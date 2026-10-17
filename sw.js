@@ -1,0 +1,57 @@
+// sw.js — keeps the app working with no signal (garages, lofts, cellars).
+// Your jobs and certificates are NOT in here: they're in IndexedDB.
+// When any file changes, bump CACHE (sparky-v0.1 -> sparky-v0.2).
+// Shares the mattytattie.github.io origin with Hearth, so it only ever
+// deletes caches whose names start with "sparky-".
+const CACHE = 'sparky-v0.1';
+const FILES = [
+  "./",
+  "./fonts/inter-latin.woff",
+  "./icons/icon-192.png",
+  "./icons/icon-512.png",
+  "./icons/icon-maskable-512.png",
+  "./icons/icon.svg",
+  "./index.html",
+  "./js/app.js",
+  "./js/backup.js",
+  "./js/cables.js",
+  "./js/calc.js",
+  "./js/calcui.js",
+  "./js/certmodel.js",
+  "./js/certui.js",
+  "./js/checks.js",
+  "./js/config.js",
+  "./js/cuscan.js",
+  "./js/db.js",
+  "./js/gdrive.js",
+  "./js/guidance.js",
+  "./js/inspections.js",
+  "./js/limits.js",
+  "./js/main.js",
+  "./js/ocr.js",
+  "./js/pdf.js",
+  "./js/pdffonts.js",
+  "./js/pdfkit.js",
+  "./js/schedule.js",
+  "./js/state.js",
+  "./js/templates.js",
+  "./js/ui.js",
+  "./js/voice.js",
+  "./manifest.json",
+  "./styles.css",
+  "./vendor/jspdf/jspdf.umd.min.js",
+  "./vendor/tesseract/eng.traineddata.gz",
+  "./vendor/tesseract/tesseract-core-lstm.js",
+  "./vendor/tesseract/tesseract-core-lstm.wasm",
+  "./vendor/tesseract/tesseract-core-simd-lstm.js",
+  "./vendor/tesseract/tesseract-core-simd-lstm.wasm",
+  "./vendor/tesseract/tesseract.min.js",
+  "./vendor/tesseract/worker.min.js",
+];
+self.addEventListener('install', (e) => { e.waitUntil(caches.open(CACHE).then((c) => c.addAll(FILES.map((f) => new Request(f, { cache: 'reload' })))).then(() => self.skipWaiting())); });
+self.addEventListener('activate', (e) => { e.waitUntil(caches.keys().then((ks) => Promise.all(ks.filter((k) => k.startsWith('sparky-') && k !== CACHE).map((k) => caches.delete(k)))).then(() => self.clients.claim())); });
+self.addEventListener('fetch', (e) => {
+  const u = new URL(e.request.url);
+  if (e.request.method !== 'GET' || u.origin !== location.origin || !u.pathname.startsWith(new URL('./', self.registration.scope).pathname)) return;
+  e.respondWith(caches.match(e.request, { ignoreSearch: true }).then((hit) => hit || fetch(e.request).then((r) => { if (r.ok) { const cp = r.clone(); caches.open(CACHE).then((c) => c.put(e.request, cp)); } return r; }).catch(() => caches.match('./index.html'))));
+});

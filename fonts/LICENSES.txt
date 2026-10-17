@@ -1,0 +1,5 @@
+Fonts used in this app
+- fonts/inter-latin.woff: Inter, SIL Open Font License 1.1 (see LICENSE-Inter.txt). Used on screen.
+- js/pdffonts.js: a subset of Arimo (Google Fonts, Apache License 2.0, https://www.apache.org/licenses/LICENSE-2.0),
+  regular and bold, embedded in the certificate PDFs; plus the two glyphs ✓ ✗ from DejaVu Sans
+  (Bitstream Vera Fonts licence / public domain DejaVu changes, https://dejavu-fonts.github.io/License.html).
