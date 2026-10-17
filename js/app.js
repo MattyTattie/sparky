@@ -225,7 +225,6 @@ route(/^\/settings$/, async () => {
         signed ? h('button', { class: 'btn', onclick: restoreFromDrive }, 'Restore from Drive') : null,
         signed ? h('button', { class: 'btn', onclick: async () => { await G.revoke(); G.rememberAccount(''); drawDrive(); } }, 'Disconnect') : null));
   };
-  drawDrive();
   const restoreFromDrive = async () => {
     try {
       await G.getToken({ interactive: true, email: G.accountHint() });
@@ -237,6 +236,7 @@ route(/^\/settings$/, async () => {
       toast(`Restored ${ids.length} job(s)`);
     } catch (e) { toast(e.message || 'Restore failed'); }
   };
+  drawDrive();
   page('Settings', [
     h('div', { class: 'card' }, h('h2', {}, 'You'), h('p', { class: 'note' }, 'Shown on your certificates. Kept on this phone (and in your Drive backup), never in the app\u2019s code.'),
       txt('name', 'Your name'), txt('business', 'Business name'), txt('position', 'Position', 'text', 'e.g. Proprietor'),
