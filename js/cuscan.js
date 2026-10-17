@@ -210,7 +210,9 @@ export function mergeRows(rows, { start = 1 } = {}) {
 // A proposed way → circuit fields for the schedule.
 export function toCircuit(w) {
   const rcbo = w.rcbo !== false;
-  return { desc: w.desc || '', type: w.type || 'B', rating: w.rating || '', device: rcbo ? 'rcbo' : 'mcb', bs: rcbo ? '61009' : '60898',
+  // Nothing read at all: don't claim MCB/BS 60898; leave the BS blank for you (or an import) to fill.
+  const unknown = !w.rating && !rcbo;
+  return { desc: w.desc || '', type: w.type || 'B', rating: w.rating || '', device: rcbo ? 'rcbo' : 'mcb', bs: unknown ? '' : rcbo ? '61009' : '60898',
     rcdBs: rcbo ? '61009' : '', rcdIdn: rcbo ? (w.idn || '30') : '', rcdType: rcbo ? (w.rcdType || 'A') : '', rcdRating: rcbo ? (w.rating || '') : '', bka: w.ka || (w.brand ? '6' : ''), time: 0.4 };
 }
 

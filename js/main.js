@@ -3,6 +3,7 @@ import './app.js';
 import './certui.js';
 import './schedule.js';
 import './calcui.js';
+import './importui.js';
 import { render } from './app.js';
 import { persist } from './db.js';
 import { recoverPending } from './state.js';

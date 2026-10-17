@@ -128,3 +128,18 @@ table.sched td.calc { min-width: 56px; }
 .wayform .chips input.rating { width: 64px; text-align: center; }
 .flag { color: #8a5300; font-size: 13px; font-weight: 600; }
 .btn.tiny { padding: 4px 10px; min-height: 30px; font-size: 13px; }
+/* import results */
+.improw { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 10px; padding: 6px 0; border-top: 1px solid var(--line); font-size: 14px; }
+.improw .iml { color: var(--sub); }
+.improw.differs { background: var(--amberbg); padding: 6px; border-radius: 6px; }
+.impc.new { border-color: #a9d9b6; } .impc.clash { border-color: #f0b9b9; background: var(--redbg); }
+/* calculator */
+.calcsum { position: sticky; top: 0; z-index: 2; border-width: 2px; }
+.calcsum.good { border-color: #a9d9b6; } .calcsum.bad { border-color: #f0b9b9; }
+.calchead { font-weight: 700; font-size: 16px; margin-bottom: 6px; }
+.resline { display: flex; gap: 10px; align-items: flex-start; padding: 4px 0; font-size: 14px; }
+.resline > b { width: 22px; text-align: center; font-size: 16px; }
+.resline.ok > b { color: var(--green); } .resline.bad > b { color: var(--red); } .resline.na > b { color: var(--sub); }
+.chips.small .chip { padding: 6px 10px; min-height: 34px; }
+.calctab { width: 100%; font-size: 14px; border-collapse: collapse; } .calctab th { text-align: left; } .calctab tr.on { background: #e3f4e8; }
+.warnnote { color: #6b4500; }

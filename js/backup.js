@@ -83,7 +83,9 @@ export async function restoreDriveJob(folderId) {
   const j = files.find((f) => f.name === 'job.json'); if (!j) throw new Error('No job.json in that folder');
   const d = await G.readJSON(j.id);
   if (d.customer) { const c = await db.get('customers', d.customer.id); if (!c) await db.put('customers', d.customer); }
-  await db.put('jobs', { ...d.job, driveFolderId: folderId, driveJsonId: j.id });
+  // Don't overwrite a newer copy of the job already on this device.
+  const curJob = await db.get('jobs', d.job.id);
+  if (!curJob || (curJob.updatedAt || '') <= (d.job.updatedAt || '')) await db.put('jobs', { ...d.job, driveFolderId: folderId, driveJsonId: j.id });
   for (const c of d.certs || []) { const cur = await db.get('certs', c.id); if (!cur || cur.updatedAt <= c.updatedAt) await db.put('certs', c); }
   for (const f of d.files || []) if (f.driveId && !(await db.get('files', f.id))) { try { await db.put('files', { ...f, blob: await G.readBlob(f.driveId) }); } catch {} }
   return d.job;

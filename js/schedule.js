@@ -13,6 +13,9 @@ import { FIELDS, FIELD, TEMPLATES, blankCircuit, applyTemplate, copyCircuit, mak
 import { checkCircuit, limitZs, isSpare } from './checks.js';
 import { DEVICES, deviceById, deviceFromBs, ratingsFor, CHECK_NOTE } from './limits.js';
 import { voiceSupported, listen } from './voice.js';
+import { CABLE_PICKS, WIRING_TYPES, REF_METHODS } from './cables.js';
+import { lengthFromR1R2 } from './calc.js';
+import { cableCheck, isRingLike, applyCable } from './checks.js';
 
 const LAND = window.matchMedia('(orientation: landscape) and (min-width: 600px)');
 LAND.addEventListener('change', () => { if (/\/b\/\d+$/.test(location.hash)) render(); });
@@ -126,7 +129,9 @@ async function pickTemplate() {
 function circuitEditor({ cert, c, ctx, back, title, prev, next, extra = [], mw = false }) {
   const flagEls = {};
   const limBox = h('div', { class: 'limit' });
+  let updHint = () => {};
   const refresh = () => {
+    updHint();
     const res = checkCircuit(c, ctx());
     for (const [k, el] of Object.entries(flagEls)) {
       const f = res.flags[k]; el.wrap.className = 'fld ' + (f ? f.level : ''); el.msg.textContent = f ? f.msg : '';
@@ -163,6 +168,41 @@ function circuitEditor({ cert, c, ctx, back, title, prev, next, extra = [], mw =
       h('label', { class: 'f' }, h('span', {}, 'Your own max Zs (e.g. maker\u2019s figure) — leave blank to use the table'), h('input', { inputmode: 'decimal', value: c.maxZsOverride || '', oninput: (e) => { c.maxZsOverride = e.target.value; changed(); refresh(); } })));
   };
   drawDev();
+  // Cable: type + size fill live and CPC; wiring type (col 3) and reference method (col 4) as drop-downs.
+  const cableBox = h('div');
+  const drawCable = () => {
+    const pick = CABLE_PICKS[c.cable];
+    const size = pick && c.cableSize != null ? String(c.cableSize) : '';
+    const codeSel = (k, list, label, col) => {
+      const known = list.some(([code]) => code === String(c[k] || ''));
+      return h('div', { class: 'fld' }, h('div', { class: 'lab' }, h('span', {}, label), h('span', { class: 'col' }, 'col ' + col)),
+        h('select', { 'aria-label': label, onchange: (e) => { c[k] = e.target.value === '__other' ? (known ? '' : c[k]) : e.target.value; changed(); drawCable(); refresh(); } },
+          h('option', { value: '' }, '— pick —'), list.map(([code, name]) => h('option', { value: code, selected: String(c[k] || '') === code ? true : null }, `${code} – ${name}`)),
+          !known && c[k] ? h('option', { value: c[k], selected: true }, `${c[k]} (as entered)`) : null));
+    };
+    const hintBox = h('div');
+    updHint = () => {
+    const hint = [];
+    if (pick && pick.warn && pick.warn[size]) hint.push(h('div', { class: 'notice amber' }, pick.warn[size]));
+    if (pick && pick.cpc === 'armour') hint.push(h('p', { class: 'note' }, '⚠ CPC is the steel armour: R1+R2 uses maker’s armour resistance (check your cable’s data sheet), and the armour must pass the adiabatic check (543.1.3).'));
+    const cab = cableCheck(c);
+    if (cab && cab.msg && !cab.level) hint.push(h('p', { class: 'note' }, cab.msg));
+    const len = lengthFromR1R2({ r1r2: c.r1r2, live: Number(c.live), cpc: pick && pick.cpc === 'armour' ? 'armour' : Number(c.cpc), cores: pick && pick.cores });
+    if (len && !isRingLike(c)) hint.push(h('p', { class: 'note' }, `Your R1+R2 of ${c.r1r2} Ω is about ${len} m of this cable (at 20 °C).`));
+    fill(hintBox, hint);
+    };
+    updHint();
+    fill(cableBox,
+      h('div', { class: 'grid2' },
+        h('label', { class: 'f' }, h('span', {}, 'Cable'), h('select', { 'aria-label': 'Cable type', onchange: (e) => { c.cable = e.target.value; const p = CABLE_PICKS[c.cable]; if (p && !(String(c.cableSize) in p.sizes)) c.cableSize = ''; if (p && (!c.wiring || WIRING_TYPES.some(([w]) => w === c.wiring))) c.wiring = p.wiring; applyCable(c); changed(); drawCable(); refresh(); } },
+          h('option', { value: '' }, '— type in sizes below —'), Object.entries(CABLE_PICKS).map(([k, p]) => h('option', { value: k, selected: c.cable === k ? true : null }, p.label)))),
+        pick ? h('label', { class: 'f' }, h('span', {}, 'Size'), h('select', { 'aria-label': 'Cable size', onchange: (e) => { c.cableSize = e.target.value; applyCable(c); changed(); drawCable(); refresh(); } },
+          h('option', { value: '' }, '— size —'), Object.entries(pick.sizes).map(([sz, cp]) => h('option', { value: sz, selected: size === sz ? true : null }, `${sz} mm²` + (cp === 'armour' ? ' + armour' : ` / ${cp} mm² CPC`))))) : h('span')),
+      h('div', { class: 'grid2' }, inp('live'), inp('cpc')),
+      codeSel('wiring', WIRING_TYPES, 'Type of wiring', 3), codeSel('ref', REF_METHODS, 'Reference method', 4),
+      hintBox);
+  };
+  drawCable();
   let rec = null;
   const mic = voiceSupported() ? h('button', { class: 'btn small', onclick: (e) => {
     const btn = e.currentTarget; if (rec) { rec.stop(); return; }
@@ -179,7 +219,7 @@ function circuitEditor({ cert, c, ctx, back, title, prev, next, extra = [], mw =
   page(title, [
     h('div', { class: 'btns' }, extra, mic),
     sect('Circuit details', h('div', { class: 'grid2' }, inp('num'), inp('points')), inp('desc'), devBox,
-      h('div', { class: 'grid3' }, inp('live'), inp('cpc'), inp('ref')), inp('wiring', { label: 'Type of wiring (A–H, O)' }),
+      cableBox,
       h('div', { class: 'grid2' }, inp('rcdBs'), inp('rcdType'), inp('rcdIdn'), inp('rcdRating')),
       h('label', { class: 'check' }, h('input', { type: 'checkbox', checked: !!c.rcdS, onchange: (e) => { c.rcdS = e.target.checked; changed(); refresh(); } }), 'Time-delayed (S-type) RCD')),
     sect('Test results',

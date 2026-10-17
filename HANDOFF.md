@@ -41,3 +41,17 @@ Open points
   confirmed is right (strips sit offset by perspective; matching is by nearest x, no tweak needed).
   Other labels can land one way off; the review crops make that easy to spot.
 - Tests: tests/cuscan.test.mjs. Service worker cache: sparky-v0.2.
+
+## v0.3 (17 Oct 2026, built locally, NOT pushed)
+- **Import results file** (job → certificate → "Earlier results" → Import results file). Reads a `{app:'sparky', kind:'results', format:1}` JSON file, previews it, then MERGES by circuit: it matches on circuit number when the description and device rating agree, otherwise on a unique description. It only fills blank boxes; any different values are listed and only taken if you tick them. It never deletes circuits or photos. Code: js/importres.js (logic, tested), js/importui.js (preview). The backup format is unchanged; cert.imports records each import.
+- restoreDriveJob no longer overwrites a newer local job record.
+- **Calculator overhaul** (js/calc.js, js/calcui.js): device/curve/rating chips feed max Zs; radial / ring (load at a point ÷4, spread ÷8); ring Iz ≥ 20 A only for ≥2.5 mm² on 30/32 A (433.1.204); ambient 20–60 °C; 3-core SWA with the 3rd core or the armour as CPC; design Zs = Ze + R1+R2(20 °C) × 1.2/1.28; expected R1+R2; a "where the numbers come from" list.
+- **Circuit page**: cable picker (6242Y 1–16 mm² auto-fills live/CPC; 6243Y; 2-/3-core SWA, armour → CPC 'SWA'); wiring (col 3) and reference method (col 4) drop-downs (they keep unknown values as entered); amber flag when In > cable It (rings excepted); implied length from R1+R2. RCD rating auto-fill from the RCBO is unchanged.
+- **Flagged data (shown in the UI notes too):**
+  - 20 °C uses the Table 4B1 25 °C factor.
+  - Method D: no air-ambient factor.
+  - Armour resistance is from the maker (Anixter BS 5467), not BS 7671.
+  - 6243Y 2.5 mm² CPC: makers differ (1.0 or 1.5), so the app fills 1.0.
+  - 3-core SWA is rated with the 2-core single-phase columns.
+  - The armour uses the same hot multiplier as the conductors (conservative).
+- Cache sparky-v0.3, APP_VERSION 0.3 beta. Tests: `node --test tests/` (49 pass).
