@@ -33,7 +33,7 @@ export function limitZs(c, ctx = {}) {
 
 // ---- Cable vs device (Appendix 4 tabulated ratings, before correction factors) ----
 const hasVal = (v) => v != null && String(v).trim() !== '' && !/^n\/?a$/i.test(String(v).trim());
-export const isRingLike = (c) => ['r1', 'rn', 'r2'].some((k) => hasVal(c[k])) || /\bring\b/i.test(c.desc || '');
+export const isRingLike = (c) => c.ring === true || (c.ring !== false && (['r1', 'rn', 'r2'].some((k) => hasVal(c[k])) || /\bring\b/i.test(c.desc || '')));
 const SOCKETY = /sock|skt|ring/i;
 export function cableTable(c) {
   const p = CABLE_PICKS[c.cable]; if (p) return p.calc;
@@ -53,7 +53,7 @@ export function cableCheck(c) {
   const base = `Cable rating ${it} A (${src}), before correction factors.`;
   if (In == null) return { level: null, msg: base, it };
   if (In <= it) return { level: null, msg: base, it };
-  const ringOk = live >= 2.5 && (isRingLike(c) || (live === 2.5 && [30, 32].includes(In) && SOCKETY.test(c.desc || ''))) && [30, 32].includes(In) && it >= 20;
+  const ringOk = live >= 2.5 && (isRingLike(c) || (c.ring !== false && live === 2.5 && [30, 32].includes(In) && SOCKETY.test(c.desc || ''))) && [30, 32].includes(In) && it >= 20;
   if (ringOk) return { level: null, msg: `${base} ${In} A on ${live} mm² is OK as a ring final (Regulation 433.1.204, Iz ≥ 20 A); a ${live} mm² radial can\u2019t be on ${In} A.`, it };
   return { level: 'amber', msg: `The device (${In} A) is bigger than the cable\u2019s rating (${it} A, ${src}, before correction factors). Check the cable size or the device.`, it };
 }

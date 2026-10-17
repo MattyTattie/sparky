@@ -199,6 +199,7 @@ function circuitEditor({ cert, c, ctx, back, title, prev, next, extra = [], mw =
         pick ? h('label', { class: 'f' }, h('span', {}, 'Size'), h('select', { 'aria-label': 'Cable size', onchange: (e) => { c.cableSize = e.target.value; applyCable(c); changed(); drawCable(); refresh(); } },
           h('option', { value: '' }, '— size —'), Object.entries(pick.sizes).map(([sz, cp]) => h('option', { value: sz, selected: size === sz ? true : null }, `${sz} mm²` + (cp === 'armour' ? ' + armour' : ` / ${cp} mm² CPC`))))) : h('span')),
       h('div', { class: 'grid2' }, inp('live'), inp('cpc')),
+      h('label', { class: 'check' }, h('input', { type: 'checkbox', checked: isRingLike(c), onchange: (e) => { c.ring = e.target.checked; changed(); drawCable(); refresh(); } }), 'Ring final circuit'),
       codeSel('wiring', WIRING_TYPES, 'Type of wiring', 3), codeSel('ref', REF_METHODS, 'Reference method', 4),
       hintBox);
   };
