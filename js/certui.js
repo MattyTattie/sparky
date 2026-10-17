@@ -110,7 +110,7 @@ route(/^\/cert\/([^/]+)\/photos$/, async (id) => {
   cert.photoIds = cert.photoIds || [];
   page('Photos on the certificate', [
     h('p', { class: 'note' }, 'Tap the photos to add to the end of the PDF. Add photos on the job page.'),
-    photos.length ? h('div', { class: 'photos' }, photos.map((f) => { const img = h('img', { src: URL.createObjectURL(f.blob), style: cert.photoIds.includes(f.id) ? 'outline:4px solid #1b3a6b' : 'opacity:.6', onclick: () => { const i = cert.photoIds.indexOf(f.id); if (i >= 0) cert.photoIds.splice(i, 1); else cert.photoIds.push(f.id); changed(); img.style.cssText = cert.photoIds.includes(f.id) ? 'outline:4px solid #1b3a6b' : 'opacity:.6'; } }); return img; })) : h('div', { class: 'empty' }, 'No photos on this job yet.'),
+    photos.length ? h('div', { class: 'photos' }, photos.map((f) => { const img = h('img', { src: URL.createObjectURL(f.blob), style: cert.photoIds.includes(f.id) ? 'outline:4px solid var(--brand)' : 'opacity:.6', onclick: () => { const i = cert.photoIds.indexOf(f.id); if (i >= 0) cert.photoIds.splice(i, 1); else cert.photoIds.push(f.id); changed(); img.style.cssText = cert.photoIds.includes(f.id) ? 'outline:4px solid var(--brand)' : 'opacity:.6'; } }); return img; })) : h('div', { class: 'empty' }, 'No photos on this job yet.'),
   ], { back: '#/cert/' + id });
 });
 

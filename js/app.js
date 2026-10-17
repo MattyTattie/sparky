@@ -60,7 +60,7 @@ route(/^\/$/, async () => {
     warns.map((w) => h('a', { class: 'notice ' + w.level, href: '#/settings', style: 'display:block;text-decoration:none' }, w.text)),
     h('input', { class: 'search', type: 'search', placeholder: 'Search jobs, customers, addresses', oninput: (e) => draw(e.target.value) }),
     list,
-    h('div', { class: 'btns full' }, h('a', { class: 'btn', href: '#/customers' }, 'Customers'), h('a', { class: 'btn', href: '#/calc' }, 'Calculators'), h('a', { class: 'btn', href: '#/settings' }, 'Settings')),
+    h('div', { class: 'btns full' }, h('a', { class: 'btn ic i-cust', href: '#/customers' }, 'Customers'), h('a', { class: 'btn ic i-calc', href: '#/calc' }, 'Calculators'), h('a', { class: 'btn ic i-set', href: '#/settings' }, 'Settings')),
     h('p', { class: 'note' }, `${APP_NAME} ${APP_VERSION}. Everything is saved on this phone as you type. `, h('a', { href: '#/settings' }, 'Back up to Google Drive'), '.'),
     h('button', { class: 'btn primary fab', onclick: () => go('#/newjob') }, '+ New job'),
   ], { actions: [h('button', { 'aria-label': 'Settings', onclick: () => go('#/settings') }, '⚙')] });
