@@ -2,6 +2,7 @@
 // backup.js — never lose a job: a backup file on the phone, and a copy of
 // every job in its own Google Drive folder (optional).
 // =====================================================================
+import { serialPerKey } from './filerules.js';
 import * as db from './db.js';
 import * as G from './gdrive.js';
 import { DRIVE_ROOT, APP_SLUG } from './config.js';
@@ -41,7 +42,11 @@ async function rootFolder() {
 }
 export const jobFolderName = (job, customer) => [job.createdAt ? job.createdAt.slice(0, 10) : '', customer && customer.name, (job.siteAddress || '').split(/[,\n]/)[0], job.title].filter(Boolean).join(' – ').replace(/[\\/]/g, '-').slice(0, 120);
 
-export async function backupJob(jobId, { onStep } = {}) {
+// One backup per job at a time (see filerules.serialPerKey). Before this, two
+// quick backups could both see "not uploaded yet" and both upload a file.
+export const backupJob = serialPerKey((jobId, opts = {}) => backupJobNow(jobId, opts));
+export const backupRunning = (jobId) => backupJob.isRunning(jobId);
+async function backupJobNow(jobId, { onStep } = {}) {
   const job = await db.get('jobs', jobId); if (!job) return;
   const customer = job.customerId ? await db.get('customers', job.customerId) : null;
   const certs = await db.byJob('certs', jobId);
@@ -52,7 +57,8 @@ export async function backupJob(jobId, { onStep } = {}) {
   if (!folder) { folder = (await G.createFolder(jobFolderName(job, customer), root)).id; job.driveFolderId = folder; }
   // Files (photos, PDFs) go up once each; PDFs are re-sent when remade.
   let i = 0;
-  for (const f of files) {
+  for (const f0 of files) {
+    const f = (await db.get('files', f0.id)) || f0; files[i] = f;
     i++; if (onStep) onStep(`Uploading ${i} of ${files.length}`);
     if (f.driveId && f.driveVersion === (f.version || 1)) continue;
     const meta = f.driveId ? await G.writeBlob(f.driveId, f.blob, f.blob.type || 'application/octet-stream') : await G.uploadNewBlob(f.name || f.id, folder, f.blob, f.blob.type || 'application/octet-stream', { sparky: f.kind || 'file' });

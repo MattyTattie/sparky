@@ -4,7 +4,7 @@
 // Landscape: the full schedule as a table, like the paper form.
 // =====================================================================
 import * as db from './db.js';
-import { h, fill, toast, modal, confirmBox, pickFile } from './ui.js';
+import { h, fill, toast, modal, confirmBox, pickFile, shrinkImage } from './ui.js';
 import { route, page, go, render } from './app.js';
 import { openCert, changed, flush } from './state.js';
 import { field } from './certui.js';
@@ -217,43 +217,159 @@ function scheduleTable(cert, b, bi) {
     h('p', { class: 'note' }, `Zdb ${b.zdb || '–'} Ω · Ipf ${b.ipf || '–'} kA · Earthing ${cert.supply.earthing}. Red = over the limit, amber = worth a look (hold a finger on a cell to see why). Double-tap a tick column for ✓. `, CHECK_NOTE));
 }
 
-// ---------- Scan a consumer unit photo ----------
+// ---------- Scan the consumer unit (one or more photos) ----------
+// 1. Add photos in board order (a two-row board: one photo per row is fine, or
+//    one photo with a box drawn round each row). 2. Optionally draw a box round
+//    each row of breakers. 3. Read. 4. Check every way next to its own crop of
+//    the photo, fix anything flagged, then add. The photos are kept with the job.
 route(/^\/cert\/([^/]+)\/b\/(\d+)\/scan$/, async (id, bi) => {
   const cert = await openCert(id); if (!cert) return go('#/');
   const b = cert.boards[+bi];
   const box = h('div');
   const status = h('div', { class: 'note' });
-  const start = async (capture) => {
-    const [f] = await pickFile({ accept: 'image/*', capture }); if (!f) return;
-    status.textContent = 'Loading the reader…';
+  const parts = []; // { file, url, bmp, rects: [] }
+  let rows = null;
+  const ocr = () => import('./ocr.js');
+  const addPhotos = async (capture) => {
+    const fs = await pickFile({ accept: 'image/*', capture, multiple: !capture }); if (!fs || !fs.length) return;
+    const { loadPhoto } = await ocr();
+    for (const f of fs) parts.push({ file: f, url: URL.createObjectURL(f), bmp: await loadPhoto(f), rects: [] });
+    rows = null; drawStart();
+  };
+  // Thumbnail of a photo with its boxes drawn on.
+  const thumb = (p, maxW = 600) => {
+    const s = Math.min(1, maxW / p.bmp.width); const c = h('canvas', { width: Math.round(p.bmp.width * s), height: Math.round(p.bmp.height * s), class: 'scanthumb' });
+    const g = c.getContext('2d'); g.drawImage(p.bmp, 0, 0, c.width, c.height);
+    g.lineWidth = 3; g.font = 'bold 22px sans-serif';
+    (p.rects.length ? p.rects : p.autoRects || []).forEach((r, i) => { g.strokeStyle = p.rects.length ? '#ffb300' : '#4fc3f7'; g.strokeRect(r.x * s, r.y * s, r.w * s, r.h * s); g.fillStyle = g.strokeStyle; g.fillText(String(i + 1), r.x * s + 6, r.y * s + 24); });
+    return c;
+  };
+  const drawStart = () => fill(box,
+    h('div', { class: 'card' },
+      h('p', {}, 'Photograph the consumer unit with the cover on, as straight-on as you can. For a two-row board take one photo per row (or one photo and draw a box round each row). Get close enough that B32 / C16 and the model numbers are sharp.'),
+      h('p', { class: 'note' }, 'Read on this phone, no internet needed. The photos are saved with this job (and go to Drive with its backup). You check every way before anything is added.'),
+      h('div', { class: 'btns full' }, h('button', { class: 'btn primary', onclick: () => addPhotos(true) }, parts.length ? '+ Take another photo' : 'Take photo'), h('button', { class: 'btn', onclick: () => addPhotos(false) }, 'From gallery'))),
+    parts.map((p, i) => h('div', { class: 'card scanpart' },
+      h('div', { class: 'rowhead' }, h('b', {}, `Photo ${i + 1}`), h('span', { class: 'note' }, p.rects.length ? ` · ${p.rects.length} row box(es)` : ' · whole photo (rows found automatically)')),
+      thumb(p),
+      h('div', { class: 'btns' },
+        h('button', { class: 'btn small primary', onclick: () => cropper(p) }, p.rects.length ? 'Edit row boxes' : 'Draw row boxes'),
+        i > 0 ? h('button', { class: 'btn small', onclick: () => { parts.splice(i - 1, 0, parts.splice(i, 1)[0]); drawStart(); } }, '↑ Earlier') : null,
+        h('button', { class: 'btn small warn', onclick: () => { parts.splice(i, 1); drawStart(); } }, 'Remove')))),
+    parts.length ? h('div', { class: 'stick' }, h('button', { class: 'btn primary', onclick: read }, `Read ${parts.length} photo(s)`)) : null,
+    status);
+
+  // Draw boxes round rows of breakers. Drag on the photo; each box = one row, in order.
+  const cropper = (p) => {
+    const W = Math.min(window.innerWidth - 24, 1200); let zoom = 1;
+    const cv = h('canvas', { class: 'cropcv' }); const wrap = h('div', { class: 'cropwrap' }, cv);
+    let drag = null;
+    const scale = () => (W * zoom) / p.bmp.width;
+    const paint = () => {
+      const s = scale(); cv.width = Math.round(p.bmp.width * s); cv.height = Math.round(p.bmp.height * s);
+      const g = cv.getContext('2d'); g.drawImage(p.bmp, 0, 0, cv.width, cv.height); g.lineWidth = 3; g.font = 'bold 22px sans-serif';
+      p.rects.forEach((r, i) => { g.strokeStyle = g.fillStyle = '#ffb300'; g.strokeRect(r.x * s, r.y * s, r.w * s, r.h * s); g.fillText(`Row ${i + 1}`, r.x * s + 6, r.y * s + 24); });
+      if (drag) { g.strokeStyle = '#4fc3f7'; g.setLineDash([8, 6]); g.strokeRect(Math.min(drag.x0, drag.x1), Math.min(drag.y0, drag.y1), Math.abs(drag.x1 - drag.x0), Math.abs(drag.y1 - drag.y0)); g.setLineDash([]); }
+    };
+    const pos = (e) => { const r = cv.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; };
+    cv.addEventListener('pointerdown', (e) => { if (!drawMode) return; e.preventDefault(); cv.setPointerCapture(e.pointerId); const [x, y] = pos(e); drag = { x0: x, y0: y, x1: x, y1: y }; });
+    cv.addEventListener('pointermove', (e) => { if (!drag) return; const [x, y] = pos(e); drag.x1 = x; drag.y1 = y; paint(); });
+    cv.addEventListener('pointerup', () => {
+      if (!drag) return; const s = scale(); const r = { x: Math.min(drag.x0, drag.x1) / s, y: Math.min(drag.y0, drag.y1) / s, w: Math.abs(drag.x1 - drag.x0) / s, h: Math.abs(drag.y1 - drag.y0) / s }; drag = null;
+      if (r.w > 40 && r.h > 20) p.rects.push(r); paint(); info();
+    });
+    let drawMode = true; const modeBtn = h('button', { class: 'btn small' });
+    const setMode = (m) => { drawMode = m; cv.style.touchAction = m ? 'none' : 'auto'; modeBtn.textContent = m ? '✋ Move/scroll' : '✏️ Draw'; };
+    modeBtn.onclick = () => setMode(!drawMode); setMode(true);
+    const infoEl = h('p', { class: 'note' }); const info = () => (infoEl.textContent = p.rects.length ? `${p.rects.length} row box(es). Rows are read in the order you drew them.` : 'Drag a box round the first row of breakers (just the breakers; the labels underneath are read automatically).');
+    fill(box, h('div', { class: 'card' }, infoEl,
+      h('div', { class: 'btns' }, modeBtn,
+        h('button', { class: 'btn small', onclick: () => { zoom = zoom === 1 ? 2 : zoom === 2 ? 3 : 1; paint(); } }, '🔍 Zoom'),
+        h('button', { class: 'btn small', onclick: () => { p.rects.pop(); paint(); info(); } }, 'Undo'),
+        h('button', { class: 'btn small', onclick: () => { p.rects = []; paint(); info(); } }, 'Clear'))),
+      wrap,
+      h('div', { class: 'stick' }, h('button', { class: 'btn primary', onclick: () => { rows = null; drawStart(); } }, 'Done')));
+    paint(); info();
+  };
+
+  async function read() {
+    const { readBoard } = await ocr();
+    fill(box, h('div', { class: 'card' }, h('p', {}, 'Reading the board… this can take a minute for a big board.'), status));
     try {
-      const { readBoardPhoto } = await import('./ocr.js');
-      const { circuits, text } = await readBoardPhoto(f, (p, msg) => (status.textContent = `${msg} ${Math.round(p * 100)}%`));
+      rows = await readBoard(parts, (f, msg) => (status.textContent = `${msg} ${Math.round(f * 100)}%`));
       status.textContent = '';
-      review(circuits, text, URL.createObjectURL(f));
-    } catch (e) { status.textContent = 'Couldn\u2019t read the photo: ' + e.message; }
+      for (const r of rows) { r.ways.forEach((w) => (w.keep = !w.maybeSpd)); placeCrops(r); }
+      review();
+    } catch (e) { status.textContent = 'Couldn\u2019t read the photos: ' + e.message; drawStart(); }
+  }
+  // Each way gets its own slice of the photo (breaker + the label strip below).
+  const placeCrops = (r) => {
+    const ws = r.ways, R = r.rect; const pitch = r.pitch || R.w / Math.max(1, ws.length);
+    ws.forEach((w, i) => {
+      if (w.crop) return;
+      const left = i ? (ws[i - 1].cx + w.cx) / 2 : w.cx - pitch / 2, right = i < ws.length - 1 ? (ws[i + 1].cx + w.cx) / 2 : w.cx + pitch / 2;
+      w.crop = { x: Math.max(0, left), y: R.y, w: Math.max(10, right - left), h: R.h * 1.9 };
+    });
+    for (const o of r.board) if (!o.crop) { const ww = pitch * (o.wide ? 2 : 1); o.crop = { x: Math.max(0, o.cx - ww / 2), y: R.y, w: ww, h: R.h * 1.4 }; }
   };
-  const review = (rows, text, img) => {
-    rows.forEach((r) => (r.keep = true));
-    const draw = () => fill(box, 
-      h('img', { src: img, style: 'width:100%;border-radius:10px;margin-bottom:8px' }),
-      rows.length ? h('div', { class: 'notice amber' }, `Found ${rows.length} device(s). Check every row: the reader can get things wrong. Nothing is added until you tap “Add”.`) : h('div', { class: 'notice red' }, 'No breaker markings (like B32 or C16) found. Try a closer, straight-on photo with good light.'),
-      rows.map((r, i) => h('div', { class: 'card', style: r.keep ? '' : 'opacity:.5' },
-        h('label', { class: 'check' }, h('input', { type: 'checkbox', checked: r.keep, onchange: (e) => { r.keep = e.target.checked; draw(); } }), h('b', {}, `Way ${i + 1}`), h('span', { class: 'note' }, ` read as “${r.source}”`)),
-        h('div', { class: 'grid3' }, h('label', { class: 'f' }, h('span', {}, 'Description'), h('input', { value: r.desc, oninput: (e) => (r.desc = e.target.value) })),
-          h('label', { class: 'f' }, h('span', {}, 'Type'), h('select', { onchange: (e) => (r.type = e.target.value) }, ['B', 'C', 'D'].map((t) => h('option', { selected: r.type === t ? true : null }, t)))),
-          h('label', { class: 'f' }, h('span', {}, 'Rating A'), h('input', { value: r.rating, inputmode: 'numeric', oninput: (e) => (r.rating = e.target.value) }))),
-        h('label', { class: 'check' }, h('input', { type: 'checkbox', checked: r.device === 'rcbo', onchange: (e) => { r.device = e.target.checked ? 'rcbo' : 'mcb'; r.bs = e.target.checked ? '61009' : '60898'; } }), 'RCBO'))),
-      text ? h('details', { class: 'card' }, h('summary', {}, 'Text the reader saw'), h('pre', { style: 'white-space:pre-wrap;font-size:12px' }, text)) : null,
-      h('div', { class: 'stick' }, h('button', { class: 'btn', onclick: () => start(true) }, 'Retake'), h('button', { class: 'btn primary', disabled: !rows.some((r) => r.keep), onclick: () => {
-        const add = rows.filter((r) => r.keep); let n = b.circuits.length;
-        for (const r of add) { const c = blankCircuit(++n); Object.assign(c, { desc: r.desc, type: r.type, rating: r.rating, device: r.device, bs: r.bs, time: 0.4 }); if (r.device === 'rcbo') Object.assign(c, { rcdBs: '61009', rcdIdn: '30', rcdType: 'A', rcdRating: r.rating }); if (/spare/i.test(r.desc)) Object.assign(c, makeSpare(c)); b.circuits.push(c); }
-        changed(); toast(`Added ${add.length} circuit(s)`); go(`#/cert/${id}/b/${bi}`);
-      } }, `Add ${rows.filter((r) => r.keep).length} circuit(s)`)));
-    draw();
-  };
-  fill(box, h('div', { class: 'card' }, h('p', {}, 'Take a photo of the consumer unit with the cover on, straight on, so the breaker markings (B32, C16…) and the labels are readable.'),
-    h('p', { class: 'note' }, 'The photo is read on this phone (no internet needed) and isn\u2019t saved. You check every circuit before anything is added.'),
-    h('div', { class: 'btns full' }, h('button', { class: 'btn primary', onclick: () => start(true) }, 'Take photo'), h('button', { class: 'btn', onclick: () => start(false) }, 'From gallery')), status));
+  const cropImg = (p, c) => { const bm = p.bmp; const r = { x: c.x, y: c.y, w: Math.min(c.w, bm.width - c.x), h: Math.min(c.h, bm.height - c.y) }; const s = Math.min(1, 170 / r.h); const cv = h('canvas', { width: Math.max(1, Math.round(r.w * s)), height: Math.max(1, Math.round(r.h * s)), class: 'waycrop' }); cv.getContext('2d').drawImage(bm, r.x, r.y, r.w, r.h, 0, 0, cv.width, cv.height); cv.onclick = () => modal('Close-up', (() => { const z = Math.min(2, (window.innerWidth - 60) / r.w, 520 / r.h); const big = h('canvas', { width: Math.round(r.w * z), height: Math.round(r.h * z), style: 'max-width:100%' }); big.getContext('2d').drawImage(bm, r.x, r.y, r.w, r.h, 0, 0, big.width, big.height); return big; })(), [{ label: 'Close', value: true }]); return cv; };
+  const blankWay = (crop) => ({ kind: 'way', type: 'B', rating: '', rcbo: false, idn: '', desc: '', sure: false, why: 'Type it in', keep: true, crop });
+
+  function review() {
+    const total = () => rows.reduce((n, r) => n + r.ways.filter((w) => w.keep).length, 0);
+    let n0 = b.circuits.length;
+    const wayCard = (r, w, i) => {
+      const p = parts[r.part]; const num = ++n0;
+      return h('div', { class: 'card waycard' + (w.keep ? '' : ' off') + (w.sure ? '' : ' unsure') },
+        w.crop ? cropImg(p, w.crop) : null,
+        h('div', { class: 'wayform' },
+          h('label', { class: 'check' }, h('input', { type: 'checkbox', checked: w.keep, onchange: (e) => { w.keep = e.target.checked; review(); } }), h('b', {}, `Circuit ${w.keep ? num : '–'}`),
+            w.sure ? h('span', { class: 'note' }, ' ✓ ' + (w.why || '')) : h('span', { class: 'flag' }, ' check: ' + (w.why || 'not sure'))),
+          h('div', { class: 'chips' }, ['B', 'C', 'D'].map((t) => h('button', { class: 'chip' + (w.type === t ? ' on' : ''), onclick: () => { w.type = t; w.sure = true; review(); } }, t)),
+            h('input', { class: 'rating', value: w.rating, inputmode: 'numeric', placeholder: 'A', 'aria-label': 'Rating A', oninput: (e) => { w.rating = e.target.value.replace(/\D/g, ''); w.sure = true; } }), h('span', {}, 'A'),
+            h('label', { class: 'check' }, h('input', { type: 'checkbox', checked: !!w.rcbo, onchange: (e) => { w.rcbo = e.target.checked; if (w.rcbo && !w.idn) w.idn = '30'; review(); } }), 'RCBO'),
+            w.rcbo ? h('select', { onchange: (e) => (w.idn = e.target.value) }, ['10', '30', '100', '300'].map((v) => h('option', { value: v, selected: (w.idn || '30') === v ? true : null }, v + 'mA'))) : null),
+          h('input', { value: w.desc || '', placeholder: 'Description (e.g. Downstairs sockets)', oninput: (e) => (w.desc = e.target.value) }),
+          h('div', { class: 'btns' }, h('button', { class: 'btn tiny', onclick: () => { const c = w.crop ? { ...w.crop, x: w.crop.x + w.crop.w / 2 } : null; r.ways.splice(i + 1, 0, blankWay(c)); review(); } }, '+ way after'))));
+    };
+    fill(box,
+      h('div', { class: 'notice amber' }, `Check every way against its photo (tap a photo to zoom). Flagged ones weren\u2019t clear. Nothing is added until you tap “Add”.`),
+      rows.map((r, ri) => h('div', {},
+        h('h2', { class: 'sec' }, `Photo ${r.part + 1}${parts[r.part].rects.length > 1 || (parts[r.part].autoRects || []).length > 1 ? ' · row ' + (r.row + 1) : ''}: ${r.ways.length} way(s)`),
+        !r.ways.length ? h('div', { class: 'notice red' }, 'No breaker markings could be read here. Split the row into ways below and type them in next to each photo slice.') : null,
+        h('div', { class: 'btns' }, h('button', { class: 'btn small', onclick: async () => {
+          const inp = h('input', { inputmode: 'numeric', value: String(r.ways.length || 12) });
+          const v = await modal('How many ways in this row?', inp, [{ label: 'Cancel', value: false }, { label: 'Split', value: true, cls: 'primary' }]);
+          const nn = parseInt(inp.value, 10); if (!v || !(nn > 0 && nn <= 40)) return;
+          const { splitSlots } = await import('./cuscan.js');
+          const old = r.ways; r.ways = splitSlots(r.rect, nn).map((c) => { const cx = c.x + c.w / 2; const hit = old.find((w) => w.cx >= c.x && w.cx < c.x + c.w); return hit ? { ...hit, crop: { ...c, h: r.rect.h * 1.9 } } : { ...blankWay({ ...c, h: r.rect.h * 1.9 }), cx }; }); review();
+        } }, 'Split into N equal ways')),
+        r.ways.map((w, i) => wayCard(r, w, i)),
+        r.board.map((o, oi) => h('div', { class: 'card waycard board' + (o.kind === 'other' ? ' unsure' : '') },
+          o.crop ? cropImg(parts[r.part], o.crop) : null,
+          h('div', { class: 'wayform' },
+            h('b', {}, o.kind === 'main' ? 'Not a circuit: main switch' + (o.rating ? ` (${o.rating}A)` : '') : o.kind === 'spd' ? 'Not a circuit: surge protector (SPD)' : 'Not added: unknown device'),
+            h('span', { class: o.kind === 'other' || o.kind === 'spd' && o.why && /looks like/.test(o.why) ? 'flag' : 'note' }, (o.kind === 'other' || /looks like/.test(o.why || '') ? 'check: ' : '') + (o.why || '')),
+            h('div', { class: 'btns' }, h('button', { class: 'btn tiny', onclick: () => { r.board.splice(oi, 1); const w = { ...o, kind: 'way', type: 'B', rating: '', rcbo: false, sure: false, why: 'You said this is a circuit: type it in', keep: true }; const at = r.ways.findIndex((x) => x.cx > o.cx); r.ways.splice(at < 0 ? r.ways.length : at, 0, w); review(); } }, 'It\u2019s a circuit'))))))),
+      h('div', { class: 'stick' }, h('button', { class: 'btn', onclick: () => drawStart() }, 'Back to photos'), h('button', { class: 'btn primary', disabled: !total(), onclick: add }, `Add ${total()} circuit(s)`)));
+  }
+
+  async function add() {
+    const { toCircuit } = await import('./cuscan.js');
+    let n = b.circuits.length, added = 0;
+    for (const r of rows) for (const w of r.ways) { if (!w.keep) continue; const c = blankCircuit(++n); Object.assign(c, toCircuit(w)); if (/spare/i.test(w.desc || '')) Object.assign(c, makeSpare(c)); b.circuits.push(c); added++; }
+    // Keep the photos with the job (they go to Drive with the job's backup).
+    if (cert.jobId) {
+      for (const [i, p] of parts.entries()) {
+        if (p.savedId) continue;
+        const blob = await shrinkImage(p.file, 3000, 0.85);
+        const fid = db.newId(); await db.put('files', { id: fid, jobId: cert.jobId, kind: 'photo', name: `board-${(b.ref || 'DB').replace(/[^\w-]+/g, '')}-${i + 1}-${Date.now()}.jpg`, blob, caption: `Consumer unit ${b.ref || ''} photo ${i + 1}`.replace(/\s+/g, ' '), createdAt: new Date().toISOString(), version: 1, source: 'scan' });
+        p.savedId = fid;
+      }
+    }
+    changed(); await flush();
+    toast(`Added ${added} circuit(s)${cert.jobId ? ' · photos saved with the job' : ''}`); go(`#/cert/${id}/b/${bi}`);
+  }
+  drawStart();
   page('Scan consumer unit', box, { back: `#/cert/${id}/b/${bi}`, sub: b.ref });
 });

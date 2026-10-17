@@ -113,7 +113,7 @@ route(/^\/job\/([^/]+)$/, async (id) => {
   const certs = (await db.byJob('certs', id)).sort((a, b) => (a.createdAt || '').localeCompare(b.createdAt || ''));
   const files = await db.byJob('files', id);
   const photos = files.filter((f) => f.kind === 'photo');
-  const pdfs = files.filter((f) => f.kind === 'pdf');
+  const pdfs = files.filter((f) => f.kind === 'pdf' || f.kind === 'chart');
   const save = async () => { job.updatedAt = new Date().toISOString(); job.version = (job.version || 0) + 1; await db.put('jobs', job); };
   const txt = (k, label, type = 'text') => h('label', { class: 'f' }, h('span', {}, label), h(type === 'area' ? 'textarea' : 'input', { value: job[k] || '', oninput: (e) => { job[k] = e.target.value; save(); } }));
   const addPhotos = async (capture) => {
@@ -264,6 +264,9 @@ window.addEventListener('hashchange', async (e) => {
   if (!id || id === lastJob && location.hash.includes(id)) return;
   const p = await getProfile(); if (!p.autoBackup || !G.isConfigured() || !navigator.onLine) return;
   if (location.hash.includes(id)) return;
+  // Still inside one of this job's certificates (e.g. certificate → board → back): not leaving the job yet.
+  const now = /#\/cert\/([^/]+)/.exec(location.hash);
+  if (now && ((await db.get('certs', now[1])) || {}).jobId === id) return;
   const job = await db.get('jobs', id); if (!job || (job.version || 0) <= (job.backedUpVersion || 0)) return;
   try { await G.getToken({ interactive: false }); await backup.backupJob(id); } catch {}
 });

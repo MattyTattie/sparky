@@ -2,6 +2,7 @@
 // certui.js — a certificate: overview, form sections, inspections,
 // observations, signatures and the PDF.
 // =====================================================================
+import { findOldPdf } from './filerules.js';
 import * as db from './db.js';
 import { h, fill, toast, modal, confirmBox, fmtDate, shareOrDownload, blobToDataUrl } from './ui.js';
 import { route, page, go, render } from './app.js';
@@ -71,11 +72,13 @@ async function pdfPhotos(cert) {
   for (const pid of cert.photoIds || []) { const f = await db.get('files', pid); if (f && f.blob) out.push({ dataUrl: await blobToDataUrl(f.blob), caption: f.caption || '' }); }
   return out;
 }
-async function savePdf(cert, blob, name, kind = 'pdf') {
+export async function savePdf(cert, blob, name, kind = 'pdf') {
   if (!cert.jobId) return;
   const files = await db.byJob('files', cert.jobId);
-  const old = files.find((f) => f.kind === kind && f.certId === cert.id && (kind !== 'chart' || f.name === name));
-  await db.put('files', { ...(old || { id: db.newId(), createdAt: new Date().toISOString() }), jobId: cert.jobId, certId: cert.id, kind: 'pdf', name, blob, createdAt: new Date().toISOString(), version: ((old && old.version) || 0) + 1, driveId: old && old.driveId, driveVersion: old && old.driveVersion });
+  // Same certificate + same file name = remake of the same PDF: replace it (and re-send it to Drive) rather than adding another.
+  // (Charts used to be stored as kind 'pdf', so match those too.)
+  const old = findOldPdf(files, cert.id, name, kind);
+  await db.put('files', { ...(old || { id: db.newId(), createdAt: new Date().toISOString() }), jobId: cert.jobId, certId: cert.id, kind, name, blob, createdAt: new Date().toISOString(), version: ((old && old.version) || 0) + 1, driveId: old && old.driveId, driveVersion: old && old.driveVersion });
 }
 async function makePdf(cert, btn, how) {
   await flush(); const label = btn.textContent; btn.disabled = true; btn.textContent = 'Making PDF…';
