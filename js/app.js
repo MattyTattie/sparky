@@ -229,11 +229,15 @@ route(/^\/settings$/, async () => {
     try {
       await G.getToken({ interactive: true, email: G.accountHint() });
       const list = await backup.listDriveJobs();
-      const pick = await modal('Restore a job from Drive', list.length ? h('div', { class: 'list' }, list.map((f) => h('label', { class: 'row' }, h('input', { type: 'checkbox', value: f.id, class: 'rj' }), h('div', { class: 'main' }, h('div', { class: 't' }, f.name))))) : h('p', {}, 'No jobs found in Drive.'), [{ label: 'Cancel', value: false }, { label: 'Restore', value: true, cls: 'primary' }]);
+      const chosen = new Set();
+      const pick = await modal('Restore a job from Drive', list.length ? h('div', { class: 'list' }, list.map((f) => h('label', { class: 'row' }, h('input', { type: 'checkbox', value: f.id, class: 'rj', onchange: (e) => { if (e.target.checked) chosen.add(f.id); else chosen.delete(f.id); } }), h('div', { class: 'main' }, h('div', { class: 't' }, f.name))))) : h('p', {}, 'No jobs found in Drive.'), [{ label: 'Cancel', value: false }, { label: 'Restore', value: true, cls: 'primary' }]);
       if (!pick) return;
-      const ids = [...document.querySelectorAll('.rj')].filter((x) => x.checked).map((x) => x.value);
+      const ids = [...chosen];
+      if (!ids.length) { toast('Tick a job to restore'); return; }
+      toast('Restoring…');
       for (const fid of ids) await backup.restoreDriveJob(fid);
       toast(`Restored ${ids.length} job(s)`);
+      location.hash = '#/';
     } catch (e) { toast(e.message || 'Restore failed'); }
   };
   drawDrive();
