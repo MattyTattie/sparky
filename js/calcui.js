@@ -2,9 +2,10 @@
 // the cable; it tells you straight away whether the cable carries the
 // current, the volt drop is OK, and the Zs will be within the limit.
 import { h, fill } from './ui.js';
-import { route, page } from './app.js';
+import { route, page, render } from './app.js';
 import { CABLES, CABLE_PICKS, AMBIENTS, CA_SOURCE, ARMOUR_MOHM_PER_M, TEMP_MULT } from './cables.js';
 import { voltDrop, sizeCable, designZs, r1r2At20 } from './calc.js';
+import { adiabatic, kFor, cpcAreaFor } from './design.js';
 import { CHECK_NOTE, DEVICES, deviceById, ratingsFor, maxZs, maxZsSource } from './limits.js';
 
 const CABLE_ORDER = ['te', 'swa', 'swaX', 'swa3', 'swa3X'];
@@ -18,7 +19,14 @@ export function cpcFor(cable, size, cpcMode) {
   return cpcMode === 'armour' ? 'armour' : Number(size);
 }
 
-route(/^\/calc$/, async () => {
+// Tabs across the top of every calculator.
+export const CALC_TABS = [['size', 'Size it'], ['check', 'Check it'], ['dc', 'Solar / battery']];
+export function calcTabs(on) {
+  localStorage.setItem('sparky.calctab', on);
+  return h('div', { class: 'tabs' }, CALC_TABS.map(([k, t]) => h('a', { class: 'tab' + (k === on ? ' on' : ''), href: '#/calc/' + k }, t)));
+}
+route(/^\/calc$/, async () => { const t = localStorage.getItem('sparky.calctab'); history.replaceState(null, '', '#/calc/' + (CALC_TABS.some(([k]) => k === t) ? t : 'size')); return render(); });
+route(/^\/calc\/check$/, async () => {
   const v = { ...DEFAULTS, ...(JSON.parse(localStorage.getItem('sparky.calc2') || 'null') || {}) };
   const top = h('div'); const form = h('div'); const work = h('div');
   const save = () => { localStorage.setItem('sparky.calc2', JSON.stringify(v)); drawForm(); draw(); };
@@ -70,6 +78,8 @@ route(/^\/calc$/, async () => {
       row ? line(row.currentOk, `Current: cable ${row.it} A tabulated, needs ${row.needIt} A`, `Iz after factors ${row.iz} A (needs ${row.needIz} A). Factors ${s.factors.total}${s.caNote ? ' · ' + s.caNote : ''}`) : line(false, 'Current: no size passes. Try a bigger cable or another method.'),
       row && row.vd ? line(row.vd.pass, `Volt drop: ${row.vd.volts} V (${row.vd.pct}%), limit ${row.vd.limitPct}%`, `${row.vd.mvam} mV/A/m × ${v.ib} A × ${v.length} m ÷ 1000${row.vd.divisor > 1 ? ' ÷ ' + row.vd.divisor + ' (ring)' : ''}`) : line(null, 'Volt drop: enter a length'),
       z && z.ok ? line(z.pass, z.zs != null ? `Zs: ${z.zs} Ω, max ${max ?? '?'} Ω` : `Zs: enter Ze. Max ${max ?? '?'} Ω`, `Ze ${v.ze || '?'} + (R1+R2) ${z.r20} Ω × ${z.mult} hot = ${z.rHot} Ω. ${max != null ? maxZsSource(v.device) : 'No table figure for this device.'}${z.note ? ' ' + z.note : ''}`) : line(null, `Zs: max ${max ?? '?'} Ω (need a size and length)`),
+      (() => { if (!z || !z.ok || z.zs == null) return line(null, 'Adiabatic: enter Ze, a size and a length'); const cp = cpcAreaFor(v.cable, size, v.cpcMode); const area = cp ? (cp.cpc === 'armour' ? cp.area : cp.cpc) : null; const k = kFor({ cable: v.cable, cpcMode: v.cpcMode }); const a = adiabatic({ zs: z.zs, device: v.device, type: v.type, rating: v.rating, k: k.k, cpcCsa: area, rcd: !!(d && d.rcd), time: v.time });
+        return a.ok ? line(a.pass, `Adiabatic: CPC needs ${a.smin} mm², ${cp.cpc === 'armour' ? 'armour is' : 'it\u2019s'} ${area} mm²`, `Fault ${Math.round(a.ifault)} A at Zs ${z.zs} Ω. ${a.how} S = √(${a.i2t}) ÷ k ${a.k} (${k.label}).${cp.cpc === 'armour' ? ' ⚠ Armour area is maker\u2019s data.' : ''}`) : line(false, 'Adiabatic: ' + a.error); })(),
       size != null && Number(v.length) ? h('div', { class: 'note', style: 'margin-top:6px' }, `When you test: expect R1+R2 about ${r1r2At20({ live: size, cpc, length: +v.length, cores: CABLES[v.cable].cores, ring })} Ω at 20 °C${ring ? ' (ring, end-to-end ÷ 4)' : ''}.`) : null));
     fill(work, h('div', { class: 'card' }, h('h2', {}, 'All sizes'),
       h('table', { class: 'calctab' }, h('tr', {}, ['mm²', 'It A', 'Iz A', 'Current', 'Volt drop'].map((t) => h('th', {}, t))),
@@ -84,5 +94,5 @@ route(/^\/calc$/, async () => {
       h('div', { class: 'notice amber' }, CHECK_NOTE));
   };
   drawForm(); draw();
-  page('Circuit calculator', [top, form, work], { back: '#/' });
+  page('Calculators', [calcTabs('check'), top, form, work], { back: '#/' });
 });

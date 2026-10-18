@@ -11,6 +11,7 @@ import { calibrationState } from './checks.js';
 import { CHECK_NOTE } from './limits.js';
 import * as backup from './backup.js';
 import * as G from './gdrive.js';
+import { dueList, nextFor, suggestFromCerts, dueState, icsFor } from './reminders.js';
 
 const routes = [];
 export const route = (re, fn) => routes.push([re, fn]);
@@ -58,6 +59,7 @@ route(/^\/$/, async () => {
   page(APP_NAME, [
     !profile.name ? h('a', { class: 'notice info', href: '#/settings', style: 'display:block;text-decoration:none' }, 'First, add your details, logo and test instruments in Settings. They fill in every certificate for you.') : null,
     warns.map((w) => h('a', { class: 'notice ' + w.level, href: '#/settings', style: 'display:block;text-decoration:none' }, w.text)),
+    dueCard(jobs, certs, cmap),
     h('input', { class: 'search', type: 'search', placeholder: 'Search jobs, customers, addresses', oninput: (e) => draw(e.target.value) }),
     list,
     h('div', { class: 'btns full' }, h('a', { class: 'btn ic i-cust', href: '#/customers' }, 'Customers'), h('a', { class: 'btn ic i-calc', href: '#/calc' }, 'Calculators'), h('a', { class: 'btn ic i-set', href: '#/settings' }, 'Settings')),
@@ -65,6 +67,18 @@ route(/^\/$/, async () => {
     h('button', { class: 'btn primary fab', onclick: () => go('#/newjob') }, '+ New job'),
   ], { actions: [h('button', { 'aria-label': 'Settings', onclick: () => go('#/settings') }, '⚙')] });
 });
+
+// Inspections due in the next 90 days (or overdue), from each job's next inspection date.
+function dueCard(jobs, certs, cmap) {
+  const due = dueList(jobs, certs);
+  if (!due.length) return null;
+  const when = (d) => d.state === 'overdue' ? `Overdue ${-d.days} day${d.days === -1 ? '' : 's'}` : d.days === 0 ? 'Due today' : `In ${d.days} day${d.days === 1 ? '' : 's'}`;
+  return h('div', { class: 'card duecard' }, h('h2', {}, `Due soon (${due.length})`),
+    h('div', { class: 'list' }, due.map((d) => h('a', { class: 'row', href: '#/job/' + d.job.id },
+      h('div', { class: 'main' }, h('div', { class: 't' }, d.job.title || 'Job'), h('div', { class: 's' }, [jobLine(d.job, cmap[d.job.customerId]), 're-test ' + fmtDate(d.date)].filter(Boolean).join(' · '))),
+      h('span', { class: 'pill ' + (d.state === 'overdue' ? 'red' : 'amber') }, when(d)), h('span', { class: 'go' }, '›')))),
+    h('p', { class: 'note' }, 'From the next inspection date on each job (set on the job page). Inspections due within 90 days show here.'));
+}
 
 // ---------- New job (with saved customers) ----------
 route(/^\/newjob(?:\/(.+))?$/, async (custId) => {
@@ -149,18 +163,41 @@ route(/^\/job\/([^/]+)$/, async (id) => {
     h('div', { class: 'card' }, h('h2', {}, 'Certificates'),
       certs.length ? h('div', { class: 'list' }, certs.map((c) => h('a', { class: 'row', href: '#/cert/' + c.id }, h('div', { class: 'main' }, h('div', { class: 't' }, `${TYPES[c.type].name}`), h('div', { class: 's' }, `${c.number} · updated ${fmtDate(c.updatedAt)}`)), status(c), h('span', { class: 'go' }, '›')))) : h('p', { class: 'note' }, 'No certificates yet.'),
       h('div', { class: 'btns full' }, h('button', { class: 'btn primary', onclick: () => newCert('EIC') }, '+ EIC'), h('button', { class: 'btn primary', onclick: () => newCert('MW') }, '+ Minor Works'), h('button', { class: 'btn primary', onclick: () => newCert('EICR') }, '+ EICR'))),
+    nextCard(job, certs, cust, save),
     h('div', { class: 'card' }, h('h2', {}, 'Customer'),
       cust ? h('a', { class: 'row', href: '#/customer/' + cust.id, style: 'padding:6px 0' }, h('div', { class: 'main' }, h('div', { class: 't' }, cust.name), h('div', { class: 's' }, [cust.address, cust.postcode].filter(Boolean).join(', '))), h('span', { class: 'go' }, '›')) : h('p', { class: 'note' }, 'No customer.'),
       txt('title', 'Job title'), txt('siteAddress', 'Installation address', 'area'), txt('sitePostcode', 'Postcode'), txt('notes', 'Notes', 'area')),
     h('div', { class: 'card' }, h('h2', {}, `Photos (${photos.length})`),
       h('div', { class: 'photos' }, photos.map((f) => h('img', { src: URL.createObjectURL(f.blob), alt: f.caption || 'Photo', onclick: () => photoView(f) }))),
       h('div', { class: 'btns full' }, h('button', { class: 'btn', onclick: () => addPhotos(true) }, 'Take photo'), h('button', { class: 'btn', onclick: () => addPhotos(false) }, 'Add from gallery'))),
-    pdfs.length ? h('div', { class: 'card' }, h('h2', {}, 'Saved PDFs'), h('div', { class: 'list' }, pdfs.map((f) => h('button', { class: 'row', onclick: () => shareOrDownload(f.blob, f.name) }, h('div', { class: 'main' }, h('div', { class: 't' }, f.name), h('div', { class: 's' }, 'Made ' + fmtDate(f.createdAt) + ' · tap to share')), h('span', { class: 'go' }, '⤴'))))) : null,
+    pdfs.length ? h('div', { class: 'card' }, h('h2', {}, 'Saved PDFs'), h('div', { class: 'list' }, pdfs.map((f) => h('div', { class: 'row pdfrow' }, h('div', { class: 'main' }, h('div', { class: 't' }, f.name), h('div', { class: 's' }, 'Made ' + fmtDate(f.createdAt))),
+      h('button', { class: 'btn small', onclick: async () => (await import('./pdfview.js')).viewPdf(f.blob, f.name) }, '👁 View'),
+      h('button', { class: 'btn small', 'aria-label': 'Share ' + f.name, onclick: () => shareOrDownload(f.blob, f.name) }, '⤴ Share'))))) : null,
     h('div', { class: 'card' }, h('h2', {}, 'Backup'),
       h('p', { class: 'note' }, job.backedUpAt ? `In Google Drive (folder “${backup.jobFolderName(job, cust)}”), last saved ${new Date(job.backedUpAt).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' })}${(job.version || 0) > (job.backedUpVersion || 0) ? ' — changed since.' : '.'}` : 'Saved on this phone. Not in Google Drive yet.'),
       h('div', { class: 'btns full' }, G.isConfigured() ? h('button', { class: 'btn', onclick: (e) => doBackup(e.currentTarget) }, 'Back up to Drive') : null, h('button', { class: 'btn', onclick: copyJob }, 'Copy job'), h('button', { class: 'btn warn', onclick: delJob }, 'Delete job'))),
   ], { back: '#/', sub: cust ? cust.name : '' });
 });
+
+// Next inspection (re-test reminder) for a job.
+function nextCard(job, certs, cust, save) {
+  const box = h('div', { class: 'card' });
+  const draw = () => {
+    const sug = suggestFromCerts(certs); const n = nextFor(job, certs); const st = n && dueState(n.date);
+    fill(box, h('h2', {}, 'Next inspection'),
+      st ? h('div', { class: 'notice ' + (st.state === 'overdue' ? 'red' : st.state === 'soon' ? 'amber' : 'info') }, st.state === 'overdue' ? `Overdue since ${fmtDate(n.date)}.` : `Due ${fmtDate(n.date)} (in ${st.days} days).`, n.set ? '' : ` From ${n.from}.`) : h('p', { class: 'note' }, 'No date yet. Fill in “Next inspection” on the EICR (or EIC), or set one here.'),
+      h('label', { class: 'f' }, h('span', {}, 'Re-test due (leave blank to use the certificate)'), h('input', { type: 'date', value: job.nextInspection || '', onchange: async (e) => { job.nextInspection = e.target.value; await save(); draw(); } })),
+      sug && job.nextInspection && sug.date !== job.nextInspection ? h('button', { class: 'btn small', onclick: async () => { job.nextInspection = ''; await save(); draw(); } }, `Use ${sug.from}: ${fmtDate(sug.date)}`) : null,
+      h('label', { class: 'check' }, h('input', { type: 'checkbox', checked: !job.remindOff, onchange: async (e) => { job.remindOff = !e.target.checked; await save(); } }), 'Show on “Due soon” on the jobs page'),
+      n ? h('div', { class: 'btns' }, h('button', { class: 'btn small', onclick: async () => {
+        const where = [job.siteAddress, job.sitePostcode].filter(Boolean).join(', ');
+        const ics = icsFor({ uid: job.id + '-' + n.date, date: n.date, title: `Electrical inspection due: ${[cust && cust.name, (job.siteAddress || '').split(/[,\n]/)[0]].filter(Boolean).join(', ') || job.title}`, location: where, notes: `${job.title || ''}. Re-test due (from ${n.set ? 'the job' : n.from}). Made by ${APP_NAME}.` });
+        const r = await shareOrDownload(new Blob([ics], { type: 'text/calendar' }), `inspection-due-${n.date}.ics`); if (r === 'downloaded') toast('Calendar file saved: open it to add the reminder');
+      } }, '📅 Add to calendar')) : null,
+      h('p', { class: 'note' }, 'The calendar file has a reminder a month before. It stays on your phone: nothing is sent to the customer.'));
+  };
+  draw(); return box;
+}
 
 // ---------- Customers ----------
 route(/^\/customers$/, async () => {

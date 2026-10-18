@@ -2,7 +2,7 @@
 // Working name only (not decided yet). Change APP_NAME here and in
 // manifest.json / index.html <title>.
 export const APP_NAME = 'Sparky';
-export const APP_VERSION = '0.3.3 beta';
+export const APP_VERSION = '0.4.0 beta';
 export const APP_SLUG = 'sparky';
 // Same Google Cloud project as Hearth (not secret: only works from
 // https://mattytattie.github.io and for its test users). drive.file scope:

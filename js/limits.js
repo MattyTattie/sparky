@@ -149,3 +149,17 @@ export const RING = {
 
 // ---------- Volt drop limits (Appendix 4 section 6.4, Table 4Ab) ----------
 export const VOLT_DROP = { source: 'BS 7671 Appendix 4, Table 4Ab (public LV supply)', lightingPct: 3, otherPct: 5 };
+
+// ---------- Adiabatic check helpers (v0.4) ----------
+// Circuit-breakers: instantaneous trip at 5 × In (B), 10 × In (C), 20 × In (D), within 0.1 s
+// (BS EN 60898-1 / 61009-1). The app uses 0.1 s as the worst case in that region.
+export const INSTANT_MULT = { B: 5, C: 10, D: 20 };
+export const MCB_INSTANT_T = 0.1;
+// ⚠ Energy limiting class 3 maximum let-through I²t (A²s), BS EN 60898-1 Annex ZA, Types B and C,
+// by breaking capacity (A). Typed in for the app; check against the standard or the maker's data
+// (most makers' real let-through is well below these). Used only to cap the 0.1 s worst case.
+export const MCB_CLASS3_I2T = {
+  source: 'BS EN 60898-1 Annex ZA, energy limiting class 3 (check with maker’s data)',
+  upTo16: { 3000: 15000, 4500: 25000, 6000: 35000, 10000: 70000 },
+  upTo32: { 3000: 18000, 4500: 32000, 6000: 45000, 10000: 90000 },
+};

@@ -8,7 +8,7 @@ import { h, fill, toast, modal, confirmBox, fmtDate, shareOrDownload, blobToData
 import { route, page, go, render } from './app.js';
 import { S, openCert, changed, flush, getProfile, defaultInstruments, calibrationWarnings, INSTRUMENT_KINDS } from './state.js';
 import { TYPES, newCert, sectionsFor, sectionDone, get, set, eicrOverall } from './certmodel.js';
-import { EIC_ITEMS, EIC_OUTCOMES, EICR_ITEMS, EICR_OUTCOMES, CODE_TEXT, OBSERVATIONS } from './inspections.js';
+import { EIC_ITEMS, EIC_OUTCOMES, EICR_ITEMS, EICR_OUTCOMES, CODE_TEXT, OBSERVATIONS, OBS_CATS } from './inspections.js';
 import { checkCircuit } from './checks.js';
 import { CHECK_NOTE } from './limits.js';
 
@@ -61,8 +61,8 @@ route(/^\/cert\/([^/]+)$/, async (id) => {
       h('p', { class: 'note' }, 'Bring in results you already have (a Sparky results file). You see every change first; it only fills blanks unless you choose, and never removes circuits or photos.'),
       h('button', { class: 'btn', onclick: async () => { await flush(); (await import('./importui.js')).startImport(id); } }, 'Import results file')) : null,
     h('div', { class: 'card' }, h('h2', {}, 'PDF'),
-      h('p', { class: 'note' }, 'Makes the certificate as a PDF laid out like the IET model forms, with your logo. Sharing opens your phone\u2019s share menu: you choose the app and who it goes to. Nothing is sent by itself.'),
-      h('div', { class: 'btns full' }, h('button', { class: 'btn primary', onclick: (e) => makePdf(cert, e.currentTarget, 'share') }, 'Make PDF and share'), h('button', { class: 'btn', onclick: (e) => makePdf(cert, e.currentTarget, 'view') }, 'Preview'),
+      h('p', { class: 'note' }, 'Makes the certificate as a PDF laid out like the IET model forms, with your logo. “View PDF” shows it here first so you can check it before printing or sharing. Sharing opens your phone\u2019s share menu: you choose the app and who it goes to. Nothing is sent by itself.'),
+      h('div', { class: 'btns full' }, h('button', { class: 'btn primary', onclick: (e) => makePdf(cert, e.currentTarget, 'share') }, 'Make PDF and share'), h('button', { class: 'btn', onclick: (e) => makePdf(cert, e.currentTarget, 'view') }, '👁 View PDF'),
         cert.type !== 'MW' ? h('button', { class: 'btn', onclick: (e) => makeChart(cert, e.currentTarget) }, 'Circuit chart') : null),
       h('label', { class: 'check' }, h('input', { type: 'checkbox', checked: !!cert.pdfFlags, onchange: (e) => { cert.pdfFlags = e.target.checked; changed(); } }), 'Highlight readings over the limit in red on the PDF'),
       cert.status !== 'issued' ? h('button', { class: 'btn', onclick: async () => { if (await confirmBox('Mark as issued?', 'Records today as the issue date. You can still edit it.', 'Mark issued')) { cert.status = 'issued'; cert.issuedAt = new Date().toISOString(); changed(); await flush(); render(); } } }, 'Mark as issued') : null),
@@ -89,7 +89,7 @@ async function makePdf(cert, btn, how) {
     const { certificatePdf, pdfName } = await import('./pdf.js');
     const blob = await certificatePdf(cert, { profile: await getProfile(), photos: await pdfPhotos(cert) });
     const name = pdfName(cert); await savePdf(cert, blob, name);
-    if (how === 'view') { const u = URL.createObjectURL(blob); window.open(u, '_blank') || shareOrDownload(blob, name); }
+    if (how === 'view') (await import('./pdfview.js')).viewPdf(blob, name, { shareText: `${TYPES[cert.type].name} ${cert.number}` });
     else { const r = await shareOrDownload(blob, name, `${TYPES[cert.type].name} ${cert.number}`); if (r === 'downloaded') toast('Saved to your downloads'); }
   } catch (e) { console.error(e); toast('Couldn\u2019t make the PDF: ' + e.message); }
   btn.disabled = false; btn.textContent = label;
@@ -98,7 +98,8 @@ async function makeChart(cert, btn) {
   await flush(); btn.disabled = true;
   try {
     const { boardChartPdf, pdfName } = await import('./pdf.js');
-    for (const b of cert.boards) { const blob = await boardChartPdf(cert, b, await getProfile()); const name = pdfName(cert, '-chart-' + (b.ref || 'DB')); await savePdf(cert, blob, name, 'chart'); await shareOrDownload(blob, name); }
+    const { viewPdf } = await import('./pdfview.js');
+    for (const b of [...cert.boards].reverse()) { const blob = await boardChartPdf(cert, b, await getProfile()); const name = pdfName(cert, '-chart-' + (b.ref || 'DB')); await savePdf(cert, blob, name, 'chart'); viewPdf(blob, name); }
   } catch (e) { toast('Couldn\u2019t make the chart: ' + e.message); }
   btn.disabled = false;
 }
@@ -176,25 +177,39 @@ function observationsSection(cert, redraw) {
     return h('div', { class: 'card' },
       h('div', { style: 'display:flex;justify-content:space-between' }, h('b', {}, 'Observation ' + (i + 1)), h('button', { class: 'btn small warn', onclick: async () => { if (await confirmBox('Remove observation?', o.text, 'Remove', 'warn')) { obs.splice(i, 1); changed(); redraw(); } } }, 'Remove')),
       h('label', { class: 'f' }, h('span', {}, 'Observation'), h('textarea', { value: o.text, oninput: (e) => { o.text = e.target.value; changed(); } })),
+      h('div', { class: 'btns' }, h('button', { class: 'btn tiny', onclick: () => pick(o) }, '📚 Use wording from the library')),
       h('label', { class: 'f' }, h('span', {}, 'Location / circuit'), h('input', { value: o.location || '', oninput: (e) => { o.location = e.target.value; changed(); } })),
       h('div', { class: 'grid2' }, h('label', { class: 'f' }, h('span', {}, 'Regulation(s)'), h('input', { value: o.reg || '', oninput: (e) => { o.reg = e.target.value; changed(); } })), h('div', {}, h('span', { class: 'note' }, 'Code'), codeChips)),
       o.item ? h('div', { class: 'note' }, 'From schedule item ' + o.item) : null);
   };
-  const pick = async () => {
-    const q = h('input', { type: 'search', placeholder: 'Search common defects' });
-    const list = h('div', { class: 'list' });
-    let chosen = null;
-    const draw = () => fill(list, ...OBSERVATIONS.filter((o) => !q.value || o.text.toLowerCase().includes(q.value.toLowerCase())).map((o) => h('button', { class: 'row', onclick: () => { chosen = o; document.querySelector('.modal-bg').remove(); add(o); } }, h('span', { class: 'pill ' + (o.code === 'C1' || o.code === 'C2' ? 'red' : o.code === 'C3' ? '' : 'amber') }, o.code), h('div', { class: 'main' }, h('div', { style: 'white-space:normal' }, o.text), h('div', { class: 's' }, 'Reg ' + o.reg)))));
-    q.oninput = draw; draw();
-    await modal('Pick an observation', h('div', {}, h('p', { class: 'note' }, 'Code and regulation are suggestions. Change them to suit what you found.'), q, h('div', { style: 'height:8px' }), list), [{ label: 'Write my own', value: 'own' }]).then((r) => { if (r === 'own' && !chosen) add({ text: '', code: 'C3', reg: '' }); });
-  };
+  const pick = async (replace = null) => { const o = await pickObservation(); if (!o) return; if (replace) { Object.assign(replace, { text: o.text, code: o.code, reg: o.reg }); changed(); redraw(); } else add(o); };
   const add = (o) => { obs.push({ id: db.newId(), text: o.text, code: o.code, reg: o.reg, location: '' }); changed(); redraw(); };
   const counts = ['C1', 'C2', 'C3', 'FI'].map((c) => `${c}: ${obs.filter((o) => o.code === c).length}`).join('  ·  ');
   return h('div', {},
     h('div', { class: 'notice ' + (eicrOverall(cert) === 'SATISFACTORY' ? 'green' : 'red') }, `${counts}. Overall: ${eicrOverall(cert)}.`),
     obs.length ? obs.map(card) : h('div', { class: 'empty' }, 'No observations. If there are none, the PDF says so.'),
-    h('div', { class: 'btns full' }, h('button', { class: 'btn primary', onclick: pick }, '+ Add observation')),
+    h('div', { class: 'btns full' }, h('button', { class: 'btn primary', onclick: () => pick() }, '+ Add from library'), h('button', { class: 'btn', onclick: () => add({ text: '', code: 'C3', reg: '' }) }, '+ Write my own')),
     h('details', { class: 'card' }, h('summary', {}, 'What the codes mean'), Object.entries(CODE_TEXT).map(([k, v]) => h('p', {}, h('b', {}, k + ': '), v))));
+}
+
+// The observation codes library: filter by code, search, grouped by where it is. Resolves the chosen one (or null).
+export async function pickObservation() {
+  let chosen = null; let code = '';
+  const q = h('input', { type: 'search', placeholder: 'Search, e.g. bonding, RCD, bathroom' });
+  const chips = h('div', { class: 'chips small', style: 'margin:8px 0' });
+  const list = h('div');
+  const colour = (c) => (c === 'C1' || c === 'C2' ? 'red' : c === 'C3' ? '' : 'amber');
+  const draw = () => {
+    fill(chips, [['', 'All'], ['C1', 'C1'], ['C2', 'C2'], ['C3', 'C3'], ['FI', 'FI']].map(([v, t]) => h('button', { class: 'chip ' + v.toLowerCase() + (code === v ? ' on' : ''), onclick: () => { code = v; draw(); } }, t + (v ? ` · ${OBSERVATIONS.filter((o) => o.code === v).length}` : ''))));
+    const qq = q.value.trim().toLowerCase();
+    const shown = OBSERVATIONS.filter((o) => (!code || o.code === code) && (!qq || (o.text + ' ' + o.reg + ' ' + o.cat).toLowerCase().includes(qq)));
+    fill(list, shown.length ? OBS_CATS.map((cat) => { const os = shown.filter((o) => o.cat === cat); return os.length ? [h('div', { class: 'obscat' }, cat), h('div', { class: 'list' }, os.map((o) => h('button', { class: 'row', onclick: () => { chosen = o; document.querySelector('.modal-bg').remove(); done(); } }, h('span', { class: 'pill ' + colour(o.code) }, o.code), h('div', { class: 'main' }, h('div', { style: 'white-space:normal' }, o.text), h('div', { class: 's' }, 'Reg ' + o.reg)))))] : null; }) : h('div', { class: 'empty' }, 'Nothing matches. Write your own instead.'));
+  };
+  q.oninput = draw; draw();
+  let done = () => {};
+  const p = new Promise((res) => { done = () => res(chosen); });
+  modal('Observation codes library', h('div', {}, h('p', { class: 'note' }, `${OBSERVATIONS.length} common defects. Tap one to add it. The code and regulation are suggestions: change them to suit what you found.`), q, chips, list), [{ label: 'Cancel', value: null }]).then(() => done());
+  return p;
 }
 
 // ---------- Signatures ----------

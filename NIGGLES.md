@@ -1,3 +1,16 @@
+# Sparky — niggles and update lists
+
+## [BUILT v0.4 on branch `v0.4`, 18 Oct 2026 — NOT LIVE] Batch agreed 17–18 Oct 2026 (Matthew) — screenshots in /workspace/sparky-shots/v0.4, publish only on his OK
+- [built] New look: clean white + electric blue, rounded cards (restyle branch 7ff61ca merged in; cache sparky-v0.4.0, manifest theme #2952ff, APP_VERSION 0.4.0 beta). Android app splash/status bar stay navy until the APK is rebuilt.
+- [built] Proper ring final check when "Ring final circuit" is ticked: r1/rn/r2 boxes only show when ticked; r1 vs rn within 0.05 Ω; r2 ≈ r1 × live/CPC csa (1.67 for 2.5/1.5); expected R1+R2 = (r1+r2)/4 and L–N = (r1+rn)/4; ring length from r1; ring volt drop (OSG: 20 A at far point + 12 A spread); expected Zs = Zdb + (r1+r2)/4.
+- [built] DC calculator (Solar / battery tab): two-way DC volt drop at conductor temp, 1–3% target, cable size up to 120 mm²; PV cold-morning Voc vs inverter max and MPPT top (default −10 °C); string fuses (3+ strings, 1.5–2.4 × Isc, ≤ panel max series fuse); battery fuse ≥ 1.25 × current and cable ≥ fuse.
+- [built] Copy a circuit (to this or another board, readings optional) / copy a whole board (new ids, readings and board tests optional).
+- [built] Observation codes library: 54 entries (C1 8, C2 21, C3 19, FI 6), filter by code, search, grouped; "Use wording from the library" on each observation.
+- [built] "View" PDFs inside the app (pdf.js, works offline, zoom button) on the job page's saved PDFs, the certificate's "View PDF", and circuit charts.
+- [built] Re-test reminders: next inspection per job (from the EICR date / EIC interval, or typed in), "Due soon" (90 days / overdue) on the jobs page, 📅 calendar file (.ics) with a reminder a month before.
+- [built] Adiabatic check (543.1.3) on the circuit page (from measured Zs; amber flag on CPC), in "Check it" and in the sizer. k 115/143/176, armour 51/46.
+- [built] Cable & breaker sizer ("Size it" tab): load kW/A (+pf), run, method, ambient, grouping, insulation (Ci incl. Table 52.2 short lengths), T&E / 6243Y / singles / SWA; next breaker ≥ Ib, B (C for motors); smallest cable passing Iz, volt drop (3%/5%), Zs, adiabatic; plain-words reasons ("2.5 fails on volt drop at 32 m, so 4 mm²"); ring option.
+- Matthew to check: see HANDOFF.md "v0.4 — values to check".
 
 ## [DONE v0.3, 17 Oct 2026] Calculator overhaul (Matthew 17 Oct 2026)
 - Make the calculator more intuitive (clearer layout, fewer steps).

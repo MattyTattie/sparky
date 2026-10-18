@@ -9,13 +9,13 @@ import { route, page, go, render } from './app.js';
 import { openCert, changed, flush } from './state.js';
 import { field } from './certui.js';
 import { blankBoard } from './certmodel.js';
-import { FIELDS, FIELD, TEMPLATES, blankCircuit, applyTemplate, copyCircuit, makeSpare } from './templates.js';
+import { FIELDS, FIELD, TEMPLATES, blankCircuit, applyTemplate, copyCircuit, copyBoard, makeSpare } from './templates.js';
 import { checkCircuit, limitZs, isSpare } from './checks.js';
 import { DEVICES, deviceById, deviceFromBs, ratingsFor, CHECK_NOTE } from './limits.js';
 import { voiceSupported, listen } from './voice.js';
 import { CABLE_PICKS, WIRING_TYPES, REF_METHODS } from './cables.js';
 import { lengthFromR1R2 } from './calc.js';
-import { cableCheck, isRingLike, applyCable } from './checks.js';
+import { cableCheck, isRingLike, applyCable, ringCheck, circuitAdiabatic } from './checks.js';
 
 const LAND = window.matchMedia('(orientation: landscape) and (min-width: 600px)');
 LAND.addEventListener('change', () => { if (/\/b\/\d+$/.test(location.hash)) render(); });
@@ -32,6 +32,36 @@ route(/^\/cert\/([^/]+)\/boards$/, async (id) => {
     h('div', { class: 'btns full' }, h('button', { class: 'btn primary', onclick: () => addBoard(cert) }, '+ Add board')),
   ], { back: '#/cert/' + id, sub: cert.number });
 });
+// Copy a whole board (e.g. a block of identical flats): new ids, readings cleared unless you tick.
+export async function copyBoardDialog(cert, b) {
+  const ref = h('input', { value: nextRef(cert) });
+  const keep = h('input', { type: 'checkbox' }); const keepB = h('input', { type: 'checkbox' });
+  const ok = await modal('Copy this board', h('div', {},
+    h('p', { class: 'note' }, `Makes a new board with the same ${b.circuits.length} circuit(s): devices, cables and descriptions. Test readings are left blank unless you tick below.`),
+    h('label', { class: 'f' }, h('span', {}, 'New board reference'), ref),
+    h('label', { class: 'check' }, keep, 'Keep the circuit test results too'),
+    h('label', { class: 'check' }, keepB, 'Keep the board\u2019s Zdb, Ipf and confirmations')),
+  [{ label: 'Cancel', value: false }, { label: 'Copy board', value: true, cls: 'primary' }]);
+  if (!ok) return;
+  cert.boards.push(copyBoard(b, { ref: ref.value.trim() || nextRef(cert), keepResults: keep.checked, keepBoardTests: keepB.checked }));
+  changed(); toast(`Copied to ${cert.boards[cert.boards.length - 1].ref}`); go(`#/cert/${cert.id}/b/${cert.boards.length - 1}`);
+}
+const nextRef = (cert) => { let n = cert.boards.length + 1; while (cert.boards.some((x) => x.ref === 'DB' + n)) n++; return 'DB' + n; };
+// Copy one circuit: to this board or another one, readings optional.
+async function copyCircuitDialog(cert, b, bi, ci, base) {
+  const c = b.circuits[ci];
+  const keep = h('input', { type: 'checkbox' });
+  const to = cert.boards.length > 1 ? h('select', {}, cert.boards.map((x, i) => h('option', { value: i, selected: i === bi ? true : null }, (x.ref || 'Board ' + (i + 1)) + (i === bi ? ' (this board)' : '')))) : null;
+  const ok = await modal(`Copy circuit ${c.num}`, h('div', {},
+    h('p', { class: 'note' }, 'The copy keeps the device, cable and description. It goes straight after this one (or at the end of the other board).'),
+    to ? h('label', { class: 'f' }, h('span', {}, 'Copy to'), to) : null,
+    h('label', { class: 'check' }, keep, 'Keep the test results too')),
+  [{ label: 'Cancel', value: false }, { label: 'Copy circuit', value: true, cls: 'primary' }]);
+  if (!ok) return;
+  const tb = to ? +to.value : bi; const tgt = cert.boards[tb];
+  if (tb === bi) { b.circuits.splice(ci + 1, 0, copyCircuit(c, b.circuits.length + 1, { keepResults: keep.checked })); renumberIfSequential(b); changed(); toast(keep.checked ? 'Copied with readings' : 'Copied (readings left blank)'); go(`${base}/c/${ci + 1}`); }
+  else { tgt.circuits.push(copyCircuit(c, tgt.circuits.length + 1, { keepResults: keep.checked })); changed(); toast(`Copied to ${tgt.ref}`); go(`#/cert/${cert.id}/b/${tb}/c/${tgt.circuits.length - 1}`); }
+}
 function addBoard(cert) { cert.boards.push(blankBoard(cert.boards.length + 1)); changed(); go(`#/cert/${cert.id}/b/${cert.boards.length - 1}`); }
 
 // ---------- One board ----------
@@ -46,7 +76,7 @@ route(/^\/cert\/([^/]+)\/b\/(\d+)$/, async (id, bi) => {
     h('div', { class: 'note', style: 'margin:4px 0 8px' }, 'Tip: turn the phone sideways to see the whole schedule as a table.'),
     tools,
     circuitCards(cert, b, +bi),
-    h('div', { class: 'btns full' }, h('button', { class: 'btn', onclick: () => addBoard(cert) }, '+ Add another board'), cert.boards.length > 1 ? h('button', { class: 'btn warn', onclick: async () => { if (await confirmBox('Delete this board?', `${b.ref} and its ${b.circuits.length} circuits`, 'Delete', 'warn')) { cert.boards.splice(+bi, 1); changed(); go(`#/cert/${id}/boards`); } } }, 'Delete board') : null),
+    h('div', { class: 'btns full' }, h('button', { class: 'btn', onclick: () => addBoard(cert) }, '+ Add another board'), h('button', { class: 'btn', onclick: () => copyBoardDialog(cert, b) }, 'Copy this board'), cert.boards.length > 1 ? h('button', { class: 'btn warn', onclick: async () => { if (await confirmBox('Delete this board?', `${b.ref} and its ${b.circuits.length} circuits`, 'Delete', 'warn')) { cert.boards.splice(+bi, 1); changed(); go(`#/cert/${id}/boards`); } } }, 'Delete board') : null),
     h('div', { class: 'notice amber' }, CHECK_NOTE),
   ], { back, sub: cert.number });
 });
@@ -108,7 +138,7 @@ route(/^\/cert\/([^/]+)\/b\/(\d+)\/c\/(\d+)$/, async (id, bi, ci) => {
   circuitEditor({ cert, c, ctx: () => ctxFor(cert, b), back: base, title: `Circuit ${c.num}`,
     prev: +ci > 0 ? `${base}/c/${+ci - 1}` : null, next: +ci < b.circuits.length - 1 ? `${base}/c/${+ci + 1}` : null,
     extra: [
-      h('button', { class: 'btn small', onclick: () => { b.circuits.splice(+ci + 1, 0, copyCircuit(c, b.circuits.length + 1)); renumberIfSequential(b); changed(); toast('Copied (readings left blank)'); go(`${base}/c/${+ci + 1}`); } }, 'Copy row'),
+      h('button', { class: 'btn small', onclick: () => copyCircuitDialog(cert, b, +bi, +ci, base) }, 'Copy circuit'),
       h('button', { class: 'btn small', onclick: async () => { const t = await pickTemplate(); if (t) { Object.assign(c, applyTemplate(c, t)); changed(); render(); } } }, 'Template'),
       h('button', { class: 'btn small', onclick: () => { Object.assign(c, makeSpare(c)); changed(); render(); } }, 'SPARE / N/A'),
       h('button', { class: 'btn small warn', onclick: async () => { if (await confirmBox('Delete circuit?', `${c.num} ${c.desc}`, 'Delete', 'warn')) { b.circuits.splice(+ci, 1); changed(); go(base); } } }, 'Delete'),
@@ -189,7 +219,12 @@ function circuitEditor({ cert, c, ctx, back, title, prev, next, extra = [], mw =
     if (cab && cab.msg && !cab.level) hint.push(h('p', { class: 'note' }, cab.msg));
     const len = lengthFromR1R2({ r1r2: c.r1r2, live: Number(c.live), cpc: pick && pick.cpc === 'armour' ? 'armour' : Number(c.cpc), cores: pick && pick.cores });
     if (len && !isRingLike(c)) hint.push(h('p', { class: 'note' }, `Your R1+R2 of ${c.r1r2} Ω is about ${len} m of this cable (at 20 °C).`));
+    const ad = circuitAdiabatic(c, ctx());
+    if (ad && ad.ok) hint.push(h('div', { class: 'resline ' + (ad.pass ? 'ok' : ad.pass === false ? 'bad' : 'na') }, h('b', {}, ad.pass ? '✓' : ad.pass === false ? '!' : '–'),
+      h('div', {}, h('div', {}, `Adiabatic (543.1.3): CPC needs ${ad.smin} mm², it\u2019s ${ad.cpc} mm²`), h('div', { class: 'note' }, `Fault ${Math.round(ad.ifault)} A at Zs ${c.zs} Ω. ${ad.how} k ${ad.k} (${ad.kLabel}). S = √(${ad.i2t} A²s) ÷ ${ad.k}.${ad.armourNote || ''}`))));
+    else if (ad && !ad.ok && ad.error && /Zs/.test(ad.error) && !/Need/.test(ad.error)) hint.push(h('p', { class: 'note' }, 'Adiabatic: ' + ad.error));
     fill(hintBox, hint);
+    drawRing();
     };
     updHint();
     fill(cableBox,
@@ -199,10 +234,24 @@ function circuitEditor({ cert, c, ctx, back, title, prev, next, extra = [], mw =
         pick ? h('label', { class: 'f' }, h('span', {}, 'Size'), h('select', { 'aria-label': 'Cable size', onchange: (e) => { c.cableSize = e.target.value; applyCable(c); changed(); drawCable(); refresh(); } },
           h('option', { value: '' }, '— size —'), Object.entries(pick.sizes).map(([sz, cp]) => h('option', { value: sz, selected: size === sz ? true : null }, `${sz} mm²` + (cp === 'armour' ? ' + armour' : ` / ${cp} mm² CPC`))))) : h('span')),
       h('div', { class: 'grid2' }, inp('live'), inp('cpc')),
-      h('label', { class: 'check' }, h('input', { type: 'checkbox', checked: isRingLike(c), onchange: (e) => { c.ring = e.target.checked; changed(); drawCable(); refresh(); } }), 'Ring final circuit'),
+      h('label', { class: 'check' }, h('input', { type: 'checkbox', checked: isRingLike(c), onchange: (e) => { c.ring = e.target.checked; changed(); drawCable(); refresh(); } }), 'Ring final circuit', h('span', { class: 'note' }, ' (shows the ring tests)')),
       codeSel('wiring', WIRING_TYPES, 'Type of wiring', 3), codeSel('ref', REF_METHODS, 'Reference method', 4),
       hintBox);
   };
+  // Ring final: r1 / rn / r2 boxes and the end-to-end check, only when ticked.
+  const ringInputs = h('div', { class: 'grid3' }, inp('r1'), inp('rn'), inp('r2'));
+  const ringBox = h('div');
+  function drawRing() {
+    const on = isRingLike(c);
+    ringInputs.style.display = on ? '' : 'none';
+    const hidden = !on && ['r1', 'rn', 'r2'].some((k) => String(c[k] || '').trim());
+    if (!on) { fill(ringBox, hidden ? h('p', { class: 'note' }, `Ring readings hidden (r1 ${c.r1 || '–'}, rn ${c.rn || '–'}, r2 ${c.r2 || '–'}). Tick “Ring final circuit” to see them.`) : null); return; }
+    const rc = ringCheck(c, ctx());
+    fill(ringBox, h('div', { class: 'ringchk' }, h('div', { class: 'ringhd' }, 'Ring final check'),
+      rc.empty ? h('p', { class: 'note' }, 'Enter the end-to-end readings r1, rn and r2 and the app checks the ring.') :
+      rc.items.map((it) => h('div', { class: 'resline ' + (it.pass === true ? 'ok' : it.pass === false ? 'bad' : 'na') }, h('b', {}, it.pass === true ? '✓' : it.pass === false ? '!' : '•'), h('div', {}, h('div', {}, it.text), it.sub ? h('div', { class: 'note' }, it.sub) : null))),
+      h('p', { class: 'note' }, 'Rules of thumb from IET Guidance Note 3, not regulations.')));
+  }
   drawCable();
   let rec = null;
   const mic = voiceSupported() ? h('button', { class: 'btn small', onclick: (e) => {
@@ -224,7 +273,7 @@ function circuitEditor({ cert, c, ctx, back, title, prev, next, extra = [], mw =
       h('div', { class: 'grid2' }, inp('rcdBs'), inp('rcdType'), inp('rcdIdn'), inp('rcdRating')),
       h('label', { class: 'check' }, h('input', { type: 'checkbox', checked: !!c.rcdS, onchange: (e) => { c.rcdS = e.target.checked; changed(); refresh(); } }), 'Time-delayed (S-type) RCD')),
     sect('Test results',
-      h('div', { class: 'grid3' }, inp('r1'), inp('rn'), inp('r2')), h('div', { class: 'grid2' }, inp('r1r2'), inp('R2')),
+      ringInputs, h('div', { class: 'grid2' }, inp('r1r2'), inp('R2')), ringBox,
       inp('irV'), inp('irLL'), inp('irLE'), inp('pol'), inp('zs'), inp('rcdMs'), inp('rcdBtn'), inp('afddBtn'), inp('remarks')),
     h('div', { class: 'stick' }, prev ? h('a', { class: 'btn', href: prev }, '← Previous') : null, h('a', { class: 'btn', href: back }, 'All circuits'), next ? h('a', { class: 'btn primary', href: next }, 'Next →') : null),
   ], { back, sub: c.desc || '' });

@@ -146,3 +146,62 @@ export const CABLE_PICKS = {
   swa3cX: { label: '3-core XLPE SWA 6943X (3rd core as CPC)', calc: 'swa3X', wiring: 'G', cores: 3, cpc: 'core', sizes: { 1.5: 1.5, 2.5: 2.5, 4: 4, 6: 6, 10: 10, 16: 16, 25: 25, 35: 35 } },
   swa3aX: { label: '3-core XLPE SWA 6943X (armour as CPC)', calc: 'swa3X', wiring: 'G', cores: 3, cpc: 'armour', sizes: { 1.5: 'armour', 2.5: 'armour', 4: 'armour', 6: 'armour', 10: 'armour', 16: 'armour', 25: 'armour', 35: 'armour' } },
 };
+
+// ---------- v0.4 additions ----------
+// Single-core 70 °C PVC (6491X) in conduit / trunking or clipped, two cables
+// single-phase a.c. or d.c. Table 4D1A columns 2, 4 and 6 (checked against published
+// copies, Oct 2026). Volt drop Table 4D1B single-phase; 25/35 mm² use the impedance z
+// (1.80 / 1.30) — ⚠ from memory, check against your copy.
+CABLES.singles = {
+  label: 'Singles 70 °C PVC (6491X) in conduit / trunking',
+  source: 'Table 4D1A (current, 2 cables 1-phase a.c./d.c.) and 4D1B (volt drop)',
+  note: '⚠ Singles: Table 4D1A current ratings; volt drop from Table 4D1B (25/35 mm² use 1.80 / 1.30 mV/A/m, check against your copy). CPC is a separate single in the same conduit (Table 54.7 size, k 115 as it\u2019s bunched).',
+  cores: 2,
+  sizes: [1, 1.5, 2.5, 4, 6, 10, 16, 25, 35],
+  mvam: { 1: 44, 1.5: 29, 2.5: 18, 4: 11, 6: 7.3, 10: 4.4, 16: 2.8, 25: 1.8, 35: 1.3 },
+  methods: {
+    A: { label: 'In conduit in an insulated wall (A)', amps: { 1: 11, 1.5: 14.5, 2.5: 19.5, 4: 26, 6: 34, 10: 46, 16: 61, 25: 80, 35: 99 } },
+    B: { label: 'In conduit or trunking on a wall (B)', amps: { 1: 13.5, 1.5: 17.5, 2.5: 24, 4: 32, 6: 41, 10: 57, 16: 76, 25: 101, 35: 125 } },
+    C: { label: 'Clipped direct (C)', amps: { 1: 15.5, 1.5: 20, 2.5: 27, 4: 37, 6: 47, 10: 65, 16: 87, 25: 114, 35: 141 } },
+  },
+};
+CABLE_TEMP.singles = 70;
+// 6243Y (3-core & earth) uses the T&E table (two loaded cores).
+CABLES.te3 = { ...CABLES.te, label: '3-core & earth, 70 °C PVC (6243Y)', sizes: [1, 1.5, 2.5], note: '⚠ 6243Y is rated with the Table 4D5 T&E figures (two loaded cores on a single-phase circuit). Makers differ on the 2.5 mm² CPC (1.0 or 1.5); the app uses 1.0.' };
+CABLE_TEMP.te3 = 70; CABLES.te3.cores = 2;
+
+// Separate CPC for singles (Table 54.7: same as live up to 16 mm², 16 mm² for 25 and 35).
+export const SINGLES_CPC = { 1: 1, 1.5: 1.5, 2.5: 2.5, 4: 4, 6: 6, 10: 10, 16: 16, 25: 16, 35: 16 };
+
+// Steel wire armour cross-section, mm² (for the adiabatic check when the armour is the CPC).
+// ⚠ Maker's data (BS 5467 600/1000 V XLPE/SWA, e.g. Prysmian / Anixter sheets), NOT BS 7671.
+// PVC/SWA (BS 6346) is close but not identical. Use your cable's data sheet where you can.
+export const ARMOUR_CSA = {
+  source: 'Maker’s data (BS 5467 XLPE/SWA 600/1000 V), not BS 7671. Check your cable’s data sheet.',
+  2: { 1.5: 16, 2.5: 17, 4: 21, 6: 23, 10: 26, 16: 31, 25: 42, 35: 46 },
+  3: { 1.5: 17, 2.5: 19, 4: 23, 6: 24, 10: 29, 16: 33, 25: 46, 35: 52 },
+};
+
+// k for the adiabatic equation S = √(I²t) / k (Regulation 543.1.3).
+//  Table 54.2: separate insulated CPC, not in a cable or bunched — 70 °C PVC 143, 90 °C XLPE 176.
+//  Table 54.3: CPC as a core in a cable or bunched with cables — 70 °C PVC 115, 90 °C XLPE 143.
+//  Table 54.4: steel armour as CPC — 70 °C PVC cable 51, 90 °C XLPE cable 46.
+export const K_VALUES = {
+  source: 'BS 7671 Tables 54.2, 54.3 and 54.4 (copper conductors; steel armour)',
+  core70: { k: 115, label: 'Copper core in a 70 °C PVC cable, or bunched (Table 54.3)' },
+  core90: { k: 143, label: 'Copper core in a 90 °C XLPE cable (Table 54.3)' },
+  sep70: { k: 143, label: 'Separate PVC-insulated copper CPC, not bunched (Table 54.2)' },
+  sep90: { k: 176, label: 'Separate XLPE-insulated copper CPC, not bunched (Table 54.2)' },
+  armour70: { k: 51, label: 'Steel armour of a 70 °C PVC SWA cable (Table 54.4)' },
+  armour90: { k: 46, label: 'Steel armour of a 90 °C XLPE SWA cable (Table 54.4)' },
+};
+
+// Thermal insulation factor Ci (Table 52.2 for short lengths; 0.5 for 0.5 m or more).
+export const CI_OPTIONS = [
+  ['1', 'None (Ci 1.0)'],
+  ['0.88', 'Through insulation for 50 mm (Ci 0.88)'],
+  ['0.78', 'Through insulation for 100 mm (Ci 0.78)'],
+  ['0.63', 'Through insulation for 200 mm (Ci 0.63)'],
+  ['0.51', 'Through insulation for 400 mm (Ci 0.51)'],
+  ['0.5', 'Totally surrounded for 0.5 m or more (Ci 0.5)'],
+];

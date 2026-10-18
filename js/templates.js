@@ -67,11 +67,22 @@ export function applyTemplate(c, t) {
   const { name, ...vals } = t;
   return { ...c, ...vals, spare: false };
 }
-export function copyCircuit(c, nextNum) {
-  const out = { ...c, id: 'c' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), num: String(nextNum) };
-  // a copied row keeps the circuit details but not the readings
-  for (const k of ['r1', 'rn', 'r2', 'r1r2', 'R2', 'irLL', 'irLE', 'pol', 'zs', 'rcdMs', 'rcdBtn', 'afddBtn', 'remarks']) out[k] = '';
+export const RESULT_KEYS = ['r1', 'rn', 'r2', 'r1r2', 'R2', 'irLL', 'irLE', 'pol', 'zs', 'rcdMs', 'rcdBtn', 'afddBtn', 'remarks'];
+const newCircuitId = () => 'c' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+export function copyCircuit(c, nextNum, { keepResults = false } = {}) {
+  const out = { ...JSON.parse(JSON.stringify(c)), id: newCircuitId(), num: String(nextNum) };
+  // a copied row keeps the circuit details; readings only if asked
+  if (!keepResults) for (const k of RESULT_KEYS) out[k] = '';
   return out;
+}
+// Copy a whole board: new ids for the board and every circuit; readings cleared unless asked.
+export function copyBoard(b, { ref = '', keepResults = false, keepBoardTests = false } = {}) {
+  const nb = JSON.parse(JSON.stringify(b));
+  nb.id = 'b' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5);
+  nb.ref = ref || ((b.ref || 'DB') + ' (copy)');
+  if (!keepBoardTests) { nb.zdb = ''; nb.ipf = ''; nb.polOk = false; nb.phaseSeq = false; nb.spdOk = false; }
+  nb.circuits = (b.circuits || []).map((c) => copyCircuit(c, c.num, { keepResults }));
+  return nb;
 }
 export function makeSpare(c) {
   const keep = { id: c.id, num: c.num, device: c.device, time: c.time, spare: true };
