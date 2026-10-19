@@ -26,6 +26,7 @@ const LABEL_WORDS = ['DOWNSTAIRS', 'UPSTAIRS', 'SOCKETS', 'SKTS', 'SOCKET', 'LIG
   'RADIATOR', 'RADIATORS', 'BEDROOM', 'KITCHEN', 'TOWEL', 'RAIL', 'BOILER', 'HEATING', 'SMOKE', 'ALARMS', 'ALARM', 'GARAGE', 'SHED', 'GARDEN', 'OUTSIDE', 'FRONT', 'BACK', 'LOFT',
   'BATHROOM', 'LOUNGE', 'LIVING', 'ROOM', 'DINING', 'HALL', 'LANDING', 'UTILITY', 'FRIDGE', 'FREEZER', 'WASHER', 'DRYER', 'DISHWASHER', 'SPARE', 'CHARGER', 'EXTRACTOR', 'FAN', 'FLOOR', 'UNDERFLOOR', 'RING', 'MICROWAVE', 'RADIAL', 'ISOLATOR'];
 function editDist(a, b) { const d = Array.from({ length: a.length + 1 }, (_, i) => [i]); for (let j = 1; j <= b.length; j++) d[0][j] = j; for (let i = 1; i <= a.length; i++) for (let j = 1; j <= b.length; j++) d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1)); return d[a.length][b.length]; }
+export const isLabelWord = (w) => LABEL_WORDS.includes(String(w).toUpperCase());
 export function fixLabelWord(w) {
   const u = w.toUpperCase(); if (u.length < 3 || /\d/.test(u)) return w; if (LABEL_WORDS.includes(u)) return u;
   if (u.length >= 4) { const pre = LABEL_WORDS.find((c) => c.length > u.length && c.startsWith(u)); if (pre) return pre; }
@@ -156,9 +157,18 @@ export function readColumn(col) {
 
 // Labels (often on strips under the breakers, written sideways). labelWords
 // have cx already mapped back into the row's x coordinates.
-export function attachLabels(ways, labelWords) {
+export function attachLabels(ways, labelWords, { centre = null } = {}) {
   if (!ways.length) return ways;
   const pitch = ways[0].pitch || median(ways.slice(1).map((w, i) => w.cx - ways[i].cx)) || 100;
+  // v0.13: stickers read one by one (labelWords with .sticker = id) are matched as whole stickers.
+  const stick = (labelWords || []).filter((w) => w.sticker);
+  if (stick.length) {
+    const ids = [...new Set(stick.map((w) => w.sticker))];
+    const st = ids.map((id) => { const ws = stick.filter((w) => w.sticker === id).sort((a, b) => (a.order ?? 0) - (b.order ?? 0)); return { cx: ws[0].cx, text: stickerText(ws.map((w) => w.text).join(' ')) }; }).filter((x) => x.text);
+    const m = matchStickers(ways.map((w) => w.cx), st.map((x) => x.cx), pitch, centre ?? (ways[0].cx + ways[ways.length - 1].cx) / 2);
+    st.forEach((x, i) => { const w = ways[m[i]]; if (m[i] >= 0 && !w.desc) { w.desc = x.text; w.labelFrom = 'sticker'; } });
+    labelWords = labelWords.filter((w) => !w.sticker);
+  }
   // Words of one strip share an x; join them into a phrase.
   const ws = (labelWords || []).map((w) => ({ ...w, text: clean(w.text) })).filter((w) => /[A-Za-z]{2,}/.test(w.text) && w.text.length >= 2 && (w.conf == null || w.conf >= 55)).sort((a, b) => a.cx - b.cx || a.order - b.order);
   const strips = [];
@@ -173,7 +183,7 @@ export function attachLabels(ways, labelWords) {
 }
 
 // Whole row: OCR words of the breaker faces (+ optional label words) → ways and board items.
-export function readRow(words, labelWords = []) {
+export function readRow(words, labelWords = [], opts = {}) {
   const items = mergeWords(words).map(classify).filter(Boolean);
   const cols = columns(items);
   let read = cols.map(readColumn).map((r, i) => ({ ...r, pitch: cols[i].pitch }));
@@ -191,7 +201,7 @@ export function readRow(words, labelWords = []) {
   // A lone odd "10mA" on a way we couldn't read is usually a misread: use the row's usual RCD rating (still flagged).
   const idns = ways.filter((w) => w.sure && w.idn).map((w) => w.idn); const usual = idns.length >= 3 ? median(idns.map(Number)) : null;
   if (usual) for (const w of ways) if (!w.sure && w.idn && Number(w.idn) !== usual && !w.items.some((i) => i.kind === 'model')) w.idn = String(usual);
-  attachLabels(ways, labelWords);
+  attachLabels(ways, labelWords, opts);
   return { ways, board: read.filter((r) => r.kind !== 'way'), pitch: cols.length ? cols[0].pitch : null };
 }
 
@@ -221,4 +231,35 @@ export function readDevice(word) { const m = readMarking(word); if (m) return { 
 export function proposeCircuits(words) {
   return readRow(words.filter((w) => !labelFor(w.text || '')), words.filter((w) => labelFor(w.text || '')).map((w, i) => ({ ...w, cx: (w.bbox.x0 + w.bbox.x1) / 2, order: i })))
     .ways.map((w, i) => ({ num: String(i + 1), source: w.items.map((x) => x.text).join(' '), ...toCircuit(w), spare: /spare/i.test(w.desc || '') }));
+}
+
+// v0.13: one sticker's words -> a tidy label ("BEDROOM 2 RADIATOR" -> "Bedroom 2 radiator"). Null if it doesn't look like words.
+export function stickerText(raw) {
+  const ws = String(raw || '').split(/\s+/).map((w) => w.replace(/^[^A-Za-z0-9]+|[^A-Za-z0-9/&+-]+$/g, '')).filter(Boolean)
+    .filter((w) => /[A-Za-z]{2,}/.test(w) || (/^\d{1,2}$/.test(w)));
+  const fixed = ws.map((w) => (/[A-Za-z]{3,}/.test(w) ? fixLabelWord(w) : w));
+  if (!fixed.some((w) => /[A-Za-z]{3,}/.test(w))) return null;
+  while (fixed.length > 1 && /^\d+$/.test(fixed[0])) fixed.shift();
+  while (fixed.length > 1 && /^\d+$/.test(fixed[fixed.length - 1])) fixed.pop();
+  const t = fixed.join(' ').toLowerCase(); return t.charAt(0).toUpperCase() + t.slice(1);
+}
+// v0.13: which breaker does each sticker belong to? Stickers sit on the cover, the breakers stand out
+// from it, so in a photo the row of stickers looks slightly narrower (or wider) than the row of breakers,
+// centred on the camera. Try a few such scales, keep left-to-right order, one sticker per breaker,
+// and take the best fit. Returns, for each sticker, the index of its breaker (or -1).
+export function matchStickers(wayX, stX, pitch, centre) {
+  const order = stX.map((x, i) => [x, i]).sort((a, b) => a[0] - b[0]); const xs = order.map((o) => o[0]);
+  const miss = pitch * 0.6; let best = null;
+  for (let k = 0.84; k <= 1.081; k += 0.004) {
+    const map = xs.map((x) => centre + (x - centre) / k); const n = map.length, m = wayX.length;
+    // D[i][j]: best cost placing first i stickers among first j breakers
+    const D = Array.from({ length: n + 1 }, () => new Float64Array(m + 1).fill(Infinity)); const P = Array.from({ length: n + 1 }, () => new Int8Array(m + 1));
+    for (let j = 0; j <= m; j++) D[0][j] = 0;
+    for (let i = 1; i <= n; i++) { D[i][0] = D[i - 1][0] + miss; for (let j = 1; j <= m; j++) {
+      const take = D[i - 1][j - 1] + Math.min(miss * 1.5, Math.abs(map[i - 1] - wayX[j - 1])), skipW = D[i][j - 1], skipS = D[i - 1][j] + miss;
+      if (take <= skipW && take <= skipS) { D[i][j] = take; P[i][j] = 1; } else if (skipW <= skipS) { D[i][j] = skipW; P[i][j] = 2; } else { D[i][j] = skipS; P[i][j] = 3; } } }
+    const cost = D[n][m] + Math.abs(k - 1) * pitch * 0.4;
+    if (!best || cost < best.cost) { const a = new Array(n).fill(-1); let i = n, j = m; while (i > 0 && j >= 0) { if (j === 0) { i--; continue; } const p = P[i][j]; if (p === 1) { a[i - 1] = Math.abs(map[i - 1] - wayX[j - 1]) < miss * 1.5 ? j - 1 : -1; i--; j--; } else if (p === 2) j--; else i--; } best = { cost, a, k }; }
+  }
+  const out = new Array(stX.length).fill(-1); order.forEach(([, i], r) => (out[i] = best ? best.a[r] : -1)); return out;
 }

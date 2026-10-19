@@ -488,13 +488,38 @@ route(/^\/cert\/([^/]+)\/b\/(\d+)\/scan$/, async (id, bi) => {
     ws.forEach((w, i) => {
       if (w.crop) return;
       const left = i ? (ws[i - 1].cx + w.cx) / 2 : w.cx - pitch / 2, right = i < ws.length - 1 ? (ws[i + 1].cx + w.cx) / 2 : w.cx + pitch / 2;
-      w.crop = { x: Math.max(0, left), y: R.y, w: Math.max(10, right - left), h: R.h * 1.9 };
+      const lb = r.labelRects && r.labelRects.length ? Math.max(...r.labelRects.map((x) => x.y + x.h)) - R.y : 0;
+      w.crop = { x: Math.max(0, left), y: R.y, w: Math.max(10, right - left), h: Math.max(R.h * 1.9, lb + pitch * 0.1) };
     });
     for (const o of r.board) if (!o.crop) { const ww = pitch * (o.wide ? 2 : 1); o.crop = { x: Math.max(0, o.cx - ww / 2), y: R.y, w: ww, h: R.h * 1.4 }; }
   };
   const cropImg = (p, c) => { const bm = p.bmp; const r = { x: c.x, y: c.y, w: Math.min(c.w, bm.width - c.x), h: Math.min(c.h, bm.height - c.y) }; const s = Math.min(1, 170 / r.h); const cv = h('canvas', { width: Math.max(1, Math.round(r.w * s)), height: Math.max(1, Math.round(r.h * s)), class: 'waycrop' }); cv.getContext('2d').drawImage(bm, r.x, r.y, r.w, r.h, 0, 0, cv.width, cv.height); cv.onclick = () => modal('Close-up', (() => { const z = Math.min(2, (window.innerWidth - 60) / r.w, 520 / r.h); const big = h('canvas', { width: Math.round(r.w * z), height: Math.round(r.h * z), style: 'max-width:100%' }); big.getContext('2d').drawImage(bm, r.x, r.y, r.w, r.h, 0, 0, big.width, big.height); return big; })(), [{ label: 'Close', value: true }]); return cv; };
   const blankWay = (crop) => ({ kind: 'way', type: 'B', rating: '', rcbo: false, idn: '', desc: '', sure: false, why: 'Type it in', keep: true, crop });
 
+  // v0.13: show / redraw the box the labels are read from (green), with each sticker found (dashed).
+  function labelBoxEditor(r) {
+    const p = parts[r.part]; const R = r.rect; const lb0 = r.labelBox || { x: R.x, y: R.y + R.h, w: R.w, h: R.h * 2 };
+    const view = { x: Math.max(0, Math.min(R.x, lb0.x) - 20), y: Math.max(0, Math.min(R.y, lb0.y) - 20) };
+    view.w = Math.min(p.bmp.width - view.x, Math.max(R.x + R.w, lb0.x + lb0.w) - view.x + 40); view.h = Math.min(p.bmp.height - view.y, Math.max(R.y + R.h, lb0.y + lb0.h) - view.y + R.h);
+    const W = Math.min(window.innerWidth - 24, 1200); const s = W / view.w;
+    const cv = h('canvas', { class: 'cropcv', width: Math.round(view.w * s), height: Math.round(view.h * s), style: 'touch-action:none;max-width:100%' });
+    let lbox = { ...lb0 }, drag = null, moved = false;
+    const T = (q) => [(q.x - view.x) * s, (q.y - view.y) * s, q.w * s, q.h * s];
+    const paint = () => { const g = cv.getContext('2d'); g.drawImage(p.bmp, view.x, view.y, view.w, view.h, 0, 0, cv.width, cv.height);
+      g.lineWidth = 3; g.strokeStyle = '#4fc3f7'; g.strokeRect(...T(R)); g.strokeStyle = '#22c55e'; g.lineWidth = 4; g.strokeRect(...T(lbox));
+      if (!moved) { g.setLineDash([6, 4]); g.lineWidth = 2; g.strokeStyle = '#16a34a'; (r.labelRects || []).forEach((q) => g.strokeRect(...T(q))); g.setLineDash([]); }
+      if (drag) { g.strokeStyle = '#ffb300'; g.setLineDash([8, 6]); g.strokeRect(Math.min(drag.x0, drag.x1), Math.min(drag.y0, drag.y1), Math.abs(drag.x1 - drag.x0), Math.abs(drag.y1 - drag.y0)); g.setLineDash([]); } };
+    const pos = (e) => { const b2 = cv.getBoundingClientRect(); return [(e.clientX - b2.left) * (cv.width / b2.width), (e.clientY - b2.top) * (cv.height / b2.height)]; };
+    cv.addEventListener('pointerdown', (e) => { e.preventDefault(); cv.setPointerCapture(e.pointerId); const [x, y] = pos(e); drag = { x0: x, y0: y, x1: x, y1: y }; });
+    cv.addEventListener('pointermove', (e) => { if (!drag) return; const [x, y] = pos(e); drag.x1 = x; drag.y1 = y; paint(); });
+    cv.addEventListener('pointerup', () => { if (!drag) return; const q = { x: view.x + Math.min(drag.x0, drag.x1) / s, y: view.y + Math.min(drag.y0, drag.y1) / s, w: Math.abs(drag.x1 - drag.x0) / s, h: Math.abs(drag.y1 - drag.y0) / s }; drag = null; if (q.w > 40 && q.h > 20) { lbox = q; moved = true; } paint(); });
+    const st = h('p', { class: 'note' });
+    fill(box, h('div', { class: 'card' }, h('p', {}, 'Green box = where the labels are read from (blue = the breakers, dashed = each sticker found). If it missed the stickers, drag a new box round all of them (above or below the breakers), then tap Read labels.'), st),
+      h('div', { class: 'cropwrap' }, cv),
+      h('div', { class: 'stick' }, h('button', { class: 'btn', onclick: () => review() }, 'Cancel'), h('button', { class: 'btn primary', onclick: async () => {
+        st.textContent = 'Reading labels\u2026'; const { relabelRow } = await ocr(); const n = await relabelRow(p.bmp, r, lbox); r.ways.forEach((w) => (w.crop = null)); placeCrops(r); toast(`${n} label(s) found`); review(); } }, 'Read labels')));
+    paint();
+  }
   function review() {
     const total = () => rows.reduce((n, r) => n + r.ways.filter((w) => w.keep).length, 0);
     let n0 = b.circuits.length;
@@ -509,7 +534,8 @@ route(/^\/cert\/([^/]+)\/b\/(\d+)\/scan$/, async (id, bi) => {
             h('input', { class: 'rating', value: w.rating, inputmode: 'numeric', placeholder: 'A', 'aria-label': 'Rating A', oninput: (e) => { w.rating = e.target.value.replace(/\D/g, ''); w.sure = true; } }), h('span', {}, 'A'),
             h('label', { class: 'check' }, h('input', { type: 'checkbox', checked: !!w.rcbo, onchange: (e) => { w.rcbo = e.target.checked; if (w.rcbo && !w.idn) w.idn = '30'; review(); } }), 'RCBO'),
             w.rcbo ? h('select', { onchange: (e) => (w.idn = e.target.value) }, ['10', '30', '100', '300'].map((v) => h('option', { value: v, selected: (w.idn || '30') === v ? true : null }, v + 'mA'))) : null),
-          h('input', { value: w.desc || '', placeholder: 'Description (e.g. Downstairs sockets)', oninput: (e) => (w.desc = e.target.value) }),
+          h('input', { value: w.desc || '', placeholder: 'Description (e.g. Downstairs sockets)', oninput: (e) => { w.desc = e.target.value; w.descTyped = true; } }),
+          w.labelFrom === 'sticker' && w.desc ? h('span', { class: 'note' }, 'Label read from the sticker') : null,
           h('div', { class: 'btns' }, h('button', { class: 'btn tiny', onclick: () => { const c = w.crop ? { ...w.crop, x: w.crop.x + w.crop.w / 2 } : null; r.ways.splice(i + 1, 0, blankWay(c)); review(); } }, '+ way after'))));
     };
     fill(box,
@@ -523,7 +549,7 @@ route(/^\/cert\/([^/]+)\/b\/(\d+)\/scan$/, async (id, bi) => {
           const nn = parseInt(inp.value, 10); if (!v || !(nn > 0 && nn <= 40)) return;
           const { splitSlots } = await import('./cuscan.js');
           const old = r.ways; r.ways = splitSlots(r.rect, nn).map((c) => { const cx = c.x + c.w / 2; const hit = old.find((w) => w.cx >= c.x && w.cx < c.x + c.w); return hit ? { ...hit, crop: { ...c, h: r.rect.h * 1.9 } } : { ...blankWay({ ...c, h: r.rect.h * 1.9 }), cx }; }); review();
-        } }, 'Split into N equal ways')),
+        } }, 'Split into N equal ways'), r.ways.length ? h('button', { class: 'btn small', onclick: () => labelBoxEditor(r) }, r.labelRects && r.labelRects.length ? `Labels: ${r.labelRects.length} found \u00b7 adjust box` : 'No labels found \u00b7 draw label box') : null),
         r.ways.map((w, i) => wayCard(r, w, i)),
         r.board.map((o, oi) => h('div', { class: 'card waycard board' + (o.kind === 'other' ? ' unsure' : '') },
           o.crop ? cropImg(parts[r.part], o.crop) : null,
