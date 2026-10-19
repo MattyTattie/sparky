@@ -7,6 +7,7 @@ import * as db from './db.js';
 import * as G from './gdrive.js';
 import { DRIVE_ROOT, APP_SLUG } from './config.js';
 import { deviceLabel } from './syncmerge.js';
+import * as presets from './presets.js';
 
 const toB64 = (blob) => new Promise((res) => { const r = new FileReader(); r.onload = () => res(String(r.result)); r.readAsDataURL(blob); });
 const fromB64 = async (u) => (await fetch(u)).blob();
@@ -15,7 +16,7 @@ const fromB64 = async (u) => (await fetch(u)).blob();
 export async function exportAll() {
   const out = { app: APP_SLUG, format: 1, exportedAt: new Date().toISOString(), jobs: await db.all('jobs'), customers: await db.all('customers'), certs: await db.all('certs'), files: [], meta: {} };
   for (const f of await db.all('files')) out.files.push({ ...f, blob: await toB64(f.blob) });
-  for (const k of ['profile', 'instruments', 'settings']) out.meta[k] = await db.getMeta(k);
+  for (const k of ['profile', 'instruments', 'settings', presets.KEY]) out.meta[k] = await db.getMeta(k); // v0.11: devicePresets (optional)
   return new Blob([JSON.stringify(out)], { type: 'application/json' });
 }
 // Restores without deleting anything: same id = replaced, newest wins.
@@ -28,7 +29,7 @@ export async function importAll(json) {
     if (!cur || (v.updatedAt || '') >= (cur.updatedAt || '')) { await db.put(s, v); n++; }
   }
   for (const f of d.files || []) if (!(await db.get('files', f.id))) await db.put('files', { ...f, blob: await fromB64(f.blob) });
-  for (const [k, v] of Object.entries(d.meta || {})) if (v != null && (await db.getMeta(k)) == null) await db.setMeta(k, v);
+  for (const [k, v] of Object.entries(d.meta || {})) { if (k === presets.KEY) { if (v && v.list) await presets.mergeIn(v.list); continue; } if (v != null && (await db.getMeta(k)) == null) await db.setMeta(k, v); }
   return n;
 }
 
@@ -67,7 +68,7 @@ async function backupJobNow(jobId, { onStep } = {}) {
     f.driveId = (meta && meta.id) || f.driveId; f.driveVersion = f.version || 1; await db.put('files', f);
   }
   // v0.9: device (optional) names who saved it, for conflict copies.
-  const data = { app: APP_SLUG, format: 1, savedAt: new Date().toISOString(), device: deviceLabel(), job, customer, certs, files: files.map(({ blob, ...rest }) => rest) };
+  const data = { app: APP_SLUG, format: 1, savedAt: new Date().toISOString(), device: deviceLabel(), devicePresets: await presets.load(), job, customer, certs, files: files.map(({ blob, ...rest }) => rest) };
   if (job.driveJsonId) { try { await G.writeJSON(job.driveJsonId, data); } catch (e) { if (e instanceof G.NotFoundError) job.driveJsonId = null; else throw e; } }
   if (!job.driveJsonId) job.driveJsonId = (await G.createJSON('job.json', folder, data)).id;
   // v0.9: re-read the job so a change made during the upload isn't overwritten.
@@ -96,6 +97,7 @@ export async function restoreDriveJob(folderId) {
 // Customers and certificates are only replaced by newer ones; files are
 // downloaded when missing or changed. Nothing on this device is deleted.
 export async function applyRemote(d, folderId, jsonId, { onlyIfNewer = false, force = false } = {}) {
+  if (Array.isArray(d.devicePresets)) await presets.mergeIn(d.devicePresets); // v0.11, optional
   if (d.customer && d.customer.id) { const c = await db.get('customers', d.customer.id); if (!c || (c.updatedAt || '') < (d.customer.updatedAt || '')) await db.put('customers', d.customer); }
   const curJob = await db.get('jobs', d.job.id);
   if (!onlyIfNewer || !curJob || (curJob.updatedAt || '') <= (d.job.updatedAt || '')) {

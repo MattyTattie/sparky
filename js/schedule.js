@@ -9,6 +9,7 @@ import { route, page, go, render } from './app.js';
 import { openCert, changed, flush } from './state.js';
 import { field } from './certui.js';
 import { blankBoard } from './certmodel.js';
+import * as presets from './presets.js';
 import { FIELDS, FIELD, TEMPLATES, blankCircuit, applyTemplate, copyCircuit, copyBoard, makeSpare, autoNA, descChanged } from './templates.js';
 import { checkCircuit, limitZs, isSpare } from './checks.js';
 import { DEVICES, deviceById, deviceFromBs, ratingsFor, CHECK_NOTE } from './limits.js';
@@ -117,14 +118,59 @@ function summary(c, res) {
   const r = (k, label) => h('div', { class: (res.flags[k] || {}).level || '' }, label, h('b', {}, c[k] || '–'));
   return h('div', { class: 'rd' }, r('r1r2', 'R1+R2'), r('irLE', 'IR L-E'), r('zs', 'Zs'), r('rcdMs', 'RCD ms'));
 }
+// v0.11: select mode on a board — tick circuits, then apply a preset or set boxes on all of them.
+const SEL = { board: null, ids: new Set() };
+async function applyDialog(cert, b) {
+  const picked = b.circuits.filter((c) => SEL.ids.has(c.id)); if (!picked.length) return toast('Tick some circuits first');
+  const list = presets.shown(await presets.load());
+  let choice = null; const vals = {};
+  const chips = h('div', { class: 'chips presets' }, list.map((p) => h('button', { class: 'chip', type: 'button', onclick: (e) => { choice = p; chips.querySelectorAll('.chip').forEach((x) => x.classList.remove('on')); e.currentTarget.classList.add('on'); } }, p.name)));
+  const body = h('div', { class: 'applydlg' },
+    h('p', { class: 'note' }, `${picked.length} circuit${picked.length > 1 ? 's' : ''} ticked: ${picked.map((c) => c.num).join(', ')}.`),
+    h('div', { class: 'phd' }, 'Use a device preset'), list.length ? chips : h('p', { class: 'note' }, 'No presets yet.'),
+    h('div', { class: 'phd' }, 'Or set these boxes (blank = leave as it is)'),
+    h('div', { class: 'grid2' }, presets.BULK_FIELDS.map(([k, label]) => h('label', { class: 'f' }, h('span', {}, label), h('input', { 'data-k': k, inputmode: ['rating', 'bka', 'rcdIdn', 'rcdRating', 'live', 'cpc'].includes(k) ? 'decimal' : null, oninput: (e) => { vals[k] = e.target.value.trim(); } })))));
+  const go1 = await modal('Apply to ticked circuits', body, [{ label: 'Cancel', value: false }, { label: 'Apply', value: true, cls: 'primary' }]);
+  if (!go1) return;
+  const fields = {};
+  if (choice) Object.assign(fields, choice.fields);
+  for (const [k, v] of Object.entries(vals)) if (v) fields[k] = v;
+  if (!Object.keys(fields).length) return toast('Nothing chosen, nothing changed');
+  const clash = picked.map((c) => [c, presets.wouldOverwrite(c, fields)]).filter(([, ks]) => ks.length);
+  let mode = 'all';
+  if (clash.length) {
+    const names = Object.fromEntries(presets.BULK_FIELDS.concat([['device', 'Device'], ['rcdS', 'S-type']]));
+    mode = await modal('Overwrite what\u2019s there?', h('div', {}, h('p', {}, `${clash.length} of the ticked circuits already have something different in these boxes:`),
+      h('ul', { class: 'clashes' }, clash.slice(0, 8).map(([c, ks]) => h('li', {}, h('b', {}, `${c.num} ${c.desc || ''}: `), ks.map((k) => `${names[k] || k} ${c[k] === true ? 'on' : c[k]} \u2192 ${fields[k] === true ? 'on' : fields[k] === false || fields[k] === '' ? 'blank' : fields[k]}`).join(', '))), clash.length > 8 ? h('li', {}, `…and ${clash.length - 8} more`) : null)),
+      [{ label: 'Cancel', value: null }, { label: 'Only fill empty boxes', value: 'empty' }, { label: 'Overwrite', value: 'all', cls: 'warn' }]);
+    if (!mode) return;
+  }
+  const n = presets.bulkApply(picked, fields, mode);
+  if (choice) await presets.used(choice.id);
+  changed(); SEL.ids.clear(); SEL.board = null;
+  toast(`Updated ${n} box${n === 1 ? '' : 'es'} on ${picked.length} circuit${picked.length > 1 ? 's' : ''}`, 3500); render();
+}
+function selectBar(cert, b) {
+  const n = b.circuits.filter((c) => SEL.ids.has(c.id)).length;
+  return h('div', { class: 'selbar' },
+    h('span', { class: 'seln' }, `${n} ticked`),
+    h('button', { class: 'btn small', onclick: () => { b.circuits.forEach((c) => { if (!presets.skipByDefault(c)) SEL.ids.add(c.id); }); render(); } }, 'Select all'),
+    n ? h('button', { class: 'btn small', onclick: () => { SEL.ids.clear(); render(); } }, 'Clear') : null,
+    h('button', { class: 'btn small primary', disabled: n ? null : true, onclick: () => applyDialog(cert, b) }, 'Apply…'),
+    h('button', { class: 'btn small', onclick: () => { SEL.board = null; SEL.ids.clear(); render(); } }, 'Done'));
+}
 function circuitCards(cert, b, bi) {
   if (!b.circuits.length) return h('div', { class: 'empty' }, 'No circuits yet. Tap “+ Circuit”, or scan the board.');
-  return h('div', {}, b.circuits.map((c, ci) => {
+  if (!b.id) b.id = 'b' + Math.random().toString(36).slice(2, 9);
+  b.circuits.forEach((c) => { if (!c.id) c.id = 'c' + Math.random().toString(36).slice(2, 9); });
+  const selecting = SEL.board === b.id;
+  return h('div', {}, selecting ? selectBar(cert, b) : h('div', { class: 'btns' }, h('button', { class: 'btn small', onclick: () => { SEL.board = b.id; SEL.ids.clear(); render(); } }, 'Select circuits to change together')), b.circuits.map((c, ci) => {
     const res = checkCircuit(c, ctxFor(cert, b));
     const cls = isSpare(c) ? 'spare' : res.worst || (c.zs ? 'ok' : '');
-    const dev = isSpare(c) ? 'Spare way' : `${c.type}${c.rating}${c.rating ? ' A' : ''} ${(deviceById(c.device) || {}).label ? deviceById(c.device).label.split(' ')[0] : c.bs} · ${c.live || '–'}/${c.cpc || '–'} mm²${res.maxZs != null ? ` · max Zs ${res.maxZs}` : ''}`;
-    return h('a', { class: 'ccard ' + cls, href: `#/cert/${cert.id}/b/${bi}/c/${ci}` },
-      h('div', { class: 'hd' }, h('span', { class: 'no' }, c.num), h('span', { class: 'ds' }, c.desc || 'No description'), res.worst ? h('span', { class: 'pill ' + res.worst }, res.worst === 'red' ? 'Check' : 'Look') : null),
+    const dev = isSpare(c) ? (c.noDevice ? 'Spare way · no device fitted' : 'Spare way' + (c.rating && !/n\/?a/i.test(c.rating) ? ` · ${c.type || ''}${c.rating} A` : '')) : `${c.type}${c.rating}${c.rating ? ' A' : ''} ${(deviceById(c.device) || {}).label ? deviceById(c.device).label.split(' ')[0] : c.bs} · ${c.live || '–'}/${c.cpc || '–'} mm²${res.maxZs != null ? ` · max Zs ${res.maxZs}` : ''}`;
+    const tick = selecting ? h('input', { type: 'checkbox', class: 'seltick', checked: SEL.ids.has(c.id) ? true : null, 'aria-label': 'Tick circuit ' + c.num, onclick: (e) => e.stopPropagation(), onchange: (e) => { if (e.target.checked) SEL.ids.add(c.id); else SEL.ids.delete(c.id); render(); } }) : null;
+    return h(selecting ? 'label' : 'a', { class: 'ccard ' + cls + (selecting ? ' selecting' + (SEL.ids.has(c.id) ? ' ticked' : '') : ''), href: selecting ? null : `#/cert/${cert.id}/b/${bi}/c/${ci}` },
+      h('div', { class: 'hd' }, tick, h('span', { class: 'no' }, c.num), h('span', { class: 'ds' }, c.desc || 'No description'), res.worst ? h('span', { class: 'pill ' + res.worst }, res.worst === 'red' ? 'Check' : 'Look') : null),
       h('div', { class: 'dv' }, dev), isSpare(c) ? null : summary(c, res),
       res.worst ? h('div', { class: 'note', style: 'margin-top:4px;color:' + (res.worst === 'red' ? '#c62828' : '#a86a00') }, Object.values(res.flags).find((f) => f.level === res.worst).msg) : null);
   }));
@@ -156,7 +202,29 @@ async function pickTemplate() {
   return chosen;
 }
 
+// v0.11: leaving a circuit page remembers its device combination as a preset (if new).
+let leaving = null;
+addEventListener('hashchange', async () => {
+  const c = leaving; leaving = null; if (!c) return;
+  const l = await presets.load(); const r = presets.remember(l, c);
+  if (r.added) { await presets.save(l); toast(`Saved \u201c${r.preset.name}\u201d as a device preset`, 3500); }
+});
+function presetPicker(c, after) {
+  const box = h('div', { class: 'presetbox' });
+  const draw = async () => {
+    const list = presets.shown(await presets.load()); const cur = presets.presetFrom(c); const k = cur && presets.keyOf(cur);
+    const match = k && list.find((p) => presets.keyOf(p.fields) === k);
+    fill(box, h('div', { class: 'phd' }, h('span', {}, 'Device presets'), list.length ? h('a', { href: '#/settings/presets', class: 'note' }, 'Manage') : null),
+      list.length ? h('div', { class: 'chips presets' }, list.slice(0, 12).map((p) => h('button', { class: 'chip' + (match && match.id === p.id ? ' on' : ''), type: 'button', title: 'Fill the device boxes', onclick: async () => {
+        const ch = presets.applyPreset(c, p); await presets.used(p.id); changed(); toast(ch.length ? `Filled the device from \u201c${p.name}\u201d (cable and readings left alone)` : 'Already set like that'); after(); } }, p.name)))
+        : h('p', { class: 'note' }, 'Fill in a device below and it\u2019s remembered here for next time.'),
+      cur && !match ? h('button', { class: 'btn small savepreset', type: 'button', onclick: async () => { const l = await presets.load(); const r = presets.remember(l, c); if (r.deleted) { const p = l.find((x) => presets.keyOf(x.fields) === k); Object.assign(p, { deleted: false, updatedAt: new Date().toISOString(), uses: 1 }); } await presets.save(l); toast('Saved as a device preset'); draw(); } }, '+ Save as preset: ' + presets.nameFor(cur)) : null);
+  };
+  draw(); box.redraw = draw; return box;
+}
 function circuitEditor({ cert, c, ctx, back, title, prev, next, extra = [], mw = false }) {
+  leaving = c;
+  const pBox = presetPicker(c, () => render());
   const flagEls = {}; const inputs = {};
   const noDevBox = h('div');
   const limBox = h('div', { class: 'limit' });
@@ -171,6 +239,7 @@ function circuitEditor({ cert, c, ctx, back, title, prev, next, extra = [], mw =
     document.querySelectorAll('select[data-k]').forEach((sel) => { const o = sel.querySelector('.pick0'); if (o) o.textContent = autoNA(c, sel.dataset.k) ? 'N/A' : '— pick —'; sel.classList.toggle('autona', autoNA(c, sel.dataset.k)); });
     for (const [k, el] of Object.entries(inputs)) { const na = autoNA(c, k); el.placeholder = na ? 'N/A' : ''; el.classList.toggle('autona', na); }
     fill(noDevBox, isSpare(c) ? h('label', { class: 'check nodev' }, h('input', { type: 'checkbox', checked: !!c.noDevice, onchange: (e) => { c.noDevice = e.target.checked; changed(); refresh(); } }), 'No device fitted (device boxes show N/A too)') : null);
+    if (pBox.redraw) pBox.redraw();
     fill(limBox, isSpare(c) ? 'Spare way: no limits apply.' : lim.value != null ? h('span', {}, 'Max Zs ', h('b', {}, lim.value.toFixed(2) + ' Ω'), res.cold != null ? ` · 80% (cold reading) ${res.cold.toFixed(2)} Ω` : '', h('br'), h('span', { class: 'note' }, lim.source)) : 'Pick the device and rating to see the maximum Zs.');
   };
   const inp = (k, opts = {}) => {
@@ -274,7 +343,7 @@ function circuitEditor({ cert, c, ctx, back, title, prev, next, extra = [], mw =
   page(title, [
     h('div', { class: 'btns' }, extra, mic),
     mic ? h('p', { class: 'note voicenote' }, 'Voice entry uses Google\u2019s speech service: what you say is sent to Google to turn it into text. Typing never leaves this device.') : null,
-    sect('Circuit details', h('div', { class: 'grid2' }, inp('num'), inp('points')), inp('desc'), noDevBox, devBox,
+    sect('Circuit details', h('div', { class: 'grid2' }, inp('num'), inp('points')), inp('desc'), noDevBox, pBox, devBox,
       cableBox,
       h('div', { class: 'grid2' }, inp('rcdBs'), inp('rcdType'), inp('rcdIdn'), inp('rcdRating')),
       h('label', { class: 'check' }, h('input', { type: 'checkbox', checked: !!c.rcdS, onchange: (e) => { c.rcdS = e.target.checked; changed(); refresh(); } }), 'Time-delayed (S-type) RCD')),

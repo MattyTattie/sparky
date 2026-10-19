@@ -562,3 +562,20 @@ input:focus, select:focus, textarea:focus { border-color: #8c95ff !important; bo
 .autona::placeholder { color: #a3a9b5; font-weight: 600; opacity: 1; }
 .nodev { margin: 2px 0 10px; }
 select.autona { color: #a3a9b5; font-weight: 600; }
+
+/* v0.11: device presets + select mode */
+.presetbox { margin: 4px 0 12px; padding: 10px 12px; border-radius: 16px; background: linear-gradient(180deg, #f6f7ff, #fff); border: 1px solid #e4e8fb; }
+.phd { display: flex; justify-content: space-between; align-items: baseline; font-size: 12.5px; font-weight: 750; letter-spacing: .06em; text-transform: uppercase; color: #3b46e0; margin: 2px 0 8px; }
+.phd a { text-transform: none; letter-spacing: 0; font-weight: 600; }
+.chips.presets { flex-wrap: wrap; } .chips.presets .chip { font-size: 13.5px; }
+.savepreset { margin-top: 8px; }
+.selbar { position: sticky; top: 64px; z-index: 15; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 10px 12px; margin-bottom: 10px; border-radius: 18px; background: #fff; border: 1px solid #dfe4fb; box-shadow: var(--shadow-lift); }
+.selbar .seln { font-weight: 750; margin-right: auto; }
+.ccard.selecting { display: block; cursor: pointer; }
+.ccard.ticked { outline: 2.5px solid #5a62f5; background: #f5f6ff; }
+.seltick { width: 22px; height: 22px; margin-right: 8px; accent-color: #3a3ff0; }
+.applydlg .grid2 .f { margin-bottom: 6px; }
+.clashes { padding-left: 18px; font-size: 14px; } .clashes li { margin-bottom: 4px; }
+.prow { padding: 10px 0; border-bottom: 1px solid var(--line); } .prow:last-child { border-bottom: 0; }
+.prow input { font-weight: 650; margin-bottom: 4px; } .prow .btn { margin-top: 6px; }
+a.linkcard { display: block; text-decoration: none; color: inherit; }

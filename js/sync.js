@@ -12,6 +12,7 @@
 import * as db from './db.js';
 import * as G from './gdrive.js';
 import * as backup from './backup.js';
+import * as presets from './presets.js';
 import { S, flush } from './state.js';
 import { APP_SLUG } from './config.js';
 import { planJob, needsPush, conflictCopy, newestTime } from './syncmerge.js';
@@ -107,6 +108,7 @@ export async function pull(c = null) {
   for (const f of files) {
     let d; try { d = await G.readJSON(f.id); } catch { continue; }
     if (!d || d.app !== APP_SLUG || !d.job || !d.job.id) continue;
+    if (Array.isArray(d.devicePresets)) { try { await presets.mergeIn(d.devicePresets); } catch {} } // v0.11
     const local = await db.get('jobs', d.job.id);
     const plan = planJob(local, d, { deletedAt: tombs[d.job.id] || '' });
     const folder = (f.parents || [])[0] || d.job.driveFolderId;

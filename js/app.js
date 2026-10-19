@@ -12,6 +12,7 @@ import { CHECK_NOTE } from './limits.js';
 import * as backup from './backup.js';
 import * as G from './gdrive.js';
 import * as sync from './sync.js';
+import * as presets from './presets.js';
 import { dueList, nextFor, suggestFromCerts, dueState, icsFor } from './reminders.js';
 
 const routes = [];
@@ -391,6 +392,7 @@ route(/^\/settings$/, async () => {
       txt('regNo', 'Registration / membership no. (optional)'), txt('certPrefix', 'Certificate number prefix (optional)', 'text', 'e.g. SS-')),
     h('div', { class: 'card' }, h('h2', {}, 'Logo'), logoBox),
     h('div', { class: 'card' }, h('h2', {}, 'Signature'), sigBox),
+    h('a', { class: 'card linkcard', href: '#/settings/presets' }, h('h2', {}, 'Device presets'), h('p', { class: 'note' }, 'Breakers and RCBOs you\u2019ve used, ready to tap on any circuit. Rename or delete them here.')),
     h('h2', { class: 'sec' }, 'Test instruments'), h('p', { class: 'note' }, 'Fills the instruments box on every new certificate. You\u2019ll get a warning a month before calibration is due, and when it\u2019s out of date.'), insBox,
     h('div', { class: 'card', id: 'drive' }, h('h2', {}, 'Google Drive'), G.isConfigured() ? driveBox : h('p', { class: 'note' }, 'Not set up in this build.')),
     h('div', { class: 'card' }, h('h2', {}, 'Backup file'), h('p', { class: 'note' }, 'Everything in one file you can keep anywhere. Restoring adds to what\u2019s here; nothing is deleted.'),
@@ -400,6 +402,23 @@ route(/^\/settings$/, async () => {
     h('div', { class: 'notice amber' }, CHECK_NOTE),
     h('p', { class: 'note' }, `${APP_NAME} ${APP_VERSION}. Forms follow the IET model forms for BS 7671:2018+A4:2026. Not affiliated with the IET.`),
   ], { back: '#/' });
+});
+
+// v0.11: device presets — rename / delete.
+route(/^\/settings\/presets$/, async () => {
+  const all = await presets.load();
+  const box = h('div');
+  const saveAll = () => presets.save(all);
+  const draw = () => {
+    const list = presets.shown(all);
+    fill(box, list.length ? h('div', { class: 'card' }, list.map((p) => h('div', { class: 'prow' },
+      h('input', { value: p.name, 'aria-label': 'Preset name', onchange: async (e) => { p.name = e.target.value.trim() || presets.nameFor(p.fields); p.updatedAt = new Date().toISOString(); await saveAll(); toast('Renamed'); } }),
+      h('div', { class: 'note' }, `${[p.fields.bs && 'BS EN ' + p.fields.bs, (p.fields.type || '') + p.fields.rating + ' A', p.fields.bka && p.fields.bka + ' kA', p.fields.rcdIdn && `RCD ${p.fields.rcdType || ''} ${p.fields.rcdIdn} mA${p.fields.rcdRating ? ' ' + p.fields.rcdRating + ' A' : ''}`].filter(Boolean).join(' · ')} · used ${p.uses || 0}\u00d7`),
+      h('button', { class: 'btn small warn', onclick: async () => { if (!(await confirmBox('Delete preset?', p.name, 'Delete', 'warn'))) return; p.deleted = true; p.updatedAt = new Date().toISOString(); await saveAll(); draw(); } }, 'Delete'))))
+      : h('div', { class: 'empty' }, 'No presets yet. Fill in a protective device on a circuit and it\u2019s remembered here.'));
+  };
+  draw();
+  page('Device presets', [h('p', { class: 'note' }, 'Most used first. Tapping one on a circuit fills only the protective device boxes (BS EN, type, rating, kA and RCD); cable sizes and readings are never touched. Saved on this device and in your backup; synced with your jobs.'), box], { back: '#/settings' });
 });
 
 // Auto-backup when leaving a job or certificate (only if switched on and signed in).

@@ -1,5 +1,11 @@
 # Sparky — niggles and update lists
 
+## [BUILT v0.11 on branch `v0.11`, 19 Oct 2026 — NOT LIVE] screenshots in /workspace/sparky-shots/v0.11
+- [built] Device presets: chips on the circuit page (most used first), "+ Save as preset", and a new combination is remembered automatically when you leave a circuit. Tapping fills only BS/type/rating/kA/RCD boxes. Settings → Device presets: rename / delete. In the backup file (meta.devicePresets) and carried in each job.json for sync (merged by combination; deletes stick).
+- [built] Board select mode: "Select circuits to change together", Select all (skips spares with No device fitted), Apply… a preset and/or set device + cable boxes; "Overwrite / Only fill empty boxes / Cancel" when something would change.
+- No AFDD device field exists on circuits (only the AFDD test-button column), so presets have no AFDD part. Add one later if wanted.
+- A preset change on its own only syncs when a job is next saved.
+
 ## [BUILT v0.10 on branch `v0.10`, 19 Oct 2026 — NOT LIVE] screenshots in /workspace/sparky-shots/v0.10
 - [built] Generic device wording (sync, conflict copies "from another device" / "from this device", "this device" instead of "this phone"). Old conflict-copy titles left as they are.
 - [built] G/J headings: Earthing conductor / Main protective bonding conductors (None-needed tick first) / Bonding of extraneous-conductive-parts. PDF layout unchanged.
