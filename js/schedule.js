@@ -105,6 +105,7 @@ function boardDetails(cert, b) {
 function boardTools(cert, b, bi) {
   const bulk = (k, v, label) => h('button', { class: 'btn small', onclick: () => { let n = 0; for (const c of b.circuits) if (!isSpare(c) && !c[k]) { c[k] = v; n++; } changed(); toast(`${label}: filled ${n}`); render(); } }, label);
   return h('div', {},
+    b.circuits.length ? h('a', { class: 'btn primary bigtest', href: `#/cert/${cert.id}/b/${bi}/t/r1r2` }, h('span', { class: 'bigtop' }, withIcon('gauge', 'Test across circuits')), h('span', { class: 'bigsub' }, 'One test at a time, every circuit in a list')) : null,
     h('div', { class: 'btns' },
       h('button', { class: 'btn primary small', onclick: () => addCircuit(cert, b, bi) }, '+ Circuit'),
       h('a', { class: 'btn small', href: `#/cert/${cert.id}/b/${bi}/scan` }, 'Scan board'),
@@ -357,10 +358,13 @@ function circuitEditor({ cert, c, ctx, back, title, prev, next, extra = [], mw =
   page(title, [
     h('div', { class: 'btns' }, extra, mic),
     mic ? h('p', { class: 'note voicenote' }, 'Voice entry uses Google\u2019s speech service: what you say is sent to Google to turn it into text. Typing never leaves this device.') : null,
+    // v0.14: the RCD boxes (cols 13-16) sit with the protective device, before the cable.
     sect('Circuit details', h('div', { class: 'grid2' }, inp('num'), inp('points')), inp('desc'), noDevBox, pBox, devBox,
-      cableBox,
-      h('div', { class: 'grid2' }, inp('rcdBs'), inp('rcdType'), inp('rcdIdn'), inp('rcdRating')),
-      h('label', { class: 'check' }, h('input', { type: 'checkbox', checked: !!c.rcdS, onchange: (e) => { c.rcdS = e.target.checked; changed(); refresh(); } }), 'Time-delayed (S-type) RCD')),
+      h('div', { class: 'rcdgrp' }, h('div', { class: 'phd' }, h('span', {}, 'RCD (if any)')),
+        h('div', { class: 'grid2' }, inp('rcdBs'), inp('rcdType'), inp('rcdIdn'), inp('rcdRating')),
+        h('label', { class: 'check' }, h('input', { type: 'checkbox', checked: !!c.rcdS, onchange: (e) => { c.rcdS = e.target.checked; changed(); refresh(); } }), 'Time-delayed (S-type) RCD')),
+      h('div', { class: 'phd cablehd' }, h('span', {}, 'Cable and wiring')),
+      cableBox),
     sect('Test results',
       ringInputs, h('div', { class: 'grid2' }, inp('r1r2'), inp('R2')), ringBox,
       inp('irV'), inp('irLL'), inp('irLE'), inp('pol'), inp('zs'), inp('rcdMs'), inp('rcdBtn'), inp('afddBtn'), inp('remarks')),

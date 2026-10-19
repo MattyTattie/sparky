@@ -2,6 +2,7 @@
 import './app.js';
 import './certui.js';
 import './schedule.js';
+import './testacross.js';
 import './calcui.js';
 import './calcmd.js';
 import './calcsize.js';

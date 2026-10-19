@@ -124,6 +124,13 @@ Open points
 - **Standards quoted**: BS EN 1648-2 (motor caravans, 12 V d.c.), BS EN 1648-1 (caravans), BS 7671 Section 721 (caravans and motor caravans, 230 V), BS EN ISO 10133 / 13297 (small craft d.c. / a.c.). 3% / 10% volt drop described as "the usual marine rule". No regulation numbers quoted.
 - **Worked example** (VAN_EXAMPLE, 12 V 200 Ah LiFePO4, 400 W solar (2 × 200 W, Voc 24.3), 30 A DC-DC, 1500 W inverter, fridge, lights, pump, diesel heater, laptop, low-watt kettle, 2 days at 80%): 993.5 Wh/day = 82.8 Ah; needs 207 Ah (200 Ah ≈ 1.9 days, flagged); inverter 144.9 A → 200 A MEGA, 50 mm² (1.49% over 1.5 m); MPPT 100 V / 45 A, 2 in series, cold Voc 53.5 V; main 166.9 A → 225 A Class T, 50 mm²; 250 A isolator, 300 A shunt, 250 A busbars; DC-DC in 36.9 A → 50 A MIDI, 16 mm² over 5 m; out 40 A MIDI, 6 mm²; fuse box feed 30 A MIDI, 10 mm²; loads 1.5–2.5 mm² on 3–15 A blades.
 
+## v0.14 (19 Oct 2026, branch `v0.14`, NOT pushed)
+- schedule.js circuitEditor: RCD group (.rcdgrp) moved into Circuit details after devBox; "Cable and wiring" heading before cableBox. boardTools: big "Test across circuits" link (.bigtest).
+- js/testlist.js (pure, tested): TEST_STEPS (r1r2, ring, ir, pol, zs, rcd; dead then live), rowMode (skip spares / non-rings), quickFor, progress, fillEmpty (never overwrites). js/testacross.js: route `#/cert/<id>/b/<bi>/t/<step>`, uses checkCircuit/limitZs for flags. Imported in main.js.
+- Other sources: optional `cert.otherSources = [{id, type, typeOther?, make, kw, isolation, ref, notes}]` (only printed/needed when supply.otherSources is ticked). certmodel: SOURCE_TYPES, blankSource, sourceRows, sourcesMissing, sourcesOk (SUPPLY doneIf). certui: sourcesSection under the Supply fields; stateLine lists what's missing. pdf.js: sourcesSheet after the bonding schedule, SRC_PER_PAGE 4, sourceSheetCount in contSheets, "(incl. … other sources of supply)".
+- Cache sparky-v0.14.0, APP_VERSION 0.14.0 beta. `node --test tests/` → 135 pass (tests/v14.test.mjs). Shots: `python3 tests/screens_v14.py <dir>`; PDF: `node tests/pdf_sources_v14.mjs <dir>`.
+- Note: `node --check` on these files does NOT check ES module syntax; use `node --input-type=module --check < file.js`.
+
 ## v0.11 (19 Oct 2026, branch `v0.11`, NOT pushed)
 - js/presets.js: PRESET_KEYS, presetFrom/keyOf/nameFor/applyPreset/wouldOverwrite/shown/mergePresets/remember, load/save/mergeIn/used (meta 'devicePresets' = { list }), bulkApply, skipByDefault, BULK_FIELDS.
 - backup.js: exportAll includes meta.devicePresets; importAll merges it; job.json gets optional devicePresets; applyRemote + sync pull merge it.

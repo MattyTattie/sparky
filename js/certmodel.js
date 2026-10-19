@@ -85,9 +85,9 @@ const SUPPLY = { id: 'supply', title: 'Supply and earthing', form: 'F / I', fiel
   f('supply.conductors', 'Live conductors', 'select', { opts: LIVE_COND }),
   f('supply.u', 'Nominal voltage U/U0 (V)', 'num'), f('supply.f', 'Nominal frequency (Hz)', 'num'),
   f('supply.ipf', 'Prospective fault current Ipf (kA)', 'num'), f('supply.ze', 'External loop impedance Ze (Ω)', 'num'),
-  f('supply.polarity', 'Supply polarity confirmed', 'check'), f('supply.otherSources', 'Other sources of supply (continuation sheet)', 'check'),
+  f('supply.polarity', 'Supply polarity confirmed', 'check'), f('supply.otherSources', 'Other sources of supply (continuation sheet)', 'check', { redraw: true }),
   f('supply.spBs', 'Supply protective device BS (EN)'), f('supply.spType', 'Type', 'text', { opt: true }), f('supply.spRating', 'Rated current (A)', 'num'), f('supply.spKa', 'Breaking capacity (kA)', 'num'),
-] };
+], doneIf: (c) => sourcesOk(c) };
 // v0.8: the parts of section G/J that only apply sometimes. Fields can carry
 // showIf / hideIf: a key (shown/hidden when that value is truthy) or a
 // function (cert) => boolean. Hidden fields print N/A and are not needed for
@@ -243,3 +243,20 @@ export function sectionDone(cert, s) {
 }
 // Which needed fields are still empty (shown at the top of a section).
 export const missingFields = (cert, s) => (s.special ? [] : neededFields(cert, s).filter((x) => !filled(get(cert, x.k))));
+
+// v0.14: other sources of supply (battery storage, PV inverter, generator...),
+// printed on their own continuation sheet. Optional, so older certificates and
+// backups still load: cert.otherSources = [{ id, type, make, kw, isolation, ref, notes }].
+export const SOURCE_TYPES = ['Battery storage', 'PV inverter', 'Generator', 'Other'];
+export const blankSource = (id = '') => ({ id, type: '', make: '', kw: '', isolation: '', ref: '', notes: '' });
+export const sourceRows = (cert) => (get(cert, 'supply.otherSources') ? (cert.otherSources || []).filter((x) => x && (x.type || x.make || x.kw || x.isolation || x.ref || x.notes)) : []);
+// What's still missing for the green dot: at least one source, each with a type and a rating.
+export function sourcesMissing(cert) {
+  if (!get(cert, 'supply.otherSources')) return [];
+  const list = sourceRows(cert);
+  if (!list.length) return ['the other source details'];
+  const m = [];
+  list.forEach((x, i) => { const n = list.length > 1 ? ` (source ${i + 1})` : ''; if (!x.type) m.push('source type' + n); if (!String(x.kw || '').trim()) m.push('rating kW' + n); });
+  return m;
+}
+export const sourcesOk = (cert) => !sourcesMissing(cert).length;

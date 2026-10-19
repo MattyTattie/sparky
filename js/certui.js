@@ -7,7 +7,7 @@ import * as db from './db.js';
 import { h, fill, toast, modal, confirmBox, fmtDate, shareOrDownload, blobToDataUrl, emptyState, icon, withIcon } from './ui.js';
 import { route, page, go, render } from './app.js';
 import { S, openCert, changed, flush, getProfile, defaultInstruments, calibrationWarnings, INSTRUMENT_KINDS } from './state.js';
-import { TYPES, newCert, sectionsFor, sectionDone, missingFields, visible, get, set, eicrOverall, blankBond, BOND_LOCATIONS, BOND_PARTS } from './certmodel.js';
+import { TYPES, newCert, sectionsFor, sectionDone, missingFields, visible, get, set, eicrOverall, blankBond, BOND_LOCATIONS, BOND_PARTS, SOURCE_TYPES, blankSource, sourcesMissing } from './certmodel.js';
 import { EIC_ITEMS, EIC_OUTCOMES, EICR_ITEMS, EICR_OUTCOMES, CODE_TEXT, OBSERVATIONS, OBS_CATS, EIC_HELP, EICR_HELP } from './inspections.js';
 import { checkCircuit, isSpare } from './checks.js';
 import { CHECK_NOTE } from './limits.js';
@@ -146,7 +146,8 @@ route(/^\/cert\/([^/]+)\/s\/([^/]+)$/, async (id, sid) => {
     else if (s.special === 'mwcircuit') content = [stateBox(cert, s), h('div', { class: 'card' }, s.fields.map((fd) => field(cert, fd, () => refreshState()))), h('a', { class: 'btn primary', href: `#/cert/${id}/mwc`, style: 'width:100%;margin-bottom:12px' }, 'Circuit details and test results →')];
     else {
       content = [h('div', { class: 'notice ' + stateLine(cert, s)[0] + ' secstate' }, stateLine(cert, s)[1]),
-        h('div', { class: 'card' }, s.fields.map((fd) => field(cert, fd, (k, v, d) => { if (k === 'eic.samePerson' || k.startsWith('people.designer')) { if (k === 'eic.samePerson' || get(cert, 'eic.samePerson')) syncPeople(cert); if (k === 'eic.samePerson') return draw(); } if (d.redraw) draw(); else refreshState(); })))];
+        h('div', { class: 'card' }, s.fields.map((fd) => field(cert, fd, (k, v, d) => { if (k === 'eic.samePerson' || k.startsWith('people.designer')) { if (k === 'eic.samePerson' || get(cert, 'eic.samePerson')) syncPeople(cert); if (k === 'eic.samePerson') return draw(); } if (d.redraw) draw(); else refreshState(); }))),
+        s.id === 'supply' && get(cert, 'supply.otherSources') ? sourcesSection(cert, draw) : null];
     }
     fill(box, content, sid === 'summary' && cert.type === 'EICR' ? h('div', { class: 'notice ' + (eicrOverall(cert) === 'SATISFACTORY' ? 'green' : 'red') }, `From your observations: ${eicrOverall(cert)}. ${cert.eicr.overall ? '' : 'Used on the PDF unless you pick one above.'}`) : null,
       h('div', { class: 'stick' }, nextBtn()));
@@ -173,6 +174,7 @@ export function stateLine(cert, s) {
   if (s.special === 'sign') return ['info', 'Still to fill in: a signature.'];
   if (s.special === 'mwcircuit') { const c = cert.mw.circuit; const m = [!c.desc && 'circuit description', !c.zs && 'Zs', ...missingFields(cert, { ...s, special: null }).map((x) => x.label)].filter(Boolean); return ['info', `Still to fill in: ${list(m)}.`]; }
   const miss = missingFields(cert, s);
+  if (s.id === 'supply') { const all = [...miss.map((x) => x.label.replace(/\s*\([^)]*\)$/, '')), ...sourcesMissing(cert)]; if (all.length) return ['info', `Still to fill in: ${list(all)}.`]; }
   if (miss.length) return ['info', `Still to fill in: ${list(miss.map((x) => x.label.replace(/\s*\([^)]*\)$/, '')))}.`];
   return ['info', 'Still to fill in: tick each service you bonded (it needs a size), or tick \u201cNone needed\u201d.'];
 }
@@ -211,6 +213,28 @@ function helpLine(cert, n) {
   const x = cert.type === 'EIC' ? EIC_HELP[n] : EICR_HELP[n] && [EICR_HELP[n]];
   if (!x) return null;
   return h('div', { class: 'help' }, x[0], x[1] ? [' ', h('span', { class: 'reg' }, '(' + x[1] + ')')] : null);
+}
+
+// ---------- Other sources of supply (v0.14) ----------
+function sourcesSection(cert, redraw) {
+  cert.otherSources = cert.otherSources || [];
+  const list = cert.otherSources;
+  const inp = (o, k, label, attrs = {}) => h('label', { class: 'f' }, h('span', {}, label), h('input', { value: o[k] || '', oninput: (e) => { o[k] = e.target.value; changed(); }, ...attrs }));
+  const area = (o, k, label, ph) => h('label', { class: 'f' }, h('span', {}, label), h('textarea', { rows: 2, value: o[k] || '', placeholder: ph, oninput: (e) => { o[k] = e.target.value; changed(); } }));
+  const add = () => { list.push(blankSource(db.newId())); changed(); redraw(); };
+  const card = (o, i) => h('div', { class: 'card srccard' },
+    h('div', { class: 'cardhd' }, h('b', {}, 'Source ' + (i + 1)), h('button', { class: 'btn small warn', onclick: async () => { if (await confirmBox('Remove this source?', [o.type, o.make].filter(Boolean).join(' \u00b7 ') || 'Source ' + (i + 1), 'Remove', 'warn')) { list.splice(i, 1); changed(); redraw(); } } }, withIcon('trash', 'Remove'))),
+    h('div', { class: 'f' }, h('span', { class: 'note' }, 'Type of source'), h('div', { class: 'chips' }, SOURCE_TYPES.map((t) => h('button', { class: 'chip' + (o.type === t ? ' on' : ''), type: 'button', onclick: () => { o.type = o.type === t ? '' : t; changed(); redraw(); } }, t)))),
+    o.type === 'Other' ? inp(o, 'typeOther', 'Describe the source', { placeholder: 'e.g. wind turbine' }) : null,
+    inp(o, 'make', 'Make and model', { placeholder: 'e.g. GivEnergy 5 kW hybrid' }),
+    h('div', { class: 'grid2' }, inp(o, 'kw', 'Rating (kW)', { inputmode: 'decimal', placeholder: 'e.g. 5' }), inp(o, 'ref', 'G98 / G99 notification ref', { placeholder: 'DNO ref, if any' })),
+    area(o, 'isolation', 'Means of isolation and where it is', 'e.g. AC isolator next to the consumer unit, DC isolator on the inverter'),
+    area(o, 'notes', 'Notes (optional)', 'e.g. battery in garage, labels fitted at the CU and meter (514.15)'));
+  return h('div', {},
+    h('h2', { class: 'sec' }, 'Other sources of supply'),
+    h('p', { class: 'note' }, 'Each source (battery, solar inverter, generator) prints on its own continuation sheet with the certificate number.'),
+    list.length ? list.map(card) : emptyState('zap', 'No other sources recorded yet.', null),
+    h('div', { class: 'btns full' }, h('button', { class: list.length ? 'btn' : 'btn primary', onclick: add }, list.length ? '+ Add another source' : '+ Add a source')));
 }
 
 // ---------- Supplementary bonding (v0.5) ----------

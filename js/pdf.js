@@ -3,7 +3,7 @@
 // (BS 7671:2018+A4:2026, 15 April 2026). No IET logo (their terms).
 // =====================================================================
 import { Kit, loadJsPDF, VALUE, GREY, INK, RED } from './pdfkit.js';
-import { TYPES, get, eicrOverall, isElectrode, msIsRcd, msIsOcpd, BOND_SERVICES, bondTicked, bondCsaFor, bondNone } from './certmodel.js';
+import { TYPES, get, eicrOverall, isElectrode, msIsRcd, msIsOcpd, BOND_SERVICES, bondTicked, bondCsaFor, bondNone, sourceRows } from './certmodel.js';
 import { EIC_ITEMS, EICR_ITEMS, CODE_TEXT } from './inspections.js';
 import { GUIDANCE } from './guidance.js';
 import { limitZs, isSpare } from './checks.js';
@@ -352,6 +352,7 @@ function schedules(k, cert, certNo) {
   for (const s of sheets) circuitDetailsPage(k, cert, s.b, certNo, s.rows, s.part, s.parts);
   for (const s of sheets) testResultsPage(k, cert, s.b, certNo, s.rows, s.part, s.parts);
   bondingSchedule(k, cert, certNo);
+  sourcesSheet(k, cert, certNo);
 }
 // v0.5: Schedule of supplementary bonding. The IET model forms record
 // supplementary bonding only as an inspection item, so this is printed as
@@ -397,7 +398,44 @@ function bondingSchedule(k, cert, certNo) {
   k.field('Tested by name (Capitals):', nm.toUpperCase(), k.x0, k.y + 4, 92);
   sig(k, k.x0 + 96, k.y + 4, 60, s); k.field('Date:', fmtDate(s.date), k.x0 + 160, k.y + 4, 30); k.y += 7;
 }
-const contSheets = (cert) => (cert.extraSheets || 0) + (bondRows(cert).length ? Math.ceil(bondRows(cert).length / 25) : 0);
+// v0.14: other sources of supply (Section F/I tick "as detailed on attached
+// continuation sheet"): one block per source, SRC_PER_PAGE to a page.
+export const SRC_PER_PAGE = 4;
+export const sourceSheetCount = (cert) => (sourceRows(cert).length ? Math.ceil(sourceRows(cert).length / SRC_PER_PAGE) : 0);
+function sourcesSheet(k, cert, certNo) {
+  const list = sourceRows(cert); if (!list.length) return;
+  const total = sourceSheetCount(cert);
+  const labW = 52;
+  list.forEach((o, i) => {
+    if (i % SRC_PER_PAGE === 0) {
+      const part = i / SRC_PER_PAGE + 1;
+      k.addPage('p');
+      contTitle(k, 'OTHER SOURCES OF SUPPLY (continuation sheet)', certNo, 'Continuation sheet' + (total > 1 ? ` ${part} of ${total}` : '') + ' · as referred to under Supply characteristics and earthing arrangements');
+    }
+    const type = o.type === 'Other' && o.typeOther ? 'Other: ' + o.typeOther : o.type;
+    const rows = [['Type of source', type, 1], ['Make and model', o.make, 1], ['Rating', o.kw ? o.kw + ' kW' : '', 1], ['Means of isolation and location', o.isolation, 2], ['G98 / G99 notification ref.', o.ref, 1], ['Notes', o.notes, 2]];
+    k.rect(k.x0, k.y, k.cw, 7, { lw: 0.35, color: INK, fill: [238, 238, 238] });
+    k.t('Source ' + (i + 1), k.x0 + 2, k.y + 4.8, { size: 8.5, bold: true });
+    k.y += 7;
+    for (const [lab, v, maxL] of rows) {
+      const val = String(v ?? '').trim();
+      const lines = val ? k.wrap(val, k.cw - labW - 4, 8).slice(0, maxL) : [];
+      const rh = maxL > 1 ? 10.5 : 7;
+      k.rect(k.x0, k.y, k.cw, rh, { lw: 0.2 });
+      k.line(k.x0 + labW, k.y, k.x0 + labW, k.y + rh, { w: 0.2 });
+      k.t(lab, k.x0 + 1.5, k.y + 4.6, { size: 7.2, maxW: labW - 3 });
+      if (lines.length) lines.forEach((l, n) => k.t(l, k.x0 + labW + 2, k.y + 4.6 + n * 3.6, { size: 8, color: VALUE }));
+      else k.t('N/A', k.x0 + labW + 2, k.y + 4.6, { size: 8, color: AUTO_GREY });
+      k.y += rh;
+    }
+    k.y += 5;
+    if ((i + 1) % SRC_PER_PAGE === 0 || i === list.length - 1) {
+      k.y += k.para('Where an installation has an additional source of supply (e.g. PV, battery storage or a generator), Chapter 55 and Section 551 apply; warning notices at the origin, meter position and consumer unit (Regulation 514.15) and isolation of every source (Chapter 46 / Section 537) should be confirmed. Generating units are notified to the DNO under ENA EREC G98 or G99.', k.x0, k.y, k.cw, { size: 6.6, color: GREY });
+    }
+  });
+}
+const contSheets = (cert) => (cert.extraSheets || 0) + (bondRows(cert).length ? Math.ceil(bondRows(cert).length / 25) : 0) + sourceSheetCount(cert);
+const contWhat = (cert) => { const w = [bondRows(cert).length ? 'supplementary bonding' : '', sourceRows(cert).length ? 'other sources of supply' : ''].filter(Boolean); return w.length ? ` (incl. ${w.join(' and ')})` : ''; };
 
 function guidancePage(k, kind) {
   const g = GUIDANCE[kind];
@@ -492,7 +530,7 @@ function eic(k, cert, profile) {
   k.section('SECTION I: COMMENTS ON EXISTING INSTALLATION (in the case of an addition or alteration see Regulation 644.1.2):', (k, x, w) => textBlock(k, x, w, '', cert.comments, { minLines: 2 }));
   const nb = (cert.boards || []).length;
   k.section('SECTION J: SCHEDULES', (k, x, w) => {
-    k.y += k.para(`${contSheets(cert)}  Continuation sheet(s)${bondRows(cert).length ? ' (incl. supplementary bonding)' : ''}    1  Schedule(s) of Inspection    ${nb}  Schedule(s) of Circuit Details and Schedule(s) of Test Results`, x, k.y + 3, w, { size: 7.5 }) + 1;
+    k.y += k.para(`${contSheets(cert)}  Continuation sheet(s)${contWhat(cert)}    1  Schedule(s) of Inspection    ${nb}  Schedule(s) of Circuit Details and Schedule(s) of Test Results`, x, k.y + 3, w, { size: 7.5 }) + 1;
     k.y += k.para('The schedule(s) and continuation sheet(s) listed are part of this document and this certificate is valid only when they are attached to it.', x, k.y + 3, w, { size: 7 });
   });
   schedules(k, cert, no);
@@ -551,7 +589,7 @@ function eicr(k, cert, profile) {
   k.addPage('p'); contTitle(k, 'ELECTRICAL INSTALLATION CONDITION REPORT (continued)', no);
   const nb = (cert.boards || []).length;
   k.section('SECTION H: SCHEDULES AND CONTINUATION SHEET(S) ATTACHED', (k, x, w) => {
-    k.y += k.para(`${contSheets(cert)}  Continuation sheet(s)${bondRows(cert).length ? ' (incl. supplementary bonding)' : ''}    1  Schedule(s) of Inspection    ${nb}  Schedule(s) of Circuit Details and Schedule(s) of Test Results.`, x, k.y + 3, w, { size: 7.5 }) + 1;
+    k.y += k.para(`${contSheets(cert)}  Continuation sheet(s)${contWhat(cert)}    1  Schedule(s) of Inspection    ${nb}  Schedule(s) of Circuit Details and Schedule(s) of Test Results.`, x, k.y + 3, w, { size: 7.5 }) + 1;
     k.y += k.para('The schedule(s) and continuation sheet(s) listed are part of this document and this report is valid only when they are attached to it.', x, k.y + 3, w, { size: 7 });
   });
   supplySection(k, cert, 'I');

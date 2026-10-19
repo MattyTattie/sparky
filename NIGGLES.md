@@ -1,5 +1,11 @@
 # Sparky — niggles and update lists
 
+## [BUILT v0.14 on branch `v0.14`, 19 Oct 2026 — NOT LIVE] screenshots in /workspace/sparky-shots/v0.14, publish only on his OK
+- [built] Circuit page: the RCD boxes (cols 13–16, N/A buttons, S-type tick) now sit under "RCD (if any)" straight after the protective device, before "Cable and wiring". Col numbers kept. (Matthew 19 Oct)
+- [built] Other sources of supply: ticking it on Supply and earthing opens a list (type battery / PV inverter / generator / other, make and model, kW, isolation and where, G98/G99 ref, notes), add/remove several. Prints "OTHER SOURCES OF SUPPLY (continuation sheet)" with the cert number, counted in the continuation sheets. Status line asks for a type and kW for each. For his inverter. (Matthew 19 Oct)
+- [built] Test across circuits (board page, big button): R1+R2/R2 → ring r1/rn/r2 → IR (V, L–L, L–E) → polarity → Zs → RCD ms + button. Every circuit in a list with just those boxes, live red/amber flags, Next test / previous, fill-all-empty buttons, spares (and non-rings on the ring step) greyed. Same data as the circuit pages. EIC and EICR; not on minor works (one circuit only).
+- Later maybe: AFDD button step; per-phase readings for 3-phase boards.
+
 ## [BUILT v0.11 on branch `v0.11`, 19 Oct 2026 — NOT LIVE] screenshots in /workspace/sparky-shots/v0.11
 - [built] Device presets: chips on the circuit page (most used first), "+ Save as preset", and a new combination is remembered automatically when you leave a circuit. Tapping fills only BS/type/rating/kA/RCD boxes. Settings → Device presets: rename / delete. In the backup file (meta.devicePresets) and carried in each job.json for sync (merged by combination; deletes stick).
 - [built] Board select mode: "Select circuits to change together", Select all (skips spares with No device fitted), Apply… a preset and/or set device + cable boxes; "Overwrite / Only fill empty boxes / Cancel" when something would change.
