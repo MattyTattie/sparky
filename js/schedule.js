@@ -9,7 +9,7 @@ import { route, page, go, render } from './app.js';
 import { openCert, changed, flush } from './state.js';
 import { field } from './certui.js';
 import { blankBoard } from './certmodel.js';
-import { FIELDS, FIELD, TEMPLATES, blankCircuit, applyTemplate, copyCircuit, copyBoard, makeSpare } from './templates.js';
+import { FIELDS, FIELD, TEMPLATES, blankCircuit, applyTemplate, copyCircuit, copyBoard, makeSpare, autoNA, descChanged } from './templates.js';
 import { checkCircuit, limitZs, isSpare } from './checks.js';
 import { DEVICES, deviceById, deviceFromBs, ratingsFor, CHECK_NOTE } from './limits.js';
 import { voiceSupported, listen } from './voice.js';
@@ -109,7 +109,7 @@ async function addCircuit(cert, b, bi, open = true) {
   const r = await modal('Add a circuit', h('div', {}, h('p', { class: 'note' }, 'Pick a template to fill the circuit details (you can change anything), or start blank.'),
     h('div', { class: 'list' }, TEMPLATES.map((t, i) => h('button', { class: 'row', onclick: () => { document.querySelector('.modal-bg').remove(); done(applyTemplate(blankCircuit(n), t)); } }, h('div', { class: 'main' }, h('div', { class: 't' }, t.name), h('div', { class: 's' }, `${t.type || ''}${t.rating} A ${deviceById(t.device).label.split(' ')[0]} · ${t.live}/${t.cpc || '–'} mm²`)))))),
   [{ label: 'Blank', value: 'blank' }, { label: 'Spare way', value: 'spare' }]);
-  if (r === 'blank') done(blankCircuit(n)); else if (r === 'spare') done(makeSpare(blankCircuit(n)));
+  if (r === 'blank') done(blankCircuit(n)); else if (r === 'spare') { const c = makeSpare(blankCircuit(n)); descChanged(c, false); done(c); }
   function done(c) { b.circuits.push(c); changed(); if (open && !LAND.matches && !c.spare) go(`#/cert/${cert.id}/b/${bi}/c/${b.circuits.length - 1}`); else render(); }
 }
 
@@ -140,7 +140,7 @@ route(/^\/cert\/([^/]+)\/b\/(\d+)\/c\/(\d+)$/, async (id, bi, ci) => {
     extra: [
       h('button', { class: 'btn small', onclick: () => copyCircuitDialog(cert, b, +bi, +ci, base) }, 'Copy circuit'),
       h('button', { class: 'btn small', onclick: async () => { const t = await pickTemplate(); if (t) { Object.assign(c, applyTemplate(c, t)); changed(); render(); } } }, 'Template'),
-      h('button', { class: 'btn small', onclick: () => { Object.assign(c, makeSpare(c)); changed(); render(); } }, 'SPARE / N/A'),
+      h('button', { class: 'btn small', onclick: () => { { const was = isSpare(c); Object.assign(c, makeSpare(c)); descChanged(c, was); } changed(); render(); } }, 'SPARE / N/A'),
       h('button', { class: 'btn small warn', onclick: async () => { if (await confirmBox('Delete circuit?', `${c.num} ${c.desc}`, 'Delete', 'warn')) { b.circuits.splice(+ci, 1); changed(); go(base); } } }, 'Delete'),
     ] });
 });
@@ -157,7 +157,8 @@ async function pickTemplate() {
 }
 
 function circuitEditor({ cert, c, ctx, back, title, prev, next, extra = [], mw = false }) {
-  const flagEls = {};
+  const flagEls = {}; const inputs = {};
+  const noDevBox = h('div');
   const limBox = h('div', { class: 'limit' });
   let updHint = () => {};
   const refresh = () => {
@@ -167,11 +168,15 @@ function circuitEditor({ cert, c, ctx, back, title, prev, next, extra = [], mw =
       const f = res.flags[k]; el.wrap.className = 'fld ' + (f ? f.level : ''); el.msg.textContent = f ? f.msg : '';
     }
     const lim = limitZs(c, ctx());
+    document.querySelectorAll('select[data-k]').forEach((sel) => { const o = sel.querySelector('.pick0'); if (o) o.textContent = autoNA(c, sel.dataset.k) ? 'N/A' : '— pick —'; sel.classList.toggle('autona', autoNA(c, sel.dataset.k)); });
+    for (const [k, el] of Object.entries(inputs)) { const na = autoNA(c, k); el.placeholder = na ? 'N/A' : ''; el.classList.toggle('autona', na); }
+    fill(noDevBox, isSpare(c) ? h('label', { class: 'check nodev' }, h('input', { type: 'checkbox', checked: !!c.noDevice, onchange: (e) => { c.noDevice = e.target.checked; changed(); refresh(); } }), 'No device fitted (device boxes show N/A too)') : null);
     fill(limBox, isSpare(c) ? 'Spare way: no limits apply.' : lim.value != null ? h('span', {}, 'Max Zs ', h('b', {}, lim.value.toFixed(2) + ' Ω'), res.cold != null ? ` · 80% (cold reading) ${res.cold.toFixed(2)} Ω` : '', h('br'), h('span', { class: 'note' }, lim.source)) : 'Pick the device and rating to see the maximum Zs.');
   };
   const inp = (k, opts = {}) => {
     const fd = FIELD[k] || { label: opts.label, k };
-    const input = h('input', { value: c[k] ?? '', inputmode: fd.num ? 'decimal' : null, oninput: (e) => { c[k] = e.target.value; changed(); refresh(); } });
+    const input = h('input', { value: c[k] ?? '', inputmode: fd.num ? 'decimal' : null, oninput: (e) => { const was = isSpare(c); c[k] = e.target.value; if (k === 'desc' && descChanged(c, was) && inputs.irV) inputs.irV.value = c.irV ?? ''; changed(); refresh(); } });
+    inputs[k] = input;
     const quick = [];
     if (k === 'irLL' || k === 'irLE') quick.push('>999');
     if (isTick(k)) quick.push('✓', '✗');
@@ -206,8 +211,8 @@ function circuitEditor({ cert, c, ctx, back, title, prev, next, extra = [], mw =
     const codeSel = (k, list, label, col) => {
       const known = list.some(([code]) => code === String(c[k] || ''));
       return h('div', { class: 'fld' }, h('div', { class: 'lab' }, h('span', {}, label), h('span', { class: 'col' }, 'col ' + col)),
-        h('select', { 'aria-label': label, onchange: (e) => { c[k] = e.target.value === '__other' ? (known ? '' : c[k]) : e.target.value; changed(); drawCable(); refresh(); } },
-          h('option', { value: '' }, '— pick —'), list.map(([code, name]) => h('option', { value: code, selected: String(c[k] || '') === code ? true : null }, `${code} – ${name}`)),
+        h('select', { 'aria-label': label, 'data-k': k, onchange: (e) => { c[k] = e.target.value === '__other' ? (known ? '' : c[k]) : e.target.value; changed(); drawCable(); refresh(); } },
+          h('option', { value: '', class: 'pick0' }, autoNA(c, k) ? 'N/A' : '— pick —'), list.map(([code, name]) => h('option', { value: code, selected: String(c[k] || '') === code ? true : null }, `${code} – ${name}`)),
           !known && c[k] ? h('option', { value: c[k], selected: true }, `${c[k]} (as entered)`) : null));
     };
     const hintBox = h('div');
@@ -268,8 +273,8 @@ function circuitEditor({ cert, c, ctx, back, title, prev, next, extra = [], mw =
   const sect = (t, ...kids) => h('div', { class: 'card' }, h('h2', {}, t), kids);
   page(title, [
     h('div', { class: 'btns' }, extra, mic),
-    mic ? h('p', { class: 'note voicenote' }, 'Voice entry uses Google\u2019s speech service: what you say is sent to Google to turn it into text. Typing never leaves the phone.') : null,
-    sect('Circuit details', h('div', { class: 'grid2' }, inp('num'), inp('points')), inp('desc'), devBox,
+    mic ? h('p', { class: 'note voicenote' }, 'Voice entry uses Google\u2019s speech service: what you say is sent to Google to turn it into text. Typing never leaves this device.') : null,
+    sect('Circuit details', h('div', { class: 'grid2' }, inp('num'), inp('points')), inp('desc'), noDevBox, devBox,
       cableBox,
       h('div', { class: 'grid2' }, inp('rcdBs'), inp('rcdType'), inp('rcdIdn'), inp('rcdRating')),
       h('label', { class: 'check' }, h('input', { type: 'checkbox', checked: !!c.rcdS, onchange: (e) => { c.rcdS = e.target.checked; changed(); refresh(); } }), 'Time-delayed (S-type) RCD')),
@@ -288,20 +293,23 @@ function scheduleTable(cert, b, bi) {
     cols.slice(2).map((f) => [h('th', {}, h('span', { class: 'n' }, f.col), f.short), f.k === 'bka' ? h('th', {}, h('span', { class: 'n' }, '12'), 'Max Zs') : null]), h('th', {}, ''));
   const body = h('tbody');
   b.circuits.forEach((c, ci) => {
-    const cells = {}; let maxCell;
+    const cells = {}; let maxCell; let td0 = null;
     const upd = () => {
       const res = checkCircuit(c, ctxFor(cert, b));
       for (const [k, td] of Object.entries(cells)) { const f = res.flags[k]; td.className = (k === 'desc' ? 'desc sl2 ' : k === 'num' ? 'sl ' : '') + (f ? f.level : ''); td.title = f ? f.msg : ''; }
-      const lim = limitZs(c, ctxFor(cert, b)); maxCell.firstChild.placeholder = isSpare(c) ? 'N/A' : lim.value != null ? lim.value.toFixed(2) : '?';
+      const lim = limitZs(c, ctxFor(cert, b)); maxCell.firstChild.placeholder = isSpare(c) ? (autoNA(c, 'maxZs') ? 'N/A' : '') : lim.value != null ? lim.value.toFixed(2) : '?';
+      maxCell.firstChild.classList.toggle('autona', autoNA(c, 'maxZs'));
+      for (const [k, td] of Object.entries(cells)) { const el = td.firstChild; const na = autoNA(c, k); el.placeholder = na ? 'N/A' : ''; el.classList.toggle('autona', na); if (k === 'irV' && document.activeElement !== el) el.value = c.irV ?? ''; }
+      td0 && td0.classList.toggle('spare', isSpare(c));
     };
     const cell = (f) => {
-      const i = h('input', { value: c[f.k] ?? '', inputmode: f.num ? 'decimal' : null, 'aria-label': `Circuit ${c.num} ${f.label}`, oninput: (e) => { c[f.k] = e.target.value; if (f.k === 'bs') { const d = deviceFromBs(c.bs); if (d) c.device = d.id; } changed(); upd(); }, ondblclick: isTick(f.k) ? (e) => { c[f.k] = c[f.k] === '✓' ? '' : '✓'; e.target.value = c[f.k]; changed(); upd(); } : null });
+      const i = h('input', { value: c[f.k] ?? '', inputmode: f.num ? 'decimal' : null, 'aria-label': `Circuit ${c.num} ${f.label}`, oninput: (e) => { const was = isSpare(c); c[f.k] = e.target.value; if (f.k === 'desc') descChanged(c, was); if (f.k === 'bs') { const d = deviceFromBs(c.bs); if (d) c.device = d.id; } changed(); upd(); }, ondblclick: isTick(f.k) ? (e) => { c[f.k] = c[f.k] === '✓' ? '' : '✓'; e.target.value = c[f.k]; changed(); upd(); } : null });
       const td = h('td', { class: f.k === 'desc' ? 'desc sl2' : f.k === 'num' ? 'sl' : '', style: f.k === 'desc' ? 'min-width:150px' : f.k === 'remarks' ? 'min-width:160px' : 'min-width:' + (f.tick ? 40 : 52) + 'px' }, i);
       cells[f.k] = td; return td;
     };
     maxCell = h('td', { class: 'calc', title: 'From the BS 7671 tables. Type your own figure to override.' }, h('input', { value: c.maxZsOverride || '', inputmode: 'decimal', style: 'color:var(--brand);font-weight:600', oninput: (e) => { c.maxZsOverride = e.target.value; changed(); upd(); } }));
-    body.append(h('tr', { class: isSpare(c) ? 'spare' : '' }, cols.map((f) => [cell(f), f.k === 'bka' ? maxCell : null]),
-      h('td', { class: 'act' }, h('button', { title: 'Open', onclick: () => go(`#/cert/${cert.id}/b/${bi}/c/${ci}`) }, '✎'), h('button', { title: 'Copy row', onclick: () => { b.circuits.splice(ci + 1, 0, copyCircuit(c, b.circuits.length + 1)); renumberIfSequential(b); changed(); render(); } }, '⧉'), h('button', { title: 'Spare', onclick: () => { Object.assign(c, makeSpare(c)); changed(); render(); } }, '∅'))));
+    body.append(td0 = h('tr', { class: isSpare(c) ? 'spare' : '' }, cols.map((f) => [cell(f), f.k === 'bka' ? maxCell : null]),
+      h('td', { class: 'act' }, h('button', { title: 'Open', onclick: () => go(`#/cert/${cert.id}/b/${bi}/c/${ci}`) }, '✎'), h('button', { title: 'Copy row', onclick: () => { b.circuits.splice(ci + 1, 0, copyCircuit(c, b.circuits.length + 1)); renumberIfSequential(b); changed(); render(); } }, '⧉'), h('button', { title: 'Spare', onclick: () => { { const was = isSpare(c); Object.assign(c, makeSpare(c)); descChanged(c, was); } changed(); render(); } }, '∅'))));
     upd();
   });
   return h('div', {}, h('div', { class: 'tablewrap' }, h('table', { class: 'sched' }, h('thead', {}, head), body)),
@@ -338,7 +346,7 @@ route(/^\/cert\/([^/]+)\/b\/(\d+)\/scan$/, async (id, bi) => {
   const drawStart = () => fill(box,
     h('div', { class: 'card' },
       h('p', {}, 'Photograph the consumer unit with the cover on, as straight-on as you can. For a two-row board take one photo per row (or one photo and draw a box round each row). Get close enough that B32 / C16 and the model numbers are sharp.'),
-      h('p', { class: 'note' }, 'Read on this phone, no internet needed. The photos are saved with this job (and go to Drive with its backup). You check every way before anything is added.'),
+      h('p', { class: 'note' }, 'Read on this device, no internet needed. The photos are saved with this job (and go to Drive with its backup). You check every way before anything is added.'),
       h('div', { class: 'btns full' }, h('button', { class: 'btn primary', onclick: () => addPhotos(true) }, parts.length ? '+ Take another photo' : 'Take photo'), h('button', { class: 'btn', onclick: () => addPhotos(false) }, 'From gallery'))),
     parts.map((p, i) => h('div', { class: 'card scanpart' },
       h('div', { class: 'rowhead' }, h('b', {}, `Photo ${i + 1}`), h('span', { class: 'note' }, p.rects.length ? ` · ${p.rects.length} row box(es)` : ' · whole photo (rows found automatically)')),
@@ -448,7 +456,7 @@ route(/^\/cert\/([^/]+)\/b\/(\d+)\/scan$/, async (id, bi) => {
   async function add() {
     const { toCircuit } = await import('./cuscan.js');
     let n = b.circuits.length, added = 0;
-    for (const r of rows) for (const w of r.ways) { if (!w.keep) continue; const c = blankCircuit(++n); Object.assign(c, toCircuit(w)); if (/spare/i.test(w.desc || '')) Object.assign(c, makeSpare(c)); b.circuits.push(c); added++; }
+    for (const r of rows) for (const w of r.ways) { if (!w.keep) continue; const c = blankCircuit(++n); Object.assign(c, toCircuit(w)); if (/spare/i.test(w.desc || '')) { const was = isSpare(c); Object.assign(c, makeSpare(c)); descChanged(c, was); } b.circuits.push(c); added++; }
     // Keep the photos with the job (they go to Drive with the job's backup).
     if (cert.jobId) {
       for (const [i, p] of parts.entries()) {

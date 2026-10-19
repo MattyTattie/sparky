@@ -1,5 +1,10 @@
 # Sparky — niggles and update lists
 
+## [BUILT v0.10 on branch `v0.10`, 19 Oct 2026 — NOT LIVE] screenshots in /workspace/sparky-shots/v0.10
+- [built] Generic device wording (sync, conflict copies "from another device" / "from this device", "this device" instead of "this phone"). Old conflict-copy titles left as they are.
+- [built] G/J headings: Earthing conductor / Main protective bonding conductors (None-needed tick first) / Bonding of extraneous-conductive-parts. PDF layout unchanged.
+- [built] Spare ways: "spare" (any case) → empty boxes show grey N/A placeholders, device boxes stay blank unless "No device fitted"; PDF prints auto N/A light grey. Old v0.9 spares (typed N/A) print as typed.
+
 ## [BUILT v0.9 on branch `v0.9`, 19 Oct 2026 — NOT LIVE] Sync, 3-phase Check it, max demand, new look — screenshots in /workspace/sparky-shots/v0.9, publish only on his OK
 - [built] Automatic sync phone ↔ Mac through his Drive (same "Sparky jobs" job.json files as the backup): sign in once per device (Settings → Google Drive → Turn on sync); changes go up ~20 s after the last edit (or straight away when the app is hidden); open/focus/online pulls newer job.json files. Changed on both → newest kept, the other saved as a "conflict copy" job (with its certificates and photos) and a notice on the jobs page. Deleted jobs stay deleted (per-device list). Status dot in the top bar (synced / syncing / offline / sign in / error) and a clear message in Settings.
 - [built] Check it: Single-phase / 3-phase 400 V (4-core SWA 70/90 °C, singles), Ib per phase, volt drop % of 400 V, Zs/adiabatic phase–earth. ⚠ 3-phase tables from memory (same as the sizer): Matthew to check against Appendix 4.
@@ -77,3 +82,10 @@
 - [built v0.5] Note that voice entry uses Google speech service.
 - [built v0.5] Add Content-Security-Policy meta (tested: sign-in script, Drive mock, pdf.js, OCR).
 - Later maybe: separate Google OAuth client for Sparky.
+
+- [built v0.10] Wording: remove "phone and Mac" / device-specific wording (sync text, conflict copy titles "from phone/Mac" etc.) — say "your devices"/"another device". Matthew wants it generic, not bespoke. (19 Oct)
+- [built v0.10] Section G/J wording to match IET form: "Earthing conductor" (not main), "Main protective bonding conductors" (material/csa) as one heading, then separate heading "Bonding of extraneous-conductive-parts" for water/gas/oil/steel/lightning/other ticks (keep per-service csa). (19 Oct)
+- [built v0.10] Typing "spare" (any case) as circuit description auto-fills rest of that circuit row (circuit details + test results) with grey N/A placeholders, counts as done; removing "spare" restores (do not overwrite real values). (19 Oct)
+  - Spare: N/A must be a placeholder (typing replaces it). Leave protective device fields (BS, type, rating, kA, RCD) blank/editable for spares; only cable + test fields go grey N/A. Typed values print instead of N/A. (19 Oct)
+  - Spare: add "No device fitted" tick; when on, device fields also grey N/A. (19 Oct)
+  - Auto N/A prints grey on the PDF too (typed values black). Show PDF screenshot. (19 Oct)

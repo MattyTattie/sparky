@@ -105,7 +105,7 @@ route(/^\/$/, async () => {
     jobs.length ? h('label', { class: 'searchbox' }, icon('search', { size: 18 }), h('input', { class: 'search', type: 'search', placeholder: 'Search jobs, customers, addresses', 'aria-label': 'Search jobs', oninput: (e) => draw(e.target.value) })) : null,
     jobs.length ? h('h2', { class: 'sec' }, `Jobs (${jobs.length})`) : null,
     list,
-    h('p', { class: 'note' }, `${APP_NAME} ${APP_VERSION}. Everything is saved on this phone as you type. `, sync.getStatus().state === 'off' ? [h('a', { href: '#/settings' }, 'Sync with your other devices through Google Drive'), '.'] : 'Synced to your Google Drive.'),
+    h('p', { class: 'note' }, `${APP_NAME} ${APP_VERSION}. Everything is saved on this device as you type. `, sync.getStatus().state === 'off' ? [h('a', { href: '#/settings' }, 'Sync with your other devices through Google Drive'), '.'] : 'Synced to your Google Drive.'),
     jobs.length ? h('button', { class: 'btn primary fab', onclick: () => go('#/newjob') }, '+ New job') : null,
   ], { actions: [h('button', { class: 'iconbtn', 'aria-label': 'Settings', onclick: () => go('#/settings') }, icon('settings', { size: 20 }))] });
 });
@@ -202,7 +202,7 @@ route(/^\/job\/([^/]+)$/, async (id) => {
   const photoView = async (f) => {
     const cap = h('input', { value: f.caption || '', placeholder: 'Caption (shows under the photo on certificates)' });
     const r = await modal('Photo', h('div', {}, h('img', { src: URL.createObjectURL(f.blob), style: 'width:100%;border-radius:8px;margin-bottom:8px' }), cap), [{ label: 'Delete', value: 'del', cls: 'warn' }, { label: 'Done', value: 'ok', cls: 'primary' }]);
-    if (r === 'del') { if (await confirmBox('Delete photo?', 'This removes it from the phone.', 'Delete', 'warn')) { await db.del('files', f.id); render(); } return; }
+    if (r === 'del') { if (await confirmBox('Delete photo?', 'This removes it from this device.', 'Delete', 'warn')) { await db.del('files', f.id); render(); } return; }
     if (r === 'ok' && cap.value !== (f.caption || '')) { f.caption = cap.value; f.version = (f.version || 1) + 1; await db.put('files', f); }
   };
   const newCert = async (type) => { const { createCert } = await import('./certui.js'); const c = await createCert(type, job, cust); go('#/cert/' + c.id); };
@@ -219,7 +219,7 @@ route(/^\/job\/([^/]+)$/, async (id) => {
     catch (e) { toast(e.message || 'Backup failed'); btn.disabled = false; btn.textContent = 'Back up to Drive'; }
   };
   const delJob = async () => {
-    if (!(await confirmBox('Delete this job?', `Deletes the job, its ${certs.length} certificate(s) and ${photos.length} photo(s) from this phone. Anything already in Google Drive stays there (sync won\u2019t bring it back).`, 'Delete', 'warn'))) return;
+    if (!(await confirmBox('Delete this job?', `Deletes the job, its ${certs.length} certificate(s) and ${photos.length} photo(s) from this device. Anything already in Google Drive stays there (sync won\u2019t bring it back).`, 'Delete', 'warn'))) return;
     for (const c of certs) await db.del('certs', c.id); for (const f of files) await db.del('files', f.id); await db.del('jobs', id); await sync.recordDelete(id); go('#/');
   };
   const { dcPlansCard } = await import('./calcdcplan.js'); // v0.6: optional job.dcPlans
@@ -240,7 +240,7 @@ route(/^\/job\/([^/]+)$/, async (id) => {
       h('button', { class: 'btn small', onclick: async () => (await import('./pdfview.js')).viewPdf(f.blob, f.name) }, 'View'),
       h('button', { class: 'btn small', 'aria-label': 'Share ' + f.name, onclick: () => shareOrDownload(f.blob, f.name) }, 'Share'))))) : null,
     h('div', { class: 'card' }, h('h2', {}, 'Backup'),
-      h('p', { class: 'note' }, job.backedUpAt ? `In Google Drive (folder “${backup.jobFolderName(job, cust)}”), last saved ${new Date(job.backedUpAt).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' })}${(job.version || 0) > (job.backedUpVersion || 0) ? ' — changed since.' : '.'}` : 'Saved on this phone. Not in Google Drive yet.'),
+      h('p', { class: 'note' }, job.backedUpAt ? `In Google Drive (folder “${backup.jobFolderName(job, cust)}”), last saved ${new Date(job.backedUpAt).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' })}${(job.version || 0) > (job.backedUpVersion || 0) ? ' — changed since.' : '.'}` : 'Saved on this device. Not in Google Drive yet.'),
       h('div', { class: 'btns full' }, G.isConfigured() ? h('button', { class: 'btn', onclick: (e) => doBackup(e.currentTarget) }, 'Back up to Drive') : null, h('button', { class: 'btn', onclick: copyJob }, 'Copy job'), h('button', { class: 'btn warn', onclick: delJob }, 'Delete job'))),
   ], { back: '#/', sub: cust ? cust.name : '' });
 });
@@ -260,7 +260,7 @@ function nextCard(job, certs, cust, save) {
         const ics = icsFor({ uid: job.id + '-' + n.date, date: n.date, title: `Electrical inspection due: ${[cust && cust.name, (job.siteAddress || '').split(/[,\n]/)[0]].filter(Boolean).join(', ') || job.title}`, location: where, notes: `${job.title || ''}. Re-test due (from ${n.set ? 'the job' : n.from}). Made by ${APP_NAME}.` });
         const r = await shareOrDownload(new Blob([ics], { type: 'text/calendar' }), `inspection-due-${n.date}.ics`); if (r === 'downloaded') toast('Calendar file saved: open it to add the reminder');
       } }, 'Add to calendar')) : null,
-      h('p', { class: 'note' }, 'The calendar file has a reminder a month before. It stays on your phone: nothing is sent to the customer.'));
+      h('p', { class: 'note' }, 'The calendar file has a reminder a month before. It stays on this device: nothing is sent to the customer.'));
   };
   draw(); return box;
 }
@@ -321,7 +321,7 @@ route(/^\/settings$/, async () => {
   const drawSync = async () => {
     const c = await sync.getConfig(); const st = sync.getStatus(); const [t, col] = sync.statusText(st);
     fill(syncBox,
-      h('h3', {}, 'Sync between my phone and Mac'),
+      h('h3', {}, 'Sync between your devices'),
       h('p', { class: 'note' }, 'Sign in once on each device. Every change goes up to your Drive within about 20 seconds, and the other device picks it up when you open it or come back to it. If a job is changed on both before they catch up, the newest is kept and the other is saved as a \u201cconflict copy\u201d job.'),
       c.enabled ? h('div', { class: 'syncline' }, h('span', { class: 'syncchip ' + col }, h('i', {}), h('span', {}, t)), G.accountHint() ? h('span', { class: 'note' }, G.accountHint()) : null) : null,
       c.enabled && st.message ? h('div', { class: 'notice ' + (st.state === 'error' ? 'red' : 'amber') }, st.message) : null,
@@ -384,7 +384,7 @@ route(/^\/settings$/, async () => {
   };
   drawDrive();
   page('Settings', [
-    h('div', { class: 'card' }, h('h2', {}, 'You'), h('p', { class: 'note' }, 'Shown on your certificates. Kept on this phone (and in your Drive backup), never in the app\u2019s code.'),
+    h('div', { class: 'card' }, h('h2', {}, 'You'), h('p', { class: 'note' }, 'Shown on your certificates. Kept on this device (and in your Drive backup), never in the app\u2019s code.'),
       txt('name', 'Your name'), txt('business', 'Business name'), txt('position', 'Position', 'text', 'e.g. Proprietor'),
       txt('address1', 'Address line 1'), txt('address2', 'Address line 2'), h('div', { class: 'grid2' }, txt('town', 'Town'), txt('postcode', 'Postcode')),
       h('div', { class: 'grid2' }, txt('phone', 'Phone', 'tel'), txt('email', 'Email', 'email')),

@@ -7,6 +7,8 @@ import { TYPES, get, eicrOverall, isElectrode, msIsRcd, msIsOcpd, BOND_SERVICES,
 import { EIC_ITEMS, EICR_ITEMS, CODE_TEXT } from './inspections.js';
 import { GUIDANCE } from './guidance.js';
 import { limitZs, isSpare } from './checks.js';
+import { FIELDS, autoNA } from './templates.js';
+const AUTO_GREY = [170, 170, 170]; // v0.10: automatic N/A on spare ways
 import { STANDARD } from './limits.js';
 
 const yes = (v) => v === true || v === 'yes' || v === '✓';
@@ -198,7 +200,8 @@ function tableGrid(k, cols, rows, { headH = 26, rowH = 6.2, top, numbered = true
       const v = r[c.k];
       const cell = typeof v === 'object' && v ? v : { v };
       if (cell.flag) k.rect(colX[i] + 0.3, yy + 0.3, c.ww - 0.6, rowH - 0.6, { lw: 0, color: cell.flag === 'red' ? [235, 160, 160] : [240, 205, 140], fill: cell.flag === 'red' ? [252, 225, 225] : [253, 240, 210] });
-      if (c.tick) k.mark(cell.v, colX[i] + c.ww / 2, yy + rowH - 1.8, { size: 7.5 });
+      if (cell.auto) k.t(cell.v, c.left ? colX[i] + 1 : colX[i] + c.ww / 2, yy + rowH - 1.8, { size: 7, color: AUTO_GREY, align: c.left ? 'left' : 'center', maxW: c.ww - 1.2 });
+      else if (c.tick) k.mark(cell.v, colX[i] + c.ww / 2, yy + rowH - 1.8, { size: 7.5 });
       else if (c.left && cell.v && !k.fitSize(String(cell.v), c.ww - 2, 7.5, 6.2)) {
         // v0.5: long text (descriptions, remarks) wraps onto two lines inside the cell, whole words only
         const maxL = Math.max(1, Math.floor((rowH - 0.8) / 2.3));
@@ -320,7 +323,9 @@ export function scheduleRows(cert, b, flags = false) {
   return b.circuits.map((c) => {
     const spare = isSpare(c);
     const lim = spare ? { value: null } : limitZs(c, ctx);
-    const r = { ...c, maxZs: spare ? 'N/A' : (lim.value != null ? lim.value.toFixed(2) : (c.maxZsOverride || '')) };
+    const r = { ...c, maxZs: spare ? (c.maxZsOverride || '') : (lim.value != null ? lim.value.toFixed(2) : (c.maxZsOverride || '')) };
+    // v0.10: spare way: empty boxes print an automatic N/A in light grey (typed values as typed).
+    if (spare) for (const f of FIELDS) if (autoNA(c, f.k)) r[f.k] = { v: 'N/A', auto: true };
     if (flags && !spare) {
       const zs = parseFloat(c.zs);
       if (lim.value != null && !isNaN(zs) && zs > lim.value) r.zs = { v: c.zs, flag: 'red' };

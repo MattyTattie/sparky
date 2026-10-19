@@ -1,5 +1,5 @@
 // =====================================================================
-// sync.js — v0.9: keep jobs the same on the phone and the Mac, through
+// sync.js — v0.9: keep jobs the same on all your devices, through
 // your own Google Drive (the same "Sparky jobs" folders the backup uses).
 //  - Sign in once on each device (Settings → Google Drive).
 //  - A change is sent up about 20 s after you stop typing.
@@ -14,7 +14,7 @@ import * as G from './gdrive.js';
 import * as backup from './backup.js';
 import { S, flush } from './state.js';
 import { APP_SLUG } from './config.js';
-import { planJob, needsPush, conflictCopy, deviceLabel, newestTime } from './syncmerge.js';
+import { planJob, needsPush, conflictCopy, newestTime } from './syncmerge.js';
 
 const CONF = 'sync.config'; // { enabled, lastPull, lastSync }
 const TOMBS = 'sync.deleted'; // { jobId: deletedAt }
@@ -112,12 +112,12 @@ export async function pull(c = null) {
     const folder = (f.parents || [])[0] || d.job.driveFolderId;
     if (plan === 'pull') { await take(d, folder, f.id); out.pulled++; out.jobIds.push(d.job.id); }
     else if (plan === 'conflict-remote') { // Drive's is newer: keep this device's as a copy first
-      await saveCopy({ job: local, certs: await db.byJob('certs', local.id), files: await db.byJob('files', local.id) }, deviceLabel());
+      await saveCopy({ job: local, certs: await db.byJob('certs', local.id), files: await db.byJob('files', local.id) }, 'this device');
       await take(d, folder, f.id, true); out.pulled++; out.conflicts++; out.jobIds.push(d.job.id);
     } else if (plan === 'conflict-local') { // this device's is newer: keep Drive's as a copy
       const remoteFiles = [];
       for (const m of d.files || []) { const here = await db.get('files', m.id); let blob = here && here.blob; if (!blob && m.driveId) { try { blob = await G.readBlob(m.driveId); } catch {} } if (blob) remoteFiles.push({ ...m, blob }); }
-      await saveCopy({ job: d.job, certs: d.certs || [], files: remoteFiles }, d.device || 'other device');
+      await saveCopy({ job: d.job, certs: d.certs || [], files: remoteFiles }, 'another device');
       const j = await db.get('jobs', local.id); j.syncSavedAt = d.savedAt; j.driveJsonId = f.id; await db.put('jobs', j); // so the next push replaces Drive's copy
       out.conflicts++;
     }

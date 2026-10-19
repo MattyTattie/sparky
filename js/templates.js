@@ -84,11 +84,29 @@ export function copyBoard(b, { ref = '', keepResults = false, keepBoardTests = f
   nb.circuits = (b.circuits || []).map((c) => copyCircuit(c, c.num, { keepResults }));
   return nb;
 }
-export function makeSpare(c) {
-  const keep = { id: c.id, num: c.num, device: c.device, time: c.time, spare: true };
-  const out = blankCircuit(c.num); Object.assign(out, keep);
-  out.desc = 'SPARE';
-  for (const f of FIELDS) if (!['num', 'desc'].includes(f.k)) out[f.k] = 'N/A';
-  out.irV = 'N/A';
-  return out;
+// v0.10: a spare is just "SPARE" in the description. Nothing typed is
+// overwritten: empty boxes SHOW a grey N/A (a placeholder, see autoNA) and
+// print it in lighter grey. Take "spare" out and the boxes are empty again.
+export function makeSpare(c) { return { ...c, desc: 'SPARE' }; }
+export const SPARE_RE = /^\s*spare\s*$/i;
+export const isSpareCircuit = (c) => !!(c && (c.spare || SPARE_RE.test(String(c.desc || '')) || /^\s*n\/?a\s*$/i.test(String(c.desc || ''))));
+// Protective device boxes: left blank for a spare (a spare way usually still
+// has its breaker) unless "No device fitted" (c.noDevice) is ticked.
+export const DEVICE_KEYS = ['bs', 'type', 'rating', 'bka', 'maxZs', 'rcdBs', 'rcdType', 'rcdIdn', 'rcdRating'];
+const blankV = (v) => v == null || String(v).trim() === '';
+// Is box k of circuit c an automatic N/A? (irV's 500 V default counts as empty on a spare.)
+export function autoNA(c, k) {
+  if (!isSpareCircuit(c) || k === 'num' || k === 'desc') return false;
+  if (DEVICE_KEYS.includes(k) && !c.noDevice) return false;
+  if (k === 'maxZs') return blankV(c.maxZsOverride);
+  return blankV(c[k]) || (k === 'irV' && String(c[k]) === '500');
+}
+
+// v0.10: typing in the description: spare on/off. The 500 V IR default is cleared on a spare (shows N/A) and put back after.
+export function descChanged(c, wasSpare) {
+  if (c.spare && !SPARE_RE.test(String(c.desc || ''))) c.spare = false;
+  const now = isSpareCircuit(c);
+  if (!wasSpare && isSpareCircuit(c) && String(c.irV) === '500') c.irV = '';
+  if (wasSpare && !isSpareCircuit(c) && !String(c.irV || '').trim()) c.irV = '500';
+  return now !== wasSpare;
 }

@@ -124,6 +124,13 @@ Open points
 - **Standards quoted**: BS EN 1648-2 (motor caravans, 12 V d.c.), BS EN 1648-1 (caravans), BS 7671 Section 721 (caravans and motor caravans, 230 V), BS EN ISO 10133 / 13297 (small craft d.c. / a.c.). 3% / 10% volt drop described as "the usual marine rule". No regulation numbers quoted.
 - **Worked example** (VAN_EXAMPLE, 12 V 200 Ah LiFePO4, 400 W solar (2 × 200 W, Voc 24.3), 30 A DC-DC, 1500 W inverter, fridge, lights, pump, diesel heater, laptop, low-watt kettle, 2 days at 80%): 993.5 Wh/day = 82.8 Ah; needs 207 Ah (200 Ah ≈ 1.9 days, flagged); inverter 144.9 A → 200 A MEGA, 50 mm² (1.49% over 1.5 m); MPPT 100 V / 45 A, 2 in series, cold Voc 53.5 V; main 166.9 A → 225 A Class T, 50 mm²; 250 A isolator, 300 A shunt, 250 A busbars; DC-DC in 36.9 A → 50 A MIDI, 16 mm² over 5 m; out 40 A MIDI, 6 mm²; fuse box feed 30 A MIDI, 10 mm²; loads 1.5–2.5 mm² on 3–15 A blades.
 
+## v0.10 (19 Oct 2026, branch `v0.10`, NOT pushed)
+- templates.js: isSpareCircuit, autoNA(c, k), DEVICE_KEYS, descChanged (500 V IR default cleared on spare / put back), makeSpare now only sets desc 'SPARE'. checks.isSpare = isSpareCircuit. New optional circuit field `noDevice`.
+- pdf.js scheduleRows: auto N/A cells { v: 'N/A', auto: true } → AUTO_GREY [170,170,170] in tableGrid.
+- schedule.js: placeholders + .autona class in the editor and landscape table, "No device fitted" tick on spares, code selects show N/A.
+- certmodel/certui: field type 'heading' (never required). G/J reordered with IET headings.
+- Tests: tests/v10.test.mjs, tests/screens_v10.py, tests/pdf_spare_v10.mjs.
+
 ## v0.9 (19 Oct 2026, built on branch `v0.9`, NOT pushed / not live)
 - Sync: js/syncmerge.js (pure: planJob, needsPush, conflictCopy, deviceLabel, newestTime), js/sync.js (status listeners, schedule, init/connect/disconnect/syncNow, pull, conflict notices), db.onPut hook, backup.applyRemote (shared with Restore from Drive), backupJobNow re-reads the job before saving (edits during upload stay "changed since") and records job.syncSavedAt.
 - New optional fields: job.syncSavedAt, job.conflictOf, job.conflictAt; job.json gets optional "device". Meta keys sync.config / sync.deleted / sync.conflicts (device-only). Backup file format unchanged.

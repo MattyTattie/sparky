@@ -555,3 +555,10 @@ input:focus, select:focus, textarea:focus { border-color: #8c95ff !important; bo
 .mdadd .chip { font-size: 13px; }
 .btn.fact { margin-top: 6px; min-height: 36px; font-size: 13.5px; }
 @media (prefers-reduced-motion: reduce) { main { animation: none; } .syncchip.info i { animation: none; } a.row:active, .calcpick:active { transform: none; } }
+
+/* v0.10: form sub-headings (IET wording) */
+.fhead { font-size: 15px; font-weight: 750; letter-spacing: -0.005em; color: var(--ink); margin: 18px 0 8px; padding-top: 12px; border-top: 1px solid var(--line); }
+.card > .fhead:first-child { margin-top: 0; padding-top: 0; border-top: 0; }
+.autona::placeholder { color: #a3a9b5; font-weight: 600; opacity: 1; }
+.nodev { margin: 2px 0 10px; }
+select.autona { color: #a3a9b5; font-weight: 600; }

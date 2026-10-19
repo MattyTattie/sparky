@@ -1,7 +1,7 @@
 // =====================================================================
 // certmodel.js — what a certificate holds, and the on-screen sections.
 // =====================================================================
-import { blankCircuit } from './templates.js';
+import { blankCircuit, isSpareCircuit } from './templates.js';
 import { EIC_ITEMS, EICR_ITEMS } from './inspections.js';
 
 export const TYPES = {
@@ -108,15 +108,19 @@ const PARTS = { id: 'parts', title: 'Earthing, bonding and main switch', form: '
   f('parts.means', 'Means of earthing', 'chips', { opts: ['Distributor\u2019s facility', 'Installation earth electrode'], redraw: true }),
   f('parts.maxDemand', 'Maximum demand', 'num', { action: { label: 'Work it out from the loads', href: (c) => '#/calc/md/' + c.id } }), f('parts.mdUnit', 'Unit', 'chips', { opts: ['A', 'kVA'] }),
   f('parts.elType', 'Earth electrode type (rod, tape…)', 'text', { showIf: isElectrode }), f('parts.elLocation', 'Electrode location', 'text', { showIf: isElectrode }), f('parts.elRa', 'Electrode resistance RA (Ω)', 'num', { showIf: isElectrode }),
-  f('parts.ecMat', 'Earthing conductor material'), f('parts.ecCsa', 'Earthing conductor csa (mm²)', 'num'), f('parts.ecOk', 'Earthing conductor connection verified', 'check'),
-  f('parts.bondMat', 'Main bonding material', 'text', { hideIf: 'parts.bondNone' }), f('parts.bondCsa', 'Main bonding csa (mm²)', 'num', { hideIf: 'parts.bondNone', hint: 'Used for every service below unless you give it its own size.' }), f('parts.bondOk', 'Main bonding connection verified', 'check', { hideIf: 'parts.bondNone' }),
-  f('parts.bondWater', 'Bonded to water', 'check', { redraw: true, hideIf: 'parts.bondNone' }), svcCsa('Water', 'Water'),
-  f('parts.bondGas', 'Bonded to gas', 'check', { redraw: true, hideIf: 'parts.bondNone' }), svcCsa('Gas', 'Gas'),
-  f('parts.bondOil', 'Bonded to oil', 'check', { redraw: true, hideIf: 'parts.bondNone' }), svcCsa('Oil', 'Oil'),
-  f('parts.bondSteel', 'Bonded to structural steel', 'check', { redraw: true, hideIf: 'parts.bondNone' }), svcCsa('Steel', 'Structural steel'),
-  f('parts.bondLightning', 'Bonded to lightning protection', 'check', { redraw: true, hideIf: 'parts.bondNone' }), svcCsa('Lightning', 'Lightning protection'),
-  f('parts.bondOther', 'Bonded to other (specify)', 'text', { redraw: 'blur', opt: true, hideIf: 'parts.bondNone' }), svcCsa('Other', 'Other'),
-  f('parts.bondNone', 'No services need main bonding (all plastic / none present)', 'check', { redraw: true, hideIf: (c) => !bondNone(c) && (BOND_SERVICES.some(([s]) => bondTicked(c, s)) || bondTicked(c, 'Other')) }),
+  // v0.10: headings as on the IET form.
+  f('parts._hEc', 'Earthing conductor', 'heading'),
+  f('parts.ecMat', 'Material'), f('parts.ecCsa', 'csa (mm²)', 'num'), f('parts.ecOk', 'Connection / continuity verified', 'check'),
+  f('parts._hBond', 'Main protective bonding conductors', 'heading'),
+  f('parts.bondNone', 'None needed (no extraneous-conductive-parts: all plastic / none present)', 'check', { redraw: true, hideIf: (c) => !bondNone(c) && (BOND_SERVICES.some(([s]) => bondTicked(c, s)) || bondTicked(c, 'Other')) }),
+  f('parts.bondMat', 'Material', 'text', { hideIf: 'parts.bondNone' }), f('parts.bondCsa', 'csa (mm²)', 'num', { hideIf: 'parts.bondNone', hint: 'Used for every service below unless you give it its own size.' }), f('parts.bondOk', 'Connection / continuity verified', 'check', { hideIf: 'parts.bondNone' }),
+  f('parts._hExt', 'Bonding of extraneous-conductive-parts', 'heading', { hideIf: 'parts.bondNone' }),
+  f('parts.bondWater', 'Water installation pipes', 'check', { redraw: true, hideIf: 'parts.bondNone' }), svcCsa('Water', 'Water'),
+  f('parts.bondGas', 'Gas installation pipes', 'check', { redraw: true, hideIf: 'parts.bondNone' }), svcCsa('Gas', 'Gas'),
+  f('parts.bondOil', 'Oil installation pipes', 'check', { redraw: true, hideIf: 'parts.bondNone' }), svcCsa('Oil', 'Oil'),
+  f('parts.bondSteel', 'Structural steel', 'check', { redraw: true, hideIf: 'parts.bondNone' }), svcCsa('Steel', 'Structural steel'),
+  f('parts.bondLightning', 'Lightning protection', 'check', { redraw: true, hideIf: 'parts.bondNone' }), svcCsa('Lightning', 'Lightning protection'),
+  f('parts.bondOther', 'Other (specify)', 'text', { redraw: 'blur', opt: true, hideIf: 'parts.bondNone' }), svcCsa('Other', 'Other'),
   f('parts.msLocation', 'Main switch location'), f('parts.msBs', 'Main switch BS (EN)'), f('parts.msPoles', 'No. of poles', 'num'), f('parts.msCurrent', 'Current rating (A)', 'num'), f('parts.msVoltage', 'Voltage rating (V)', 'num'),
   f('parts.msIsOcpd', 'Main switch is a breaker or fuse (OCPD)', 'check', { dflt: msIsOcpd, redraw: true }),
   f('parts.msType', 'Device type (MCCB / ACB / fuse…)', 'text', { showIf: msIsOcpd, indent: true }), f('parts.msRating', 'Device rating/setting (A)', 'num', { showIf: msIsOcpd, indent: true }), f('parts.msKa', 'Breaking capacity (kA)', 'num', { showIf: msIsOcpd, indent: true }),
@@ -220,13 +224,13 @@ export function visible(cert, fd) {
 }
 // The fields a section needs before its dot goes green: every showing field
 // that isn't a tick box and isn't marked opt (optional / "if any").
-export const neededFields = (cert, s) => (s.fields || []).filter((x) => x.type !== 'check' && !x.opt && visible(cert, x));
+export const neededFields = (cert, s) => (s.fields || []).filter((x) => x.type !== 'check' && x.type !== 'heading' && !x.opt && visible(cert, x));
 const filled = (v) => String(v ?? '').trim() !== '';
 
 // How complete a section is (for the progress dots).
 export function sectionDone(cert, s) {
   if (s.special === 'inspections') { const v = Object.values(cert.inspections || {}); return v.length && v.every(Boolean); }
-  if (s.special === 'boards') return (cert.boards || []).some((b) => b.circuits.length) && cert.boards.every((b) => b.circuits.every((c) => c.spare || c.zs || c.desc === 'SPARE'));
+  if (s.special === 'boards') return (cert.boards || []).some((b) => b.circuits.length) && cert.boards.every((b) => b.circuits.every((c) => isSpareCircuit(c) || c.zs));
   if (s.special === 'observations') return true;
   if (s.special === 'bonding') return Boolean(cert.bondingNA || (cert.bonding || []).length || cert.status === 'issued');
   if (s.special === 'sign') return Boolean(cert.sigs && Object.values(cert.sigs).some((x) => x && x.img));

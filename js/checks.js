@@ -17,7 +17,8 @@ export function num(v) {
 }
 const isGreater = (v) => /^\s*[>≥]/.test(String(v || ''));
 
-export const isSpare = (c) => !!(c && (c.spare || /^(spare|n\/?a)$/i.test(String(c.desc || '').trim())));
+import { isSpareCircuit } from './templates.js';
+export const isSpare = isSpareCircuit;
 
 // The max Zs used for a circuit: your own figure (e.g. from the maker's
 // data) wins; otherwise the BS 7671 table; on TT with an RCD, Table 41.5.

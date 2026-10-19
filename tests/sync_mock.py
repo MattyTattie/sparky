@@ -99,7 +99,7 @@ async def main():
         res['4_phone_jobs'] = await phone.evaluate(JOBS)
         await mac.evaluate(SYNC); res['4_mac_jobs'] = await mac.evaluate(JOBS)
         for k in ('4_phone_jobs', '4_mac_jobs'):
-            js = res[k]; check(len(js) == 2 and any('conflict copy from phone' in j['title'] and j['notes'] == 'Phone note: RCD tripping' for j in js) and any(j['id'] == 'job-s1' and j['notes'] == 'Mac note: quote sent' for j in js), f'{k}: conflict not kept on both sides')
+            js = res[k]; check(len(js) == 2 and any('conflict copy from this device' in j['title'] and j['notes'] == 'Phone note: RCD tripping' for j in js) and any(j['id'] == 'job-s1' and j['notes'] == 'Mac note: quote sent' for j in js), f'{k}: conflict not kept on both sides')
         res['4_copy_cert'] = await mac.evaluate("async () => { const db = await import('/js/db.js'); const j = (await db.all('jobs')).find((x) => x.conflictOf); return j ? (await db.byJob('certs', j.id)).length + ' cert(s), ' + (await db.byJob('files', j.id)).length + ' file(s)' : 'none'; }")
         check(res['4_copy_cert'] == '1 cert(s), 1 file(s)', 'conflict copy missing its certificate/photo')
         if SHOTS:

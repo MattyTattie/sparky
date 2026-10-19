@@ -29,6 +29,7 @@ export function field(cert, fd, onChange) {
   if (!visible(cert, fd)) return null;
   const cls = fd.indent ? ' sub' : '';
   const hint = fd.hint ? h('div', { class: 'note fhint' }, fd.hint) : null;
+  if (fd.type === 'heading') return h('h3', { class: 'fhead' }, fd.label);
   if (fd.type === 'check') return h('label', { class: 'check' + cls }, h('input', { type: 'checkbox', checked: !!(val == null && fd.dflt ? fd.dflt(cert) : val), onchange: (e) => upd(e.target.checked) }), fd.label);
   if (fd.type === 'chips') {
     const box = h('div', { class: 'chips' });
@@ -73,7 +74,7 @@ route(/^\/cert\/([^/]+)$/, async (id) => {
         cert.type !== 'MW' ? h('button', { class: 'btn', onclick: (e) => makeChart(cert, e.currentTarget) }, 'Circuit chart') : null),
       h('label', { class: 'check' }, h('input', { type: 'checkbox', checked: !!cert.pdfFlags, onchange: (e) => { cert.pdfFlags = e.target.checked; changed(); } }), 'Highlight readings over the limit in red on the PDF'),
       cert.status !== 'issued' ? h('button', { class: 'btn', onclick: async () => { if (await confirmBox('Mark as issued?', 'Records today as the issue date. You can still edit it.', 'Mark issued')) { cert.status = 'issued'; cert.issuedAt = new Date().toISOString(); changed(); await flush(); render(); } } }, 'Mark as issued') : null),
-    h('div', { class: 'btns full' }, h('button', { class: 'btn warn', onclick: async () => { if (await confirmBox('Delete certificate?', cert.number + ' will be removed from this phone.', 'Delete', 'warn')) { await db.del('certs', id); S.cert = null; go(job ? '#/job/' + job.id : '#/'); } } }, 'Delete certificate')),
+    h('div', { class: 'btns full' }, h('button', { class: 'btn warn', onclick: async () => { if (await confirmBox('Delete certificate?', cert.number + ' will be removed from this device.', 'Delete', 'warn')) { await db.del('certs', id); S.cert = null; go(job ? '#/job/' + job.id : '#/'); } } }, 'Delete certificate')),
   ], { back: job ? '#/job/' + job.id : '#/', sub: cert.number });
 });
 

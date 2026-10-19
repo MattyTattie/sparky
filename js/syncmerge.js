@@ -30,7 +30,7 @@ export const needsPush = (job) => Boolean(job) && (job.version || 0) > (job.back
 
 // A copy of a whole job (job + certificates + files) under new ids, so the
 // losing side of a conflict is kept, never thrown away.
-export function conflictCopy({ job, certs = [], files = [] }, { newId, label = 'other device', when = new Date() } = {}) {
+export function conflictCopy({ job, certs = [], files = [] }, { newId, label = 'another device', when = new Date() } = {}) {
   const ids = new Map(); const nid = (old) => { if (!ids.has(old)) ids.set(old, newId()); return ids.get(old); };
   const stamp = when.toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
   const jid = newId(); const now = when.toISOString();

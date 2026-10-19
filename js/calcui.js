@@ -31,7 +31,7 @@ route(/^\/calc$/, async () => {
     h('span', { class: 'cpt' }, h('span', { class: 'cpn' }, c.title, isLast ? h('span', { class: 'lastbadge' }, 'Last used') : null), h('span', { class: 'cps' }, c.sub)),
     icon('chevronRight', { size: 20, cls: 'cpgo' }));
   page('Calculators', [
-    h('p', { class: 'note calcintro' }, 'Pick what you want to work out. Everything stays on this phone.'),
+    h('p', { class: 'note calcintro' }, 'Pick what you want to work out. Everything stays on this device.'),
     lc ? [h('h2', { class: 'sec' }, 'Carry on'), card(lc, true), h('h2', { class: 'sec' }, 'All calculators')] : null,
     h('div', { class: 'calcpicks' }, CALCS.filter((c) => c !== lc).map((c) => card(c, false))),
   ]);
