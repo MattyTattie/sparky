@@ -7,8 +7,8 @@ import * as db from './db.js';
 import { h, fill, toast, modal, confirmBox, fmtDate, shareOrDownload, blobToDataUrl, emptyState, icon, withIcon } from './ui.js';
 import { route, page, go, render } from './app.js';
 import { S, openCert, changed, flush, getProfile, defaultInstruments, calibrationWarnings, INSTRUMENT_KINDS } from './state.js';
-import { TYPES, newCert, sectionsFor, sectionDone, get, set, eicrOverall, blankBond, BOND_LOCATIONS, BOND_PARTS } from './certmodel.js';
-import { EIC_ITEMS, EIC_OUTCOMES, EICR_ITEMS, EICR_OUTCOMES, CODE_TEXT, OBSERVATIONS, OBS_CATS } from './inspections.js';
+import { TYPES, newCert, sectionsFor, sectionDone, missingFields, visible, get, set, eicrOverall, blankBond, BOND_LOCATIONS, BOND_PARTS } from './certmodel.js';
+import { EIC_ITEMS, EIC_OUTCOMES, EICR_ITEMS, EICR_OUTCOMES, CODE_TEXT, OBSERVATIONS, OBS_CATS, EIC_HELP, EICR_HELP } from './inspections.js';
 import { checkCircuit } from './checks.js';
 import { CHECK_NOTE } from './limits.js';
 
@@ -20,21 +20,27 @@ export async function createCert(type, job, cust) {
   await db.put('certs', c); return c;
 }
 
-// One form field, wired to autosave.
+// One form field, wired to autosave. v0.8: showIf/hideIf (see visible()),
+// dflt (a tick worked out from the data until you change it), placeholder
+// (text or (cert) => text), hint, indent (sits under the tick that opens it).
 export function field(cert, fd, onChange) {
   const val = get(cert, fd.k);
-  const upd = (v) => { set(cert, fd.k, v); changed(); if (onChange) onChange(fd.k, v); };
-  if (fd.hideIf && get(cert, fd.hideIf)) return null;
-  if (fd.type === 'check') return h('label', { class: 'check' }, h('input', { type: 'checkbox', checked: !!val, onchange: (e) => upd(e.target.checked) }), fd.label);
+  const upd = (v) => { set(cert, fd.k, v); changed(); if (onChange) onChange(fd.k, v, fd); };
+  if (!visible(cert, fd)) return null;
+  const cls = fd.indent ? ' sub' : '';
+  const hint = fd.hint ? h('div', { class: 'note fhint' }, fd.hint) : null;
+  if (fd.type === 'check') return h('label', { class: 'check' + cls }, h('input', { type: 'checkbox', checked: !!(val == null && fd.dflt ? fd.dflt(cert) : val), onchange: (e) => upd(e.target.checked) }), fd.label);
   if (fd.type === 'chips') {
     const box = h('div', { class: 'chips' });
     const draw = () => fill(box, ...fd.opts.map((o) => h('button', { class: 'chip' + (get(cert, fd.k) === o ? ' on' : ''), onclick: () => { upd(get(cert, fd.k) === o ? '' : o); draw(); } }, o)));
     draw();
-    return h('div', { class: 'f', style: 'margin-bottom:12px' }, h('span', { class: 'note', style: 'display:block;margin-bottom:4px' }, fd.label), box, fd.hint ? h('div', { class: 'note' }, fd.hint) : null);
+    return h('div', { class: 'f' + cls, style: 'margin-bottom:12px' }, h('span', { class: 'note', style: 'display:block;margin-bottom:4px' }, fd.label), box, hint);
   }
-  if (fd.type === 'select') return h('label', { class: 'f' }, h('span', {}, fd.label), h('select', { onchange: (e) => upd(e.target.value) }, fd.opts.map((o) => h('option', { selected: o === val ? true : null }, o))));
+  if (fd.type === 'select') return h('label', { class: 'f' + cls }, h('span', {}, fd.label), h('select', { onchange: (e) => upd(e.target.value) }, fd.opts.map((o) => h('option', { selected: o === val ? true : null }, o))), hint);
   const tag = fd.type === 'area' ? 'textarea' : 'input';
-  return h('label', { class: 'f' }, h('span', {}, fd.label), h(tag, { type: fd.type === 'date' ? 'date' : tag === 'input' ? 'text' : null, inputmode: fd.type === 'num' ? 'decimal' : null, value: val ?? '', oninput: (e) => upd(e.target.value) }));
+  const ph = typeof fd.placeholder === 'function' ? fd.placeholder(cert) : fd.placeholder;
+  const ev = fd.redraw === 'blur' ? { oninput: (e) => set(cert, fd.k, e.target.value) || changed(), onchange: (e) => upd(e.target.value) } : { oninput: (e) => upd(e.target.value) };
+  return h('label', { class: 'f' + cls }, h('span', {}, fd.label), h(tag, { type: fd.type === 'date' ? 'date' : tag === 'input' ? 'text' : null, inputmode: fd.type === 'num' ? 'decimal' : null, value: val ?? '', placeholder: ph || null, ...ev }), hint);
 }
 
 // ---------- Overview ----------
@@ -123,7 +129,11 @@ route(/^\/cert\/([^/]+)\/s\/([^/]+)$/, async (id, sid) => {
   const s = sid === 'instruments' ? { id: 'instruments', title: 'Test instruments', form: '' } : secs[i];
   if (!s) return go('#/cert/' + id);
   const box = h('div');
-  const nextBtn = () => { const n = secs[i + 1]; return n ? h('a', { class: 'btn primary', href: n.special === 'boards' ? `#/cert/${id}/boards` : `#/cert/${id}/s/${n.id}` }, 'Next: ' + n.title + ' →') : h('a', { class: 'btn primary', href: '#/cert/' + id }, 'Done'); };
+  const href = (n) => (n.special === 'boards' ? `#/cert/${id}/boards` : `#/cert/${id}/s/${n.id}`);
+  // v0.8: Back and Next side by side (no Back on the first section).
+  const nextBtn = () => { const n = secs[i + 1]; const p = i > 0 ? secs[i - 1] : null;
+    return h('div', { class: 'secnav' + (p ? '' : ' one') }, p ? h('a', { class: 'btn back', href: href(p), title: p.title }, '← Back') : null,
+      n ? h('a', { class: 'btn primary', href: href(n), title: n.title }, h('span', { class: 'lbl' }, 'Next: ' + n.title), h('span', {}, ' →')) : h('a', { class: 'btn primary', href: '#/cert/' + id }, 'Done')); };
   const draw = () => {
     let content;
     if (s.id === 'instruments') content = instrumentsSection(cert);
@@ -132,13 +142,25 @@ route(/^\/cert\/([^/]+)\/s\/([^/]+)$/, async (id, sid) => {
     else if (s.special === 'bonding') content = bondingSection(cert, draw);
     else if (s.special === 'sign') content = [h('div', { class: 'card' }, (s.fields || []).map((fd) => field(cert, fd))), signSection(cert, draw)];
     else if (s.special === 'mwcircuit') content = [h('div', { class: 'card' }, s.fields.map((fd) => field(cert, fd))), h('a', { class: 'btn primary', href: `#/cert/${id}/mwc`, style: 'width:100%;margin-bottom:12px' }, 'Circuit details and test results →')];
-    else content = h('div', { class: 'card' }, s.fields.map((fd) => field(cert, fd, (k) => { if (k === 'eic.samePerson' || k.startsWith('people.designer')) { if (k === 'eic.samePerson' || get(cert, 'eic.samePerson')) syncPeople(cert); if (k === 'eic.samePerson') draw(); } })));
+    else {
+      content = [h('div', { class: 'notice ' + stateLine(cert, s)[0] + ' secstate' }, stateLine(cert, s)[1]),
+        h('div', { class: 'card' }, s.fields.map((fd) => field(cert, fd, (k, v, d) => { if (k === 'eic.samePerson' || k.startsWith('people.designer')) { if (k === 'eic.samePerson' || get(cert, 'eic.samePerson')) syncPeople(cert); if (k === 'eic.samePerson') return draw(); } if (d.redraw) draw(); else refreshState(); })))];
+    }
     fill(box, content, sid === 'summary' && cert.type === 'EICR' ? h('div', { class: 'notice ' + (eicrOverall(cert) === 'SATISFACTORY' ? 'green' : 'red') }, `From your observations: ${eicrOverall(cert)}. ${cert.eicr.overall ? '' : 'Used on the PDF unless you pick one above.'}`) : null,
       h('div', { class: 'stick' }, nextBtn()));
   };
+  // update the 'still to fill' line as you type, without redrawing the inputs
+  const refreshState = () => { const el = box.querySelector('.secstate'); if (!el) return; const [c, t] = stateLine(cert, s); el.className = 'notice ' + c + ' secstate'; el.textContent = t; };
   draw();
   page(s.title, box, { back: '#/cert/' + id, sub: `${cert.number}${s.form ? ' · Section ' + s.form : ''}` });
 });
+// v0.8: the line at the top of a section saying what's left for the green dot.
+function stateLine(cert, s) {
+  const miss = missingFields(cert, s);
+  if (miss.length) return ['info', `Still to fill in for the green dot: ${miss.map((x) => x.label.replace(/\s*\([^)]*\)$/, '')).join(', ')}.`];
+  if (sectionDone(cert, s)) return ['green', 'All filled in \u2713 The dot for this section is green.'];
+  return ['info', 'Tick each service you bonded (it needs a size), or tick \u201cNo services need main bonding\u201d.'];
+}
 function syncPeople(cert) {
   if (!cert.eic.samePerson) return;
   const d = cert.people.designer; cert.people.constructor = { ...d }; cert.people.inspector = { ...d }; changed();
@@ -159,13 +181,20 @@ function inspectionsSection(cert) {
   const draw = () => fill(list, 
     h('p', { class: 'note' }, cert.type === 'EIC' ? 'Tick or N/A each item. A ✓ means inspected and satisfactory.' : 'Outcome for each item: ✓ acceptable, C1/C2/C3 (code), FI further investigation, N/V not verified, LIM limitation, N/A not applicable. Codes C1, C2, C3 or FI need an observation too.'),
     h('div', { class: 'btns' }, h('button', { class: 'btn small', onclick: () => { for (const k of Object.keys(cert.inspections)) if (!cert.inspections[k]) cert.inspections[k] = '✓'; changed(); draw(); } }, 'Tick all the blanks'), h('button', { class: 'btn small', onclick: () => { for (const k of Object.keys(cert.inspections)) cert.inspections[k] = ''; changed(); draw(); } }, 'Clear all')),
-    ...items.map(([n, text, head]) => head ? h('div', { class: 'ins head' }, n + '  ' + text) : h('div', { class: 'ins' }, h('span', { class: 'num' }, n), h('div', { class: 'txt' }, text, h('div', { class: 'chips', style: 'margin-top:6px' }, outs.map((o) => h('button', { class: 'chip ' + o.toLowerCase().replace('/', '') + (cert.inspections[n] === o ? ' on' : ''), onclick: async () => {
+    ...items.map(([n, text, head]) => head ? h('div', { class: 'ins head' }, n + '  ' + text) : h('div', { class: 'ins' }, h('span', { class: 'num' }, n), h('div', { class: 'txt' }, text, helpLine(cert, n), h('div', { class: 'chips', style: 'margin-top:6px' }, outs.map((o) => h('button', { class: 'chip ' + o.toLowerCase().replace('/', '') + (cert.inspections[n] === o ? ' on' : ''), onclick: async () => {
       cert.inspections[n] = cert.inspections[n] === o ? '' : o; changed(); draw();
       if (cert.type === 'EICR' && /^(C1|C2|C3|FI)$/.test(o) && cert.inspections[n] === o && !cert.observations.some((x) => x.item === n)) {
         if (await confirmBox('Add an observation?', `Item ${n} is ${o}. Add it to the observations list now?`, 'Add observation')) { cert.observations.push({ id: db.newId(), item: n, text: text.replace(/\s*\([^)]*\)\s*$/, ''), code: o, reg: (/\(([^)]*)\)\s*$/.exec(text) || [])[1] || '', location: '' }); changed(); toast('Added to observations'); }
       }
     } }, o)))))));
   draw(); return list;
+}
+
+// v0.8: the small "what to check" line under an inspection item (screen only).
+function helpLine(cert, n) {
+  const x = cert.type === 'EIC' ? EIC_HELP[n] : EICR_HELP[n] && [EICR_HELP[n]];
+  if (!x) return null;
+  return h('div', { class: 'help' }, x[0], x[1] ? [' ', h('span', { class: 'reg' }, '(' + x[1] + ')')] : null);
 }
 
 // ---------- Supplementary bonding (v0.5) ----------

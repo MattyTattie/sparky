@@ -124,6 +124,15 @@ Open points
 - **Standards quoted**: BS EN 1648-2 (motor caravans, 12 V d.c.), BS EN 1648-1 (caravans), BS 7671 Section 721 (caravans and motor caravans, 230 V), BS EN ISO 10133 / 13297 (small craft d.c. / a.c.). 3% / 10% volt drop described as "the usual marine rule". No regulation numbers quoted.
 - **Worked example** (VAN_EXAMPLE, 12 V 200 Ah LiFePO4, 400 W solar (2 × 200 W, Voc 24.3), 30 A DC-DC, 1500 W inverter, fridge, lights, pump, diesel heater, laptop, low-watt kettle, 2 days at 80%): 993.5 Wh/day = 82.8 Ah; needs 207 Ah (200 Ah ≈ 1.9 days, flagged); inverter 144.9 A → 200 A MEGA, 50 mm² (1.49% over 1.5 m); MPPT 100 V / 45 A, 2 in series, cold Voc 53.5 V; main 166.9 A → 225 A Class T, 50 mm²; 250 A isolator, 300 A shunt, 250 A busbars; DC-DC in 36.9 A → 50 A MIDI, 16 mm² over 5 m; out 40 A MIDI, 6 mm²; fuse box feed 30 A MIDI, 10 mm²; loads 1.5–2.5 mm² on 3–15 A blades.
 
+## v0.8 (19 Oct 2026, built on branch `v0.8`, NOT pushed / not live)
+- certmodel.js: fields take showIf/hideIf (key or (cert)=>bool), opt (not needed for the dot), dflt (tick inferred from data), placeholder, hint, indent, redraw. visible(), neededFields(), missingFields(); sectionDone uses them. PARTS has doneIf (a bonded service or bondNone).
+- pdf.js particularsSection: N/A for hidden boxes; per-service csa three to a line.
+- inspections.js: EIC_HELP / EICR_HELP (screen only). certui.js: helpLine, stateLine, Back + Next (.secnav).
+- Tests: tests/v08.test.mjs (incl. overlap check on G/J variants); screenshots: tests/screens_v08.py.
+### v0.8 — to check
+- Reg numbers on the EIC section H help lines: 551.6/551.7, Section 411, 416, 412/413/414, 411.3.3/411.3.4/Section 415, Chapter 46/Section 537, Chapter 55, Section 514, Section 701, Part 7, Chapter 82.
+- Typical sizes quoted in EICR help (16 mm² earthing / 10 mm² bonding on most PME homes; IPX4/IPX5 in bathroom zones; IP2X/IP4X top).
+
 ## v0.7 (19 Oct 2026, built on branch `v0.7`, NOT pushed / not live)
 - **Layout/UX rework of the calculators. Sums unchanged** (all v0.3–v0.6 tests pass with the same values).
 - **Calculators home** (`#/calc`): big cards with one line each: Size a cable & breaker (`#/calc/size`), Check a circuit (`#/calc/check`), Ring final check (`#/calc/ring`, new screen using the same `ringCheck()` as the circuit page), Solar string & battery checks (`#/calc/dc/pv`), DC system planner (`#/calc/dc/plan`). The last one used (`sparky.calclast`) shows at the top as "Carry on". The old tabs are gone (`calcTabs`/`dcSubTabs` return null); old links still work.

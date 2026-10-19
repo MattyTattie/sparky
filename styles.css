@@ -460,3 +460,14 @@ label.f > span.withunit { display: block; position: relative; font-size: inherit
 .wiring.zoom svg { min-width: 680px; }
 .wiring svg { max-width: 560px; margin: 0 auto; }
 .wiring.zoom svg { max-width: none; }
+
+/* v0.8: certificate sections — follow-on boxes indented under their tick, field hints, Back + Next, inspection help lines */
+.card .sub { margin-left: 18px; padding-left: 12px; border-left: 3px solid var(--brandbg, #e6ebff); }
+.note.fhint { font-size: 12.5px; margin-top: 4px; }
+.secnav { display: flex; gap: 8px; width: 100%; }
+.secnav .btn { flex: 1 1 auto; min-width: 0; white-space: nowrap; }
+.secnav .btn .lbl { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.secnav .btn.back { flex: 0 0 auto; }
+.ins .help { font-size: 12.5px; line-height: 1.35; color: var(--muted, #6b7280); margin-top: 3px; font-weight: 400; }
+.ins .help .reg { font-weight: 600; color: var(--sub, #4b5563); white-space: nowrap; }
+.ins.head .help { margin-top: 2px; }

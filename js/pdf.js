@@ -3,7 +3,7 @@
 // (BS 7671:2018+A4:2026, 15 April 2026). No IET logo (their terms).
 // =====================================================================
 import { Kit, loadJsPDF, VALUE, GREY, INK, RED } from './pdfkit.js';
-import { TYPES, get, eicrOverall } from './certmodel.js';
+import { TYPES, get, eicrOverall, isElectrode, msIsRcd, msIsOcpd, BOND_SERVICES, bondTicked, bondCsaFor, bondNone } from './certmodel.js';
 import { EIC_ITEMS, EICR_ITEMS, CODE_TEXT } from './inspections.js';
 import { GUIDANCE } from './guidance.js';
 import { limitZs, isSpare } from './checks.js';
@@ -114,35 +114,52 @@ function supplySection(k, cert, letter) {
 }
 function particularsSection(k, cert, letter) {
   const p = cert.parts;
+  // v0.8: boxes that don't apply print N/A (electrode unless "Installation earth
+  // electrode"; OCPD / RCD boxes unless their tick is on; bonding if none needed).
+  const NA = 'N/A';
+  const el = isElectrode(cert), ocpd = msIsOcpd(cert), rcd = msIsRcd(cert), none = bondNone(cert);
+  const svcs = [...BOND_SERVICES, ['Other', 'other']];
+  const ticked = svcs.filter(([sv]) => bondTicked(cert, sv));
+  const sizes = [...new Set(ticked.map(([sv]) => bondCsaFor(cert, sv)).filter(Boolean))];
+  const mainCsa = none ? NA : sizes.length > 1 ? sizes.join(' / ') : (sizes[0] || p.bondCsa);
   k.section(`SECTION ${letter}: PARTICULARS OF INSTALLATION REFERRED TO IN THE ${cert.type === 'EICR' ? 'REPORT' : 'CERTIFICATE'}`, (k, x, w) => {
     const c = w * 0.28;
     k.t('Means of Earthing', x, k.y + 3.2, { size: 7, bold: true });
     k.t('Maximum Demand', x + c, k.y + 3.2, { size: 7, bold: true });
     let y = k.y + 7.6;
     k.cb(x, y, /Distributor/.test(p.means), 'Distributor\u2019s facility');
-    k.cb(x, y + 4.4, /electrode/i.test(p.means), 'Installation earth electrode');
+    k.cb(x, y + 4.4, el, 'Installation earth electrode');
     k.field('Maximum demand (load)', p.maxDemand, x + c, y, w - c - 2, { unit: p.mdUnit === 'kVA' ? 'kVA' : 'A' });
     k.t('Details of Installation Earth Electrode (where applicable)', x + c, y + 4.6, { size: 7, bold: true });
-    k.field('Type (rod(s), tape etc)', p.elType, x + c, y + 9.2, w - c - 2);
-    k.field('Location', p.elLocation, x + c, y + 13.8, w - c - 2);
-    k.field('Electrode resistance RA', p.elRa, x + c, y + 18.4, w - c - 2, { unit: 'Ω' });
+    k.field('Type (rod(s), tape etc)', el ? p.elType : NA, x + c, y + 9.2, w - c - 2);
+    k.field('Location', el ? p.elLocation : NA, x + c, y + 13.8, w - c - 2);
+    k.field('Electrode resistance RA', el ? p.elRa : NA, x + c, y + 18.4, w - c - 2, { unit: 'Ω' });
     k.y = y + 21;
     k.t('Main Protective Conductors', x, k.y + 3.2, { size: 7, bold: true }); k.y += 3.6;
     row(k, x, w, [['Earthing conductor   Material', p.ecMat, 0.45], ['csa', p.ecCsa, 0.25, { unit: 'mm²' }]]);
     k.cb(x + w * 0.72, k.y - 1.2, yes(p.ecOk), 'Connection / continuity verified');
-    row(k, x, w, [['Main protective bonding   Material', p.bondMat, 0.45], ['csa', p.bondCsa, 0.25, { unit: 'mm²' }]]);
-    k.cb(x + w * 0.72, k.y - 1.2, yes(p.bondOk), 'Connection / continuity verified');
-    checks(k, x, [['To water installation pipes', p.bondWater], ['To gas installation pipes', p.bondGas], ['To oil installation pipes', p.bondOil], ['To structural steel', p.bondSteel], ['To lightning protection', p.bondLightning]], { size: 7 });
-    row(k, x, w, [['To other   Specify', p.bondOther, 1]]);
+    row(k, x, w, [['Main protective bonding   Material', none ? NA : p.bondMat, 0.45], ['csa', mainCsa, 0.25, { unit: 'mm²' }]]);
+    k.cb(x + w * 0.72, k.y - 1.2, !none && yes(p.bondOk), 'Connection / continuity verified');
+    // Each bonded service with its own size (unticked = N/A), three to a line.
+    const cols = 3, cw = w / cols; const ys = k.y + 3.4;
+    BOND_SERVICES.forEach(([sv, name], i) => {
+      const on = !none && bondTicked(cert, sv); const cx = x + (i % cols) * cw, cy = ys + Math.floor(i / cols) * 4.6;
+      const nx = k.cb(cx, cy, on, 'To ' + name, { size: 7 });
+      const v = on ? (bondCsaFor(cert, sv) ? bondCsaFor(cert, sv) + ' mm²' : '') : NA;
+      if (v) k.t(v, nx - 1.5, cy, { size: 7.5, color: on ? VALUE : GREY, maxW: cx + cw - nx - 1 });
+    });
+    k.y = ys + Math.ceil(BOND_SERVICES.length / cols) * 4.6 - 3.4;
+    const oth = !none && bondTicked(cert, 'Other');
+    row(k, x, w, [['To other   Specify', oth ? p.bondOther : NA, 0.72], ['csa', oth ? bondCsaFor(cert, 'Other') : NA, 0.28, { unit: 'mm²' }]]);
     k.t('Main switch (Isolation device / Switch-fuse / Circuit-breaker / RCD etc.)', x, k.y + 3.4, { size: 7, bold: true }); k.y += 3.8;
     const a = w / 3; y = k.y + 3.4;
     k.field('Location', p.msLocation, x, y, a - 3); k.field('BS (EN)', p.msBs, x, y + 4.6, a - 3); k.field('No of poles', p.msPoles, x, y + 9.2, a - 3);
     k.field('Current rating', p.msCurrent, x, y + 13.8, a - 3, { unit: 'A' }); k.field('Voltage rating', p.msVoltage, x, y + 18.4, a - 3, { unit: 'V' });
     k.t('If overcurrent protective device', x + a, y, { size: 7, bold: true });
-    k.field('Device type MCCB / ACB / Fuse(s) / other', p.msType, x + a, y + 4.6, a - 3); k.field('Device rating/setting', p.msRating, x + a, y + 9.2, a - 3, { unit: 'A' }); k.field('Breaking capacity', p.msKa, x + a, y + 13.8, a - 3, { unit: 'kA' });
+    k.field('Device type MCCB / ACB / Fuse(s) / other', ocpd ? p.msType : NA, x + a, y + 4.6, a - 3); k.field('Device rating/setting', ocpd ? p.msRating : NA, x + a, y + 9.2, a - 3, { unit: 'A' }); k.field('Breaking capacity', ocpd ? p.msKa : NA, x + a, y + 13.8, a - 3, { unit: 'kA' });
     k.t('If RCD main switch', x + 2 * a, y, { size: 7, bold: true });
-    k.field('RCD Type AC / A / F / B / other', p.rcdType, x + 2 * a, y + 4.6, a); k.field('Rated residual operating current (IΔn)', p.rcdIdn, x + 2 * a, y + 9.2, a, { unit: 'mA' });
-    k.field('Rated time delay', p.rcdDelay, x + 2 * a, y + 13.8, a, { unit: 'ms' }); k.field('Measured operating time', p.rcdMs, x + 2 * a, y + 18.4, a, { unit: 'ms' });
+    k.field('RCD Type AC / A / F / B / other', rcd ? p.rcdType : NA, x + 2 * a, y + 4.6, a); k.field('Rated residual operating current (IΔn)', rcd ? p.rcdIdn : NA, x + 2 * a, y + 9.2, a, { unit: 'mA' });
+    k.field('Rated time delay', rcd ? p.rcdDelay : NA, x + 2 * a, y + 13.8, a, { unit: 'ms' }); k.field('Measured operating time', rcd ? p.rcdMs : NA, x + 2 * a, y + 18.4, a, { unit: 'ms' });
     k.y = y + 20;
   });
 }

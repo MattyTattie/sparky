@@ -1,5 +1,16 @@
 # Sparky — niggles and update lists
 
+## [BUILT v0.8 on branch `v0.8`, 19 Oct 2026 — NOT LIVE] Section G/J + green dots (Matthew 19 Oct) — screenshots in /workspace/sparky-shots/v0.8, publish only on his OK
+- [built] Earth electrode boxes only show with "Installation earth electrode"; otherwise N/A on the PDF.
+- [built] Each bonded service (water, gas, oil, steel, lightning, other) gets its own csa box (blank = same as main bonding csa). PDF prints each with its size, unticked = N/A; main csa shows e.g. "10 / 16" if they differ. "No services need main bonding" tick (prints N/A).
+- [built] "Main switch is a breaker or fuse (OCPD)" and "Main switch is an RCD" ticks: boxes hidden + N/A when off. Old jobs with values in those boxes count as ticked.
+- [built] Green dots: every needed box in a section (hidden and "if any"/departures boxes not needed), plus a "Still to fill in for the green dot: …" line at the top of each section.
+- [built] Plain "what to check" line under each item of the schedule of inspections (screen only), with reg numbers where certain.
+- [built] Back button next to Next on every section (not on the first).
+- New optional fields: parts.msIsRcd, parts.msIsOcpd, parts.bondNone, parts.bond{Water,Gas,Oil,Steel,Lightning,Other}Csa.
+- Matthew to check: HANDOFF.md "v0.8 — to check".
+- Not done: tests/flow.py is out of date since the v0.4 restyle (fails the same on main).
+
 ## [BUILT v0.7 on branch `v0.7`, 19 Oct 2026 — NOT LIVE] Calculator layout (Matthew 19 Oct: "the DC part seems a bit hard to understand") — screenshots in /workspace/sparky-shots/v0.7, publish only on his OK
 - [built] Calculators home: big cards, plain one-liners, last used at the top. Ring final check as its own calculator.
 - [built] DC planner as 6 steps (System, Loads, Charging, Inverter, Cable runs, Results), jump to any step, More options for the advanced bits, helper line on every field.
