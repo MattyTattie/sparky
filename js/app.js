@@ -185,6 +185,7 @@ route(/^\/job\/([^/]+)$/, async (id) => {
     if (!(await confirmBox('Delete this job?', `Deletes the job, its ${certs.length} certificate(s) and ${photos.length} photo(s) from this phone. Anything already in Google Drive stays there.`, 'Delete', 'warn'))) return;
     for (const c of certs) await db.del('certs', c.id); for (const f of files) await db.del('files', f.id); await db.del('jobs', id); go('#/');
   };
+  const { dcPlansCard } = await import('./calcdcplan.js'); // v0.6: optional job.dcPlans
   const status = (c) => c.status === 'issued' ? h('span', { class: 'pill green' }, 'Issued') : h('span', { class: 'pill' }, 'Draft');
   page(job.title || 'Job', [
     h('div', { class: 'card' }, h('h2', {}, 'Certificates'),
@@ -197,6 +198,7 @@ route(/^\/job\/([^/]+)$/, async (id) => {
     h('div', { class: 'card' }, h('h2', {}, `Photos (${photos.length})`),
       photos.length ? h('div', { class: 'photos' }, photos.map((f) => h('img', { src: URL.createObjectURL(f.blob), alt: f.caption || 'Photo', onclick: () => photoView(f) }))) : emptyState('camera', 'No photos yet. Add the board, labels and any defects.'),
       h('div', { class: 'btns full' }, h('button', { class: 'btn', onclick: () => addPhotos(true) }, 'Take photo'), h('button', { class: 'btn', onclick: () => addPhotos(false) }, 'Add from gallery'))),
+    dcPlansCard(job, save, render),
     pdfs.length ? h('div', { class: 'card' }, h('h2', {}, 'Saved PDFs'), h('div', { class: 'list' }, pdfs.map((f) => h('div', { class: 'row pdfrow' }, h('div', { class: 'main' }, h('div', { class: 't' }, f.name), h('div', { class: 's' }, 'Made ' + fmtDate(f.createdAt))),
       h('button', { class: 'btn small', onclick: async () => (await import('./pdfview.js')).viewPdf(f.blob, f.name) }, 'View'),
       h('button', { class: 'btn small', 'aria-label': 'Share ' + f.name, onclick: () => shareOrDownload(f.blob, f.name) }, 'Share'))))) : null,

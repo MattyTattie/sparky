@@ -317,3 +317,19 @@ main { animation: pagein .2s var(--ease) both; }
   *, *::before, *::after { animation: none !important; transition: none !important; }
   .btn:active, .chip:active, header.top .iconbtn:active { transform: none; }
 }
+
+/* v0.6: DC system planner */
+.subtabs { margin: -4px 0 12px; }
+.subtabs .chip { text-decoration: none; color: inherit; display: inline-flex; align-items: center; }
+.subtabs .chip.on { color: #fff; }
+.loadrow { border: 1.5px solid #e3e7f0; border-radius: 14px; padding: 10px 10px 2px; margin-bottom: 10px; background: #fbfcff; }
+.loadrow.ac { background: #f6f4ff; border-color: #e0dbff; }
+.loadtop { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
+.loadtop .lname { flex: 1; font-weight: 700; }
+.loadrow .check { min-height: 40px; font-size: 13px; gap: 6px; }
+.calctab.runs { font-size: 13px; } .calctab.runs td, .calctab.runs th { padding: 4px 3px; vertical-align: top; }
+details.why { border-top: 1px solid #eef0f5; padding: 6px 0; } details.why summary { font-weight: 600; font-size: 14px; cursor: pointer; }
+.partgroup h3 { font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: var(--brand); margin: 12px 0 4px; }
+ul.parts { list-style: none; padding: 0; margin: 0; }
+ul.parts li { display: flex; justify-content: space-between; gap: 10px; padding: 7px 0; border-bottom: 1px solid #eef0f5; font-size: 14px; }
+ul.parts li b { white-space: nowrap; color: var(--brand); }

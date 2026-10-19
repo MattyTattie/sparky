@@ -20,7 +20,7 @@ export function cpcFor(cable, size, cpcMode) {
 }
 
 // Tabs across the top of every calculator.
-export const CALC_TABS = [['size', 'Size it'], ['check', 'Check it'], ['dc', 'Solar / battery']];
+export const CALC_TABS = [['size', 'Size it'], ['check', 'Check it'], ['dc', 'DC']];
 export function calcTabs(on) {
   localStorage.setItem('sparky.calctab', on);
   return h('div', { class: 'tabs' }, CALC_TABS.map(([k, t]) => h('a', { class: 'tab' + (k === on ? ' on' : ''), href: '#/calc/' + k }, t)));

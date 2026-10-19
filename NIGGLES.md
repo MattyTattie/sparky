@@ -1,5 +1,12 @@
 # Sparky — niggles and update lists
 
+## [BUILT v0.6 on branch `v0.6`, 19 Oct 2026 — NOT LIVE] DC system planner (Matthew 19 Oct: camper van, "a list of everything I need") — screenshots in /workspace/sparky-shots/v0.6, publish only on his OK
+- [built] "Solar / battery" tab renamed "DC", with two parts: Solar / battery checks (unchanged) and DC system planner.
+- [built] Planner: 12/24/48 V, LiFePO4/AGM/lead + usable %, days with no charging, loads (W or A, hours, peak, run length, 10% tick for lighting; quick picks), solar (W, Voc/Vmp/Isc, series, MPPT max V), DC-DC (A, alternator), mains charger, inverter.
+- [built] Results: daily Wh/Ah, battery Ah, every cable + fuse with reasons, inverter, MPPT + cold Voc, DC-DC + input cable, main Class T fuse (LiFePO4), isolator, shunt, busbars, chassis bond, grouped parts list with lengths (+10%) and lugs; share as text, PDF (view/share), save to a job (job.dcPlans, optional) + PDF in Saved PDFs.
+- Matthew to check: HANDOFF.md "v0.6 — values to check".
+- Later maybe: thin-wall automotive cable ratings (maker's table), inverter idle draw, per-load "on at the same time" ticks (diversity).
+
 ## [BUILT v0.5 on branch `v0.5`, 19 Oct 2026 — NOT LIVE] Batch agreed 18–19 Oct 2026 (Matthew) — screenshots in /workspace/sparky-shots/v0.5, publish only on his OK
 - [built] Security fixes (below) and Restore from Drive messages.
 - [built] Supplementary bonding schedule (location, csa, parts bonded, continuity) on EIC/EICR, printed as a continuation sheet.

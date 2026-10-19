@@ -1,14 +1,17 @@
 // calcdc.js — DC calculator: solar PV strings (cold-morning voltage, cable,
 // string fuses) and battery ↔ inverter leads (volt drop, cable, fuse).
 import { h, fill } from './ui.js';
-import { route, page } from './app.js';
+import { route, page, render } from './app.js';
 import { pvString, batteryLeads, DC_AMPS, RHO20, ALPHA, rhoAt } from './dc.js';
 import { calcTabs } from './calcui.js';
+import { dcSubTabs } from './calcdcplan.js';
 
 const DEFAULTS = { mode: 'pv', n: '10', voc: '49.5', vmp: '41.6', isc: '13.9', imp: '13.2', coef: '-0.27', tmin: '-10', invMax: '600', mpptMax: '', pvLen: '25', strings: '1', maxFuse: '25', pvPct: '1',
   bV: '51.2', bI: '', bKw: '5', bEff: '0.95', bLen: '2', bPct: '1', temp: '70', cable: 'xlpe90' };
 
-route(/^\/calc\/dc$/, async () => {
+// v0.6: the DC tab has two parts; #/calc/dc opens the last one used.
+route(/^\/calc\/dc$/, async () => { const t = localStorage.getItem('sparky.dcsub'); history.replaceState(null, '', '#/calc/dc/' + (t === 'plan' ? 'plan' : 'pv')); return render(); });
+route(/^\/calc\/dc\/pv$/, async () => {
   const v = { ...DEFAULTS, ...(JSON.parse(localStorage.getItem('sparky.dc1') || 'null') || {}) };
   const top = h('div'); const form = h('div'); const work = h('div');
   const save = () => { localStorage.setItem('sparky.dc1', JSON.stringify(v)); drawForm(); draw(); };
@@ -80,5 +83,5 @@ route(/^\/calc\/dc$/, async () => {
       h('li', {}, '⚠ Rules of thumb typed in from the codes of practice: always check the panel, inverter, battery and fuse makers\u2019 instructions.'))),
     h('div', { class: 'notice amber' }, 'DC arcs don\u2019t go out on their own: isolate and cover the panels, and use DC-rated isolators and fuses.'));
   drawForm(); draw();
-  page('Calculators', [calcTabs('dc'), top, form, work], { back: '#/' });
+  page('Calculators', [calcTabs('dc'), dcSubTabs('pv'), top, form, work], { back: '#/' });
 });
