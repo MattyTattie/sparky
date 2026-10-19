@@ -2,8 +2,9 @@
 // cable runs with the reasons, safety notes). Uses the same Kit as the certificates.
 import { loadJsPDF, Kit, GREY, INK, VALUE, RED } from './pdfkit.js';
 import { SAFETY } from './dcplan.js';
+import { connections, wiringModel } from './dcwire.js';
 
-export async function dcPlanPdf(p, { title = 'DC system plan', profile = {}, base } = {}) {
+export async function dcPlanPdf(p, { title = 'DC system plan', profile = {}, base, inputs = {} } = {}) {
   const { jsPDF } = await loadJsPDF(base);
   const k = new Kit(jsPDF, { orientation: 'p', footer: 'DC system plan made with Sparky. A guide only: follow the makers\u2019 instructions.' });
   const room = (h) => { if (k.y + h > k.H - k.M - 10) { k.addPage(); } };
@@ -32,6 +33,22 @@ export async function dcPlanPdf(p, { title = 'DC system plan', profile = {}, bas
   ].filter(Boolean);
   for (const [a, b] of sum) { const ls = k.wrap(b, k.cw - 32, 8); room(ls.length * k.lh(8) + 1); k.t(a, k.x0 + 1, k.y + 2.8, { size: 8, bold: true }); ls.forEach((s, i) => k.t(s, k.x0 + 32, k.y + 2.8 + i * k.lh(8), { size: 8, color: VALUE })); k.y += ls.length * k.lh(8) + 1.2; }
   for (const w of p.warnings) para('⚠ ' + w, { size: 8, bold: true, color: RED });
+  // v0.7: every link between the kit, in order
+  head('Connections, in order (red = positive, black = negative)');
+  connections(p, inputs).forEach((c, i) => {
+    const path = `${i + 1}.  ${[c.from, ...(c.via || []), c.to].join(' → ')}`;
+    const spec = c.ac ? '' : [c.size ? `${c.size} mm² ${c.colour}` : `size ? (${c.colour})`, c.length ? `${c.length} m` : null, c.vd != null ? `${c.vd}% drop (≤ ${c.limit ?? '–'}%)` : null].filter(Boolean).join('  ·  ');
+    room(12); para(path, { size: 8.5, bold: true });
+    if (spec) para(spec, { size: 8, color: VALUE, indent: 5 });
+    if (c.fuse) para(`Fuse: ${c.fuse.text}, ${c.fuse.where}`, { size: 8, color: RED, indent: 5 });
+    if (c.note) para(c.note, { size: 7, color: GREY, indent: 5 });
+    k.y += 0.8;
+  });
+  // v0.7: the wiring diagram (same model as on screen)
+  const wm = wiringModel(p, inputs);
+  if ((k.H - k.M - 26 - k.y) / wm.H < 0.33) k.addPage();
+  head('Wiring diagram (a layout guide, not to scale)');
+  drawWiring(k, wm);
   head('Parts list');
   for (const g of p.parts) {
     room(10); k.t(g.group.toUpperCase(), k.x0 + 1, k.y + 3.4, { size: 8.5, bold: true }); k.y += 5;
@@ -60,4 +77,28 @@ export async function dcPlanPdf(p, { title = 'DC system plan', profile = {}, bas
   for (const n of [...p.notes, ...(p.inverter ? [p.inverter.surge] : []), p.chassis.why, ...SAFETY]) para('• ' + n, { size: 7.5 });
   k.footers();
   return k.blob();
+}
+
+const COL = { pos: [217, 45, 32], neg: [16, 24, 40], pv: [217, 45, 32] };
+const BOX = { kit: [[255, 255, 255], [160, 172, 205], INK], fuse: [[255, 244, 242], [230, 140, 128], [159, 29, 20]], bus: [[41, 82, 255], [41, 82, 255], [255, 255, 255]], load: [[251, 252, 255], [190, 198, 215], INK], neg: [[242, 244, 247], [152, 162, 179], INK] };
+function drawWiring(k, m) {
+  const avail = k.H - k.M - 14 - k.y;
+  const s = Math.min(k.cw / m.W, avail / m.H); const ox = k.x0 + (k.cw - m.W * s) / 2, oy = k.y + 2;
+  const X = (x) => ox + x * s, Y = (y) => oy + y * s, pt = (u) => (u * s) / 0.3528;
+  const d = k.doc;
+  for (const w of m.wires) for (let i = 1; i < w.pts.length; i++) k.line(X(w.pts[i - 1][0]), Y(w.pts[i - 1][1]), X(w.pts[i][0]), Y(w.pts[i][1]), { w: 0.6, color: COL[w.c], dash: w.c === 'pv' ? [1.6, 1] : null });
+  const rbox = (x, y, w, h, fill, line, r = 2.2) => { d.setDrawColor(...line); d.setLineWidth(0.3); d.setFillColor(...fill); d.roundedRect(X(x), Y(y), w * s, h * s, r * s, r * s, 'FD'); };
+  for (const b of m.boxes) {
+    const [fill, line, ink] = BOX[b.kind] || BOX.kit; rbox(b.x, b.y, b.w, b.h, fill, line, 7);
+    if (b.kind === 'load') { k.t(b.t, X(b.x + 6), Y(b.y + 12), { size: pt(8), bold: true, color: ink, maxW: (b.w - 10) * s }); k.t(b.s[0] || '', X(b.x + 6), Y(b.y + 23), { size: pt(7), color: GREY, maxW: (b.w - 10) * s }); continue; }
+    const n = b.s.length; const top = b.y + b.h / 2 - (n * 9) / 2 + 3; const cx = X(b.x + b.w / 2);
+    k.t(b.t, cx, Y(top), { size: pt(b.kind === 'bus' ? 9 : 8.5), bold: true, color: ink, align: 'center', maxW: (b.w - 8) * s });
+    b.s.forEach((t, i) => k.t(t, cx, Y(top + 10 + i * 9), { size: pt(7), color: b.kind === 'fuse' ? [159, 29, 20] : GREY, align: 'center', maxW: (b.w - 8) * s }));
+  }
+  for (const q of m.pills) {
+    const fuse = q.kind === 'fuse'; rbox(q.cx - q.w / 2, q.y, q.w, q.h, fuse ? [255, 244, 242] : [255, 255, 255], fuse ? [230, 140, 128] : [160, 172, 205], 6.5);
+    k.t(q.t, X(q.cx), Y(q.y + 9.4), { size: pt(7.5), bold: true, color: fuse ? [159, 29, 20] : INK, align: 'center', maxW: (q.w - 4) * s });
+  }
+  for (const t of m.texts) k.t(t.t, X(t.x), Y(t.y), { size: pt(t.size), bold: !!t.bold, color: t.color === 'sub' ? GREY : INK, maxW: (m.W - t.x - 4) * s });
+  k.y = oy + m.H * s + 2;
 }

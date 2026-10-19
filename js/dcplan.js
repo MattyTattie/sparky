@@ -71,7 +71,7 @@ export const PLAN_DEFAULTS = {
   loads: [quickLoad('lights'), quickLoad('fridge'), quickLoad('pump'), quickLoad('sockets')],
   solarW: '', panels: '', panelVoc: '', panelVmp: '', panelIsc: '', series: '', coef: '-0.29', tmin: '-10', mpptV: '100', pvLen: '5',
   dcdcA: '', altA: '', vehV: '12', dcdcLen: '5', shoreA: '',
-  invW: '', invLen: '1.5',
+  invW: '', invLen: '1.5', mpptA: '',
   cable: 'tri90', install: 'clipped', ambient: '30', mainPct: '2', mainLen: '1', fuseBoxLen: '1', chargeLen: '1',
 };
 
@@ -167,7 +167,10 @@ export function planDC(o0 = {}) {
   const solarW = num(o.solarW); let solar = null;
   if (solarW) {
     const minA = r1(solarW / V); const needA = r2((solarW / V) * 1.25);
-    const mppt = up(MPPT_SIZES, needA);
+    // v0.7: optional "I already have one" controller size (blank = pick one, as before).
+    const mpptHave = num(o.mpptA); const mpptPick = up(MPPT_SIZES, needA);
+    const mppt = mpptHave || mpptPick;
+    if (mpptHave && mpptHave < needA) warnings.push(`Solar: your ${mpptHave} A controller is smaller than the ${needA} A worked out (solar W ÷ battery V × 1.25). It will clip on the best days; ${mpptPick ?? 'a bigger'} A would catch it all.`);
     const panels = Math.max(1, Math.round(num(o.panels, 1)));
     const voc = num(o.panelVoc), vmp = num(o.panelVmp), isc = num(o.panelIsc); const mpptV = num(o.mpptV, 100);
     let series = Math.round(num(o.series)); let pv = null; let seriesAuto = false;
@@ -181,9 +184,9 @@ export function planDC(o0 = {}) {
       if (pv.vmpOk === false) warnings.push('Solar: the string voltage on a hot day may be too close to the battery voltage for the MPPT to charge well. Put more panels in series (if the cold Voc allows).');
     }
     const run = sizeRun({ ...common, id: 'mppt', name: 'MPPT to battery', current: mppt || needA, length: o.chargeLen, pct: mainPct, kind: 'charge' });
-    solar = { w: solarW, minA, needA, mppt, mpptV, panels, pv, run,
+    solar = { w: solarW, minA, needA, mppt, mpptPick, mpptHave: mpptHave || null, mpptV, panels, pv, run,
       summerWh: Math.round(solarW * 4 * 0.8), winterWh: Math.round(solarW * 0.7 * 0.8),
-      why: `${solarW} W ÷ ${V} V = ${minA} A; × 1.25 margin = ${needA} A, so a ${mppt ?? 'over 100'} A controller. (A ${up(MPPT_SIZES, minA)} A one would work but clip on the best days.)` };
+      why: `${solarW} W ÷ ${V} V = ${minA} A; × 1.25 margin = ${needA} A, so a ${mpptPick ?? 'over 100'} A controller${mpptHave ? ` (you\u2019ve set ${mpptHave} A)` : ''}. (A ${up(MPPT_SIZES, minA)} A one would work but clip on the best days.)` };
   }
 
   // ---- DC-DC (alternator) ----

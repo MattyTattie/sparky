@@ -1,5 +1,13 @@
 # Sparky — niggles and update lists
 
+## [BUILT v0.7 on branch `v0.7`, 19 Oct 2026 — NOT LIVE] Calculator layout (Matthew 19 Oct: "the DC part seems a bit hard to understand") — screenshots in /workspace/sparky-shots/v0.7, publish only on his OK
+- [built] Calculators home: big cards, plain one-liners, last used at the top. Ring final check as its own calculator.
+- [built] DC planner as 6 steps (System, Loads, Charging, Inverter, Cable runs, Results), jump to any step, More options for the advanced bits, helper line on every field.
+- [built] Results: "what you need" summary, warnings with what to do, Connections in order (every link: cable, length, fuse and where it sits, volt drop), wiring diagram (screen + PDF), the rest folded.
+- [built] "I already have one" for battery, MPPT, DC-DC, mains charger, inverter.
+- [built] Same answer-card / More options layout on Size it, Check it and Solar / battery.
+- Later maybe: pick an isolator/busbar/fuse box he already has; thin-wall auto cable; diagram for 24/48 V house systems with several batteries in parallel.
+
 ## [BUILT v0.6 on branch `v0.6`, 19 Oct 2026 — NOT LIVE] DC system planner (Matthew 19 Oct: camper van, "a list of everything I need") — screenshots in /workspace/sparky-shots/v0.6, publish only on his OK
 - [built] "Solar / battery" tab renamed "DC", with two parts: Solar / battery checks (unchanged) and DC system planner.
 - [built] Planner: 12/24/48 V, LiFePO4/AGM/lead + usable %, days with no charging, loads (W or A, hours, peak, run length, 10% tick for lighting; quick picks), solar (W, Voc/Vmp/Isc, series, MPPT max V), DC-DC (A, alternator), mains charger, inverter.

@@ -1,125 +1,250 @@
-// calcdcplan.js — "DC system planner" screen (Calculators → DC → DC system planner).
-// Inputs are kept on this phone (localStorage) and can be saved to a job
-// (job.dcPlans, optional: older backups and older app versions are unaffected).
+// calcdcplan.js — "DC system planner" (Calculators → DC system planner).
+// v0.7: a step-by-step wizard (System → Loads → Charging → Inverter → Cable
+// runs → Results). Same inputs object as v0.6 (localStorage sparky.dcplan1 and
+// job.dcPlans[].inputs), so saved plans open as before. Layout only; the sums
+// are all planDC() in dcplan.js. Connections + wiring diagram: dcwire.js.
 import { h, fill, toast, modal, shareOrDownload } from './ui.js';
 import { route, page, go } from './app.js';
 import * as db from './db.js';
 import { getProfile } from './state.js';
 import { planDC, planText, PLAN_DEFAULTS, VAN_EXAMPLE, QUICK_LOADS, quickLoad, CHEMS, PLAN_CABLES, SAFETY } from './dcplan.js';
-import { calcTabs } from './calcui.js';
+import { connections, wiringModel, wiringSvg, connectionText } from './dcwire.js';
+import { setLastCalc, formKit, icard, more, fold, banner, resline, pchip } from './calckit.js';
+import { icon } from './icons.js';
 
 const KEY = 'sparky.dcplan1';
-export const dcSubTabs = (on) => { localStorage.setItem('sparky.dcsub', on); return h('div', { class: 'chips subtabs' }, [['pv', 'Solar / battery checks'], ['plan', 'DC system planner']].map(([k, t]) => h('a', { class: 'chip' + (k === on ? ' on' : ''), href: '#/calc/dc/' + k }, t))); };
+export const dcSubTabs = () => null; // v0.6 tabs, replaced by the Calculators home in v0.7
 export const loadPlanInputs = () => { try { return { ...PLAN_DEFAULTS, ...(JSON.parse(localStorage.getItem(KEY) || 'null') || {}) }; } catch { return { ...PLAN_DEFAULTS }; } };
 export const storePlanInputs = (v) => localStorage.setItem(KEY, JSON.stringify(v));
 const clone = (o) => JSON.parse(JSON.stringify(o));
+export const STEPS = [['system', 'System'], ['loads', 'Loads'], ['charging', 'Charging'], ['inverter', 'Inverter'], ['cables', 'Cable runs'], ['results', 'Results']];
+const QUICK_IC = { lights: 'sun', fridge: 'layers', pump: 'zap', sockets: 'zap', heater: 'zap', fan: 'zap', laptop: 'fileText', kettle: 'zap', ac: 'zap' };
+const shortName = (n) => n.replace(' (via inverter)', '').replace(' (230 V via inverter)', '');
 
-route(/^\/calc\/dc\/plan$/, async () => {
+// What to do about each warning planDC() can give.
+export function warningTodo(w) {
+  if (/^Inverter .*less than/.test(w)) return 'Pick a bigger inverter in step 4, or take some 230 V things off in step 2.';
+  if (/^Solar: cold-morning Voc/.test(w)) return 'Put fewer panels in series (step 3 → Solar → More options), or use a controller with a higher max PV voltage.';
+  if (/^Solar: the string voltage on a hot day/.test(w)) return 'Step 3 → Solar → More options → panels in series.';
+  if (/^Solar: your .*controller/.test(w)) return 'Fit the bigger controller, or live with losing a bit of charge on the sunniest days.';
+  if (/BMS/.test(w)) return 'Pick a battery with a bigger BMS rating, or don\u2019t run everything at once.';
+  if (/^All chargers at once/.test(w)) return 'Check the battery\u2019s data sheet allows that much charge current, or fit smaller chargers.';
+  if (/^Battery:/.test(w)) return 'Fit a bigger battery (step 1), use less each day (step 2), or plan for fewer days without charging.';
+  return '';
+}
+
+route(/^\/calc\/dc\/plan(?:\/(\w+))?$/, async (stepArg) => {
+  setLastCalc('plan'); localStorage.setItem('sparky.dcsub', 'plan');
+  const step = STEPS.some(([k]) => k === stepArg) ? stepArg : (STEPS.some(([k]) => k === localStorage.getItem('sparky.dcstep')) ? localStorage.getItem('sparky.dcstep') : 'system');
+  if (stepArg !== step) history.replaceState(null, '', '#/calc/dc/plan/' + step);
+  localStorage.setItem('sparky.dcstep', step);
+  const idx = STEPS.findIndex(([k]) => k === step);
   const v = loadPlanInputs(); v.loads = (v.loads || []).map((l) => ({ ...l }));
-  const top = h('div'); const form = h('div'); const work = h('div');
-  const save = () => { storePlanInputs(v); drawForm(); draw(); };
+  const body = h('div'); const live = h('div', { class: 'wizlive' });
+  const save = () => { storePlanInputs(v); draw(); };
   const set = (k, val) => { v[k] = val; save(); };
-  const chips = (k, opts, cls = '') => h('div', { class: 'chips ' + cls }, opts.map(([val, t]) => h('button', { class: 'chip' + (String(v[k]) === String(val) ? ' on' : ''), onclick: () => set(k, val) }, t)));
-  const num = (k, label, ph = '') => h('label', { class: 'f' }, h('span', {}, label), h('input', { inputmode: 'decimal', value: v[k], placeholder: ph, onchange: (e) => set(k, e.target.value.trim()) }));
-  const lab = (t) => h('span', { class: 'note', style: 'display:block;margin:6px 0 4px' }, t);
-  const line = (ok, text, sub) => h('div', { class: 'resline ' + (ok === true ? 'ok' : ok === false ? 'bad' : 'na') }, h('b', {}, ok === true ? '✓' : ok === false ? '✗' : '–'), h('div', {}, h('div', {}, text), sub ? h('div', { class: 'note' }, sub) : null));
+  const F = formKit(v, set);
   const setLoad = (i, k, val) => { v.loads[i][k] = val; save(); };
+  // On/off and "I already have one" switches stash the value so switching back brings it back.
+  const off = () => (v._off ||= {});
+  const toggle = (keys, on, dflt = {}) => { for (const k of keys) { if (on) { v[k] = off()[k] || dflt[k] || ''; delete off()[k]; } else { if (v[k]) off()[k] = v[k]; v[k] = ''; } } save(); };
+  const sw = (on, label, onchange, hint = '') => h('div', { class: 'swrow' }, h('div', { class: 'swt' }, h('div', { class: 'swl' }, label), hint ? h('div', { class: 'help' }, hint) : null),
+    h('button', { class: 'switch' + (on ? ' on' : ''), type: 'button', role: 'switch', 'aria-checked': on ? 'true' : 'false', 'aria-label': label, onclick: () => onchange(!on) }, h('span', {})));
+  const have = (key, { auto, mine, unit, hint, dflt }) => {
+    const isHave = String(v[key] ?? '').trim() !== '' || (v._have || {})[key];
+    return h('div', { class: 'f fld2' },
+      h('div', { class: 'chips seg2' }, h('button', { class: 'chip' + (!isHave ? ' on' : ''), type: 'button', onclick: () => { (v._have ||= {})[key] = false; toggle([key], false); } }, auto),
+        h('button', { class: 'chip' + (isHave ? ' on' : ''), type: 'button', onclick: () => { (v._have ||= {})[key] = true; toggle([key], true, { [key]: dflt }); } }, 'I already have one')),
+      isHave ? F.num(key, mine, { unit, hint }) : null);
+  };
 
-  const loadRow = (l, i) => h('div', { class: 'loadrow' + (l.ac ? ' ac' : '') },
-    h('div', { class: 'loadtop' }, h('input', { class: 'lname', value: l.name || '', placeholder: 'Name', 'aria-label': 'Load name', onchange: (e) => setLoad(i, 'name', e.target.value) }),
-      h('button', { class: 'btn small warn', 'aria-label': 'Remove ' + (l.name || 'load'), onclick: () => { v.loads.splice(i, 1); save(); } }, '✕')),
-    h('div', { class: 'grid3' },
-      h('label', { class: 'f' }, h('span', {}, l.ac ? 'Power (W, 230 V)' : `Power (${l.unit === 'A' ? 'A' : 'W'})`), h('input', { inputmode: 'decimal', value: l.value || '', onchange: (e) => setLoad(i, 'value', e.target.value.trim()) })),
-      h('label', { class: 'f' }, h('span', {}, 'Hours a day'), h('input', { inputmode: 'decimal', value: l.hours || '', onchange: (e) => setLoad(i, 'hours', e.target.value.trim()) })),
-      l.ac ? h('div', { class: 'note', style: 'align-self:center' }, 'via the inverter') : h('label', { class: 'f' }, h('span', {}, 'Run (m, one way)'), h('input', { inputmode: 'decimal', value: l.length || '', onchange: (e) => setLoad(i, 'length', e.target.value.trim()) }))),
-    l.ac ? null : h('div', { class: 'grid3' },
-      h('label', { class: 'f' }, h('span', {}, `Peak (${l.unit === 'A' ? 'A' : 'W'}, optional)`), h('input', { inputmode: 'decimal', value: l.peak || '', onchange: (e) => setLoad(i, 'peak', e.target.value.trim()) })),
-      h('div', { class: 'chips small', style: 'align-self:end;margin-bottom:10px' }, ['W', 'A'].map((u) => h('button', { class: 'chip' + ((l.unit || 'W') === u ? ' on' : ''), onclick: () => setLoad(i, 'unit', u) }, u))),
-      h('label', { class: 'check', style: 'align-self:end' }, h('input', { type: 'checkbox', checked: !!l.lighting, onchange: (e) => setLoad(i, 'lighting', e.target.checked) }), '10% drop OK')));
+  const stepper = () => h('nav', { class: 'stepper', 'aria-label': 'Steps' }, STEPS.map(([k, t], i) => h('a', { class: 'stp' + (i === idx ? ' on' : '') + (i < idx ? ' done' : ''), href: '#/calc/dc/plan/' + k, 'aria-current': i === idx ? 'step' : null },
+    h('span', { class: 'stpn' }, i < idx ? icon('check', { size: 14 }) : String(i + 1)), h('span', { class: 'stpt' }, t))));
+  const navBar = () => h('div', { class: 'wiznav' },
+    idx > 0 ? h('a', { class: 'btn noic', href: '#/calc/dc/plan/' + STEPS[idx - 1][0] }, '‹ Back') : h('a', { class: 'btn noic', href: '#/calc' }, '‹ Calculators'),
+    idx < STEPS.length - 1 ? h('a', { class: 'btn primary noic', href: '#/calc/dc/plan/' + STEPS[idx + 1][0] }, idx === STEPS.length - 2 ? 'See results ›' : 'Next ›') : h('a', { class: 'btn noic', href: '#/calc/dc/plan/system' }, 'Edit from step 1'));
 
-  const drawForm = () => fill(form,
-    h('div', { class: 'card' }, h('h2', {}, 'System'),
-      lab('System voltage'), chips('volts', [['12', '12 V'], ['24', '24 V'], ['48', '48 V']]),
-      lab('Battery type'), chips('chem', Object.entries(CHEMS).map(([k, c]) => [k, c.label])),
-      h('div', { class: 'grid3' }, num('dod', 'Usable %', String(Math.round((CHEMS[v.chem] || CHEMS.lifepo4).dod * 100))), num('days', 'Days with no charging'), num('battAh', 'Battery fitted (Ah)', 'optional')),
-      num('bmsA', 'Battery BMS max continuous (A, optional)', 'from the data sheet'),
-      h('p', { class: 'note' }, 'Usable % (depth of discharge): about 80% for LiFePO4, 50% for AGM and lead-acid if you want them to last.')),
-    h('div', { class: 'card' }, h('h2', {}, `Loads (${v.loads.length})`),
-      v.loads.map(loadRow),
-      lab('Add a load'),
-      h('div', { class: 'chips small' }, QUICK_LOADS.map((q) => h('button', { class: 'chip', onclick: () => { v.loads.push(quickLoad(q.key)); save(); } }, '+ ' + q.name.replace(' (via inverter)', '').replace(' (230 V via inverter)', ' (230 V)'))),
-        h('button', { class: 'chip', onclick: () => { v.loads.push({ name: '', value: '', unit: 'W', hours: '', length: '', peak: '' }); save(); } }, '+ Other DC'),
-        h('button', { class: 'chip', onclick: () => { v.loads.push({ name: '', ac: true, value: '', unit: 'W', hours: '' }); save(); } }, '+ Other 230 V')),
-      h('p', { class: 'note' }, 'Hours a day = how long it runs at that power (a fridge cycles, so about 8 h on a warm day). Peak is the start-up or max draw (heater glow plug, 12 V socket): the fuse and cable are sized for it. Run = fuse box to the load, one way.')),
-    h('div', { class: 'card' }, h('h2', {}, 'Charging'),
-      h('div', { class: 'grid2' }, num('solarW', 'Solar panels total (W)', '0 = none'), num('panels', 'Number of panels')),
-      v.solarW ? [h('div', { class: 'grid3' }, num('panelVoc', 'Panel Voc (V)', 'optional'), num('panelVmp', 'Vmp (V)'), num('panelIsc', 'Isc (A)')),
-        h('div', { class: 'grid3' }, num('series', 'In series', 'auto'), num('mpptV', 'MPPT max PV (V)'), num('pvLen', 'Roof to MPPT (m)')),
-        h('div', { class: 'grid2' }, num('tmin', 'Coldest °C'), num('coef', 'Voc coeff. (%/°C)'))] : null,
-      h('div', { class: 'grid3' }, num('dcdcA', 'DC-DC charger (A)', '0 = none'), num('altA', 'Alternator (A)', 'optional'), num('dcdcLen', 'Starter batt. to DC-DC (m)')),
-      h('div', { class: 'grid2' }, num('shoreA', 'Mains (shore) charger (A)', '0 = none'), num('vehV', 'Vehicle battery (V)'))),
-    h('div', { class: 'card' }, h('h2', {}, 'Inverter and layout'),
-      h('div', { class: 'grid2' }, num('invW', 'Inverter (W)', 'blank = from 230 V loads'), num('invLen', 'Busbar to inverter (m)')),
-      h('div', { class: 'grid3' }, num('mainLen', 'Battery to busbar (m)'), num('fuseBoxLen', 'Busbar to fuse box (m)'), num('chargeLen', 'Chargers to busbar (m)')),
-      lab('Cable'), chips('cable', Object.entries(PLAN_CABLES).map(([k, c]) => [k, c.label]), 'small'),
-      lab('How the cables run'), chips('install', [['clipped', 'Clipped / free air'], ['bundled', 'Bundled in a loom or conduit']], 'small'),
-      lab('Hottest it gets round the cables'), chips('ambient', [['30', '30 °C'], ['40', '40 °C'], ['50', '50 °C']], 'small'),
-      lab('Volt drop target for the main, inverter and charger cables'), chips('mainPct', [['1', '1%'], ['2', '2%'], ['3', '3%']], 'small'),
-      h('p', { class: 'note' }, 'Loads are sized for 3% drop, or 10% where you tick it (lighting and other non-critical loads).')),
-    h('div', { class: 'btns full' }, h('button', { class: 'btn', onclick: () => { Object.assign(v, clone(VAN_EXAMPLE)); save(); toast('Camper van example loaded'); } }, 'Load camper van example'),
-      h('button', { class: 'btn', onclick: () => { Object.assign(v, clone(PLAN_DEFAULTS)); v.loads = []; save(); } }, 'Start again')));
+  const steps = {
+    system: (p) => [
+      icard('Your system', [
+        F.seg('volts', 'System voltage', [['12', '12 V'], ['24', '24 V'], ['48', '48 V']], '12 V for most vans. 24 or 48 V for bigger systems: half or a quarter of the current, so thinner cables.'),
+        F.seg('chem', 'Battery type', Object.entries(CHEMS).map(([k, c]) => [k, c.label]), 'LiFePO4 (lithium) is lighter and you can use about 80% of it. AGM and lead-acid: use about half if you want them to last.', 'small'),
+        F.num('days', 'Days with no charging', { unit: 'days', hint: 'How long it has to last with no sun, no driving and no hook-up.' }),
+        more('dc-sys', [
+          F.num('dod', 'Usable part of the battery (depth of discharge)', { unit: '%', ph: String(Math.round((CHEMS[v.chem] || CHEMS.lifepo4).dod * 100)), hint: `Blank = ${Math.round((CHEMS[v.chem] || CHEMS.lifepo4).dod * 100)}% for ${(CHEMS[v.chem] || CHEMS.lifepo4).label}.` }),
+          F.num('bmsA', 'Battery BMS max continuous current', { unit: 'A', ph: 'data sheet', hint: 'BMS = the battery\u2019s own protection board. Optional: lets Sparky check it can feed everything at once.' })],
+          `${v.dod || Math.round((CHEMS[v.chem] || CHEMS.lifepo4).dod * 100)}% usable${v.bmsA ? `, BMS ${v.bmsA} A` : ''}`)], { step: 1 }),
+      icard('Battery', [have('battAh', { auto: `Size for me${p.battery.suggestAh ? ` (${p.battery.suggestAh} Ah)` : ''}`, mine: 'Your battery', unit: 'Ah', hint: `You need about ${p.battery.needAh} Ah for what you\u2019ve put in.`, dflt: String(p.battery.suggestAh || '') })]),
+      h('div', { class: 'btns full' }, h('button', { class: 'btn', onclick: () => { Object.assign(v, clone(VAN_EXAMPLE)); delete v._off; delete v._have; save(); toast('Camper van example loaded'); } }, 'Load camper van example'),
+        h('button', { class: 'btn', onclick: () => { Object.keys(v).forEach((k) => delete v[k]); Object.assign(v, clone(PLAN_DEFAULTS)); v.loads = []; save(); } }, 'Start again'))],
+
+    loads: (p) => [
+      icard('Add what you\u2019ll run', [
+        h('p', { class: 'help', style: 'margin:0 0 10px' }, 'Tap to add. Typical figures are filled in: change them to suit.'),
+        h('div', { class: 'quickgrid' }, QUICK_LOADS.map((q) => h('button', { class: 'quick' + (q.ac ? ' ac' : ''), type: 'button', onclick: () => { v.loads.push(quickLoad(q.key)); save(); toast(shortName(q.name) + ' added'); } },
+          h('span', { class: 'qn' }, '+ ' + shortName(q.name)), h('span', { class: 'qs' }, `${q.w} W · ${q.hours} h a day${q.ac ? ' · 230 V' : ''}`)))),
+        h('div', { class: 'btns full' }, h('button', { class: 'btn', onclick: () => { v.loads.push({ name: '', value: '', unit: 'W', hours: '', length: '', peak: '' }); save(); } }, `+ Other ${v.volts || 12} V thing`),
+          h('button', { class: 'btn', onclick: () => { v.loads.push({ name: '', ac: true, value: '', unit: 'W', hours: '' }); save(); } }, '+ Other 230 V thing'))], { step: 2 }),
+      icard(`Your loads (${v.loads.length})`, [
+        v.loads.length ? null : h('p', { class: 'help' }, 'Nothing yet: add some above.'),
+        v.loads.map((l, i) => h('div', { class: 'loadrow' + (l.ac ? ' ac' : '') },
+          h('div', { class: 'loadtop' }, h('input', { class: 'lname', value: l.name || '', placeholder: 'What is it?', 'aria-label': 'Load name', onchange: (e) => setLoad(i, 'name', e.target.value) }),
+            l.ac ? h('span', { class: 'tag ac' }, '230 V') : h('span', { class: 'tag' }, `${v.volts || 12} V`),
+            h('button', { class: 'btn small warn ic', type: 'button', 'aria-label': 'Remove ' + (l.name || 'load'), onclick: () => { v.loads.splice(i, 1); save(); } }, icon('x', { size: 16 }))),
+          h('div', { class: 'grid2' },
+            h('label', { class: 'f fld2' }, h('span', {}, 'Power'), h('span', { class: 'withunit' }, h('input', { inputmode: 'decimal', value: l.value || '', onchange: (e) => setLoad(i, 'value', e.target.value.trim()) }), h('span', { class: 'unit' }, l.unit === 'A' && !l.ac ? 'A' : 'W'))),
+            h('label', { class: 'f fld2' }, h('span', {}, 'Hours a day'), h('span', { class: 'withunit' }, h('input', { inputmode: 'decimal', value: l.hours || '', onchange: (e) => setLoad(i, 'hours', e.target.value.trim()) }), h('span', { class: 'unit' }, 'h')))),
+          l.ac ? h('p', { class: 'help', style: 'margin:-4px 0 8px' }, 'Runs off the inverter (step 4).') : more('load-' + i, [
+            h('div', { class: 'grid2' },
+              h('label', { class: 'f fld2' }, h('span', {}, 'Peak / start-up'), h('span', { class: 'withunit' }, h('input', { inputmode: 'decimal', value: l.peak || '', placeholder: 'optional', onchange: (e) => setLoad(i, 'peak', e.target.value.trim()) }), h('span', { class: 'unit' }, l.unit === 'A' ? 'A' : 'W')), h('span', { class: 'help' }, 'Fuse and cable are sized for it')),
+              h('div', { class: 'f fld2' }, h('span', { class: 'lab' }, 'Power in'), h('div', { class: 'chips small' }, ['W', 'A'].map((u) => h('button', { class: 'chip' + ((l.unit || 'W') === u ? ' on' : ''), type: 'button', onclick: () => setLoad(i, 'unit', u) }, u === 'W' ? 'Watts' : 'Amps'))))),
+            h('label', { class: 'check' }, h('input', { type: 'checkbox', checked: !!l.lighting, onchange: (e) => setLoad(i, 'lighting', e.target.checked) }), '10% volt drop is OK'), h('span', { class: 'help' }, 'Lighting and other things that don\u2019t mind a bit less voltage (the usual marine rule). Otherwise 3%.')],
+            `${l.peak ? 'peak ' + l.peak + (l.unit === 'A' ? ' A' : ' W') : 'no peak'}, ${l.lighting ? '10%' : '3%'} drop`))),
+        h('div', { class: 'help' }, 'Hours a day = how long it runs at that power. A fridge cycles on and off, so about 8 h on a warm day.')]),
+      h('div', { class: 'tot' }, `That\u2019s ${p.daily.wh} Wh a day = ${p.daily.ah} Ah at ${p.V} V`)],
+
+    charging: (p) => {
+      const sOn = !!String(v.solarW || '').trim(), dOn = !!String(v.dcdcA || '').trim(), mOn = !!String(v.shoreA || '').trim();
+      const dSug = (p.dcdcAdvice.match(/DC-DC: (\d+)/) || [])[1];
+      return [
+        h('p', { class: 'help steplead' }, 'Turn on the ways you\u2019ll charge the battery. All optional.'),
+        icard('Solar panels', [
+          sw(sOn, 'Solar on the roof', (on) => toggle(['solarW', 'panels'], on, { solarW: '200', panels: '1' }), 'Panels feed an MPPT = solar charge controller, which charges the battery.'),
+          sOn ? [h('div', { class: 'grid2' }, F.num('solarW', 'Solar total', { unit: 'W', hint: 'All the panels added up' }), F.num('panels', 'How many panels', { hint: 'Same size panels' })),
+            h('div', { class: 'f fld2' }, h('span', { class: 'lab' }, 'Solar controller (MPPT)'), have('mpptA', { auto: `Pick for me${p.solar && p.solar.mpptPick ? ` (${p.solar.mpptPick} A)` : ''}`, mine: 'Your controller\u2019s charge current', unit: 'A', hint: 'The amps on its label, e.g. 100/30 = 30 A.', dflt: String((p.solar && p.solar.mpptPick) || '') })),
+            more('dc-solar', [
+              h('p', { class: 'help' }, 'From the panel\u2019s label or data sheet. Voc = open-circuit volts, Vmp = working volts, Isc = short-circuit amps.'),
+              h('div', { class: 'grid3' }, F.num('panelVoc', 'Voc', { unit: 'V', ph: 'optional' }), F.num('panelVmp', 'Vmp', { unit: 'V' }), F.num('panelIsc', 'Isc', { unit: 'A' })),
+              h('div', { class: 'grid2' }, F.num('series', 'Panels in series', { ph: 'auto', hint: 'Blank = most that fits' }), F.num('mpptV', 'Controller max PV volts', { unit: 'V', hint: 'The first number: 100/30 = 100 V' })),
+              h('div', { class: 'grid2' }, F.num('tmin', 'Coldest morning', { unit: '°C', hint: '−10 °C for the UK' }), F.num('coef', 'Voc coefficient', { unit: '%/°C', hint: 'Panel data sheet' }))],
+              `${v.panelVoc ? 'Voc ' + v.panelVoc + ' V, ' : 'no panel figures, '}${v.mpptV || 100} V controller, ${v.tmin} °C, ${v.coef} %/°C`)] : null]),
+        icard('Charging from the engine', [
+          sw(dOn, 'DC-DC charger', (on) => toggle(['dcdcA'], on, { dcdcA: dSug || '30' }), 'Battery-to-battery charger: charges the house battery from the alternator while you drive.'),
+          dOn ? [F.num('dcdcA', 'DC-DC charger size', { unit: 'A', hint: `Suggested for your battery: ${dSug || '?'} A.` }),
+            more('dc-dcdc', [h('div', { class: 'grid2' }, F.num('altA', 'Alternator', { unit: 'A', ph: '120', hint: 'Blank = 120 A assumed' }), F.num('vehV', 'Vehicle battery', { unit: 'V', hint: 'Usually 12 V' }))], `alternator ${v.altA || '120 (assumed)'} A, vehicle ${v.vehV || 12} V`)] : null]),
+        icard('Charging from mains hook-up', [
+          sw(mOn, 'Mains (shore) charger', (on) => toggle(['shoreA'], on, { shoreA: String(p.shoreSuggest || 20) }), 'Charges the battery when you\u2019re plugged into a campsite or house supply.'),
+          mOn ? F.num('shoreA', 'Mains charger size', { unit: 'A', hint: `About ${p.shoreSuggest} A suits this battery.` }) : null]),
+      ];
+    },
+
+    inverter: (p) => {
+      const acW = p.acLoads.reduce((a, l) => a + l.w, 0);
+      return [
+        icard('Inverter (230 V from the battery)', [
+          h('p', { class: 'help', style: 'margin-top:0' }, `An inverter turns the battery\u2019s ${p.V} V into 230 V for mains things like a laptop charger or a low-watt kettle.`),
+          acW ? h('div', { class: 'tot inl' }, `Your 230 V things add up to ${acW} W`) : h('p', { class: 'help' }, 'You\u2019ve no 230 V things in step 2, so you don\u2019t need one. Set a size below if you want one anyway.'),
+          have('invW', { auto: acW ? `Size for me (${p.inverter && p.inverter.suggest ? p.inverter.suggest : '?'} W)` : 'No inverter', mine: 'Your inverter', unit: 'W', hint: 'Continuous rating (not the peak). Pure sine wave.', dflt: String((p.inverter && p.inverter.suggest) || 1000) }),
+          p.inverter ? h('div', { class: 'help' }, `At full power it draws about ${p.inverter.current} A from the battery: its cable and fuse are sized for that.`) : null], { step: 4 })];
+    },
+
+    cables: (p) => {
+      const len = (k, label, hint) => F.num(k, label, { unit: 'm', hint });
+      return [
+        icard('Main cable runs', [
+          h('p', { class: 'help', style: 'margin-top:0' }, 'One-way lengths. Short is good: the defaults suit a small van.'),
+          h('div', { class: 'grid2' }, len('mainLen', 'Battery to busbar', 'Through the main fuse and isolator'), p.inverter ? len('invLen', 'Busbar to inverter', 'Keep it short') : null),
+          h('div', { class: 'grid2' }, p.dcLoads.length ? len('fuseBoxLen', 'Busbar to fuse box', '12 V fuse box for the loads') : null, (p.solar || p.dcdc || p.shore) ? len('chargeLen', 'Chargers to busbar', 'MPPT, DC-DC, mains charger') : null),
+          h('div', { class: 'grid2' }, p.solar ? len('pvLen', 'Roof panels to MPPT', 'Solar PV cable') : null, p.dcdc ? len('dcdcLen', 'Starter battery to DC-DC', 'Often front to back of the van') : null),
+          more('dc-cable', [
+            F.seg('cable', 'Cable', Object.entries(PLAN_CABLES).map(([k, c]) => [k, c.label]), 'Tri-rated or tinned marine cable is the usual choice.', 'small'),
+            F.seg('install', 'How the cables run', [['clipped', 'Clipped / free air'], ['bundled', 'Bundled in a loom or conduit']], 'Bundled cables run hotter, so they need to be bigger.', 'small'),
+            F.seg('ambient', 'Hottest it gets round the cables', [['30', '30 °C'], ['40', '40 °C'], ['50', '50 °C']], 'Engine bays and under-floor near exhausts get hot.', 'small'),
+            F.seg('mainPct', 'Volt drop for the main, inverter and charger cables', [['1', '1%'], ['2', '2%'], ['3', '3%']], 'Loads use 3%, or 10% where you ticked it.', 'small')],
+            `${PLAN_CABLES[v.cable] ? PLAN_CABLES[v.cable].label.split(' singles')[0] : ''}, ${v.install === 'bundled' ? 'bundled' : 'clipped'}, ${v.ambient} °C, ${v.mainPct}% drop`)], { step: 5 }),
+        p.dcLoads.length ? icard('Fuse box to each load', [
+          h('div', { class: 'grid2' }, v.loads.map((l, i) => l.ac || !(Number(l.value) > 0) ? null : h('label', { class: 'f fld2' }, h('span', {}, shortName(l.name || `Load ${i + 1}`)), h('span', { class: 'withunit' }, h('input', { inputmode: 'decimal', value: l.length || '', placeholder: 'm', onchange: (e) => setLoad(i, 'length', e.target.value.trim()) }), h('span', { class: 'unit' }, 'm'))))),
+          h('p', { class: 'help' }, 'Fuse box to the load, one way. Blank = no cable sized for it.')]) : null];
+    },
+
+    results: (p) => results(v, p),
+  };
 
   const draw = () => {
     const p = planDC(v);
-    const R = (r, label) => r ? line(r.ok, `${label}: ${r.fuse ? r.fuse.A + ' A ' + r.fuse.label : 'fuse ?'}, ${r.size ? r.size + ' mm²' : 'no cable size fits'}${r.vd ? ` (${r.vd.pct}% drop)` : ''}`, r.why) : null;
-    const bad = p.warnings.length > 0 || p.runs.some((r) => !r.ok);
-    fill(top, h('div', { class: 'card calcsum nostick ' + (bad ? 'bad' : 'good') },
-      h('div', { class: 'calchead' }, `${p.V} V ${p.battery.label}`, h('span', { class: 'note' }, ` · ${p.daily.wh} Wh a day`)),
-      line(p.battery.ok, `Battery: ${p.battery.needAh} Ah needed${p.battery.fittedAh ? `, ${p.battery.fittedAh} Ah fitted (${p.battery.fittedDays} days)` : ` (about ${p.battery.suggestAh} Ah)`}`, p.battery.why),
-      p.inverter ? line(p.inverter.small ? false : true, `Inverter: ${p.inverter.w} W, ${p.inverter.current} A from the battery`, p.inverter.why) : null,
-      p.solar ? line(p.solar.pv ? p.solar.pv.vocOk : null, `Solar: ${p.solar.w} W → MPPT ${p.solar.mpptV} V / ${p.solar.mppt} A`, p.solar.why + (p.solar.pv && p.solar.pv.cold ? ` ${p.solar.pv.series} in series: cold-morning Voc ${p.solar.pv.cold} V at ${v.tmin} °C ${p.solar.pv.vocOk ? '≤' : '>'} ${p.solar.mpptV} V${p.solar.pv.seriesAuto ? ' (most in series that fits)' : ''}.` : ' Add the panel Voc to check the controller\u2019s max PV voltage.')) : null,
-      p.dcdc ? line(!p.dcdc.tooBig, `DC-DC: ${p.dcdc.a} A`, p.dcdcAdvice) : line(null, 'DC-DC: none', p.dcdcAdvice),
-      p.main ? line(p.main.ok, `Main: ${p.main.fuse ? p.main.fuse.A + ' A ' + p.main.fuse.label : '?'}, ${p.main.size ?? '?'} mm², ${p.isolator.a} A isolator, ${p.shunt.a} A shunt`, p.main.why) : null,
-      p.warnings.map((w) => h('div', { class: 'notice amber', style: 'margin:6px 0 0' }, '⚠ ' + w))));
-    const groups = p.parts.map((g) => h('div', { class: 'partgroup' }, h('h3', {}, g.group), h('ul', { class: 'parts' }, g.items.map((it) => h('li', {}, h('span', {}, it.item), it.qty !== 1 ? h('b', {}, typeof it.qty === 'string' ? it.qty : '× ' + it.qty) : null)))));
-    fill(work,
-      h('div', { class: 'card', id: 'runs' }, h('h2', {}, 'Cables and fuses'),
-        h('table', { class: 'calctab runs' }, h('tr', {}, ['Run', 'A', 'Fuse', 'mm²', 'Drop'].map((t) => h('th', {}, t))),
-          p.runs.map((r) => h('tr', {}, h('td', {}, r.name), h('td', {}, r.peak > r.current ? `${r.current} (${r.peak})` : r.current), h('td', {}, r.fuse ? r.fuse.A : '?'), h('td', { class: r.size ? '' : 'bad' }, r.size ?? '✗'), h('td', { class: r.vd && r.vd.pct <= r.pct ? '' : 'bad' }, r.vd ? r.vd.pct + '%' : '–')))),
-        h('p', { class: 'note' }, 'A (peak) · fuse ≥ 1.25 × peak · cable rated ≥ the fuse · drop at the working current, + and − cables together. Tap a line below for why.'),
-        p.runs.map((r) => h('details', { class: 'why' }, h('summary', {}, r.name), h('p', { class: 'note' }, r.why)))),
-      h('div', { class: 'card', id: 'parts' }, h('h2', {}, 'Parts list'), groups,
-        h('div', { class: 'btns full' },
-          h('button', { class: 'btn primary', onclick: () => sharePdf(p) }, 'PDF'),
-          h('button', { class: 'btn', onclick: () => shareText(p) }, 'Share as text'),
-          h('button', { class: 'btn', onclick: () => saveToJob(v, p) }, 'Save to a job'))),
-      h('div', { class: 'card' }, h('h2', {}, 'Other things to sort'),
-        h('ul', { class: 'note' }, p.notes.map((n) => h('li', {}, n)), p.inverter ? h('li', {}, p.inverter.surge) : null, h('li', {}, p.chassis.why), p.shunt ? h('li', {}, 'Shunt: ' + p.shunt.why) : null, p.busbar ? h('li', {}, 'Busbars: ' + p.busbar.why) : null)),
-      h('div', { class: 'card' }, h('h2', {}, 'Where the numbers come from'),
-        h('ul', { class: 'note' },
-          h('li', {}, `Cable ratings: ${PLAN_CABLES[p.cable].note} Factors: ambient ${p.ambient} °C × ${p.ca} (Table 4B1)${p.cg < 1 ? `, bundled × ${p.cg} (Table 4C1, 3 circuits)` : ''}. Smallest size 1.5 mm². Thin-wall automotive cable (FLRY) is rated by its maker: don\u2019t use these figures for it.`),
-          h('li', {}, 'Volt drop: copper resistance at 70 °C, out and back (+ and −), as % of the system voltage. Loads 3% (10% where ticked); the battery-to-busbar, inverter and charger cables use the target you pick; fuse box feed 1%; DC-DC input 5%.'),
-          h('li', {}, 'Fuses: at least 1.25 × the current (peak for loads); cable rated at least the fuse. Blade up to 30 A, then MIDI, MEGA / ANL; Class T for the LiFePO4 main fuse. ⚠ Size ranges are typical makers\u2019 ranges.'),
-          h('li', {}, `Inverter current = W ÷ (lowest battery voltage ${p.inverter ? p.inverter.vlow + ' V' : '(11.5 V per 12 V for LiFePO4, 11 V for lead)'} × 90%). 230 V loads use 90% inverter efficiency for daily energy; the inverter\u2019s own idle draw (often 5–20 W) isn\u2019t counted.`),
-          h('li', {}, 'MPPT current = solar W ÷ battery V × 1.25. Cold Voc uses the same sum as the Solar / battery checks. ⚠ Solar yield is a rough UK figure (4 h summer, 0.7 h winter, × 0.8).'),
-          h('li', {}, 'DC-DC: up to about 50% of a LiFePO4 battery\u2019s Ah (20% AGM, 15% lead) and about a quarter of the alternator: ⚠ rules of thumb. Check the battery and charger makers.'),
-          h('li', {}, 'Lengths in the parts list are red + black for each run, + 10%, rounded up to 0.5 m.'))),
-      h('div', { class: 'notice amber' }, SAFETY[0], ' ', SAFETY[2]));
+    fill(body, steps[step](p));
+    fill(live, step === 'results' ? null : h('span', {}, icon('zap', { size: 14 }), ` ${p.daily.wh} Wh a day · battery ${p.battery.fittedAh ? p.battery.fittedAh + ' Ah fitted' : 'about ' + (p.battery.suggestAh || p.battery.needAh) + ' Ah'}${p.warnings.length ? ` · ${p.warnings.length} to check` : ''}`));
   };
-  drawForm(); draw();
-  page('Calculators', [calcTabs('dc'), dcSubTabs('plan'), top, form, work], { back: '#/' });
+  draw();
+  page('DC system planner', [stepper(), h('h2', { class: 'wizt' }, `Step ${idx + 1} of ${STEPS.length} · ${STEPS[idx][1]}`), body, live, navBar()], { back: '#/calc' });
+  document.querySelector('main')?.classList.add('haswiz');
 });
 
-async function sharePdf(p, name = 'DC system plan') {
-  try { const { dcPlanPdf } = await import('./dcplanpdf.js'); const blob = await dcPlanPdf(p, { title: name, profile: await getProfile() });
+// ---- Results ----
+function results(v, p) {
+  const conns = connections(p, v);
+  const need = [
+    ['Battery', `${p.V} V ${p.battery.fittedAh || p.battery.suggestAh || p.battery.needAh} Ah ${p.battery.label.replace(' (lithium)', '')}`, p.battery.fittedAh ? `Needs ${p.battery.needAh} Ah: yours lasts about ${p.battery.fittedDays} days` : `Needs ${p.battery.needAh} Ah for ${p.battery.days} day${p.battery.days === 1 ? '' : 's'}`, p.battery.ok !== false],
+    p.inverter ? ['Inverter', `${p.inverter.w} W pure sine`, `Up to ${p.inverter.current} A from the battery`, !p.inverter.small] : null,
+    p.solar ? ['Solar controller (MPPT)', `${p.solar.mpptV} V / ${p.solar.mppt} A`, `${p.solar.w} W of panels${p.solar.pv && p.solar.pv.cold ? `, ${p.solar.pv.series} in series` : ''}`, !(p.solar.pv && p.solar.pv.vocOk === false) && !(p.solar.mpptHave && p.solar.mpptHave < p.solar.needA)] : null,
+    p.dcdc ? ['DC-DC charger', `${p.dcdc.a} A`, `About ${p.dcdc.inI} A from the starter battery`, !p.dcdc.tooBig] : null,
+    p.shore ? ['Mains charger', `${p.shore.a} A`, '', true] : null,
+    p.main ? ['Main fuse', p.main.fuse ? `${p.main.fuse.A} A ${p.main.fuse.label.replace(' fuse', '')}` : '?', 'At the battery positive', !!p.main.fuse] : null,
+    p.main ? ['Main cable', p.main.size ? `${p.main.size} mm²` : 'no size fits', `${p.cableLabel.split(' singles')[0]}, red + black`, !!p.main.size] : null,
+    p.main ? ['Isolator & shunt', `${p.isolator.a} A isolator · ${p.shunt.a} A shunt`, 'Shunt = battery monitor sensor, on the negative', true] : null,
+  ].filter(Boolean);
+  const bad = p.warnings.length > 0 || p.runs.some((r) => !r.ok);
+  const svg = wiringSvg(wiringModel(p, v));
+  const groups = p.parts.map((g) => h('div', { class: 'partgroup' }, h('h3', {}, g.group), h('ul', { class: 'parts' }, g.items.map((it) => h('li', {}, h('span', {}, it.item), it.qty !== 1 ? h('b', {}, typeof it.qty === 'string' ? it.qty : '× ' + it.qty) : null)))));
+  const conn = (c, i) => h('li', { class: 'conn' + (c.ok === false ? ' bad' : '') },
+    h('div', { class: 'cn' }, String(i + 1)),
+    h('div', { class: 'cb' },
+      h('div', { class: 'cpath' }, [c.from, ...(c.via || []), c.to].map((x, j) => [j ? h('span', { class: 'arr' }, '→') : null, h('span', {}, x)])),
+      c.ac ? null : h('div', { class: 'cspec' }, c.size ? h('b', {}, `${c.size} mm²`) : h('b', { class: 'badt' }, 'size ?'), ` ${c.colour}`, c.length ? ` · ${c.length} m` : '', c.vd != null ? ` · ${c.vd}% drop` : ''),
+      c.fuse ? h('div', { class: 'cfuse' }, icon('zap', { size: 14 }), h('span', {}, h('b', {}, c.fuse.text), ' — ' + c.fuse.where)) : null,
+      c.note ? h('div', { class: 'help' }, c.note) : null));
+  return [
+    h('div', { class: 'card anscard needcard ' + (bad ? 'warn' : 'good') },
+      h('div', { class: 'ans-k' }, 'What you need'),
+      h('div', { class: 'needlist' }, need.map(([k, val, sub, ok]) => h('div', { class: 'need' + (ok ? '' : ' bad') }, h('div', { class: 'nk' }, k), h('div', { class: 'nv' }, val), sub ? h('div', { class: 'ns' }, sub) : null))),
+      h('div', { class: 'pchips' }, pchip(null, `${p.daily.wh} Wh a day`), pchip(p.battery.ok === false ? 'warn' : true, `${p.battery.fittedDays ?? p.battery.days} days off-grid`), pchip(p.runs.every((r) => r.ok), `${p.runs.length} cable runs`))),
+    p.warnings.map((w) => banner(w, warningTodo(w))),
+    h('div', { class: 'card conncard' }, h('h2', {}, 'Connections, in order'),
+      h('p', { class: 'help', style: 'margin-top:0' }, 'Every link between the kit: cable, length, fuse and where it goes. Red = positive, black = negative.'),
+      h('ol', { class: 'conns' }, conns.map(conn))),
+    h('div', { class: 'card' }, fold('dc-diagram', 'Wiring diagram', [h('div', { class: 'wiring' + (localStorage.getItem('sparky.wzoom') === '1' ? ' zoom' : ''), html: svg }), h('div', { class: 'btns' }, h('button', { class: 'btn small noic', type: 'button', onclick: (e) => { const w = e.target.closest('.foldin').querySelector('.wiring'); const z = w.classList.toggle('zoom'); localStorage.setItem('sparky.wzoom', z ? '1' : '0'); e.target.textContent = z ? 'Fit to screen' : 'Make it bigger'; } }, localStorage.getItem('sparky.wzoom') === '1' ? 'Fit to screen' : 'Make it bigger')), h('p', { class: 'help' }, 'A layout guide, not to scale. Fuses sit at the busbar end of each positive unless it says otherwise.')], { open: true })),
+    h('div', { class: 'card foldcard' }, fold('dc-runs', 'Cables & fuses', [
+      h('table', { class: 'calctab runs' }, h('tr', {}, ['Run', 'A', 'Fuse', 'mm²', 'Drop'].map((t) => h('th', {}, t))),
+        p.runs.map((r) => h('tr', {}, h('td', {}, r.name), h('td', {}, r.peak > r.current ? `${r.current} (${r.peak})` : r.current), h('td', {}, r.fuse ? r.fuse.A : '?'), h('td', { class: r.size ? '' : 'bad' }, r.size ?? '✗'), h('td', { class: r.vd && r.vd.pct <= r.pct ? '' : 'bad' }, r.vd ? r.vd.pct + '%' : '–')))),
+      h('p', { class: 'note' }, 'A (peak) · fuse ≥ 1.25 × peak · cable rated ≥ the fuse · drop at the working current, + and − cables together.')], { badge: h('span', { class: 'fbadge' }, String(p.runs.length)) })),
+    h('div', { class: 'card foldcard' }, fold('dc-parts', 'Parts list', [groups], { badge: h('span', { class: 'fbadge' }, String(p.parts.reduce((a, g) => a + g.items.length, 0))) })),
+    h('div', { class: 'card foldcard' }, fold('dc-why', 'Why (the reasons)', [
+      resline(p.battery.ok, 'Battery', p.battery.why),
+      p.inverter ? resline(!p.inverter.small, 'Inverter', p.inverter.why) : null,
+      p.solar ? resline(p.solar.pv ? p.solar.pv.vocOk : null, 'Solar controller', p.solar.why + (p.solar.pv && p.solar.pv.cold ? ` ${p.solar.pv.series} in series: cold-morning Voc ${p.solar.pv.cold} V at ${v.tmin} °C ${p.solar.pv.vocOk ? '≤' : '>'} ${p.solar.mpptV} V${p.solar.pv.seriesAuto ? ' (most in series that fits)' : ''}.` : ' Add the panel Voc to check the controller\u2019s max PV voltage.')) : null,
+      resline(p.dcdc ? !p.dcdc.tooBig : null, 'DC-DC', p.dcdcAdvice),
+      p.main ? resline(p.main.ok, 'Main fuse and cable', p.main.why) : null,
+      p.shunt ? resline(null, 'Shunt', p.shunt.why) : null, p.busbar ? resline(null, 'Busbars', p.busbar.why) : null,
+      p.runs.map((r) => h('details', { class: 'why' }, h('summary', {}, r.name), h('p', { class: 'note' }, r.why))),
+      h('h3', { class: 'subh' }, 'Where the numbers come from'),
+      h('ul', { class: 'note' },
+        h('li', {}, `Cable ratings: ${PLAN_CABLES[p.cable].note} Factors: ambient ${p.ambient} °C × ${p.ca} (Table 4B1)${p.cg < 1 ? `, bundled × ${p.cg} (Table 4C1, 3 circuits)` : ''}. Smallest size 1.5 mm². Thin-wall automotive cable (FLRY) is rated by its maker: don\u2019t use these figures for it.`),
+        h('li', {}, 'Volt drop: copper resistance at 70 °C, out and back (+ and −), as % of the system voltage. Loads 3% (10% where ticked); the battery-to-busbar, inverter and charger cables use the target you pick; fuse box feed 1%; DC-DC input 5%.'),
+        h('li', {}, 'Fuses: at least 1.25 × the current (peak for loads); cable rated at least the fuse. Blade up to 30 A, then MIDI, MEGA / ANL; Class T for the LiFePO4 main fuse. ⚠ Size ranges are typical makers\u2019 ranges.'),
+        h('li', {}, `Inverter current = W ÷ (lowest battery voltage ${p.inverter ? p.inverter.vlow + ' V' : '(11.5 V per 12 V for LiFePO4, 11 V for lead)'} × 90%). 230 V loads use 90% inverter efficiency for daily energy; the inverter\u2019s own idle draw (often 5–20 W) isn\u2019t counted.`),
+        h('li', {}, 'MPPT current = solar W ÷ battery V × 1.25. Cold Voc uses the same sum as the Solar / battery checks. ⚠ Solar yield is a rough UK figure (4 h summer, 0.7 h winter, × 0.8).'),
+        h('li', {}, 'DC-DC: up to about 50% of a LiFePO4 battery\u2019s Ah (20% AGM, 15% lead) and about a quarter of the alternator: ⚠ rules of thumb. Check the battery and charger makers.'),
+        h('li', {}, 'Lengths in the parts list are red + black for each run, + 10%, rounded up to 0.5 m.'))])),
+    h('div', { class: 'card foldcard' }, fold('dc-safety', 'Safety notes', [
+      h('ul', { class: 'note' }, p.notes.map((n) => h('li', {}, n)), p.inverter ? h('li', {}, p.inverter.surge) : null, h('li', {}, p.chassis.why), SAFETY.map((n) => h('li', {}, n)))])),
+    h('div', { class: 'card' }, h('h2', {}, 'Share or save'),
+      h('div', { class: 'btns full' },
+        h('button', { class: 'btn primary', onclick: () => sharePdf(p, 'DC system plan', v) }, 'PDF'),
+        h('button', { class: 'btn', onclick: () => shareText(p, 'DC system plan', v) }, 'Share as text'),
+        h('button', { class: 'btn', onclick: () => saveToJob(v, p) }, 'Save to a job'))),
+  ];
+}
+
+async function sharePdf(p, name = 'DC system plan', inputs = {}) {
+  try { const { dcPlanPdf } = await import('./dcplanpdf.js'); const blob = await dcPlanPdf(p, { title: name, profile: await getProfile(), inputs });
     const r = await modal('DC system plan PDF', h('p', {}, 'View it here, or share / save it.'), [{ label: 'Close', value: null }, { label: 'View', value: 'view' }, { label: 'Share', value: 'share', cls: 'primary' }]);
     if (r === 'view') (await import('./pdfview.js')).viewPdf(blob, fileName(name));
     if (r === 'share') shareOrDownload(blob, fileName(name));
   } catch (e) { toast(e.message || 'Could not make the PDF'); }
 }
 const fileName = (name) => (name || 'DC-system-plan').replace(/[^\w\- ]+/g, '').trim().replace(/\s+/g, '-') + '.pdf';
-async function shareText(p, name = 'DC system plan') {
-  const text = planText(p, name);
+async function shareText(p, name = 'DC system plan', inputs = {}) {
+  const text = planText(p, name) + '\n\nCONNECTIONS (in order)\n' + connections(p, inputs).map((c, i) => `${i + 1}. ${connectionText(c)}`).join('\n');
   if (navigator.share) { try { await navigator.share({ title: name, text }); return; } catch (e) { if (e && e.name === 'AbortError') return; } }
   try { await navigator.clipboard.writeText(text); toast('Copied: paste it into a message or note'); } catch { shareOrDownload(new Blob([text], { type: 'text/plain' }), fileName(name).replace(/\.pdf$/, '.txt')); }
 }
@@ -135,7 +260,7 @@ async function saveToJob(v, p) {
   const now = new Date().toISOString();
   const entry = { id: db.newId(), name: nm.value.trim() || 'DC plan', savedAt: now, inputs: clone(v), summary: { volts: p.V, wh: p.daily.wh, ah: p.battery.fittedAh || p.battery.suggestAh, inverterW: p.inverter ? p.inverter.w : 0 } };
   job.dcPlans = [...(job.dcPlans || []), entry]; job.updatedAt = now; job.version = (job.version || 0) + 1; await db.put('jobs', job);
-  if (pdf.checked) { try { const { dcPlanPdf } = await import('./dcplanpdf.js'); const blob = await dcPlanPdf(p, { title: entry.name, profile: await getProfile() }); await db.put('files', { id: db.newId(), jobId: job.id, kind: 'pdf', name: fileName(entry.name), blob, createdAt: now, version: 1, dcPlanId: entry.id }); } catch (e) { toast('Plan saved, but the PDF failed: ' + (e.message || e)); } }
+  if (pdf.checked) { try { const { dcPlanPdf } = await import('./dcplanpdf.js'); const blob = await dcPlanPdf(p, { title: entry.name, profile: await getProfile(), inputs: v }); await db.put('files', { id: db.newId(), jobId: job.id, kind: 'pdf', name: fileName(entry.name), blob, createdAt: now, version: 1, dcPlanId: entry.id }); } catch (e) { toast('Plan saved, but the PDF failed: ' + (e.message || e)); } }
   toast('Saved to ' + (job.title || 'the job'));
 }
 // Job page card: the DC plans saved with this job.
@@ -143,6 +268,6 @@ export function dcPlansCard(job, save, rerender) {
   if (!(job.dcPlans && job.dcPlans.length)) return null;
   return h('div', { class: 'card' }, h('h2', {}, 'DC system plans'),
     h('div', { class: 'list' }, job.dcPlans.map((d) => h('div', { class: 'row pdfrow' }, h('div', { class: 'main' }, h('div', { class: 't' }, d.name), h('div', { class: 's' }, `${d.summary ? `${d.summary.volts} V · ${d.summary.ah} Ah · ${d.summary.wh} Wh/day · ` : ''}saved ${new Date(d.savedAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}`)),
-      h('button', { class: 'btn small', onclick: () => { storePlanInputs({ ...PLAN_DEFAULTS, ...clone(d.inputs || {}) }); go('#/calc/dc/plan'); } }, 'Open'),
+      h('button', { class: 'btn small', onclick: () => { storePlanInputs({ ...PLAN_DEFAULTS, ...clone(d.inputs || {}) }); go('#/calc/dc/plan/results'); } }, 'Open'),
       h('button', { class: 'btn small warn', 'aria-label': 'Delete ' + d.name, onclick: async () => { job.dcPlans = job.dcPlans.filter((x) => x.id !== d.id); await save(); rerender(); } }, 'Delete')))));
 }
