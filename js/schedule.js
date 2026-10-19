@@ -5,6 +5,7 @@
 // =====================================================================
 import * as db from './db.js';
 import { h, fill, toast, modal, confirmBox, pickFile, shrinkImage, icon, withIcon } from './ui.js';
+import { orderRows, mainSide, mainRow, settleSpdMcb } from './cuscan.js';
 import { route, page, go, render } from './app.js';
 import { openCert, changed, flush } from './state.js';
 import { field, stateLine } from './certui.js';
@@ -95,6 +96,7 @@ function boardDetails(cert, b) {
       F('suppliedFrom', 'Supplied from'),
       h('div', { class: 'grid3' }, F('ocpdBs', 'Supplying device BS (EN)'), F('ocpdType', 'Type'), F('ocpdRating', 'Rating (A)', 'num')),
       h('div', { class: 'grid2' }, F('zdb', 'Zdb (Ω)', 'num'), F('ipf', 'Ipf (kA)', 'num')),
+      F('spdDevice', 'SPD protective device (e.g. B32 MCB)'),
       h('div', { class: 'note' }, 'SPD type'), h('div', { class: 'grid2' }, F('spdT1', 'T1', 'check'), F('spdT2', 'T2', 'check'), F('spdT3', 'T3', 'check'), F('spdNA', 'N/A', 'check')),
       h('div', { class: 'grid2' }, F('polOk', 'Correct polarity confirmed', 'check'), F('phaseSeq', 'Phase sequence confirmed', 'check'), F('spdOk', 'SPD operational status confirmed', 'check'), F('spdStatusNA', 'SPD status N/A', 'check')),
       h('div', { class: 'note' }, 'Main RCD of the board (if any)'), h('div', { class: 'grid2' }, F('rcdBs', 'RCD BS (EN)'), F('rcdType', 'RCD type'), F('rcdIdn', 'IΔn (mA)', 'num'), F('rcdRating', 'Rating (A)', 'num'))));
@@ -408,7 +410,7 @@ route(/^\/cert\/([^/]+)\/b\/(\d+)\/scan$/, async (id, bi) => {
   const box = h('div');
   const status = h('div', { class: 'note' });
   const parts = []; // { file, url, bmp, rects: [] }
-  let rows = null;
+  let rows = null; const numOpts = { order: 'main', dir: 'ltr', manual: null };
   const ocr = () => import('./ocr.js');
   const addPhotos = async (capture) => {
     const fs = await pickFile({ accept: 'image/*', capture, multiple: !capture }); if (!fs || !fs.length) return;
@@ -477,7 +479,7 @@ route(/^\/cert\/([^/]+)\/b\/(\d+)\/scan$/, async (id, bi) => {
     fill(box, h('div', { class: 'card' }, h('p', {}, 'Reading the board… this can take a minute for a big board.'), status));
     try {
       rows = await readBoard(parts, (f, msg) => (status.textContent = `${msg} ${Math.round(f * 100)}%`));
-      status.textContent = '';
+      status.textContent = ''; settleSpdMcb(rows);
       for (const r of rows) { r.ways.forEach((w) => (w.keep = !w.maybeSpd)); placeCrops(r); }
       review();
     } catch (e) { status.textContent = 'Couldn\u2019t read the photos: ' + e.message; drawStart(); }
@@ -523,6 +525,15 @@ route(/^\/cert\/([^/]+)\/b\/(\d+)\/scan$/, async (id, bi) => {
   function review() {
     const total = () => rows.reduce((n, r) => n + r.ways.filter((w) => w.keep).length, 0);
     let n0 = b.circuits.length;
+    const seq = orderRows(rows, numOpts);
+    const side = mainSide(rows);
+    const numbering = rows.length ? h('div', { class: 'card' },
+      h('b', {}, 'Numbering (all rows go on this board)'),
+      h('p', { class: 'note' }, `Circuit ${n0 + 1} = ${numOpts.dir === 'main' ? 'the breaker next to the main switch' : 'the left-hand breaker'} on ${rows.length > 1 ? 'the first row below' : 'this row'}, then on along the row${rows.length > 1 ? ' and on to the next row' : ''}.`),
+      h('div', { class: 'chips' }, h('button', { class: 'chip' + (numOpts.dir === 'main' ? ' on' : ''), onclick: () => { numOpts.dir = 'main'; review(); } }, side === 'right' ? 'From the main switch (right to left)' : 'From the main switch'),
+        h('button', { class: 'chip' + (numOpts.dir === 'ltr' ? ' on' : ''), onclick: () => { numOpts.dir = 'ltr'; review(); } }, 'Left to right')),
+      rows.length > 1 ? h('div', { class: 'list' }, seq.map((x, k) => h('div', { class: 'row' }, h('div', { class: 'main' }, h('div', { class: 't' }, `${k + 1}. Photo ${x.row.part + 1}${parts[x.row.part].rects.length > 1 || (parts[x.row.part].autoRects || []).length > 1 ? ' row ' + (x.row.row + 1) : ''}${mainRow(rows) === x.row ? ' (main switch row)' : ''}`)),
+        k > 0 ? h('button', { class: 'btn tiny', onclick: () => { const m = seq.map((y) => rows.indexOf(y.row)); [m[k - 1], m[k]] = [m[k], m[k - 1]]; numOpts.manual = m; review(); } }, '\u2191 Earlier') : null))) : null) : null;
     const wayCard = (r, w, i) => {
       const p = parts[r.part]; const num = ++n0;
       return h('div', { class: 'card waycard' + (w.keep ? '' : ' off') + (w.sure ? '' : ' unsure') },
@@ -540,7 +551,8 @@ route(/^\/cert\/([^/]+)\/b\/(\d+)\/scan$/, async (id, bi) => {
     };
     fill(box,
       h('div', { class: 'notice amber' }, `Check every way against its photo (tap a photo to zoom). Flagged ones weren\u2019t clear. Nothing is added until you tap “Add”.`),
-      rows.map((r, ri) => h('div', {},
+      numbering,
+      seq.map(({ row: r, ways: wsq }) => h('div', {},
         h('h2', { class: 'sec' }, `Photo ${r.part + 1}${parts[r.part].rects.length > 1 || (parts[r.part].autoRects || []).length > 1 ? ' · row ' + (r.row + 1) : ''}: ${r.ways.length} way(s)`),
         !r.ways.length ? h('div', { class: 'notice red' }, 'No breaker markings could be read here. Split the row into ways below and type them in next to each photo slice.') : null,
         h('div', { class: 'btns' }, h('button', { class: 'btn small', onclick: async () => {
@@ -550,11 +562,11 @@ route(/^\/cert\/([^/]+)\/b\/(\d+)\/scan$/, async (id, bi) => {
           const { splitSlots } = await import('./cuscan.js');
           const old = r.ways; r.ways = splitSlots(r.rect, nn).map((c) => { const cx = c.x + c.w / 2; const hit = old.find((w) => w.cx >= c.x && w.cx < c.x + c.w); return hit ? { ...hit, crop: { ...c, h: r.rect.h * 1.9 } } : { ...blankWay({ ...c, h: r.rect.h * 1.9 }), cx }; }); review();
         } }, 'Split into N equal ways'), r.ways.length ? h('button', { class: 'btn small', onclick: () => labelBoxEditor(r) }, r.labelRects && r.labelRects.length ? `Labels: ${r.labelRects.length} found \u00b7 adjust box` : 'No labels found \u00b7 draw label box') : null),
-        r.ways.map((w, i) => wayCard(r, w, i)),
+        wsq.map(({ w, i }) => wayCard(r, w, i)),
         r.board.map((o, oi) => h('div', { class: 'card waycard board' + (o.kind === 'other' ? ' unsure' : '') },
           o.crop ? cropImg(parts[r.part], o.crop) : null,
           h('div', { class: 'wayform' },
-            h('b', {}, o.kind === 'main' ? 'Not a circuit: main switch' + (o.rating ? ` (${o.rating}A)` : '') : o.kind === 'spd' ? 'Not a circuit: surge protector (SPD)' : 'Not added: unknown device'),
+            h('b', {}, o.kind === 'main' ? 'Not a circuit: main switch' + (o.rating ? ` (${o.rating}A)` : '') : o.kind === 'spd' ? 'Not a circuit: surge protector (SPD)' : o.kind === 'spdmcb' ? `Not a circuit: ${(o.type || 'B') + (o.rating || '')} MCB protecting the SPD` : 'Not added: unknown device'),
             h('span', { class: o.kind === 'other' || o.kind === 'spd' && o.why && /looks like/.test(o.why) ? 'flag' : 'note' }, (o.kind === 'other' || /looks like/.test(o.why || '') ? 'check: ' : '') + (o.why || '')),
             h('div', { class: 'btns' }, h('button', { class: 'btn tiny', onclick: () => { r.board.splice(oi, 1); const w = { ...o, kind: 'way', type: 'B', rating: '', rcbo: false, sure: false, why: 'You said this is a circuit: type it in', keep: true }; const at = r.ways.findIndex((x) => x.cx > o.cx); r.ways.splice(at < 0 ? r.ways.length : at, 0, w); review(); } }, 'It\u2019s a circuit'))))))),
       h('div', { class: 'stick' }, h('button', { class: 'btn', onclick: () => drawStart() }, 'Back to photos'), h('button', { class: 'btn primary', disabled: !total(), onclick: add }, `Add ${total()} circuit(s)`)));
@@ -563,7 +575,7 @@ route(/^\/cert\/([^/]+)\/b\/(\d+)\/scan$/, async (id, bi) => {
   async function add() {
     const { toCircuit } = await import('./cuscan.js');
     let n = b.circuits.length, added = 0;
-    for (const r of rows) for (const w of r.ways) { if (!w.keep) continue; const c = blankCircuit(++n); Object.assign(c, toCircuit(w)); if (/spare/i.test(w.desc || '')) { const was = isSpare(c); Object.assign(c, makeSpare(c)); descChanged(c, was); } b.circuits.push(c); added++; }
+    for (const { row: r, ways: wsq } of orderRows(rows, numOpts)) for (const { w } of wsq) { if (!w.keep) continue; const c = blankCircuit(++n); w.num = String(n); Object.assign(c, toCircuit(w)); if (/spare/i.test(w.desc || '')) { const was = isSpare(c); Object.assign(c, makeSpare(c)); descChanged(c, was); } b.circuits.push(c); added++; }
     // Keep the photos with the job (they go to Drive with the job's backup).
     if (cert.jobId) {
       for (const [i, p] of parts.entries()) {
@@ -573,6 +585,7 @@ route(/^\/cert\/([^/]+)\/b\/(\d+)\/scan$/, async (id, bi) => {
         p.savedId = fid;
       }
     }
+    const sm = rows.flatMap((r) => r.ways).find((w) => w.spd && w.keep); if (sm && !b.spdDevice) b.spdDevice = `${sm.type || 'B'}${sm.rating || ''} MCB (circuit ${sm.num || ''})`.replace(' (circuit )', '');
     changed(); await flush();
     toast(`Added ${added} circuit(s)${cert.jobId ? ' · photos saved with the job' : ''}`); go(`#/cert/${id}/b/${bi}`);
   }

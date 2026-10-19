@@ -123,6 +123,16 @@ export async function readRowRect(bmp, rect, { labelRect = null, labels = true }
   const onFace = face.filter((w) => (w.conf ?? 0) >= 60 && /^[A-Za-z]{3,}$/.test(w.text) && labelFor(w.text) && !lab.some((l) => Math.abs(l.cx - w.cx) < 5));
   const out = Object.assign(readRow(face.filter((w) => !onFace.includes(w)), [...lab, ...onFace], { centre: bmp.width / 2 }), out0);
   out.rect = r; out.nWords = face.length;
+  // v0.13: the 'SPD's MCB' guess (plain MCB next to the main switch) gets a close-up: if it shows an RCBO model code or mA, it's a circuit after all.
+  for (const o of out.board.filter((x) => x.kind === 'spdmcb')) {
+    const p = out.pitch || r.w / 12; const cr = clampRect({ x: o.cx - p * 0.55, y: r.y, w: p * 1.1, h: r.h }, bmp.width, bmp.height);
+    const it = mergeWords(await words(bmp, cr, { s: Math.min(3, s * 1.6), mode: 'thresh', psm: 6, tag: 'column' })).map(classify).filter(Boolean);
+    if (it.some((x) => x.kind === 'model' || x.kind === 'ma' || x.kind === 'rcbo')) {
+      out.board.splice(out.board.indexOf(o), 1); const m = it.find((x) => x.kind === 'model') || {};
+      const w = { ...o, kind: 'way', rcbo: true, idn: m.idn || '30', why: 'RCBO next to the main switch' };
+      const at = out.ways.findIndex((x) => x.cx > o.cx); out.ways.splice(at < 0 ? out.ways.length : at, 0, w);
+    } else out.spdMcb = o;
+  }
   // v0.13: a way with no rating read gets a second, close-up look at just its own column (quick: one breaker wide).
   for (const w of out.ways.filter((x) => !x.rating).slice(0, 6)) {
     const p = out.pitch || r.w / 12; const cr = clampRect({ x: w.cx - p * 0.6, y: r.y, w: p * 1.2, h: r.h }, bmp.width, bmp.height);

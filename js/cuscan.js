@@ -197,6 +197,9 @@ export function readRow(words, labelWords = [], opts = {}) {
     if (r.kind === 'way' && !r.rating && mi >= 0 && i > mi) return { ...r, kind: 'other', why: 'Right of the main switch and no rating read: probably an SPD or isolator. Check it.' };
     return r;
   });
+  // v0.13: a plain MCB (no RCD) right next to the main switch, on a row of RCBOs, is usually the SPD's own breaker: not a circuit.
+  if (mi >= 0) for (const j of [mi + 1, mi - 1]) { const n = read[j]; const rest = read.filter((x, k) => x.kind === 'way' && k !== j);
+    if (n && n.kind === 'way' && n.rating && !n.idn && !n.items.some((x) => x.kind === 'ma' || x.kind === 'model') && rest.length >= 3 && rest.filter((x) => x.rcbo).length >= rest.length * 0.7) { read[j] = { ...n, kind: 'spdmcb', why: 'Plain MCB next to the main switch on a board of RCBOs: looks like the SPD\u2019s breaker. Tap \u201cIt\u2019s a circuit\u201d if not.' }; break; } }
   const ways = read.filter((r) => r.kind === 'way');
   // A lone odd "10mA" on a way we couldn't read is usually a misread: use the row's usual RCD rating (still flagged).
   const idns = ways.filter((w) => w.sure && w.idn).map((w) => w.idn); const usual = idns.length >= 3 ? median(idns.map(Number)) : null;
@@ -222,6 +225,8 @@ export function toCircuit(w) {
   const rcbo = w.rcbo !== false;
   // Nothing read at all: don't claim MCB/BS 60898; leave the BS blank for you (or an import) to fill.
   const unknown = !w.rating && !rcbo;
+  if (w.spd) return { desc: w.desc || 'SPD', type: w.type || 'B', rating: w.rating || '', device: 'mcb', bs: '60898', bka: w.ka || (w.brand ? '6' : ''), time: 0.4,
+    rcdBs: 'N/A', rcdType: 'N/A', rcdIdn: 'N/A', rcdRating: 'N/A', rcdMs: 'N/A', rcdBtn: 'N/A', afddBtn: 'N/A', r1: 'N/A', rn: 'N/A', r2: 'N/A' };
   return { desc: w.desc || '', type: w.type || 'B', rating: w.rating || '', device: rcbo ? 'rcbo' : 'mcb', bs: unknown ? '' : rcbo ? '61009' : '60898',
     rcdBs: rcbo ? '61009' : '', rcdIdn: rcbo ? (w.idn || '30') : '', rcdType: rcbo ? (w.rcdType || 'A') : '', rcdRating: rcbo ? (w.rating || '') : '', bka: w.ka || (w.brand ? '6' : ''), time: 0.4 };
 }
@@ -262,4 +267,43 @@ export function matchStickers(wayX, stX, pitch, centre) {
     if (!best || cost < best.cost) { const a = new Array(n).fill(-1); let i = n, j = m; while (i > 0 && j >= 0) { if (j === 0) { i--; continue; } const p = P[i][j]; if (p === 1) { a[i - 1] = Math.abs(map[i - 1] - wayX[j - 1]) < miss * 1.5 ? j - 1 : -1; i--; j--; } else if (p === 2) j--; else i--; } best = { cost, a, k }; }
   }
   const out = new Array(stX.length).fill(-1); order.forEach(([, i], r) => (out[i] = best ? best.a[r] : -1)); return out;
+}
+
+// v0.13: several photos / rows of ONE board -> one numbering.
+// order: 'main' = the row with the main switch first (then the rest in photo order), or 'photo' = photo order.
+// dir: 'main' = number each row from the main-switch end (rows without one follow the board's main-switch side),
+//      'ltr' = left to right. On a FuseBox F2029MX-style board (main switch on the right) 'main' runs right to left.
+export const hasMain = (r) => (r.board || []).some((o) => o.kind === 'main');
+// How sure we are this is THE main-switch row (several rows can have a 100A isolator; the SPD and its MCB sit by the real one).
+const mainScore = (r) => (r.board || []).reduce((n, o) => n + (o.kind === 'spd' || o.kind === 'spdmcb' ? 3 : o.kind === 'main' ? 1 + (o.items || []).some((i) => /main|switch/i.test(i.text || '')) : 0), 0);
+export const mainRow = (rows) => rows.reduce((b, r) => (mainScore(r) > (b ? mainScore(b) : 0) ? r : b), null);
+export function mainSide(rows) {
+  const r = mainRow(rows); if (!r) return 'left';
+  const m = r.board.find((o) => o.kind === 'main'); const xs = r.ways.map((w) => w.cx);
+  return xs.length && m.cx > xs.reduce((a, b) => a + b, 0) / xs.length ? 'right' : 'left';
+}
+export function orderRows(rows, { order = 'main', dir = 'main', manual = null } = {}) {
+  let rs = manual ? manual.map((i) => rows[i]).filter(Boolean) : rows.slice();
+  if (!manual && order === 'main') { const i = rs.indexOf(mainRow(rs)); if (i > 0) rs = [rs[i], ...rs.slice(0, i), ...rs.slice(i + 1)]; }
+  const rtl = dir === 'main' && mainSide(rows) === 'right';
+  return rs.map((r) => ({ row: r, ways: r.ways.map((w, i) => ({ w, i })).sort((a, b) => (rtl ? b.w.cx - a.w.cx : a.w.cx - b.w.cx)) }));
+}
+export function numberBoard(rows, opts = {}, start = 1) {
+  let n = start - 1; const out = [];
+  for (const { row, ways } of orderRows(rows, opts)) for (const { w } of ways) if (w.keep !== false) out.push({ ...w, num: String(++n), part: row.part });
+  return out;
+}
+// v0.13: only the main-switch row has the SPD's MCB; on any other row that guess goes back to being a circuit.
+export function settleSpdMcb(rows) {
+  const m = mainRow(rows);
+  // On the main-switch row it's the SPD's own breaker: it goes on the schedule as a circuit in its place, described "SPD".
+  if (m) for (const o of m.board.filter((x) => x.kind === 'spdmcb')) {
+    m.board.splice(m.board.indexOf(o), 1); const at = m.ways.findIndex((x) => x.cx > o.cx);
+    m.ways.splice(at < 0 ? m.ways.length : at, 0, { ...o, kind: 'way', spd: true, rcbo: false, idn: '', desc: 'SPD', type: o.type || 'B', sure: !!o.rating, why: 'MCB protecting the SPD (next to the main switch)' });
+  }
+  for (const r of rows) if (r !== m) for (const o of r.board.filter((x) => x.kind === 'spdmcb')) {
+    r.board.splice(r.board.indexOf(o), 1); const at = r.ways.findIndex((x) => x.cx > o.cx);
+    r.ways.splice(at < 0 ? r.ways.length : at, 0, { ...o, kind: 'way', rcbo: true, idn: o.idn || '30', sure: false, why: 'Next to an isolator: check it is a circuit' });
+  }
+  return rows;
 }
