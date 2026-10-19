@@ -17,7 +17,7 @@ export function loadJsPDF(base = './vendor/jspdf/jspdf.umd.min.js') {
 }
 
 export const INK = [20, 20, 20];
-export const VALUE = [11, 42, 111];   // filled-in values: dark navy, like a pen
+export const VALUE = [0, 0, 0];   // filled-in values: black
 export const GREY = [120, 120, 120];
 export const LINE = [90, 90, 90];
 export const RED = [190, 30, 30];
