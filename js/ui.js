@@ -19,11 +19,16 @@ export function h(tag, attrs, ...kids) {
   return el;
 }
 export const $ = (s, r = document) => r.querySelector(s);
-let toastT;
+let toastT, toastPlace;
 export function toast(msg, ms = 2600) {
   document.querySelectorAll('.toast').forEach((t) => t.remove());
-  const t = h('div', { class: 'toast', role: 'status' }, msg); document.body.append(t);
-  clearTimeout(toastT); toastT = setTimeout(() => t.remove(), ms);
+  const t = h('div', { class: 'toast', role: 'status' }, msg);
+  // v0.12: sit above any sticky bottom bar (Next/Back, select bar) instead of over it.
+  const place = () => { const bars = [...document.querySelectorAll('.stick, .selbar')].map((x) => x.getBoundingClientRect()).filter((r) => r.height && r.top < innerHeight && r.bottom > 0);
+    t.style.bottom = bars.length ? Math.max(innerHeight - Math.min(...bars.map((r) => r.top)) + 12, 0) + 'px' : ''; };
+  if (toastPlace) removeEventListener('scroll', toastPlace); toastPlace = place;
+  document.body.append(t); place(); addEventListener('scroll', place, { passive: true });
+  clearTimeout(toastT); toastT = setTimeout(() => { t.remove(); removeEventListener('scroll', place); }, ms);
 }
 export function modal(title, body, buttons = []) {
   return new Promise((res) => {
@@ -74,3 +79,19 @@ export const emptyState = (ic, text, action = null) => h('div', { class: 'empty2
 export const skeleton = (n = 3) => h('div', { class: 'list skel', 'aria-busy': 'true', 'aria-label': 'Loading' }, Array.from({ length: n }, () => h('div', { class: 'row' }, h('div', { class: 'main' }, h('div', { class: 'sk sk1' }), h('div', { class: 'sk sk2' })))));
 // A button/link label with an icon in front.
 export const withIcon = (ic, text) => [icon(ic, { size: 18 }), h('span', {}, text)];
+
+// v0.12: every text area grows to fit its text (as you type, on load, on rotate) - no inner scrolling.
+export function grow(t) {
+  if (!t || !t.isConnected) return;
+  t.style.height = 'auto';
+  const cs = getComputedStyle(t); const extra = parseFloat(cs.borderTopWidth) + parseFloat(cs.borderBottomWidth);
+  t.style.height = (t.scrollHeight + extra) + 'px';
+}
+if (typeof document !== 'undefined') {
+  const all = () => document.querySelectorAll('textarea').forEach(grow);
+  document.addEventListener('input', (e) => { if (e.target && e.target.tagName === 'TEXTAREA') grow(e.target); });
+  new MutationObserver((ms) => { if (ms.some((m) => [...m.addedNodes].some((n) => n.nodeType === 1 && (n.tagName === 'TEXTAREA' || n.querySelector?.('textarea'))))) requestAnimationFrame(all); })
+    .observe(document.documentElement, { childList: true, subtree: true });
+  let rt; addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(all, 100); });
+  document.fonts?.ready?.then(all);
+}

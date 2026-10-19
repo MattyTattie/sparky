@@ -95,3 +95,6 @@
   - Spare: N/A must be a placeholder (typing replaces it). Leave protective device fields (BS, type, rating, kA, RCD) blank/editable for spares; only cable + test fields go grey N/A. Typed values print instead of N/A. (19 Oct)
   - Spare: add "No device fitted" tick; when on, device fields also grey N/A. (19 Oct)
   - Auto N/A prints grey on the PDF too (typed values black). Show PDF screenshot. (19 Oct)
+- [built v0.12] Status line: replace "All filled in ✓" / "for the green dot" wording with "Section complete ✓" (and "Still to fill in: …" without "for the green dot"). Add the same status line to section H (schedule of inspections) and other special sections. (19 Oct)
+- [built v0.12] Text areas (comments, descriptions, observations etc.) auto-grow to fit their content as he types (no inner scroll, no text cut off sideways); on Mac and phone. (19 Oct)
+- [built v0.12] Schedule table rows: add a bin/delete-circuit button (with confirm "Delete circuit N?", offer renumber if sequential) next to edit/copy/spare icons; also on circuit page. (19 Oct)

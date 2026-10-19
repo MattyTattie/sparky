@@ -579,3 +579,7 @@ select.autona { color: #a3a9b5; font-weight: 600; }
 .prow { padding: 10px 0; border-bottom: 1px solid var(--line); } .prow:last-child { border-bottom: 0; }
 .prow input { font-weight: 650; margin-bottom: 4px; } .prow .btn { margin-top: 6px; }
 a.linkcard { display: block; text-decoration: none; color: inherit; }
+/* v0.12: text areas grow to fit (see ui.js grow) */
+textarea { overflow-y: hidden; resize: none; overflow-wrap: anywhere; word-break: break-word; min-height: 64px; box-sizing: border-box; }
+td.act button.del { color: #b42318; }
+td.act button svg { vertical-align: middle; display: inline-block; }

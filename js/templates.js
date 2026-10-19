@@ -110,3 +110,17 @@ export function descChanged(c, wasSpare) {
   if (wasSpare && !isSpareCircuit(c) && !String(c.irV || '').trim()) c.irV = '500';
   return now !== wasSpare;
 }
+
+// v0.12: delete circuit ci from board b. If the circuits after it are numbered in
+// sequence straight on from it (e.g. delete 3 of 1,2,3,4,5) they move down one (4->3, 5->4).
+// Returns { removed, renumbered } where renumbered is how many later circuits changed number.
+export function laterSequential(b, ci) {
+  const c = b.circuits[ci]; if (!c || !/^\d+$/.test(String(c.num || '').trim())) return 0;
+  const n = +c.num; const rest = b.circuits.slice(ci + 1);
+  return rest.length && rest.every((x, i) => String(x.num || '').trim() === String(n + 1 + i)) ? rest.length : 0;
+}
+export function deleteCircuitAt(b, ci) {
+  const k = laterSequential(b, ci); const [removed] = b.circuits.splice(ci, 1);
+  if (k) b.circuits.slice(ci).forEach((x) => (x.num = String(+x.num - 1)));
+  return { removed, renumbered: k };
+}

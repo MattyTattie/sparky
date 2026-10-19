@@ -9,7 +9,7 @@ import { route, page, go, render } from './app.js';
 import { S, openCert, changed, flush, getProfile, defaultInstruments, calibrationWarnings, INSTRUMENT_KINDS } from './state.js';
 import { TYPES, newCert, sectionsFor, sectionDone, missingFields, visible, get, set, eicrOverall, blankBond, BOND_LOCATIONS, BOND_PARTS } from './certmodel.js';
 import { EIC_ITEMS, EIC_OUTCOMES, EICR_ITEMS, EICR_OUTCOMES, CODE_TEXT, OBSERVATIONS, OBS_CATS, EIC_HELP, EICR_HELP } from './inspections.js';
-import { checkCircuit } from './checks.js';
+import { checkCircuit, isSpare } from './checks.js';
 import { CHECK_NOTE } from './limits.js';
 
 export async function createCert(type, job, cust) {
@@ -139,11 +139,11 @@ route(/^\/cert\/([^/]+)\/s\/([^/]+)$/, async (id, sid) => {
   const draw = () => {
     let content;
     if (s.id === 'instruments') content = instrumentsSection(cert);
-    else if (s.special === 'inspections') content = inspectionsSection(cert);
-    else if (s.special === 'observations') content = observationsSection(cert, draw);
-    else if (s.special === 'bonding') content = bondingSection(cert, draw);
-    else if (s.special === 'sign') content = [h('div', { class: 'card' }, (s.fields || []).map((fd) => field(cert, fd))), signSection(cert, draw)];
-    else if (s.special === 'mwcircuit') content = [h('div', { class: 'card' }, s.fields.map((fd) => field(cert, fd))), h('a', { class: 'btn primary', href: `#/cert/${id}/mwc`, style: 'width:100%;margin-bottom:12px' }, 'Circuit details and test results →')];
+    else if (s.special === 'inspections') content = [stateBox(cert, s), inspectionsSection(cert)];
+    else if (s.special === 'observations') content = [stateBox(cert, s), observationsSection(cert, draw)];
+    else if (s.special === 'bonding') content = [stateBox(cert, s), bondingSection(cert, draw)];
+    else if (s.special === 'sign') content = [stateBox(cert, s), h('div', { class: 'card' }, (s.fields || []).map((fd) => field(cert, fd))), signSection(cert, draw)];
+    else if (s.special === 'mwcircuit') content = [stateBox(cert, s), h('div', { class: 'card' }, s.fields.map((fd) => field(cert, fd, () => refreshState()))), h('a', { class: 'btn primary', href: `#/cert/${id}/mwc`, style: 'width:100%;margin-bottom:12px' }, 'Circuit details and test results →')];
     else {
       content = [h('div', { class: 'notice ' + stateLine(cert, s)[0] + ' secstate' }, stateLine(cert, s)[1]),
         h('div', { class: 'card' }, s.fields.map((fd) => field(cert, fd, (k, v, d) => { if (k === 'eic.samePerson' || k.startsWith('people.designer')) { if (k === 'eic.samePerson' || get(cert, 'eic.samePerson')) syncPeople(cert); if (k === 'eic.samePerson') return draw(); } if (d.redraw) draw(); else refreshState(); })))];
@@ -153,16 +153,30 @@ route(/^\/cert\/([^/]+)\/s\/([^/]+)$/, async (id, sid) => {
   };
   // update the 'still to fill' line as you type, without redrawing the inputs
   const refreshState = () => { const el = box.querySelector('.secstate'); if (!el) return; const [c, t] = stateLine(cert, s); el.className = 'notice ' + c + ' secstate'; el.textContent = t; };
+  // v0.12: special sections change through their own buttons: re-check the line after any tap or typing.
+  const later = () => setTimeout(refreshState, 60); box.addEventListener('click', later); box.addEventListener('input', later); box.addEventListener('change', later);
   draw();
   page(s.title, box, { back: '#/cert/' + id, sub: `${cert.number}${s.form ? ' · Section ' + s.form : ''}` });
 });
-// v0.8: the line at the top of a section saying what's left for the green dot.
-function stateLine(cert, s) {
+// v0.8/v0.12: the line at the top of a section: complete, or what's still to fill in.
+export const DONE_TEXT = 'Section complete \u2713';
+const list = (xs, n = 8) => (xs.length > n ? xs.slice(0, n).join(', ') + ` and ${xs.length - n} more` : xs.join(', '));
+export function stateLine(cert, s) {
+  if (sectionDone(cert, s)) return ['green', DONE_TEXT];
+  if (s.special === 'inspections') { const v = Object.values(cert.inspections || {}); const left = v.filter((x) => !x).length; return ['info', v.length ? `Still to fill in: ${left} of ${v.length} inspection items.` : 'Still to fill in: the inspection items.']; }
+  if (s.special === 'boards') {
+    const bs = cert.boards || []; if (!bs.some((b) => b.circuits.length)) return ['info', 'Still to fill in: add the circuits.'];
+    const miss = bs.flatMap((b) => b.circuits.filter((c) => !isSpare(c) && !c.zs).map((c) => (bs.length > 1 ? `${b.ref || 'DB'} ` : '') + c.num));
+    return ['info', `Still to fill in: Zs on circuit${miss.length > 1 ? 's' : ''} ${list(miss)}.`];
+  }
+  if (s.special === 'bonding') return ['info', 'Still to fill in: add the supplementary bonding, or tick N/A.'];
+  if (s.special === 'sign') return ['info', 'Still to fill in: a signature.'];
+  if (s.special === 'mwcircuit') { const c = cert.mw.circuit; const m = [!c.desc && 'circuit description', !c.zs && 'Zs', ...missingFields(cert, { ...s, special: null }).map((x) => x.label)].filter(Boolean); return ['info', `Still to fill in: ${list(m)}.`]; }
   const miss = missingFields(cert, s);
-  if (miss.length) return ['info', `Still to fill in for the green dot: ${miss.map((x) => x.label.replace(/\s*\([^)]*\)$/, '')).join(', ')}.`];
-  if (sectionDone(cert, s)) return ['green', 'All filled in \u2713 The dot for this section is green.'];
-  return ['info', 'Tick each service you bonded (it needs a size), or tick \u201cNo services need main bonding\u201d.'];
+  if (miss.length) return ['info', `Still to fill in: ${list(miss.map((x) => x.label.replace(/\s*\([^)]*\)$/, '')))}.`];
+  return ['info', 'Still to fill in: tick each service you bonded (it needs a size), or tick \u201cNone needed\u201d.'];
 }
+const stateBox = (cert, s) => { const [c, t] = stateLine(cert, s); return h('div', { class: 'notice ' + c + ' secstate' }, t); };
 function syncPeople(cert) {
   if (!cert.eic.samePerson) return;
   const d = cert.people.designer; cert.people.constructor = { ...d }; cert.people.inspector = { ...d }; changed();

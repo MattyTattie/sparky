@@ -4,13 +4,15 @@
 // Landscape: the full schedule as a table, like the paper form.
 // =====================================================================
 import * as db from './db.js';
-import { h, fill, toast, modal, confirmBox, pickFile, shrinkImage } from './ui.js';
+import { h, fill, toast, modal, confirmBox, pickFile, shrinkImage, icon, withIcon } from './ui.js';
 import { route, page, go, render } from './app.js';
 import { openCert, changed, flush } from './state.js';
-import { field } from './certui.js';
+import { field, stateLine } from './certui.js';
+import { sectionsFor } from './certmodel.js';
+const boardsLine = (cert) => { const sec = sectionsFor(cert.type).find((x) => x.special === 'boards'); if (!sec) return null; const [c, t] = stateLine(cert, sec); return h('div', { class: 'notice ' + c + ' secstate' }, t); };
 import { blankBoard } from './certmodel.js';
 import * as presets from './presets.js';
-import { FIELDS, FIELD, TEMPLATES, blankCircuit, applyTemplate, copyCircuit, copyBoard, makeSpare, autoNA, descChanged } from './templates.js';
+import { FIELDS, FIELD, TEMPLATES, blankCircuit, applyTemplate, copyCircuit, copyBoard, makeSpare, autoNA, descChanged, laterSequential, deleteCircuitAt } from './templates.js';
 import { checkCircuit, limitZs, isSpare } from './checks.js';
 import { DEVICES, deviceById, deviceFromBs, ratingsFor, CHECK_NOTE } from './limits.js';
 import { voiceSupported, listen } from './voice.js';
@@ -29,6 +31,7 @@ route(/^\/cert\/([^/]+)\/boards$/, async (id) => {
   const cert = await openCert(id); if (!cert) return go('#/');
   if (cert.boards.length === 1) { history.replaceState(null, '', `#/cert/${id}/b/0`); return render(); }
   page('Boards', [
+    boardsLine(cert),
     h('div', { class: 'list' }, cert.boards.map((b, i) => h('a', { class: 'row', href: `#/cert/${id}/b/${i}` }, h('div', { class: 'main' }, h('div', { class: 't' }, b.ref || 'Board ' + (i + 1)), h('div', { class: 's' }, `${b.circuits.length} circuits${b.location ? ' · ' + b.location : ''}`)), h('span', { class: 'go' }, '›')))),
     h('div', { class: 'btns full' }, h('button', { class: 'btn primary', onclick: () => addBoard(cert) }, '+ Add board')),
   ], { back: '#/cert/' + id, sub: cert.number });
@@ -73,6 +76,7 @@ route(/^\/cert\/([^/]+)\/b\/(\d+)$/, async (id, bi) => {
   const tools = boardTools(cert, b, +bi);
   if (LAND.matches) return page(`${b.ref || 'Board'} · schedule of test results`, [tools, scheduleTable(cert, b, +bi)], { back, wide: true, sub: cert.number });
   page(b.ref || 'Board', [
+    boardsLine(cert),
     boardDetails(cert, b),
     h('div', { class: 'note', style: 'margin:4px 0 8px' }, 'Tip: turn the phone sideways to see the whole schedule as a table.'),
     tools,
@@ -187,7 +191,7 @@ route(/^\/cert\/([^/]+)\/b\/(\d+)\/c\/(\d+)$/, async (id, bi, ci) => {
       h('button', { class: 'btn small', onclick: () => copyCircuitDialog(cert, b, +bi, +ci, base) }, 'Copy circuit'),
       h('button', { class: 'btn small', onclick: async () => { const t = await pickTemplate(); if (t) { Object.assign(c, applyTemplate(c, t)); changed(); render(); } } }, 'Template'),
       h('button', { class: 'btn small', onclick: () => { { const was = isSpare(c); Object.assign(c, makeSpare(c)); descChanged(c, was); } changed(); render(); } }, 'SPARE / N/A'),
-      h('button', { class: 'btn small warn', onclick: async () => { if (await confirmBox('Delete circuit?', `${c.num} ${c.desc}`, 'Delete', 'warn')) { b.circuits.splice(+ci, 1); changed(); go(base); } } }, 'Delete'),
+      h('button', { class: 'btn small warn', onclick: async () => { if (await askDelete(b, +ci)) go(base); } }, withIcon('trash', 'Delete')),
     ] });
 });
 route(/^\/cert\/([^/]+)\/mwc$/, async (id) => {
@@ -195,6 +199,14 @@ route(/^\/cert\/([^/]+)\/mwc$/, async (id) => {
   circuitEditor({ cert, c: cert.mw.circuit, ctx: () => ({ earthing: cert.mw.earthing, zdb: cert.mw.zdb }), back: `#/cert/${id}/s/mwC`, title: 'Minor works circuit', mw: true,
     extra: [h('button', { class: 'btn small', onclick: async () => { const t = await pickTemplate(); if (t) { Object.assign(cert.mw.circuit, applyTemplate(cert.mw.circuit, t)); changed(); render(); } } }, 'Template')] });
 });
+// v0.12: confirm then delete one circuit (later sequential numbers move down one).
+async function askDelete(b, ci) {
+  const c = b.circuits[ci]; const k = laterSequential(b, ci);
+  const what = [c.desc, c.zs ? 'its test results' : ''].filter(Boolean).join(' and ');
+  const msg = (what ? `This removes ${what}. ` : '') + (k ? `Circuit${k > 1 ? 's' : ''} ${+c.num + 1}${k > 1 ? '\u2013' + (+c.num + k) : ''} will be renumbered down one.` : '');
+  if (!(await confirmBox(`Delete circuit ${c.num || ci + 1}?`, msg, 'Delete', 'warn'))) return false;
+  deleteCircuitAt(b, ci); changed(); toast(`Circuit ${c.num || ci + 1} deleted`); return true;
+}
 function renumberIfSequential(b) { if (b.circuits.every((c, i) => !c.num || /^\d+$/.test(c.num))) b.circuits.forEach((c, i) => (c.num = String(i + 1))); }
 async function pickTemplate() {
   let chosen = null;
@@ -378,7 +390,7 @@ function scheduleTable(cert, b, bi) {
     };
     maxCell = h('td', { class: 'calc', title: 'From the BS 7671 tables. Type your own figure to override.' }, h('input', { value: c.maxZsOverride || '', inputmode: 'decimal', style: 'color:var(--brand);font-weight:600', oninput: (e) => { c.maxZsOverride = e.target.value; changed(); upd(); } }));
     body.append(td0 = h('tr', { class: isSpare(c) ? 'spare' : '' }, cols.map((f) => [cell(f), f.k === 'bka' ? maxCell : null]),
-      h('td', { class: 'act' }, h('button', { title: 'Open', onclick: () => go(`#/cert/${cert.id}/b/${bi}/c/${ci}`) }, '✎'), h('button', { title: 'Copy row', onclick: () => { b.circuits.splice(ci + 1, 0, copyCircuit(c, b.circuits.length + 1)); renumberIfSequential(b); changed(); render(); } }, '⧉'), h('button', { title: 'Spare', onclick: () => { { const was = isSpare(c); Object.assign(c, makeSpare(c)); descChanged(c, was); } changed(); render(); } }, '∅'))));
+      h('td', { class: 'act' }, h('button', { title: 'Open', onclick: () => go(`#/cert/${cert.id}/b/${bi}/c/${ci}`) }, '✎'), h('button', { title: 'Copy row', onclick: () => { b.circuits.splice(ci + 1, 0, copyCircuit(c, b.circuits.length + 1)); renumberIfSequential(b); changed(); render(); } }, '⧉'), h('button', { title: 'Spare', onclick: () => { { const was = isSpare(c); Object.assign(c, makeSpare(c)); descChanged(c, was); } changed(); render(); } }, '∅'), h('button', { title: 'Delete circuit', class: 'del', onclick: async () => { if (await askDelete(b, ci)) render(); } }, icon('trash', { size: 16 })))));
     upd();
   });
   return h('div', {}, h('div', { class: 'tablewrap' }, h('table', { class: 'sched' }, h('thead', {}, head), body)),
