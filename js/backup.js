@@ -6,6 +6,7 @@ import { serialPerKey } from './filerules.js';
 import * as db from './db.js';
 import * as G from './gdrive.js';
 import { DRIVE_ROOT, APP_SLUG } from './config.js';
+import { deviceLabel } from './syncmerge.js';
 
 const toB64 = (blob) => new Promise((res) => { const r = new FileReader(); r.onload = () => res(String(r.result)); r.readAsDataURL(blob); });
 const fromB64 = async (u) => (await fetch(u)).blob();
@@ -48,6 +49,7 @@ export const backupJob = serialPerKey((jobId, opts = {}) => backupJobNow(jobId, 
 export const backupRunning = (jobId) => backupJob.isRunning(jobId);
 async function backupJobNow(jobId, { onStep } = {}) {
   const job = await db.get('jobs', jobId); if (!job) return;
+  const startVersion = job.version || 0; // v0.9: edits made while uploading stay "changed since"
   const customer = job.customerId ? await db.get('customers', job.customerId) : null;
   const certs = await db.byJob('certs', jobId);
   const files = await db.byJob('files', jobId);
@@ -64,12 +66,15 @@ async function backupJobNow(jobId, { onStep } = {}) {
     const meta = f.driveId ? await G.writeBlob(f.driveId, f.blob, f.blob.type || 'application/octet-stream') : await G.uploadNewBlob(f.name || f.id, folder, f.blob, f.blob.type || 'application/octet-stream', { sparky: f.kind || 'file' });
     f.driveId = (meta && meta.id) || f.driveId; f.driveVersion = f.version || 1; await db.put('files', f);
   }
-  const data = { app: APP_SLUG, format: 1, savedAt: new Date().toISOString(), job, customer, certs, files: files.map(({ blob, ...rest }) => rest) };
+  // v0.9: device (optional) names who saved it, for conflict copies.
+  const data = { app: APP_SLUG, format: 1, savedAt: new Date().toISOString(), device: deviceLabel(), job, customer, certs, files: files.map(({ blob, ...rest }) => rest) };
   if (job.driveJsonId) { try { await G.writeJSON(job.driveJsonId, data); } catch (e) { if (e instanceof G.NotFoundError) job.driveJsonId = null; else throw e; } }
   if (!job.driveJsonId) job.driveJsonId = (await G.createJSON('job.json', folder, data)).id;
-  job.backedUpAt = new Date().toISOString(); job.backedUpVersion = job.version || 0;
-  await db.put('jobs', job);
-  return job.backedUpAt;
+  // v0.9: re-read the job so a change made during the upload isn't overwritten.
+  const now = (await db.get('jobs', jobId)) || job;
+  Object.assign(now, { driveFolderId: job.driveFolderId, driveJsonId: job.driveJsonId, backedUpAt: new Date().toISOString(), backedUpVersion: startVersion, syncSavedAt: data.savedAt });
+  await db.put('jobs', now);
+  return now.backedUpAt;
 }
 
 // Jobs this app has saved to Drive (for a new phone). Reads each job.json.
@@ -83,11 +88,27 @@ export async function restoreDriveJob(folderId) {
   const j = files.find((f) => f.name === 'job.json'); if (!j) throw new Error('No job.json data file in that Drive folder (the backup didn\u2019t finish). Back it up again on the other device.');
   const d = await G.readJSON(j.id);
   if (!d || d.app !== APP_SLUG || !d.job || !d.job.id) throw new Error('The job.json in that folder isn\u2019t a Sparky backup the app can read.');
-  if (d.customer) { const c = await db.get('customers', d.customer.id); if (!c) await db.put('customers', d.customer); }
   // Don't overwrite a newer copy of the job already on this device.
-  const curJob = await db.get('jobs', d.job.id);
-  if (!curJob || (curJob.updatedAt || '') <= (d.job.updatedAt || '')) await db.put('jobs', { ...d.job, driveFolderId: folderId, driveJsonId: j.id });
-  for (const c of d.certs || []) { const cur = await db.get('certs', c.id); if (!cur || cur.updatedAt <= c.updatedAt) await db.put('certs', c); }
-  for (const f of d.files || []) if (f.driveId && !(await db.get('files', f.id))) { try { await db.put('files', { ...f, blob: await G.readBlob(f.driveId) }); } catch {} }
+  await applyRemote(d, folderId, j.id, { onlyIfNewer: true });
   return d.job;
+}
+// Put a job.json from Drive into this device (restore and v0.9 sync).
+// Customers and certificates are only replaced by newer ones; files are
+// downloaded when missing or changed. Nothing on this device is deleted.
+export async function applyRemote(d, folderId, jsonId, { onlyIfNewer = false, force = false } = {}) {
+  if (d.customer && d.customer.id) { const c = await db.get('customers', d.customer.id); if (!c || (c.updatedAt || '') < (d.customer.updatedAt || '')) await db.put('customers', d.customer); }
+  const curJob = await db.get('jobs', d.job.id);
+  if (!onlyIfNewer || !curJob || (curJob.updatedAt || '') <= (d.job.updatedAt || '')) {
+    const v = Math.max((curJob && curJob.version) || 0, d.job.version || 0);
+    await db.put('jobs', { ...d.job, driveFolderId: folderId, driveJsonId: jsonId, version: v, backedUpVersion: v, backedUpAt: d.savedAt || d.job.backedUpAt || null, syncSavedAt: d.savedAt || null });
+  }
+  const changedCerts = [];
+  for (const c of d.certs || []) { const cur = await db.get('certs', c.id); if (!cur || force || (cur.updatedAt || '') < (c.updatedAt || '')) { await db.put('certs', c); changedCerts.push(c.id); } }
+  for (const f of d.files || []) {
+    if (!f.driveId) continue;
+    const cur = await db.get('files', f.id);
+    if (cur && (cur.version || 1) >= (f.version || 1)) continue;
+    try { await db.put('files', { ...f, blob: await G.readBlob(f.driveId) }); } catch {}
+  }
+  return { changedCerts };
 }

@@ -1,5 +1,14 @@
 # Sparky — niggles and update lists
 
+## [BUILT v0.9 on branch `v0.9`, 19 Oct 2026 — NOT LIVE] Sync, 3-phase Check it, max demand, new look — screenshots in /workspace/sparky-shots/v0.9, publish only on his OK
+- [built] Automatic sync phone ↔ Mac through his Drive (same "Sparky jobs" job.json files as the backup): sign in once per device (Settings → Google Drive → Turn on sync); changes go up ~20 s after the last edit (or straight away when the app is hidden); open/focus/online pulls newer job.json files. Changed on both → newest kept, the other saved as a "conflict copy" job (with its certificates and photos) and a notice on the jobs page. Deleted jobs stay deleted (per-device list). Status dot in the top bar (synced / syncing / offline / sign in / error) and a clear message in Settings.
+- [built] Check it: Single-phase / 3-phase 400 V (4-core SWA 70/90 °C, singles), Ib per phase, volt drop % of 400 V, Zs/adiabatic phase–earth. ⚠ 3-phase tables from memory (same as the sizer): Matthew to check against Appendix 4.
+- [built] Maximum demand helper (Calculators, and "Work it out from the loads" under the max demand box on G/J): OSG Table A2-style diversity, realistic-peak note, supply fuse check, "Use N A on EIC-xxxx". Example house = 124 A.
+- [built] New look: deeper electric header, softer shadows, gradient buttons/chips, coloured calculator tiles, stats strip on the jobs page, page fade-in, focus rings. Theme colour #1a2bd6 (index.html, manifest, Android).
+- [built] Android app v3 (versionCode 3, 0.9.0, status bar #1A2BD6, same key): /workspace/sparky-android/output/Sparky-v3.apk. No GitHub release yet.
+- Not synced: Settings (your details, logo, instruments) and deleting a certificate inside a job. Customers only travel with their jobs.
+- Later maybe: dark mode; 3-phase on the circuit schedule.
+
 ## [BUILT v0.8 on branch `v0.8`, 19 Oct 2026 — NOT LIVE] Section G/J + green dots (Matthew 19 Oct) — screenshots in /workspace/sparky-shots/v0.8, publish only on his OK
 - [built] Earth electrode boxes only show with "Installation earth electrode"; otherwise N/A on the PDF.
 - [built] Each bonded service (water, gas, oil, steel, lightning, other) gets its own csa box (blank = same as main bonding csa). PDF prints each with its size, unticked = N/A; main csa shows e.g. "10 / 16" if they differ. "No services need main bonding" tick (prints N/A).

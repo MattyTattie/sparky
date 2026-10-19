@@ -10,6 +10,7 @@ import { h, icon } from './ui.js';
 export const CALCS = [
   { key: 'size', href: '#/calc/size', ic: 'zap', title: 'Size a cable & breaker', sub: 'Put in the load and the length: get the breaker and the smallest cable that passes.' },
   { key: 'check', href: '#/calc/check', ic: 'check', title: 'Check a circuit', sub: 'Zs, volt drop, current rating and the adiabatic check for a cable you\u2019ve picked.' },
+  { key: 'md', href: '#/calc/md', ic: 'gauge', title: 'Maximum demand', sub: 'List the cooker, heaters, showers, sockets and lights: get the On-Site Guide figure with diversity.' },
   { key: 'ring', href: '#/calc/ring', ic: 'link', title: 'Ring final check', sub: 'Your r1, rn and r2 readings: do the ends match, and what R1+R2 to expect.' },
   { key: 'pv', href: '#/calc/dc/pv', ic: 'sun', title: 'Solar string & battery checks', sub: 'Cold-morning string voltage, PV cable and string fuses; battery-to-inverter leads.' },
   { key: 'plan', href: '#/calc/dc/plan', ic: 'layers', title: 'DC system planner', sub: 'Vans, boats, sheds: step by step to a battery, cables, fuses, wiring diagram and parts list.' },

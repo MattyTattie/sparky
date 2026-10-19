@@ -124,6 +124,18 @@ Open points
 - **Standards quoted**: BS EN 1648-2 (motor caravans, 12 V d.c.), BS EN 1648-1 (caravans), BS 7671 Section 721 (caravans and motor caravans, 230 V), BS EN ISO 10133 / 13297 (small craft d.c. / a.c.). 3% / 10% volt drop described as "the usual marine rule". No regulation numbers quoted.
 - **Worked example** (VAN_EXAMPLE, 12 V 200 Ah LiFePO4, 400 W solar (2 × 200 W, Voc 24.3), 30 A DC-DC, 1500 W inverter, fridge, lights, pump, diesel heater, laptop, low-watt kettle, 2 days at 80%): 993.5 Wh/day = 82.8 Ah; needs 207 Ah (200 Ah ≈ 1.9 days, flagged); inverter 144.9 A → 200 A MEGA, 50 mm² (1.49% over 1.5 m); MPPT 100 V / 45 A, 2 in series, cold Voc 53.5 V; main 166.9 A → 225 A Class T, 50 mm²; 250 A isolator, 300 A shunt, 250 A busbars; DC-DC in 36.9 A → 50 A MIDI, 16 mm² over 5 m; out 40 A MIDI, 6 mm²; fuse box feed 30 A MIDI, 10 mm²; loads 1.5–2.5 mm² on 3–15 A blades.
 
+## v0.9 (19 Oct 2026, built on branch `v0.9`, NOT pushed / not live)
+- Sync: js/syncmerge.js (pure: planJob, needsPush, conflictCopy, deviceLabel, newestTime), js/sync.js (status listeners, schedule, init/connect/disconnect/syncNow, pull, conflict notices), db.onPut hook, backup.applyRemote (shared with Restore from Drive), backupJobNow re-reads the job before saving (edits during upload stay "changed since") and records job.syncSavedAt.
+- New optional fields: job.syncSavedAt, job.conflictOf, job.conflictAt; job.json gets optional "device". Meta keys sync.config / sync.deleted / sync.conflicts (device-only). Backup file format unchanged.
+- Pull asks Drive for job.json files modified since the last pull (drive.file scope: only files the app made).
+- Check it 3-phase: calcui.js (phase seg), calc.sizeCable({ uo }) for % of 400 V.
+- Max demand: js/maxdemand.js (sums), js/calcmd.js (#/calc/md and #/calc/md/<certId>); field option `action` in certui field().
+- Look: v0.9 block at the end of styles.css; statsStrip on the jobs page.
+- Tests: tests/v09.test.mjs; tests/sync_mock.py (two browsers, one fake Drive); tests/screens_v09.py, tests/screens_v09_look.py.
+### v0.9 — to check
+- 3-phase tables (cables.js swa4/swa4X/singles3, from memory of Appendix 4) — now also used by Check it.
+- Diversity rules in maxdemand.js (OSG Appendix A Table A2 from memory): cooking 10 A + 30% (+5 A socket), heating 10 A + 50%, immersion 100%, showers 100/100/25%, sockets 100% largest + 40% others, lighting 66%, EV 100%.
+
 ## v0.8 (19 Oct 2026, built on branch `v0.8`, NOT pushed / not live)
 - certmodel.js: fields take showIf/hideIf (key or (cert)=>bool), opt (not needed for the dot), dflt (tick inferred from data), placeholder, hint, indent, redraw. visible(), neededFields(), missingFields(); sectionDone uses them. PARTS has doneIf (a bonded service or bondNone).
 - pdf.js particularsSection: N/A for hidden boxes; per-service csa three to a line.

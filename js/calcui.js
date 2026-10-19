@@ -6,18 +6,19 @@ import { route, page } from './app.js';
 import { CALCS, setLastCalc, lastCalc, formKit, icard, more, answerCard, pchip, resline, detailCard, banner } from './calckit.js';
 import { ringCheck } from './checks.js';
 import { icon } from './icons.js';
-import { CABLES, CABLE_PICKS, AMBIENTS, CA_SOURCE, ARMOUR_MOHM_PER_M, TEMP_MULT } from './cables.js';
+import { CABLES, CABLE_PICKS, AMBIENTS, CA_SOURCE, ARMOUR_MOHM_PER_M, TEMP_MULT, THREE_PHASE_CABLES, UL } from './cables.js';
 import { voltDrop, sizeCable, designZs, r1r2At20 } from './calc.js';
 import { adiabatic, kFor, cpcAreaFor } from './design.js';
 import { CHECK_NOTE, DEVICES, deviceById, ratingsFor, maxZs, maxZsSource } from './limits.js';
 
 const CABLE_ORDER = ['te', 'swa', 'swaX', 'swa3', 'swa3X'];
-const DEFAULTS = { device: 'rcbo', type: 'B', rating: '32', ib: '20', shape: 'radial', length: '25', lighting: false, ze: '0.35', cable: 'te', method: 'C', size: 'auto', cpcMode: 'core', ambient: '30', grouped: '1', grouping: 'bunched', ci: '1', time: 0.4 };
+const DEFAULTS = { phase: '1', device: 'rcbo', type: 'B', rating: '32', ib: '20', shape: 'radial', length: '25', lighting: false, ze: '0.35', cable: 'te', method: 'C', size: 'auto', cpcMode: 'core', ambient: '30', grouped: '1', grouping: 'bunched', ci: '1', time: 0.4 };
 const SHAPES = [['radial', 'Radial'], ['ring-point', 'Ring: load at far point'], ['ring-spread', 'Ring: load spread']];
 
 // CPC for a cable + size (T&E has a smaller CPC; SWA uses a core or the armour).
 export function cpcFor(cable, size, cpcMode) {
   if (cable === 'te') return CABLE_PICKS.te.sizes[size] ?? null;
+  if (CABLES[cable] && CABLES[cable].phase === 3) { const a = cpcAreaFor(cable, size, cpcMode); return a ? a.cpc : null; } // v0.9: 4-core SWA armour / singles CPC
   if (CABLES[cable] && CABLES[cable].cores === 2) return 'armour';
   return cpcMode === 'armour' ? 'armour' : Number(size);
 }
@@ -47,6 +48,11 @@ route(/^\/calc\/check$/, async () => {
   const F = formKit(v, set);
 
   const drawForm = () => {
+    // v0.9: 3-phase 400 V (balanced): three-phase cables only, radial only.
+    const three = v.phase === '3';
+    if (three && !THREE_PHASE_CABLES.includes(v.cable)) v.cable = 'swa4';
+    if (!three && !CABLE_ORDER.includes(v.cable)) v.cable = 'te';
+    if (three) v.shape = 'radial';
     const d = deviceById(v.device) || deviceById('rcbo');
     if (!d.types.includes(v.type)) v.type = d.types[0] || '';
     const ratings = ratingsFor(d.id, v.type); if (ratings.length && !ratings.map(String).includes(String(v.rating))) v.rating = String(ratings.find((r) => r >= 20) || ratings[0]);
@@ -60,14 +66,15 @@ route(/^\/calc\/check$/, async () => {
         F.seg('rating', 'Rating (In)', ratings.map((r) => [r, r + ' A']), '', 'small'),
         more('chk-dev', [F.seg('time', 'Disconnection time', [[0.4, '0.4 s'], [5, '5 s']], '0.4 s for final circuits up to 63 A; 5 s for distribution circuits and over 63 A.', 'small')], `${v.time} s`)], { step: 1 }),
       icard('The circuit', [
-        F.seg('shape', 'Shape', SHAPES, v.shape === 'radial' ? '' : 'Ring: put in the length all the way round the ring.', 'small'),
-        h('div', { class: 'grid2' }, F.num('ib', 'Load (Ib)', { unit: 'A', hint: 'Design current' }), F.num('length', v.shape === 'radial' ? 'Length' : 'Ring length', { unit: 'm', hint: v.shape === 'radial' ? 'Board to the far end' : 'All the way round' })),
+        F.seg('phase', 'Supply', [['1', 'Single-phase 230 V'], ['3', '3-phase 400 V']], three ? 'Balanced 3-phase load. Put in the current in each phase. ⚠ 3-phase cable figures are from memory of Appendix 4: check them.' : '', 'small'),
+        three ? null : F.seg('shape', 'Shape', SHAPES, v.shape === 'radial' ? '' : 'Ring: put in the length all the way round the ring.', 'small'),
+        h('div', { class: 'grid2' }, F.num('ib', three ? 'Load per phase (Ib)' : 'Load (Ib)', { unit: 'A', hint: three ? 'kW × 1000 ÷ (1.732 × 400)' : 'Design current' }), F.num('length', v.shape === 'radial' ? 'Length' : 'Ring length', { unit: 'm', hint: v.shape === 'radial' ? 'Board to the far end' : 'All the way round' })),
         F.num('ze', 'Ze at the board', { unit: 'Ω', ph: '0.35', hint: '0.35 Ω is the usual TN-C-S (PME) figure, 0.8 Ω TN-S. Measured is best.' }),
         F.chk('lighting', 'Lighting circuit', 'Ticked = 3% volt drop limit instead of 5%.')], { step: 2 }),
       icard('The cable', [
-        F.sel('cable', 'Cable', CABLE_ORDER.map((k) => [k, CABLES[k].label])),
+        F.sel('cable', 'Cable', (three ? THREE_PHASE_CABLES : CABLE_ORDER).map((k) => [k, CABLES[k].label])),
         CABLES[v.cable].cores === 3 ? F.seg('cpcMode', 'Earth (CPC)', [['core', '3rd core'], ['armour', 'Armour']], '', 'small') : null,
-        F.sel('size', 'Size', [['auto', 'Smallest that passes'], ...cab.sizes.map((s) => [s, s + ' mm²' + (v.cable === 'te' ? ` / ${CABLE_PICKS.te.sizes[s]} CPC` : '')])], 'Leave on "Smallest that passes", or pick the size you\u2019re fitting.'),
+        F.sel('size', 'Size', [['auto', 'Smallest that passes'], ...cab.sizes.map((s) => [s, s + ' mm²' + (v.cable === 'te' ? ` / ${CABLE_PICKS.te.sizes[s]} CPC` : v.cable === 'singles3' ? ` + ${cpcFor('singles3', s)} CPC` : '')])], 'Leave on "Smallest that passes", or pick the size you\u2019re fitting.'),
         more('chk-cable', [
           F.sel('method', 'How it\u2019s installed (reference method)', Object.entries(cab.methods).map(([k, m]) => [k, m.label])),
           h('div', { class: 'grid2' }, F.sel('ambient', 'Hottest air round it', AMBIENTS.map((t) => [t, t + ' °C'])), F.num('grouped', 'Circuits grouped', { hint: 'Run together with this one' })),
@@ -79,7 +86,8 @@ route(/^\/calc\/check$/, async () => {
 
   const draw = () => {
     const d = deviceById(v.device); const ring = v.shape === 'radial' ? false : v.shape.slice(5);
-    const s = sizeCable({ cable: v.cable, method: v.method, ib: +v.ib, inA: +v.rating, length: +v.length, ambient: +v.ambient, grouped: +v.grouped, grouping: v.grouping, insulationCi: +v.ci, bs3036: v.device === 'bs3036', lighting: v.lighting, ring });
+    const three = v.phase === '3' && CABLES[v.cable] && CABLES[v.cable].phase === 3;
+    const s = sizeCable({ cable: v.cable, method: v.method, ib: +v.ib, inA: +v.rating, length: +v.length, ambient: +v.ambient, grouped: +v.grouped, grouping: v.grouping, insulationCi: +v.ci, bs3036: v.device === 'bs3036', lighting: v.lighting, ring, uo: three ? UL : undefined });
     const max = maxZs({ device: v.device, type: v.type, rating: v.rating, time: v.time });
     if (!s.ok) { fill(top, banner(s.error, 'Change the breaker rating or the load so the rating is at least the load.', 'red')); fill(work); return; }
     const size = v.size === 'auto' ? (s.pick ? s.pick.size : null) : Number(v.size);
@@ -97,8 +105,8 @@ route(/^\/calc\/check$/, async () => {
       z && z.ok && z.zs != null ? pchip(z.pass === false ? false : z.pass === true ? true : null, `Zs ${z.zs} / ${max ?? '?'} Ω`) : pchip(null, 'Zs'),
       adi ? (adi.ok ? pchip(adi.pass ? true : 'warn', 'Earth size (adiabatic)') : pchip(false, 'Earth size')) : pchip(null, 'Earth size'),
     ];
-    fill(top, answerCard({ kicker: allOk ? 'This circuit passes' : 'This circuit needs a look', big: [size == null ? cableName : `${size} mm²${cpc === 'armour' ? ' + armour CPC' : cpc ? ` / ${cpc} mm² CPC` : ''}`, `on a ${v.type}${v.rating} ${d ? d.label.split(' (')[0] : ''}`], good: allOk ? (adi && adi.ok && !adi.pass ? 'warn' : true) : false,
-      sub: `${CABLES[v.cable].label.split(',')[0]} · ${v.shape === 'radial' ? 'radial' : 'ring'} ${v.length} m · ${v.ib} A load${v.lighting ? ' · lighting' : ''}`, chips,
+    fill(top, answerCard({ kicker: allOk ? 'This circuit passes' : 'This circuit needs a look', big: [size == null ? cableName : `${size} mm²${cpc === 'armour' ? ' + armour CPC' : cpc ? ` / ${cpc} mm² CPC` : ''}`, `on a ${v.type}${v.rating}${three ? ' triple-pole' : ''} ${d ? d.label.split(' (')[0] : ''}`], good: allOk ? (adi && adi.ok && !adi.pass ? 'warn' : true) : false,
+      sub: `${three ? '3-phase 400 V · ' : ''}${CABLES[v.cable].label.split(',')[0]} · ${v.shape === 'radial' ? 'radial' : 'ring'} ${v.length} m · ${v.ib} A ${three ? 'per phase' : 'load'}${v.lighting ? ' · lighting' : ''}`, chips,
       extra: size != null && Number(v.length) ? h('div', { class: 'ans-test' }, icon('clipboard', { size: 16 }), `When you test: expect R1+R2 about ${r1r2At20({ live: size, cpc, length: +v.length, cores: CABLES[v.cable].cores, ring })} Ω at 20 °C${ring ? ' (ring, end-to-end ÷ 4)' : ''}.`) : null }),
       adi && adi.ok && !adi.pass ? banner(`The earth (CPC) may be too small for the fault: it needs ${adi.smin} mm², it\u2019s ${adiArea} mm².`, 'This assumes the worst-case 0.1 s let-through. Check the breaker maker\u2019s I²t figure, or go up a cable size.') : null);
     fill(work,

@@ -31,7 +31,8 @@ export function ambientFactor(cable, ambient) {
 // Cable sizing, the simple route: In ≥ Ib, then It ≥ In / (Ca × Cg × Ci × Cf),
 // then volt drop. Ring finals (433.1.204): 2.5 mm² on a 30/32 A device only
 // needs Iz ≥ 20 A; anything else is treated like a radial.
-export function sizeCable({ cable = 'te', method = 'C', ib, inA, length, ambient = 30, grouped = 1, grouping = 'bunched', insulationCi = 1, bs3036 = false, lighting = false, ring = false }) {
+// v0.9: uo = 400 (line voltage) for a three-phase cable: volt drop % of 400 V.
+export function sizeCable({ cable = 'te', method = 'C', ib, inA, length, ambient = 30, grouped = 1, grouping = 'bunched', insulationCi = 1, bs3036 = false, lighting = false, ring = false, uo = UO }) {
   const c = CABLES[cable]; const m = c && c.methods[method];
   if (!m) return { ok: false, error: 'Pick a cable and installation method' };
   if (!(Number(inA) >= Number(ib))) return { ok: false, error: 'The device rating (In) must be at least the design current (Ib).' };
@@ -46,7 +47,7 @@ export function sizeCable({ cable = 'te', method = 'C', ib, inA, length, ambient
   const needFor = (s) => (ringRule(s) ? 20 : Number(inA));
   const rows = c.sizes.map((s) => {
     const it = m.amps[s];
-    const vd = length ? voltDrop({ cable, size: s, ib, length, lighting, ring }) : null;
+    const vd = length ? voltDrop({ cable, size: s, ib, length, lighting, ring, uo }) : null;
     return { size: s, it, iz: it == null ? null : r2(it * factor), needIz: needFor(s), needIt: r2(needFor(s) / factor), currentOk: it != null && it >= needFor(s) / factor, vd };
   });
   const needIz = ring && [30, 32].includes(Number(inA)) ? 20 : Number(inA);
@@ -54,7 +55,7 @@ export function sizeCable({ cable = 'te', method = 'C', ib, inA, length, ambient
   const pick = rows.find((r) => r.currentOk && (!r.vd || r.vd.pass)) || null;
   return { ok: true, factors: { ca, cg, ci, cf, total: r2(factor) }, needIz: r2(needIz), needIt: r2(needIt), rows, pick, caNote,
     assumptions: [
-      'Copper cable, single-phase 230 V, from the tables in BS 7671 Appendix 4.',
+      c.phase === 3 ? `Copper cable, three-phase ${uo} V balanced load (Ib per phase), BS 7671 Appendix 4 three-phase columns. Volt drop is a % of ${uo} V. Zs is phase to earth (Uo 230 V). ⚠ Three-phase figures typed in from memory: check them against your copy of Appendix 4.` : 'Copper cable, single-phase 230 V, from the tables in BS 7671 Appendix 4.',
       ring ? 'Ring final: with 2.5 mm² or bigger on a 30/32 A device, Iz must be at least 20 A (Regulation 433.1.204); anything else is sized like a radial (Iz ≥ In). Volt drop over the ring\u2019s total loop length, ÷ ' + (RING_DIVISOR[ring] || 4) + '.'
         : 'Overload protection by the device (In ≥ Ib, It ≥ In ÷ correction factors).',
       'Volt drop at the design current Ib against 3% for lighting or 5% for other uses, from the origin. If the board is a sub-main, add its own drop.',

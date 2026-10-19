@@ -36,7 +36,9 @@ async function tx(store, mode, fn) {
 }
 export const all = (s) => tx(s, 'readonly', (st) => st.getAll());
 export const get = (s, id) => tx(s, 'readonly', (st) => st.get(id));
-export const put = (s, v) => tx(s, 'readwrite', (st) => st.put(v));
+// v0.9: sync.js listens for saves (to send changes up after a pause).
+export const onPut = new Set();
+export const put = (s, v) => tx(s, 'readwrite', (st) => st.put(v)).then((r) => { onPut.forEach((fn) => { try { fn(s, v); } catch {} }); return r; });
 export const del = (s, id) => tx(s, 'readwrite', (st) => st.delete(id));
 export const byJob = (s, jobId) => tx(s, 'readonly', (st) => st.index('jobId').getAll(jobId));
 export const getMeta = (k) => tx('meta', 'readonly', (st) => st.get(k));

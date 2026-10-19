@@ -106,7 +106,7 @@ export const bondNone = (c) => Boolean(get(c, 'parts.bondNone'));
 const svcCsa = (svc, name) => f(`parts.bond${svc}Csa`, `${name} bonding csa (mm²)`, 'num', { showIf: (c) => bondTicked(c, svc), placeholder: (c) => (get(c, 'parts.bondCsa') ? 'Same as main: ' + get(c, 'parts.bondCsa') : ''), opt: true, indent: true });
 const PARTS = { id: 'parts', title: 'Earthing, bonding and main switch', form: 'G / J', fields: [
   f('parts.means', 'Means of earthing', 'chips', { opts: ['Distributor\u2019s facility', 'Installation earth electrode'], redraw: true }),
-  f('parts.maxDemand', 'Maximum demand', 'num'), f('parts.mdUnit', 'Unit', 'chips', { opts: ['A', 'kVA'] }),
+  f('parts.maxDemand', 'Maximum demand', 'num', { action: { label: 'Work it out from the loads', href: (c) => '#/calc/md/' + c.id } }), f('parts.mdUnit', 'Unit', 'chips', { opts: ['A', 'kVA'] }),
   f('parts.elType', 'Earth electrode type (rod, tape…)', 'text', { showIf: isElectrode }), f('parts.elLocation', 'Electrode location', 'text', { showIf: isElectrode }), f('parts.elRa', 'Electrode resistance RA (Ω)', 'num', { showIf: isElectrode }),
   f('parts.ecMat', 'Earthing conductor material'), f('parts.ecCsa', 'Earthing conductor csa (mm²)', 'num'), f('parts.ecOk', 'Earthing conductor connection verified', 'check'),
   f('parts.bondMat', 'Main bonding material', 'text', { hideIf: 'parts.bondNone' }), f('parts.bondCsa', 'Main bonding csa (mm²)', 'num', { hideIf: 'parts.bondNone', hint: 'Used for every service below unless you give it its own size.' }), f('parts.bondOk', 'Main bonding connection verified', 'check', { hideIf: 'parts.bondNone' }),

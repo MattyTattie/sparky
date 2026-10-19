@@ -40,7 +40,8 @@ export function field(cert, fd, onChange) {
   const tag = fd.type === 'area' ? 'textarea' : 'input';
   const ph = typeof fd.placeholder === 'function' ? fd.placeholder(cert) : fd.placeholder;
   const ev = fd.redraw === 'blur' ? { oninput: (e) => set(cert, fd.k, e.target.value) || changed(), onchange: (e) => upd(e.target.value) } : { oninput: (e) => upd(e.target.value) };
-  return h('label', { class: 'f' + cls }, h('span', {}, fd.label), h(tag, { type: fd.type === 'date' ? 'date' : tag === 'input' ? 'text' : null, inputmode: fd.type === 'num' ? 'decimal' : null, value: val ?? '', placeholder: ph || null, ...ev }), hint);
+  const act = fd.action ? h('a', { class: 'btn small fact', href: fd.action.href(cert) }, fd.action.label + ' \u2192') : null;
+  return h('label', { class: 'f' + cls }, h('span', {}, fd.label), h(tag, { type: fd.type === 'date' ? 'date' : tag === 'input' ? 'text' : null, inputmode: fd.type === 'num' ? 'decimal' : null, value: val ?? '', placeholder: ph || null, ...ev }), hint, act);
 }
 
 // ---------- Overview ----------

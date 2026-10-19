@@ -11,6 +11,7 @@ import { calibrationState } from './checks.js';
 import { CHECK_NOTE } from './limits.js';
 import * as backup from './backup.js';
 import * as G from './gdrive.js';
+import * as sync from './sync.js';
 import { dueList, nextFor, suggestFromCerts, dueState, icsFor } from './reminders.js';
 
 const routes = [];
@@ -30,12 +31,23 @@ export function page(title, content, { back = null, sub = '', actions = [], wide
     h('header', { class: 'top' },
       back ? h('button', { class: 'iconbtn', 'aria-label': 'Back', onclick: () => go(back) }, icon('arrowLeft', { size: 22 })) : h('span', { class: 'brandmark', 'aria-hidden': 'true' }, icon('zap', { size: 20 })),
       h('h1', {}, title, title === APP_NAME ? h('span', { class: 'beta' }, 'BETA') : null, sub ? h('span', { class: 'sub' }, sub) : null),
-      actions),
+      syncChip(), actions),
     main,
     tab ? h('nav', { class: 'bottomnav', 'aria-label': 'Main' }, NAV.map(([href, ic, label]) => h('a', { href, class: 'navi' + (href === tab ? ' on' : ''), 'aria-current': href === tab ? 'page' : null }, icon(ic, { size: 22 }), h('span', {}, label)))) : null);
   decorate(app);
   window.scrollTo(0, 0);
 }
+// v0.9: small sync status in the top bar (hidden while sync is off).
+// Tap: sign in again if needed, otherwise sync now.
+function syncChip() {
+  const st = sync.getStatus(); if (st.state === 'off') return null;
+  const [t, c] = sync.statusText(st);
+  return h('button', { id: 'syncchip', class: 'syncchip ' + c + (st.state === 'syncing' ? ' spin' : ''), 'aria-label': 'Sync: ' + t, title: st.message || t, onclick: () => (st.state === 'signin' ? sync.connect().catch((e) => toast(e.message || String(e))) : (st.state === 'error' ? go('#/settings') : sync.syncNow({ interactive: true }))) }, h('i', {}), h('span', {}, t));
+}
+sync.onStatus(() => { const old = document.getElementById('syncchip'); const top = document.querySelector('header.top'); if (!top) return; const n = syncChip(); if (old && n) old.replaceWith(n); else if (old) old.remove(); else if (n) top.insertBefore(n, top.querySelector('h1').nextSibling); });
+// Something came in from the other device: redraw (not while typing in a box).
+addEventListener('sparky:synced', () => { const a = document.activeElement; if (!(a && /INPUT|TEXTAREA|SELECT/.test(a.tagName))) render(); });
+
 // Icons on buttons by what they say (keeps the screens' code simple).
 const BTN_ICONS = [[/^\+ ?/, 'plus'], [/^Take photo/, 'camera'], [/^Add from gallery|^Add logo|^Change logo/, 'image'], [/^Back up|^Connect Google/, 'cloudUp'], [/^Restore from Drive/, 'cloudDown'], [/^Restore from file|^Import/, 'download'], [/^Save backup file/, 'download'],
   [/^Copy/, 'copy'], [/^Delete|^Remove/, 'trash'], [/^View/, 'eye'], [/^Share/, 'share'], [/^Add to calendar/, 'calendar'], [/^Say readings/, 'mic'], [/^Use wording/, 'clipboard'], [/^Make PDF|^Make the PDF|PDF$/, 'fileText'], [/^Scan/, 'scan'], [/^Customers$/, 'users'], [/^Calculators$/, 'calculator'], [/^Settings$/, 'settings'], [/^Sign/, 'pen'], [/^Disconnect/, 'x']];
@@ -76,7 +88,8 @@ route(/^\/$/, async () => {
     const shown = jobs.filter((j) => !qq || [j.title, j.siteAddress, j.sitePostcode, (cmap[j.customerId] || {}).name].join(' ').toLowerCase().includes(qq));
     fill(list, ...(shown.length ? shown.map((j) => {
       const n = certs.filter((c) => c.jobId === j.id);
-      return h('a', { class: 'row', href: '#/job/' + j.id }, h('span', { class: 'tile' }, icon('briefcase', { size: 20 })),
+      const tt = n.length ? ({ EICR: ' t-eicr', MW: ' t-mw' })[n[0].type] || '' : '';
+      return h('a', { class: 'row', href: '#/job/' + j.id }, h('span', { class: 'tile' + tt }, icon(n.length ? 'fileCheck' : 'briefcase', { size: 20 })),
         h('div', { class: 'main' }, h('div', { class: 't' }, j.title || 'Job'), h('div', { class: 's' }, jobLine(j, cmap[j.customerId]) || 'No customer yet')),
         n.length ? h('span', { class: 'pill' }, n.map((c) => (TYPES[c.type] || { short: c.type || '?' }).short).join(', ')) : null, h('span', { class: 'go' }, '›'));
     }) : [jobs.length ? emptyState('search', `No jobs match “${q}”.`) : emptyState('briefcase', 'No jobs yet. Start one, then add its certificates.', h('button', { class: 'btn primary', onclick: () => go('#/newjob') }, '+ New job'))]));
@@ -86,14 +99,38 @@ route(/^\/$/, async () => {
   page(APP_NAME, [
     !profile.name ? h('a', { class: 'notice info', href: '#/settings', style: 'display:block;text-decoration:none' }, 'First, add your details, logo and test instruments in Settings. They fill in every certificate for you.') : null,
     warns.map((w) => h('a', { class: 'notice ' + w.level, href: '#/settings', style: 'display:block;text-decoration:none' }, w.text)),
+    jobs.length ? statsStrip(jobs, certs) : null,
     dueCard(jobs, certs, cmap),
+    await conflictNotice(),
     jobs.length ? h('label', { class: 'searchbox' }, icon('search', { size: 18 }), h('input', { class: 'search', type: 'search', placeholder: 'Search jobs, customers, addresses', 'aria-label': 'Search jobs', oninput: (e) => draw(e.target.value) })) : null,
     jobs.length ? h('h2', { class: 'sec' }, `Jobs (${jobs.length})`) : null,
     list,
-    h('p', { class: 'note' }, `${APP_NAME} ${APP_VERSION}. Everything is saved on this phone as you type. `, h('a', { href: '#/settings' }, 'Back up to Google Drive'), '.'),
+    h('p', { class: 'note' }, `${APP_NAME} ${APP_VERSION}. Everything is saved on this phone as you type. `, sync.getStatus().state === 'off' ? [h('a', { href: '#/settings' }, 'Sync with your other devices through Google Drive'), '.'] : 'Synced to your Google Drive.'),
     jobs.length ? h('button', { class: 'btn primary fab', onclick: () => go('#/newjob') }, '+ New job') : null,
   ], { actions: [h('button', { class: 'iconbtn', 'aria-label': 'Settings', onclick: () => go('#/settings') }, icon('settings', { size: 20 }))] });
 });
+
+// v0.9 look: three quick numbers at the top of the jobs page.
+function statsStrip(jobs, certs) {
+  const open = jobs.filter((j) => j.status !== 'done' && j.status !== 'closed').length;
+  const drafts = certs.filter((c) => c.status !== 'issued').length;
+  const due = dueList(jobs, certs).length;
+  return h('div', { class: 'stats' },
+    h('div', { class: 'stat' }, h('b', {}, String(open)), h('span', {}, open === 1 ? 'Open job' : 'Open jobs')),
+    h('div', { class: 'stat' }, h('b', {}, String(drafts)), h('span', {}, drafts === 1 ? 'Draft cert' : 'Draft certs')),
+    h('div', { class: 'stat' + (due ? ' warn' : '') }, h('b', {}, String(due)), h('span', {}, 'Re-tests due')));
+}
+
+// v0.9: a job changed on both devices: say which copy is which.
+async function conflictNotice() {
+  const l = await sync.conflictsToShow(); if (!l.length) return null;
+  const box = h('div', { class: 'notice amber conflict' },
+    h('b', {}, l.length === 1 ? 'A job was changed on both devices' : `${l.length} jobs were changed on both devices`),
+    h('div', {}, 'Nothing was lost: the newest is kept as normal, and the other version is saved as its own job marked \u201cconflict copy\u201d. Check it, then delete whichever you don\u2019t need.'),
+    h('ul', {}, l.map((x) => h('li', {}, h('a', { href: '#/job/' + x.copyId }, x.copyTitle)))),
+    h('button', { class: 'btn small', onclick: async () => { await sync.dismissConflicts(); box.remove(); } }, 'Got it'));
+  return box;
+}
 
 // Inspections due in the next 90 days (or overdue), from each job's next inspection date.
 function dueCard(jobs, certs, cmap) {
@@ -182,8 +219,8 @@ route(/^\/job\/([^/]+)$/, async (id) => {
     catch (e) { toast(e.message || 'Backup failed'); btn.disabled = false; btn.textContent = 'Back up to Drive'; }
   };
   const delJob = async () => {
-    if (!(await confirmBox('Delete this job?', `Deletes the job, its ${certs.length} certificate(s) and ${photos.length} photo(s) from this phone. Anything already in Google Drive stays there.`, 'Delete', 'warn'))) return;
-    for (const c of certs) await db.del('certs', c.id); for (const f of files) await db.del('files', f.id); await db.del('jobs', id); go('#/');
+    if (!(await confirmBox('Delete this job?', `Deletes the job, its ${certs.length} certificate(s) and ${photos.length} photo(s) from this phone. Anything already in Google Drive stays there (sync won\u2019t bring it back).`, 'Delete', 'warn'))) return;
+    for (const c of certs) await db.del('certs', c.id); for (const f of files) await db.del('files', f.id); await db.del('jobs', id); await sync.recordDelete(id); go('#/');
   };
   const { dcPlansCard } = await import('./calcdcplan.js'); // v0.6: optional job.dcPlans
   const status = (c) => c.status === 'issued' ? h('span', { class: 'pill green' }, 'Issued') : h('span', { class: 'pill' }, 'Draft');
@@ -280,9 +317,24 @@ route(/^\/settings$/, async () => {
 
   // Backup
   const driveBox = h('div');
+  const syncBox = h('div', { class: 'syncbox' });
+  const drawSync = async () => {
+    const c = await sync.getConfig(); const st = sync.getStatus(); const [t, col] = sync.statusText(st);
+    fill(syncBox,
+      h('h3', {}, 'Sync between my phone and Mac'),
+      h('p', { class: 'note' }, 'Sign in once on each device. Every change goes up to your Drive within about 20 seconds, and the other device picks it up when you open it or come back to it. If a job is changed on both before they catch up, the newest is kept and the other is saved as a \u201cconflict copy\u201d job.'),
+      c.enabled ? h('div', { class: 'syncline' }, h('span', { class: 'syncchip ' + col }, h('i', {}), h('span', {}, t)), G.accountHint() ? h('span', { class: 'note' }, G.accountHint()) : null) : null,
+      c.enabled && st.message ? h('div', { class: 'notice ' + (st.state === 'error' ? 'red' : 'amber') }, st.message) : null,
+      h('div', { class: 'btns full' },
+        c.enabled ? [
+          st.state === 'signin' ? h('button', { class: 'btn primary', onclick: async (e) => { e.currentTarget.disabled = true; try { await sync.connect(); } catch (err) { say('Couldn\u2019t sign in to Google. ' + (err.message || err), 'red'); } drawSync(); } }, 'Sign in to Google') : h('button', { class: 'btn primary', onclick: async (e) => { e.currentTarget.disabled = true; await sync.syncNow({ interactive: true }); drawSync(); } }, 'Sync now'),
+          h('button', { class: 'btn', onclick: async () => { await sync.disconnect(); drawSync(); } }, 'Turn sync off')]
+        : h('button', { class: 'btn primary', onclick: async (e) => { const b = e.currentTarget; b.disabled = true; b.textContent = 'Signing in…'; try { await sync.connect(); } catch (err) { say('Couldn\u2019t switch sync on. ' + (err.message || err), 'red'); } drawSync(); drawDrive(); } }, 'Turn on sync (sign in to Google)')));
+  };
+  let first = true; const unsub = sync.onStatus(() => { if (!first && !syncBox.isConnected) return unsub(); first = false; drawSync(); });
   const drawDrive = () => {
     const signed = G.hasToken() || G.accountHint();
-    fill(driveBox, 
+    fill(driveBox, syncBox, h('h3', {}, 'Backup'),
       h('p', { class: 'note' }, 'Each job gets its own folder in your Google Drive (“' + DRIVE_ROOT + '”), with its photos, PDFs and a data file. The app can only see files it made itself. Nothing is shared with anyone.'),
       signed ? h('p', {}, 'Connected' + (G.accountHint() ? ' as ' + G.accountHint() : '') + '.') : null,
       h('label', { class: 'check' }, h('input', { type: 'checkbox', checked: !!p.autoBackup, onchange: (e) => { p.autoBackup = e.target.checked; saveP(); } }), 'Back up a job automatically when I leave it (needs signal)'),
@@ -340,7 +392,7 @@ route(/^\/settings$/, async () => {
     h('div', { class: 'card' }, h('h2', {}, 'Logo'), logoBox),
     h('div', { class: 'card' }, h('h2', {}, 'Signature'), sigBox),
     h('h2', { class: 'sec' }, 'Test instruments'), h('p', { class: 'note' }, 'Fills the instruments box on every new certificate. You\u2019ll get a warning a month before calibration is due, and when it\u2019s out of date.'), insBox,
-    h('div', { class: 'card' }, h('h2', {}, 'Google Drive backup'), G.isConfigured() ? driveBox : h('p', { class: 'note' }, 'Not set up in this build.')),
+    h('div', { class: 'card', id: 'drive' }, h('h2', {}, 'Google Drive'), G.isConfigured() ? driveBox : h('p', { class: 'note' }, 'Not set up in this build.')),
     h('div', { class: 'card' }, h('h2', {}, 'Backup file'), h('p', { class: 'note' }, 'Everything in one file you can keep anywhere. Restoring adds to what\u2019s here; nothing is deleted.'),
       h('div', { class: 'btns full' },
         h('button', { class: 'btn', onclick: async () => { const b = await backup.exportAll(); await shareOrDownload(b, `${APP_SLUG}-backup-${new Date().toISOString().slice(0, 10)}.json`); } }, 'Save backup file'),
