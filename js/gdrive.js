@@ -85,7 +85,7 @@ async function getTokenClient() {
         const p = pending; pending = null;
         if (!p) return;
         clearTimeout(p.timer);
-        if (resp.error) return p.reject(new AuthError(resp.error_description || resp.error));
+        if (resp.error) return p.reject(resp.error === 'access_denied' ? new AuthError('Google sign-in was cancelled, or access to Drive wasn\u2019t allowed. Tap the button again and tick “See, edit, create… Drive files”.') : new AuthError('Google sign-in failed: ' + (resp.error_description || resp.error)));
         const t = { accessToken: resp.access_token, expiresAt: Date.now() + (Number(resp.expires_in) || 3600) * 1000 };
         try { localStorage.setItem(TOKEN_KEY, JSON.stringify(t)); } catch {}
         p.resolve(t.accessToken);
@@ -94,20 +94,34 @@ async function getTokenClient() {
         const p = pending; pending = null;
         if (!p) return;
         clearTimeout(p.timer);
-        p.reject(new AuthError(err && err.type === 'popup_closed' ? 'Sign-in was cancelled.' : 'Google sign-in did not finish.'));
+        p.reject(signInError(err && err.type));
       },
     });
   }
   return tokenClient;
 }
 
-function request(opts, timeoutMs = 0) {
-  return getTokenClient().then((client) => new Promise((resolve, reject) => {
-    if (pending) { clearTimeout(pending.timer); pending.reject(new AuthError('Google sign-in did not finish.')); }
-    pending = { resolve, reject, timer: timeoutMs ? setTimeout(() => { if (pending && pending.reject === reject) { pending = null; reject(new AuthError('Google sign-in did not finish.')); } }, timeoutMs) : 0 };
-    client.requestAccessToken(opts);
-  }));
+// v0.5: clearer messages for each way sign-in can fail (shown on screen).
+export class PopupBlockedError extends AuthError { constructor() { super('The Google sign-in window was blocked by the browser. Allow pop-ups for this site (Safari: Settings → Websites → Pop-up Windows; Chrome: the icon at the right of the address bar), then tap the button again.'); this.name = 'PopupBlockedError'; } }
+function signInError(type) {
+  if (type === 'popup_failed_to_open') return new PopupBlockedError();
+  if (type === 'popup_closed') return new AuthError('Sign-in was cancelled (the Google window was closed).');
+  return new AuthError('Google sign-in did not finish' + (type ? ` (${type})` : '') + '. Tap the button to try again.');
 }
+// v0.5: browsers (Safari on the Mac especially) only let the sign-in window
+// open if it's asked for straight away inside the tap. So when Google's
+// script is already loaded, requestAccessToken is called right now, in the
+// same tick as the tap, not after an await. warmUp() loads it early.
+function ask(client, opts, timeoutMs, resolve, reject) {
+  if (pending) { clearTimeout(pending.timer); pending.reject(new AuthError('Google sign-in did not finish.')); }
+  pending = { resolve, reject, timer: timeoutMs ? setTimeout(() => { if (pending && pending.reject === reject) { pending = null; reject(new AuthError('Google sign-in didn\u2019t come back. If no Google window appeared, pop-ups may be blocked for this site: allow them and try again.')); } }, timeoutMs) : 0 };
+  try { client.requestAccessToken(opts); } catch (e) { clearTimeout(pending.timer); pending = null; reject(new AuthError('Google sign-in could not start: ' + (e.message || e))); }
+}
+function request(opts, timeoutMs = 0) {
+  if (tokenClient) return new Promise((resolve, reject) => ask(tokenClient, opts, timeoutMs, resolve, reject));
+  return getTokenClient().then((client) => new Promise((resolve, reject) => ask(client, opts, timeoutMs, resolve, reject)));
+}
+export const isReady = () => Boolean(tokenClient);
 
 // A quiet refresh: no account chooser, no consent screen (Google only shows
 // something if it really has to). Only call it straight after a tap.
@@ -131,8 +145,9 @@ export async function getToken({ interactive = false, email = '', choose = false
     if (hint && canOpenWindow() && navigator.userActivation) return refreshSilently(hint);
     throw new AuthError();
   }
-  // From a tap: no time limit (you may need to pick an account or agree).
-  return request(hint ? { prompt: '', login_hint: hint, hint } : { prompt: 'select_account' });
+  // From a tap: a long time limit (you may need to pick an account or agree),
+  // so a window that never comes back can't leave the button doing nothing.
+  return request(hint ? { prompt: '', login_hint: hint, hint } : { prompt: 'select_account' }, 180_000);
 }
 
 export async function revoke() {
@@ -210,7 +225,7 @@ export async function list(query) {
 export async function readJSON(id) {
   const res = await call(`${API}/files/${id}?alt=media&supportsAllDrives=true`, { raw: true });
   const text = await res.text();
-  try { return JSON.parse(text || 'null'); } catch { throw new Error('A sync file in Drive is damaged.'); }
+  try { return JSON.parse(text || 'null'); } catch (e) { throw new Error('A backup file in Drive is damaged and couldn\u2019t be read (' + (e.message || 'bad JSON') + ').'); }
 }
 // Writing the shared file. v13: a "resumable" upload, which Google
 // recommends for anything over 5 MB and for phones: step 1 asks Drive for

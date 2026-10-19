@@ -124,6 +124,7 @@ export function sectionsFor(type) {
     { id: 'inspections', title: 'Schedule of inspections', form: 'H', special: 'inspections' },
     { id: 'comments', title: 'Comments on existing installation', form: 'I', fields: [f('comments', 'Comments (see Regulation 644.1.2)', 'area')] },
     { id: 'boards', title: 'Circuits and test results', form: 'Schedules', special: 'boards' },
+    { id: 'bonding', title: 'Supplementary bonding', form: 'Schedule', special: 'bonding' },
     { id: 'sign', title: 'Sign', form: 'C', special: 'sign' },
   ];
   if (type === 'EICR') return [
@@ -151,6 +152,7 @@ export function sectionsFor(type) {
     SUPPLY, PARTS,
     { id: 'inspections', title: 'Schedule of inspection', form: 'Schedule', special: 'inspections' },
     { id: 'boards', title: 'Circuits and test results', form: 'Schedules', special: 'boards' },
+    { id: 'bonding', title: 'Supplementary bonding', form: 'Schedule', special: 'bonding' },
     { id: 'sign', title: 'Declaration and sign', form: 'G', special: 'sign', fields: [
       f('people.inspector.name', 'Inspected and tested by'), f('people.inspector.for', 'For/on behalf of'), f('people.inspector.position', 'Position'), f('people.inspector.address', 'Address', 'area'),
       f('eicr.authoriser.name', 'Report authorised for issue by'), f('eicr.authoriser.for', 'For/on behalf of'), f('eicr.authoriser.position', 'Position'),
@@ -177,11 +179,19 @@ export function sectionsFor(type) {
   ];
 }
 
+// v0.5: supplementary bonding (optional, so older certificates and backups
+// still load): cert.bonding = [{ id, location, parts, csa, material, reading, verified }],
+// cert.bondingNA = true when none is installed/needed.
+export const blankBond = (id = '') => ({ id, location: '', parts: '', csa: '4', material: 'Copper', reading: '', verified: false });
+export const BOND_LOCATIONS = ['Bathroom', 'Shower room', 'En-suite', 'Kitchen', 'Utility room', 'Boiler / airing cupboard', 'Swimming pool / hot tub', 'Sauna', 'Agricultural building', 'Other'];
+export const BOND_PARTS = ['Hot and cold water pipes', 'Central heating pipes', 'Radiator / towel rail', 'Metal bath / shower tray', 'Waste pipe (metal)', 'CPCs of circuits in the location', 'Structural steel', 'Gas pipe'];
+
 // How complete a section is (for the progress ticks).
 export function sectionDone(cert, s) {
   if (s.special === 'inspections') { const v = Object.values(cert.inspections || {}); return v.length && v.every(Boolean); }
   if (s.special === 'boards') return (cert.boards || []).some((b) => b.circuits.length) && cert.boards.every((b) => b.circuits.every((c) => c.spare || c.zs || c.desc === 'SPARE'));
   if (s.special === 'observations') return true;
+  if (s.special === 'bonding') return Boolean(cert.bondingNA || (cert.bonding || []).length || cert.status === 'issued');
   if (s.special === 'sign') return Boolean(cert.sigs && Object.values(cert.sigs).some((x) => x && x.img));
   if (s.special === 'mwcircuit') return Boolean(cert.mw.circuit.desc && cert.mw.circuit.zs);
   const need = (s.fields || []).filter((x) => x.type !== 'check' && !x.hideIf).slice(0, 3);

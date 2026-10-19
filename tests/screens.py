@@ -61,10 +61,10 @@ async def main():
         await shot(page, 'p04-schedule-cards-full.png', '#/cert/cert-eic/b/0', full=True)
         # observation picker + template picker modals
         await shot(page, 'p10-observations.png', '#/cert/cert-eicr/s/observations')
-        await page.click('text=+ Add observation'); await page.wait_for_timeout(400); await page.screenshot(path=os.path.join(OUT, 'p18-observation-picker.png'))
+        await page.click('button:has-text("Add observation")'); await page.wait_for_timeout(400); await page.screenshot(path=os.path.join(OUT, 'p18-observation-picker.png'))
         await page.keyboard.press('Escape'); await page.evaluate("document.querySelectorAll('.modal-bg').forEach(m=>m.remove())")
         await page.evaluate("location.hash='#/cert/cert-eic/b/0'"); await page.wait_for_timeout(500)
-        await page.click('text=+ Circuit'); await page.wait_for_timeout(400); await page.screenshot(path=os.path.join(OUT, 'p19-templates.png'))
+        await page.click('button:has-text("Circuit") >> nth=0'); await page.wait_for_timeout(400); await page.screenshot(path=os.path.join(OUT, 'p19-templates.png'))
         await page.evaluate("document.querySelectorAll('.modal-bg').forEach(m=>m.remove())")
         # landscape
         await page.set_viewport_size({'width': 915, 'height': 412}); await page.wait_for_timeout(300)

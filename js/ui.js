@@ -1,6 +1,8 @@
 // =====================================================================
 // ui.js — tiny helpers for building screens (no framework).
 // =====================================================================
+import { icon } from './icons.js';
+export { icon };
 export function h(tag, attrs, ...kids) {
   const el = document.createElement(tag);
   for (const [k, v] of Object.entries(attrs || {})) {
@@ -66,3 +68,9 @@ export async function shareOrDownload(blob, name, text = '') {
 }
 // Replace an element's contents (arrays flattened, null/false skipped).
 export function fill(el, ...kids) { el.replaceChildren(...kids.flat(Infinity).filter((k) => k != null && k !== false).map((k) => (k instanceof Node ? k : document.createTextNode(String(k))))); return el; }
+// v0.5: a friendly empty state: icon + one line + an optional action.
+export const emptyState = (ic, text, action = null) => h('div', { class: 'empty2' }, h('div', { class: 'emptyic' }, icon(ic, { size: 28 })), h('p', {}, text), action);
+// v0.5: grey placeholder rows while a page loads (instead of a blank screen).
+export const skeleton = (n = 3) => h('div', { class: 'list skel', 'aria-busy': 'true', 'aria-label': 'Loading' }, Array.from({ length: n }, () => h('div', { class: 'row' }, h('div', { class: 'main' }, h('div', { class: 'sk sk1' }), h('div', { class: 'sk sk2' })))));
+// A button/link label with an icon in front.
+export const withIcon = (ic, text) => [icon(ic, { size: 18 }), h('span', {}, text)];

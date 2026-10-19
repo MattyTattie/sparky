@@ -1,7 +1,7 @@
 // pdfview.js — look at a PDF inside the app before you share or print it.
 // Android's web view can't show PDFs itself, so pages are drawn with pdf.js
 // (vendor/pdfjs, works offline). Nothing is sent anywhere.
-import { h, toast, shareOrDownload } from './ui.js';
+import { h, toast, shareOrDownload, icon } from './ui.js';
 
 let lib = null;
 async function pdfjs() {
@@ -19,7 +19,7 @@ export async function viewPdf(blob, name = 'certificate.pdf', { shareText = '' }
     h('div', { class: 'pdfbar' },
       h('button', { class: 'pdfbtn', 'aria-label': 'Close', onclick: close }, '✕'),
       h('div', { class: 'pdfname' }, name, count),
-      h('button', { class: 'pdfbtn', 'aria-label': 'Zoom', onclick: () => { if (!doc) return; zoom = zoom === 1 ? 2 : 1; draw(); } }, '🔍'),
+      h('button', { class: 'pdfbtn', 'aria-label': 'Zoom', onclick: () => { if (!doc) return; zoom = zoom === 1 ? 2 : 1; draw(); } }, icon('search', { size: 20 })),
       h('button', { class: 'pdfbtn wide', onclick: async () => { const r = await shareOrDownload(blob, name, shareText); if (r === 'downloaded') toast('Saved to your downloads'); } }, 'Share / print')),
     pages);
   document.body.append(bg); document.body.classList.add('noscroll');
@@ -40,7 +40,7 @@ export async function viewPdf(blob, name = 'certificate.pdf', { shareText = '' }
   };
   try {
     const { getDocument } = await pdfjs();
-    doc = await getDocument({ data: new Uint8Array(await blob.arrayBuffer()) }).promise;
+    doc = await getDocument({ data: new Uint8Array(await blob.arrayBuffer()), isEvalSupported: false }).promise;
     count.textContent = ` · ${doc.numPages} page${doc.numPages === 1 ? '' : 's'}`;
     await draw();
   } catch (e) {

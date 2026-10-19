@@ -80,8 +80,9 @@ export async function listDriveJobs() {
 }
 export async function restoreDriveJob(folderId) {
   const files = await G.list(`'${folderId}' in parents and trashed = false`);
-  const j = files.find((f) => f.name === 'job.json'); if (!j) throw new Error('No job.json in that folder');
+  const j = files.find((f) => f.name === 'job.json'); if (!j) throw new Error('No job.json data file in that Drive folder (the backup didn\u2019t finish). Back it up again on the other device.');
   const d = await G.readJSON(j.id);
+  if (!d || d.app !== APP_SLUG || !d.job || !d.job.id) throw new Error('The job.json in that folder isn\u2019t a Sparky backup the app can read.');
   if (d.customer) { const c = await db.get('customers', d.customer.id); if (!c) await db.put('customers', d.customer); }
   // Don't overwrite a newer copy of the job already on this device.
   const curJob = await db.get('jobs', d.job.id);

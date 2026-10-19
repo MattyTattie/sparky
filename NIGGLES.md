@@ -1,5 +1,16 @@
 # Sparky — niggles and update lists
 
+## [BUILT v0.5 on branch `v0.5`, 19 Oct 2026 — NOT LIVE] Batch agreed 18–19 Oct 2026 (Matthew) — screenshots in /workspace/sparky-shots/v0.5, publish only on his OK
+- [built] Security fixes (below) and Restore from Drive messages.
+- [built] Supplementary bonding schedule (location, csa, parts bonded, continuity) on EIC/EICR, printed as a continuation sheet.
+- [built] Continuation sheets labelled with DB ref, sheet x of y, certificate number and Page X of Y; schedules grouped (all circuit details, then all test results).
+- [built] PDF text never overlaps: shrink → wrap at spaces/hyphens → ellipsis; fields grow; checked on every page with tests/pdf_overlap.py.
+- [built] 3-phase 400 V in the cable sizer (4-core SWA, singles). Not done: 3-phase in "Check it".
+- [built] "Paid app" polish: icons, bottom nav, empty states, skeletons, press states, cleaner PDF header/footer.
+- [built] Android app v2 (blue status bar, white splash), output/Sparky-v2.apk, same key.
+- Matthew to check: HANDOFF.md "v0.5 — values to check" (3-phase tables especially).
+- Later maybe: 3-phase in "Check it"; 3-phase on the circuit schedule (per-phase Zs/PFC columns).
+
 ## [BUILT v0.4 on branch `v0.4`, 18 Oct 2026 — NOT LIVE] Batch agreed 17–18 Oct 2026 (Matthew) — screenshots in /workspace/sparky-shots/v0.4, publish only on his OK
 - [built] New look: clean white + electric blue, rounded cards (restyle branch 7ff61ca merged in; cache sparky-v0.4.0, manifest theme #2952ff, APP_VERSION 0.4.0 beta). Android app splash/status bar stay navy until the APK is rebuilt.
 - [built] Proper ring final check when "Ring final circuit" is ticked: r1/rn/r2 boxes only show when ticked; r1 vs rn within 0.05 Ω; r2 ≈ r1 × live/CPC csa (1.67 for 2.5/1.5); expected R1+R2 = (r1+r2)/4 and L–N = (r1+rn)/4; ring length from r1; ring volt drop (OSG: 20 A at far point + 12 A spread); expected Zs = Zdb + (r1+r2)/4.
@@ -24,3 +35,10 @@
 - Reference method (col 4): drop-down of BS 7671 Appendix 4 reference methods (A, B, C, D, E, F, G, 100–103 for insulation/T&E in walls/ceilings etc.) with short plain descriptions.
 - Cable picker: choose "Twin & earth (6242Y)" then a size drop-down 1.0–16 mm² that auto-fills live csa AND the correct CPC csa (1.0/1.0, 1.5/1.0, 2.5/1.5, 4/1.5, 6/2.5, 10/4, 16/6). Also "3-core & earth (6243Y)" with its correct CPC sizes (verify against maker data before coding), and 3-core SWA (from calculator list). Should also feed max Zs / R1+R2 checks.
 - Done in v0.3. Flagged in the UI source notes: 20 °C uses the Table 4B1 25 °C factor; SWA armour resistance is from maker data; 6243Y 2.5 mm² CPC is filled as 1.0 (makers differ); 3-core SWA is rated with the 2-core single-phase columns.
+- [built v0.5] Restore from Drive: show a clear message on any failure (pop-up blocked, no backups found, sign-in failed) instead of doing nothing. Mac restore "did nothing" 18 Oct then worked; cause not confirmed (likely the sign-in pop-up being asked for after a wait, now asked for straight in the tap).
+
+## Security fixes (review 18 Oct 2026)
+- [built v0.5] pdf.js: isEvalSupported:false (same as Hearth).
+- [built v0.5] Note that voice entry uses Google speech service.
+- [built v0.5] Add Content-Security-Policy meta (tested: sign-in script, Drive mock, pdf.js, OCR).
+- Later maybe: separate Google OAuth client for Sparky.

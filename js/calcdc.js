@@ -23,7 +23,7 @@ route(/^\/calc\/dc$/, async () => {
     lab('Conductor temperature for the resistance'), chips('temp', [['20', '20 °C'], ['50', '50 °C'], ['70', '70 °C'], ['90', '90 °C']], 'small'));
 
   const drawForm = () => fill(form,
-    chips('mode', [['pv', '☀ Solar PV string'], ['battery', '🔋 Battery leads']]),
+    chips('mode', [['pv', 'Solar PV string'], ['battery', 'Battery leads']]),
     v.mode === 'pv' ? [
       h('div', { class: 'card' }, h('h2', {}, 'Panels (from the data sheet, STC)'),
         h('div', { class: 'grid3' }, num('n', 'Panels in the string'), num('voc', 'Voc (V)'), num('vmp', 'Vmp (V)')),

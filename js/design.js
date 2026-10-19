@@ -4,7 +4,7 @@
 // passes current, volt drop, Zs and adiabatic). Plain JS, tested by
 // tests/design.test.mjs. Every table comes from cables.js / limits.js.
 // =====================================================================
-import { CABLES, CABLE_PICKS, CABLE_TEMP, CG, CF_BS3036, SINGLES_CPC, ARMOUR_CSA, K_VALUES } from './cables.js';
+import { CABLES, CABLE_PICKS, CABLE_TEMP, CG, CF_BS3036, SINGLES_CPC, ARMOUR_CSA, K_VALUES, UL } from './cables.js';
 import { UO, CMIN, MAX_ZS, deviceById, ratingsFor, maxZs, INSTANT_MULT, MCB_INSTANT_T, MCB_CLASS3_I2T, RCD_TIMES } from './limits.js';
 import { ambientFactor, r1r2At20, RING_DIVISOR } from './calc.js';
 import { TEMP_MULT } from './cables.js';
@@ -18,7 +18,7 @@ const fmt = (n) => String(r2(n));
 export function kFor({ cable, cpcMode = 'core', separate = false }) {
   const pick = CABLE_PICKS[cable];
   const calc = pick ? pick.calc : cable;
-  const armour = cpcMode === 'armour' || (pick && pick.cpc === 'armour') || calc === 'swa' || calc === 'swaX';
+  const armour = cpcMode === 'armour' || (pick && pick.cpc === 'armour') || calc === 'swa' || calc === 'swaX' || calc === 'swa4' || calc === 'swa4X';
   const hot = (CABLE_TEMP[calc] || 70) === 90;
   if (armour) return { key: hot ? 'armour90' : 'armour70', ...K_VALUES[hot ? 'armour90' : 'armour70'], armour: true };
   if (separate) return { key: hot ? 'sep90' : 'sep70', ...K_VALUES[hot ? 'sep90' : 'sep70'] };
@@ -28,7 +28,8 @@ export function kFor({ cable, cpcMode = 'core', separate = false }) {
 export function cpcAreaFor(cable, size, cpcMode = 'core') {
   const c = CABLES[cable]; if (!c) return null;
   if (cable === 'te' || cable === 'te3') return { cpc: (cable === 'te3' ? CABLE_PICKS.te3 : CABLE_PICKS.te).sizes[size] ?? null };
-  if (cable === 'singles') return { cpc: SINGLES_CPC[size] ?? null };
+  if (cable === 'singles' || cable === 'singles3') return { cpc: SINGLES_CPC[size] ?? null };
+  if (c.cores === 4) { const a = ARMOUR_CSA[4][size]; return { cpc: 'armour', area: a ?? null }; }
   if (c.cores === 2 || cpcMode === 'armour') { const a = (ARMOUR_CSA[c.cores || 2] || ARMOUR_CSA[2])[size]; return { cpc: 'armour', area: a ?? null }; }
   return { cpc: Number(size) };
 }
@@ -85,18 +86,25 @@ export const LOAD_TYPES = [
   ['motor', 'Motor / pump / compressor (inrush)'],
   ['ev', 'EV charger'],
 ];
-export function designCurrent({ load, unit = 'A', pf = 1, uo = UO }) {
+// v0.5: phase 3 → balanced three-phase load, Ib = P ÷ (√3 × UL × pf) per line.
+export function designCurrent({ load, unit = 'A', pf = 1, uo = UO, phase = 1, ul = UL }) {
   const v = Number(load); if (!(v > 0)) return null;
-  return unit === 'kW' ? r2((v * 1000) / (uo * (Number(pf) || 1))) : r2(v);
+  if (unit !== 'kW') return r2(v);
+  return Number(phase) === 3 ? r2((v * 1000) / (Math.sqrt(3) * ul * (Number(pf) || 1))) : r2((v * 1000) / (uo * (Number(pf) || 1)));
 }
 
 export function sizeCircuit(o) {
   const {
     load, unit = 'kW', pf = 1, loadType = 'general', length, cable = 'te', cpcMode = 'core', method = 'C',
     ambient = 30, grouped = 1, grouping = 'bunched', ci = 1, ze = 0.35, device = 'rcbo', type = 'auto', time = 0.4,
-    vdPct = null, ringLoad = 'spread', bka = 6, separateCpc = false, uo = UO,
+    vdPct = null, ringLoad = 'spread', bka = 6, separateCpc = false, uo = UO, phase = 1, ul = UL,
   } = o;
-  const ib = designCurrent({ load, unit, pf, uo });
+  const three = Number(phase) === 3;
+  if (three && !(CABLES[cable] && CABLES[cable].phase === 3)) return { ok: false, error: 'Pick a three-phase cable (4-core SWA or singles).' };
+  if (!three && CABLES[cable] && CABLES[cable].phase === 3) return { ok: false, error: 'That cable is for three-phase. Pick a single-phase cable or switch to 3-phase.' };
+  if (three && loadType === 'ring') return { ok: false, error: 'Ring finals are single-phase. Pick another load type for 3-phase.' };
+  const ib = designCurrent({ load, unit, pf, uo, phase, ul });
+  const vref = three ? ul : uo; // volt drop % is of 400 V line voltage on 3-phase
   if (ib == null) return { ok: false, error: 'Enter the load (kW or amps).' };
   const L = Number(length);
   if (!(L > 0)) return { ok: false, error: 'Enter the length of the cable run.' };
@@ -117,7 +125,7 @@ export function sizeCircuit(o) {
   } else {
     inA = ratings.find((r) => r >= ib - 1e-9);
     if (!inA) return { ok: false, ib, error: `No ${d.label.split(' (')[0]} ${curve} rating is big enough for ${ib} A.` };
-    steps.push(`Design current Ib = ${ib} A${unit === 'kW' ? ` (${load} kW ÷ ${uo} V${Number(pf) !== 1 ? ' ÷ pf ' + pf : ''})` : ''}, so the next breaker size up is ${inA} A (In ≥ Ib).`);
+    steps.push(`Design current Ib = ${ib} A${three ? ' per phase' : ''}${unit === 'kW' ? (three ? ` (${load} kW ÷ (√3 × ${ul} V${Number(pf) !== 1 ? ' × pf ' + pf : ''}))` : ` (${load} kW ÷ ${uo} V${Number(pf) !== 1 ? ' ÷ pf ' + pf : ''})`) : ''}, so the next breaker size up is ${inA} A${three ? ' triple-pole' : ''} (In ≥ Ib).`);
   }
   const limit = vdPct != null && vdPct !== '' ? Number(vdPct) : loadType === 'lighting' ? 3 : 5;
   // correction factors
@@ -135,7 +143,7 @@ export function sizeCircuit(o) {
   const rows = cab.sizes.filter((s) => !ring || s >= 2.5).map((s) => {
     const it = m.amps[s]; const needIt = needIz(s) / factor;
     const cur = { pass: it != null && it >= needIt - 1e-9, it: it ?? null, iz: it == null ? null : r2(it * factor), needIz: needIz(s), needIt: r2(needIt) };
-    const mv = cab.mvam[s]; const v = (mv * ib * L) / 1000 / div; const pct = (v / uo) * 100;
+    const mv = cab.mvam[s]; const v = (mv * ib * L) / 1000 / div; const pct = (v / vref) * 100;
     const vd = { pass: pct <= limit + 1e-9, volts: r2(v), pct: r2(pct), limit, mvam: mv, div };
     const cp = cpcAreaFor(cable, s, cpcMode);
     const r20 = cp && cp.cpc != null ? r1r2At20({ live: s, cpc: cp.cpc, length: L, cores: cab.cores || 2, ring: !!ring }) : null;
@@ -168,14 +176,14 @@ export function sizeCircuit(o) {
     if (big.z.pass === false) steps.push('Zs is too high at every size: try a smaller breaker, a lower Ze, or RCD fault protection (check Chapter 41).');
   }
   const notes = [
-    'Single-phase 230 V, copper cables, BS 7671 Appendix 4 tables. Check against your own copy.',
+    three ? `Three-phase ${ul} V, balanced load, copper cables. Ib = P ÷ (√3 × ${ul} V × pf). Volt drop uses the three-phase mV/A/m and is a % of ${ul} V. Zs and the adiabatic check are phase to earth at Uo ${uo} V, using one phase conductor and the CPC${cab.cores === 4 && /swa/.test(cable) ? ' (the armour)' : ''}. Neutral current taken as nil (balanced, no harmonics).` : 'Single-phase 230 V, copper cables, BS 7671 Appendix 4 tables. Check against your own copy.',
     `Current: In ≥ Ib, then tabulated It ≥ In ÷ (Ca ${ca} × Cg ${cg} × Ci ${Number(ci) || 1}${cf !== 1 ? ' × 0.725 BS 3036' : ''}) = ÷ ${r2(factor)}.${caNote ? ' ' + caNote : ''}`,
     ring ? `Ring: Iz ≥ 20 A on 2.5 mm² or bigger (433.1.204); volt drop and R1+R2 use the ring\u2019s loop length ÷ ${div === 8 ? '8 (load spread round the ring)' : '4 (load at the far point)'} for volt drop and ÷ 4 for R1+R2.` : null,
-    `Volt drop at Ib against ${limit}% of ${uo} V from the board. If it\u2019s a sub-board, add the sub-main\u2019s drop.`,
+    `Volt drop at Ib against ${limit}% of ${vref} V from the board. If it\u2019s a sub-board, add the sub-main\u2019s drop.`,
     `Zs = Ze ${ze} Ω + (R1+R2) at 20 °C × ${mult} for a hot cable (${TEMP_MULT.source}).`,
     `Adiabatic (543.1.3): S = √(I²t) ÷ k, k = ${k.k} (${k.label}). I = ${uo} V ÷ Zs at the end of the run.`,
     k.armour ? `⚠ Armour area: ${ARMOUR_CSA.source}` : null,
-    'Doesn\u2019t check diversity, harmonics, 3-phase or the cable\u2019s short-circuit rating at the origin.',
+    three ? '⚠ Three-phase tables typed in from memory of Appendix 4 (and maker\u2019s armour data): check them. Doesn\u2019t check diversity, unbalance, harmonics (triplen currents in the neutral) or the cable\u2019s short-circuit rating.' : 'Doesn\u2019t check diversity, harmonics or the cable\u2019s short-circuit rating at the origin.',
   ].filter(Boolean);
-  return { ok: true, ib, inA, curve, device: d.id, limit, factors: { ca, cg, ci: Number(ci) || 1, cf, total: r2(factor) }, rows, pick, reasons, steps, notes, max, k, ring };
+  return { ok: true, phase: three ? 3 : 1, vref, ib, inA, curve, device: d.id, limit, factors: { ca, cg, ci: Number(ci) || 1, cf, total: r2(factor) }, rows, pick, reasons, steps, notes, max, k, ring };
 }

@@ -100,7 +100,7 @@ function boardTools(cert, b, bi) {
   return h('div', {},
     h('div', { class: 'btns' },
       h('button', { class: 'btn primary small', onclick: () => addCircuit(cert, b, bi) }, '+ Circuit'),
-      h('a', { class: 'btn small', href: `#/cert/${cert.id}/b/${bi}/scan` }, '📷 Scan board'),
+      h('a', { class: 'btn small', href: `#/cert/${cert.id}/b/${bi}/scan` }, 'Scan board'),
       bulk('irLL', '>999', 'IR L-L >999'), bulk('irLE', '>999', 'IR L-E >999'), bulk('pol', '✓', 'Polarity ✓'), bulk('rcdBtn', '✓', 'RCD button ✓'), bulk('afddBtn', 'N/A', 'AFDD N/A'), bulk('irV', '500', 'Test V 500')));
 }
 
@@ -263,11 +263,12 @@ function circuitEditor({ cert, c, ctx, back, title, prev, next, extra = [], mw =
       if (keys.length) { changed(); toast(`Heard “${said}” → ${keys.map((k) => (FIELD[k] ? FIELD[k].short : k) + ' ' + vals[k]).join(', ')}`, 4000); render(); }
       else toast(`Heard “${said}” — didn\u2019t spot a reading. Try “Zs nought point four two”.`, 4000);
       if (vals._next && next) go(next);
-    }, onEnd: () => { rec = null; btn.textContent = '🎤 Say readings'; }, onError: (err) => toast(err.message) });
-  } }, '🎤 Say readings') : null;
+    }, onEnd: () => { rec = null; btn.textContent = 'Say readings'; }, onError: (err) => toast(err.message) });
+  } }, 'Say readings') : null;
   const sect = (t, ...kids) => h('div', { class: 'card' }, h('h2', {}, t), kids);
   page(title, [
     h('div', { class: 'btns' }, extra, mic),
+    mic ? h('p', { class: 'note voicenote' }, 'Voice entry uses Google\u2019s speech service: what you say is sent to Google to turn it into text. Typing never leaves the phone.') : null,
     sect('Circuit details', h('div', { class: 'grid2' }, inp('num'), inp('points')), inp('desc'), devBox,
       cableBox,
       h('div', { class: 'grid2' }, inp('rcdBs'), inp('rcdType'), inp('rcdIdn'), inp('rcdRating')),
@@ -374,7 +375,7 @@ route(/^\/cert\/([^/]+)\/b\/(\d+)\/scan$/, async (id, bi) => {
     const infoEl = h('p', { class: 'note' }); const info = () => (infoEl.textContent = p.rects.length ? `${p.rects.length} row box(es). Rows are read in the order you drew them.` : 'Drag a box round the first row of breakers (just the breakers; the labels underneath are read automatically).');
     fill(box, h('div', { class: 'card' }, infoEl,
       h('div', { class: 'btns' }, modeBtn,
-        h('button', { class: 'btn small', onclick: () => { zoom = zoom === 1 ? 2 : zoom === 2 ? 3 : 1; paint(); } }, '🔍 Zoom'),
+        h('button', { class: 'btn small', onclick: () => { zoom = zoom === 1 ? 2 : zoom === 2 ? 3 : 1; paint(); } }, 'Zoom'),
         h('button', { class: 'btn small', onclick: () => { p.rects.pop(); paint(); info(); } }, 'Undo'),
         h('button', { class: 'btn small', onclick: () => { p.rects = []; paint(); info(); } }, 'Clear'))),
       wrap,

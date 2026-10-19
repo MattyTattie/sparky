@@ -3,6 +3,11 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<!-- v0.5 (security review 18 Oct 2026): Content-Security-Policy, same approach as Hearth v15.0.
+     The page may only run its own code (plus Google sign-in), only talk to Google Drive, and can't be
+     framed into other sites. If Google sign-in or Drive ever stops working, removing this tag is the
+     rollback (see HOW-IT-WORKS "Security"). -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval' https://accounts.google.com https://apis.google.com; style-src 'self' 'unsafe-inline' https://accounts.google.com; img-src 'self' data: blob: https://*.googleusercontent.com https://*.gstatic.com https://www.google.com; font-src 'self' data:; connect-src 'self' data: blob: https://www.googleapis.com https://content.googleapis.com https://oauth2.googleapis.com https://accounts.google.com; frame-src https://accounts.google.com https://docs.google.com https://drive.google.com https://content.googleapis.com; worker-src 'self' blob:; media-src 'self' blob:; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'">
 <meta name="theme-color" content="#2952ff">
 <title>Sparky (beta)</title>
 <link rel="manifest" href="manifest.json">
@@ -11,7 +16,7 @@
 <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-<div id="app"><p style="padding:20px">Loading…</p></div>
+<div id="app"><header class="top"><span class="brandmark"></span><h1>Sparky</h1></header><main><div class="list skel" aria-busy="true" aria-label="Loading"><div class="row"><div class="main"><div class="sk sk1"></div><div class="sk sk2"></div></div></div><div class="row"><div class="main"><div class="sk sk1"></div><div class="sk sk2"></div></div></div><div class="row"><div class="main"><div class="sk sk1"></div><div class="sk sk2"></div></div></div></div></main></div>
 <noscript>This app needs JavaScript.</noscript>
 <script type="module" src="js/main.js"></script>
 </body>

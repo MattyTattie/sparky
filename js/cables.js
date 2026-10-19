@@ -205,3 +205,52 @@ export const CI_OPTIONS = [
   ['0.51', 'Through insulation for 400 mm (Ci 0.51)'],
   ['0.5', 'Totally surrounded for 0.5 m or more (Ci 0.5)'],
 ];
+
+// ---------- v0.5: three-phase (400 V, balanced loads) ----------
+// Used by the sizer when "3-phase" is picked. Ratings are the "one three-core or
+// four-core cable, three-phase a.c." columns; volt drop is the three-phase mV/A/m
+// (line-to-line, so the % is taken of 400 V). ⚠ Typed in from memory of Appendix 4:
+// check every figure against your copy before relying on it (see HANDOFF "v0.5 values").
+export const UL = 400;
+CABLES.swa4 = {
+  label: '4-core SWA, 70 °C PVC (3-phase, armour as CPC)', phase: 3, cores: 4,
+  source: 'Table 4D4A (3/4-core, three-phase columns) and 4D4B (three-phase volt drop)',
+  note: '⚠ 3-phase figures from memory of Table 4D4A/4D4B; armour resistance and area are typical maker’s figures (BS 6346/BS 5467). Check your copy and the cable data sheet.',
+  sizes: [1.5, 2.5, 4, 6, 10, 16, 25, 35],
+  mvam: { 1.5: 25, 2.5: 15, 4: 9.5, 6: 6.4, 10: 3.8, 16: 2.4, 25: 1.5, 35: 1.1 },
+  methods: {
+    C: { label: 'Clipped direct (C)', amps: { 1.5: 18, 2.5: 25, 4: 33, 6: 42, 10: 58, 16: 77, 25: 102, 35: 125 } },
+    D: { label: 'Direct in the ground (D)', amps: { 1.5: 18, 2.5: 24, 4: 30, 6: 38, 10: 50, 16: 64, 25: 82, 35: 98 } },
+  },
+};
+CABLES.swa4X = {
+  label: '4-core SWA, 90 °C XLPE (6944X) (3-phase, armour as CPC)', phase: 3, cores: 4,
+  source: 'Table 4E4A (3/4-core, three-phase columns) and 4E4B (three-phase volt drop)',
+  note: '⚠ 3-phase figures from memory of Table 4E4A/4E4B; armour resistance and area are typical maker’s figures (BS 5467). Check your copy and the cable data sheet.',
+  sizes: [1.5, 2.5, 4, 6, 10, 16, 25, 35],
+  mvam: { 1.5: 27, 2.5: 16, 4: 10, 6: 6.8, 10: 4.0, 16: 2.5, 25: 1.65, 35: 1.15 },
+  methods: {
+    C: { label: 'Clipped direct (C)', amps: { 1.5: 23, 2.5: 31, 4: 42, 6: 53, 10: 73, 16: 94, 25: 124, 35: 154 } },
+    D: { label: 'Direct in the ground (D)', amps: { 1.5: 21, 2.5: 28, 4: 36, 6: 44, 10: 58, 16: 75, 25: 96, 35: 115 } },
+  },
+};
+// Singles three-phase: Table 4D1A "three or four cables, three-phase" columns 3, 5 and 7;
+// volt drop = the single-phase Table 4D1B figure × √3/2 (that's how the three-phase column
+// is derived), rounded.
+CABLES.singles3 = {
+  label: 'Singles 70 °C PVC (6491X), 3-phase (separate CPC)', phase: 3, cores: 4,
+  source: 'Table 4D1A (three or four cables, three-phase) and 4D1B (three-phase volt drop)',
+  note: '⚠ 3-phase figures from memory of Table 4D1A; volt drop is the single-phase figure × 0.866. CPC is a separate single in the same conduit (Table 54.7 size, k 115).',
+  sizes: [1, 1.5, 2.5, 4, 6, 10, 16, 25, 35],
+  mvam: { 1: 38, 1.5: 25, 2.5: 15, 4: 9.5, 6: 6.4, 10: 3.8, 16: 2.4, 25: 1.55, 35: 1.15 },
+  methods: {
+    A: { label: 'In conduit in an insulated wall (A)', amps: { 1: 10.5, 1.5: 13.5, 2.5: 18, 4: 24, 6: 31, 10: 42, 16: 56, 25: 73, 35: 89 } },
+    B: { label: 'In conduit or trunking on a wall (B)', amps: { 1: 12, 1.5: 15.5, 2.5: 21, 4: 28, 6: 36, 10: 50, 16: 68, 25: 89, 35: 110 } },
+    C: { label: 'Clipped direct (C)', amps: { 1: 14, 1.5: 18, 2.5: 25, 4: 33, 6: 43, 10: 59, 16: 79, 25: 104, 35: 129 } },
+  },
+};
+CABLE_TEMP.swa4 = 70; CABLE_TEMP.swa4X = 90; CABLE_TEMP.singles3 = 70;
+// 4-core SWA armour (typical maker's figures, ⚠ check the data sheet).
+ARMOUR_CSA[4] = { 1.5: 18, 2.5: 20, 4: 24, 6: 35, 10: 40, 16: 46, 25: 62, 35: 68 };
+ARMOUR_MOHM_PER_M[4] = { 1.5: 9.5, 2.5: 7.9, 4: 6.8, 6: 4.0, 10: 3.6, 16: 3.2, 25: 2.3, 35: 2.0 };
+export const THREE_PHASE_CABLES = ['swa4', 'swa4X', 'singles3'];

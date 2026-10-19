@@ -4,10 +4,10 @@
 // =====================================================================
 import { findOldPdf } from './filerules.js';
 import * as db from './db.js';
-import { h, fill, toast, modal, confirmBox, fmtDate, shareOrDownload, blobToDataUrl } from './ui.js';
+import { h, fill, toast, modal, confirmBox, fmtDate, shareOrDownload, blobToDataUrl, emptyState, icon, withIcon } from './ui.js';
 import { route, page, go, render } from './app.js';
 import { S, openCert, changed, flush, getProfile, defaultInstruments, calibrationWarnings, INSTRUMENT_KINDS } from './state.js';
-import { TYPES, newCert, sectionsFor, sectionDone, get, set, eicrOverall } from './certmodel.js';
+import { TYPES, newCert, sectionsFor, sectionDone, get, set, eicrOverall, blankBond, BOND_LOCATIONS, BOND_PARTS } from './certmodel.js';
 import { EIC_ITEMS, EIC_OUTCOMES, EICR_ITEMS, EICR_OUTCOMES, CODE_TEXT, OBSERVATIONS, OBS_CATS } from './inspections.js';
 import { checkCircuit } from './checks.js';
 import { CHECK_NOTE } from './limits.js';
@@ -62,7 +62,7 @@ route(/^\/cert\/([^/]+)$/, async (id) => {
       h('button', { class: 'btn', onclick: async () => { await flush(); (await import('./importui.js')).startImport(id); } }, 'Import results file')) : null,
     h('div', { class: 'card' }, h('h2', {}, 'PDF'),
       h('p', { class: 'note' }, 'Makes the certificate as a PDF laid out like the IET model forms, with your logo. “View PDF” shows it here first so you can check it before printing or sharing. Sharing opens your phone\u2019s share menu: you choose the app and who it goes to. Nothing is sent by itself.'),
-      h('div', { class: 'btns full' }, h('button', { class: 'btn primary', onclick: (e) => makePdf(cert, e.currentTarget, 'share') }, 'Make PDF and share'), h('button', { class: 'btn', onclick: (e) => makePdf(cert, e.currentTarget, 'view') }, '👁 View PDF'),
+      h('div', { class: 'btns full' }, h('button', { class: 'btn primary', onclick: (e) => makePdf(cert, e.currentTarget, 'share') }, 'Make PDF and share'), h('button', { class: 'btn', onclick: (e) => makePdf(cert, e.currentTarget, 'view') }, 'View PDF'),
         cert.type !== 'MW' ? h('button', { class: 'btn', onclick: (e) => makeChart(cert, e.currentTarget) }, 'Circuit chart') : null),
       h('label', { class: 'check' }, h('input', { type: 'checkbox', checked: !!cert.pdfFlags, onchange: (e) => { cert.pdfFlags = e.target.checked; changed(); } }), 'Highlight readings over the limit in red on the PDF'),
       cert.status !== 'issued' ? h('button', { class: 'btn', onclick: async () => { if (await confirmBox('Mark as issued?', 'Records today as the issue date. You can still edit it.', 'Mark issued')) { cert.status = 'issued'; cert.issuedAt = new Date().toISOString(); changed(); await flush(); render(); } } }, 'Mark as issued') : null),
@@ -91,7 +91,7 @@ async function makePdf(cert, btn, how) {
     const name = pdfName(cert); await savePdf(cert, blob, name);
     if (how === 'view') (await import('./pdfview.js')).viewPdf(blob, name, { shareText: `${TYPES[cert.type].name} ${cert.number}` });
     else { const r = await shareOrDownload(blob, name, `${TYPES[cert.type].name} ${cert.number}`); if (r === 'downloaded') toast('Saved to your downloads'); }
-  } catch (e) { console.error(e); toast('Couldn\u2019t make the PDF: ' + e.message); }
+  } catch (e) { console.error(e); toast('Couldn\u2019t make the PDF: ' + ((e && e.message) || 'the browser wouldn\u2019t save it (private browsing?)')); }
   btn.disabled = false; btn.textContent = label;
 }
 async function makeChart(cert, btn) {
@@ -129,6 +129,7 @@ route(/^\/cert\/([^/]+)\/s\/([^/]+)$/, async (id, sid) => {
     if (s.id === 'instruments') content = instrumentsSection(cert);
     else if (s.special === 'inspections') content = inspectionsSection(cert);
     else if (s.special === 'observations') content = observationsSection(cert, draw);
+    else if (s.special === 'bonding') content = bondingSection(cert, draw);
     else if (s.special === 'sign') content = [h('div', { class: 'card' }, (s.fields || []).map((fd) => field(cert, fd))), signSection(cert, draw)];
     else if (s.special === 'mwcircuit') content = [h('div', { class: 'card' }, s.fields.map((fd) => field(cert, fd))), h('a', { class: 'btn primary', href: `#/cert/${id}/mwc`, style: 'width:100%;margin-bottom:12px' }, 'Circuit details and test results →')];
     else content = h('div', { class: 'card' }, s.fields.map((fd) => field(cert, fd, (k) => { if (k === 'eic.samePerson' || k.startsWith('people.designer')) { if (k === 'eic.samePerson' || get(cert, 'eic.samePerson')) syncPeople(cert); if (k === 'eic.samePerson') draw(); } })));
@@ -167,6 +168,38 @@ function inspectionsSection(cert) {
   draw(); return list;
 }
 
+// ---------- Supplementary bonding (v0.5) ----------
+function bondingSection(cert, redraw) {
+  cert.bonding = cert.bonding || [];
+  const list = cert.bonding;
+  const inp = (o, k, label, attrs = {}) => h('label', { class: 'f' }, h('span', {}, label), h('input', { value: o[k] || '', oninput: (e) => { o[k] = e.target.value; changed(); }, ...attrs }));
+  const card = (o, i) => {
+    const partsBox = h('div', { class: 'chips small' });
+    const drawParts = () => { const have = (o.parts || '').split(/\s*,\s*/).filter(Boolean); fill(partsBox, BOND_PARTS.map((p) => h('button', { class: 'chip' + (have.includes(p) ? ' on' : ''), onclick: () => { const s = new Set(have); if (s.has(p)) s.delete(p); else s.add(p); o.parts = [...s].join(', '); changed(); drawParts(); partsIn.value = o.parts; } }, p))); };
+    const partsIn = h('textarea', { value: o.parts || '', rows: 2, oninput: (e) => { o.parts = e.target.value; changed(); drawParts(); } });
+    drawParts();
+    const r = parseFloat(o.reading);
+    return h('div', { class: 'card' },
+      h('div', { class: 'cardhd' }, h('b', {}, 'Bonding ' + (i + 1)), h('button', { class: 'btn small warn', onclick: async () => { if (await confirmBox('Remove this bonding entry?', o.location || 'Bonding ' + (i + 1), 'Remove', 'warn')) { list.splice(i, 1); changed(); redraw(); } } }, 'Remove')),
+      h('label', { class: 'f' }, h('span', {}, 'Location'), h('select', { onchange: (e) => { o.location = e.target.value === 'Other' ? '' : e.target.value; changed(); redraw(); } }, h('option', { value: '' }, '— pick —'), BOND_LOCATIONS.map((l) => h('option', { value: l, selected: o.location === l ? true : null }, l)))),
+      BOND_LOCATIONS.includes(o.location) ? null : inp(o, 'location', 'Location (type it)', { placeholder: 'e.g. Bathroom, first floor' }),
+      h('div', { class: 'f' }, h('span', { class: 'note' }, 'Parts bonded (tap to add, or type)'), partsBox), h('label', { class: 'f' }, partsIn),
+      h('div', { class: 'grid3' },
+        h('label', { class: 'f' }, h('span', {}, 'Conductor csa'), h('select', { onchange: (e) => { o.csa = e.target.value; changed(); } }, ['2.5', '4', '6', '10', '16'].map((v) => h('option', { value: v, selected: o.csa === v ? true : null }, v + ' mm²')))),
+        inp(o, 'material', 'Material'),
+        inp(o, 'reading', 'Continuity (Ω)', { inputmode: 'decimal', placeholder: 'e.g. 0.03' })),
+      !isNaN(r) && r > 0.5 ? h('div', { class: 'notice amber' }, `${r} Ω is high for a bonding conductor. Good joints usually read well under 0.1 Ω: check the clamps and connections.`) : null,
+      h('label', { class: 'check' }, h('input', { type: 'checkbox', checked: !!o.verified, onchange: (e) => { o.verified = e.target.checked; changed(); } }), 'Connection / continuity verified'));
+  };
+  return h('div', {},
+    h('p', { class: 'note' }, 'Record supplementary protective bonding (Regulation 415.2 / Section 701). It prints on its own schedule after the test results, with the certificate number on every page.'),
+    h('label', { class: 'check card' }, h('input', { type: 'checkbox', checked: !!cert.bondingNA, onchange: (e) => { cert.bondingNA = e.target.checked; changed(); redraw(); } }), 'No supplementary bonding installed / needed (prints N/A)'),
+    cert.bondingNA ? null : [
+      list.length ? list.map(card) : emptyState('link', 'No supplementary bonding recorded yet.', h('button', { class: 'btn primary', onclick: () => { list.push(blankBond(db.newId())); changed(); redraw(); } }, '+ Add bonding')),
+      list.length ? h('div', { class: 'btns full' }, h('button', { class: 'btn primary', onclick: () => { list.push({ ...blankBond(db.newId()), location: (list[list.length - 1] || {}).location || '' }); changed(); redraw(); } }, '+ Add another')) : null,
+      h('p', { class: 'note' }, 'Limit for RCD-protected circuits (415.2.2): R ≤ 50 V ÷ IΔn, e.g. 1667 Ω for 30 mA. In practice a sound bond reads a few hundredths of an ohm.')]);
+}
+
 // ---------- Observations (EICR) ----------
 function observationsSection(cert, redraw) {
   const obs = cert.observations;
@@ -177,7 +210,7 @@ function observationsSection(cert, redraw) {
     return h('div', { class: 'card' },
       h('div', { style: 'display:flex;justify-content:space-between' }, h('b', {}, 'Observation ' + (i + 1)), h('button', { class: 'btn small warn', onclick: async () => { if (await confirmBox('Remove observation?', o.text, 'Remove', 'warn')) { obs.splice(i, 1); changed(); redraw(); } } }, 'Remove')),
       h('label', { class: 'f' }, h('span', {}, 'Observation'), h('textarea', { value: o.text, oninput: (e) => { o.text = e.target.value; changed(); } })),
-      h('div', { class: 'btns' }, h('button', { class: 'btn tiny', onclick: () => pick(o) }, '📚 Use wording from the library')),
+      h('div', { class: 'btns' }, h('button', { class: 'btn tiny', onclick: () => pick(o) }, 'Use wording from the library')),
       h('label', { class: 'f' }, h('span', {}, 'Location / circuit'), h('input', { value: o.location || '', oninput: (e) => { o.location = e.target.value; changed(); } })),
       h('div', { class: 'grid2' }, h('label', { class: 'f' }, h('span', {}, 'Regulation(s)'), h('input', { value: o.reg || '', oninput: (e) => { o.reg = e.target.value; changed(); } })), h('div', {}, h('span', { class: 'note' }, 'Code'), codeChips)),
       o.item ? h('div', { class: 'note' }, 'From schedule item ' + o.item) : null);
@@ -187,7 +220,7 @@ function observationsSection(cert, redraw) {
   const counts = ['C1', 'C2', 'C3', 'FI'].map((c) => `${c}: ${obs.filter((o) => o.code === c).length}`).join('  ·  ');
   return h('div', {},
     h('div', { class: 'notice ' + (eicrOverall(cert) === 'SATISFACTORY' ? 'green' : 'red') }, `${counts}. Overall: ${eicrOverall(cert)}.`),
-    obs.length ? obs.map(card) : h('div', { class: 'empty' }, 'No observations. If there are none, the PDF says so.'),
+    obs.length ? obs.map(card) : emptyState('clipboard', 'No observations. If there are none, the PDF says so.'),
     h('div', { class: 'btns full' }, h('button', { class: 'btn primary', onclick: () => pick() }, '+ Add from library'), h('button', { class: 'btn', onclick: () => add({ text: '', code: 'C3', reg: '' }) }, '+ Write my own')),
     h('details', { class: 'card' }, h('summary', {}, 'What the codes mean'), Object.entries(CODE_TEXT).map(([k, v]) => h('p', {}, h('b', {}, k + ': '), v))));
 }

@@ -38,15 +38,54 @@ export class Kit {
   addPage(o = this.o) { this.doc.addPage('a4', o); this.setPage(o); if (this.onNewPage) this.onNewPage(this); }
   get cw() { return this.x1 - this.x0; }
   font(size = 8, bold = false, color = INK) { this.doc.setFont('Arimo', bold ? 'bold' : 'normal'); this.doc.setFontSize(size); this.doc.setTextColor(...color); }
-  wrap(text, w, size = 8, bold = false) { this.font(size, bold); return this.doc.splitTextToSize(String(text ?? ''), w); }
+  // v0.5: wraps on spaces, and after hyphens and slashes only: never in
+  // the middle of a word (jsPDF's own splitter chopped "Switch-disconnector"
+  // into "Switc/h-dis/conn/ector"). Only a single word wider than the whole
+  // box is broken, as a last resort (callers shrink the text first).
+  wrap(text, w, size = 8, bold = false) {
+    this.font(size, bold);
+    const out = [];
+    for (const para of String(text ?? '').split(/\r?\n/)) {
+      const parts = para.match(/[^\s\-\/]+[\-\/]*|[\-\/]+|\s+/g) || [''];
+      let line = '';
+      for (const p of parts) {
+        const tryL = line + p;
+        if (!line || this.doc.getTextWidth(tryL.trimEnd()) <= w) { line = tryL; continue; }
+        out.push(line.trimEnd()); line = /^\s+$/.test(p) ? '' : p;
+      }
+      out.push(line.trimEnd());
+      // last resort: a single word wider than the box
+      for (let i = 0; i < out.length; i++) {
+        if (this.doc.getTextWidth(out[i]) <= w || out[i].length < 2) continue;
+        let n = out[i].length; while (n > 1 && this.doc.getTextWidth(out[i].slice(0, n)) > w) n--;
+        out.splice(i, 1, out[i].slice(0, n), out[i].slice(n));
+      }
+    }
+    return out.length ? out : [''];
+  }
+  // True if wrap() would have to break inside a word.
+  wordsFit(text, w, size = 8, bold = false) { this.font(size, bold); return (String(text ?? '').match(/[^\s\-\/]+[\-\/]*|[\-\/]+/g) || []).every((p) => this.doc.getTextWidth(p) <= w); }
+  // Largest size (down to min) at which text fits on ONE line of width w.
+  fitSize(text, w, size, min = 6, bold = false) {
+    let sz = size; while (sz > min && this.tw(text, sz, bold) > w) sz = Math.round((sz - 0.25) * 100) / 100;
+    return this.tw(text, sz, bold) <= w ? sz : 0;
+  }
+  // Cut text with "…" so it fits w at this size.
+  ellipsis(text, w, size, bold = false) {
+    let s = String(text ?? ''); if (this.tw(s, size, bold) <= w) return s;
+    while (s.length > 1 && this.tw(s + '…', size, bold) > w) s = s.slice(0, -1);
+    return s.trimEnd() + '…';
+  }
   lh(size) { return size * 0.3528 * 1.2; } // line height in mm
   t(text, x, y, { size = 8, bold = false, color = INK, align = 'left', angle = 0, maxW = 0 } = {}) {
     if (this.dry) return; this.font(size, bold, color);
     const s = String(text ?? '');
-    if (maxW && this.doc.getTextWidth(s) > maxW) { // shrink to fit, then clip
-      let sz = size; while (sz > 4.5 && (this.font(sz, bold, color), this.doc.getTextWidth(s) > maxW)) sz -= 0.25;
+    let out = s;
+    if (maxW && this.doc.getTextWidth(s) > maxW) { // shrink to fit (down to 4.5 pt), then cut with "…"
+      const sz = this.fitSize(s, maxW, size, 4.5, bold);
+      if (sz) this.font(sz, bold, color); else { out = this.ellipsis(s, maxW, 4.5, bold); this.font(4.5, bold, color); }
     }
-    this.doc.text(s, x, y, { align, angle, baseline: 'alphabetic' });
+    this.doc.text(out, x, y, { align, angle, baseline: 'alphabetic' });
   }
   tw(text, size = 8, bold = false) { this.font(size, bold); return this.doc.getTextWidth(String(text ?? '')); }
   line(x1, y1, x2, y2, { w = 0.2, color = LINE, dash = null } = {}) {
@@ -73,16 +112,51 @@ export class Kit {
       this.doc.text(/^(✗|✘|x)$/i.test(s) ? '✗' : '✓', x, y, { align });
     } else this.t(s, x, y, { size, color: VALUE, align });
   }
-  // "Label ........ value" across width w. Returns height used.
-  field(label, value, x, y, w, { size = 7.5, vsize = 8.5, unit = '', lines = 1 } = {}) {
-    const lw = label ? this.tw(label, size) + 1.5 : 0;
-    const vw = Math.max(8, w - lw - (unit ? this.tw(unit, size) + 1.5 : 0));
-    const vl = value ? this.wrap(value, vw - 1, vsize) : [];
-    const n = Math.max(lines, vl.length || 1);
+  // "Label ........ value" across width w. Returns the extra height used.
+  // v0.5: values never run into the label, the unit or the next field.
+  //  - fixed (default): the field keeps ONE line. The value shrinks to fit
+  //    (down to 6 pt); if it still won't fit, the label shrinks a little too;
+  //    then it goes on two small lines inside the same line (word breaks
+  //    only); the very last resort is "…".
+  //  - grow: true (used by row(), which moves down by the height returned):
+  //    shrink to 6.5 pt first, otherwise wrap on whole words at full size
+  //    and draw a dotted line under each line.
+  field(label, value, x, y, w, { size = 7.5, vsize = 8.5, unit = '', lines = 1, grow = false } = {}) {
+    const val = value == null ? '' : String(value);
+    const unitW = unit ? this.tw(unit, size) + 1.5 : 0;
+    let lsize = size; let lab = label;
+    // the label (and unit) must leave at least 10 mm for the value: shrink the label, then cut it
+    if (lab) { while (lsize > 5.5 && this.tw(lab, lsize) + 1.5 + unitW + 10 > w) lsize -= 0.25; if (this.tw(lab, lsize) + 1.5 + unitW + 10 > w) lab = this.ellipsis(lab, Math.max(4, w - unitW - 11.5), lsize); }
+    let lw = lab ? this.tw(lab, lsize) + 1.5 : 0;
+    let vw = Math.max(8, w - lw - unitW);
     const step = this.lh(vsize) + 0.6;
-    if (label) this.t(label, x, y, { size });
+    let vl = []; let vs = vsize; let n = Math.max(1, lines);
+    if (val) {
+      const one = this.fitSize(val, vw - 1, vsize, grow || lines > 1 ? 6.5 : 6);
+      if (one) { vl = [val]; vs = one; }
+      else if (grow || lines > 1) {
+        vs = vsize; while (vs > 6.5 && !this.wordsFit(val, vw - 1, vs)) vs -= 0.25;
+        vl = this.wrap(val, vw - 1, vs); n = Math.max(n, vl.length);
+      } else {
+        // fixed one-line field: give the value more room by shrinking the label (to 6 pt)
+        if (lab) { lsize = Math.min(lsize, Math.max(6, size - 1.5)); lw = this.tw(lab, lsize) + 1.5; vw = Math.max(8, w - lw - unitW); }
+        const one2 = this.fitSize(val, vw - 1, vsize, 6);
+        if (one2) { vl = [val]; vs = one2; }
+        else {
+          // two small lines inside one line's height, whole words only
+          let s2 = Math.min(5.4, vsize);
+          while (s2 >= 4.2 && (!this.wordsFit(val, vw - 1, s2) || this.wrap(val, vw - 1, s2).length > 2)) s2 -= 0.2;
+          if (s2 >= 4.2) { vl = this.wrap(val, vw - 1, s2); vs = s2; }
+          else { vl = [this.ellipsis(val, vw - 1, 6)]; vs = 6; }
+        }
+      }
+    }
+    if (lab) this.t(lab, x, y, { size: lsize });
     for (let i = 0; i < n; i++) this.line(x + lw, y + 0.9 + i * step, x + lw + vw, y + 0.9 + i * step, { w: 0.15, color: [150, 150, 150], dash: [0.4, 0.6] });
-    vl.forEach((s, i) => this.t(s, x + lw + 0.5, y - 0.2 + i * step, { size: vsize, color: VALUE }));
+    if (vl.length === 2 && n === 1) { // two mini lines sit between the line above and the dotted line
+      const ms = this.lh(vs) * 0.92;
+      vl.forEach((s, i) => this.t(s, x + lw + 0.5, y + 0.45 - (1 - i) * ms, { size: vs, color: VALUE }));
+    } else vl.forEach((s, i) => this.t(s, x + lw + 0.5, y - 0.2 + i * step, { size: vs, color: VALUE }));
     if (unit) this.t(unit, x + lw + vw + 1, y, { size });
     return (n - 1) * step;
   }
@@ -111,15 +185,27 @@ export class Kit {
     });
   }
   image(dataUrl, x, y, w, h, fmt = 'JPEG') { if (!this.dry && dataUrl) { try { this.doc.addImage(dataUrl, fmt, x, y, w, h, undefined, 'FAST'); } catch {} } }
-  // Footer on every page: "Page n of N" etc.
+  // v0.5: a neat initials mark (rounded square) for businesses with no logo.
+  logoMark(name, x, y, size = 11) {
+    if (this.dry) return;
+    const ini = String(name || '').replace(/\(.*?\)/g, '').split(/\s+/).filter((w) => /^[A-Za-z]/.test(w)).slice(0, 2).map((w) => w[0].toUpperCase()).join('') || '•';
+    this.doc.setFillColor(...VALUE); this.doc.roundedRect(x, y, size, size, 2.2, 2.2, 'F');
+    this.font(size * 1.45, true, [255, 255, 255]); this.doc.text(ini, x + size / 2, y + size * 0.66, { align: 'center' });
+  }
+  // Footer on every page: a hairline, the form note on the left, and
+  // "Certificate No. · Page n of N" on the right (v0.5 layout).
   footers(certNo = '') {
     const n = this.doc.getNumberOfPages();
     for (let i = 1; i <= n; i++) {
       this.doc.setPage(i);
       const ps = this.doc.internal.pageSize; const W = ps.getWidth(), H = ps.getHeight();
-      this.font(6.5, false, GREY);
-      this.doc.text(this.footerText, 10, H - 5);
-      this.doc.text(`${certNo ? certNo + '   ' : ''}Page ${i} of ${n}`, W - 10, H - 5, { align: 'right' });
+      this.doc.setDrawColor(170, 170, 170); this.doc.setLineWidth(0.15); this.doc.line(10, H - 8, W - 10, H - 8);
+      const right = `${certNo ? certNo + '   ·   ' : ''}Page ${i} of ${n}`;
+      this.font(7, true, INK); const rw = this.doc.getTextWidth(right);
+      this.doc.text(right, W - 10, H - 4.6, { align: 'right' });
+      this.font(6.3, false, GREY);
+      const left = this.ellipsis(this.footerText, W - 20 - rw - 6, 6.3); this.font(6.3, false, GREY);
+      this.doc.text(left, 10, H - 4.6);
     }
   }
   blob() { return this.doc.output('blob'); }
