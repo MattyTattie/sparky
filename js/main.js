@@ -9,6 +9,7 @@ import './calcsize.js';
 import './calcdc.js';
 import './calcdcplan.js';
 import './importui.js';
+import './importextra.js';
 import { render } from './app.js';
 import { persist } from './db.js';
 import { recoverPending } from './state.js';

@@ -1,5 +1,10 @@
 # Sparky — niggles and update lists
 
+## [BUILT v0.15 on branch `v0.15`, 20 Oct 2026 — NOT LIVE] screenshots in /workspace/sparky-shots/v0.15, publish only on his OK
+- [built] Import extra details (Settings, and on each certificate under Earlier results): pick a Sparky .json (synced job.json, backup, or one certificate). Preview lists what will be added, which empty boxes get filled, and what's skipped because there's already a value; then Import or Cancel. Never overwrites or deletes. Matches certificates by id then number; boards by id then DB ref; circuits by id then number; sources by id then make. Touches updatedAt so it syncs. (Matthew 20 Oct)
+- [built] Test across circuits count: R1+R2 needs a real value in R1+R2 or R2 (N/A in R2 with R1+R2 blank no longer counts). IR needs at least one real reading; RCD on a circuit with an RCD needs a real trip time. Deliberate N/A (e.g. RCD on a non-RCD circuit) and spare auto N/A still count. (Matthew 20 Oct)
+- His battery import file (kept off the repo): /workspace/sparky-backups/sparky-import-battery-2026-10-20.json — adds Source 1, DB2 and its inverter circuit to EIC-0001.
+
 ## [BUILT v0.14 on branch `v0.14`, 19 Oct 2026 — NOT LIVE] screenshots in /workspace/sparky-shots/v0.14, publish only on his OK
 - [built] Circuit page: the RCD boxes (cols 13–16, N/A buttons, S-type tick) now sit under "RCD (if any)" straight after the protective device, before "Cable and wiring". Col numbers kept. (Matthew 19 Oct)
 - [built] Other sources of supply: ticking it on Supply and earthing opens a list (type battery / PV inverter / generator / other, make and model, kW, isolation and where, G98/G99 ref, notes), add/remove several. Prints "OTHER SOURCES OF SUPPLY (continuation sheet)" with the cert number, counted in the continuation sheets. Status line asks for a type and kW for each. For his inverter. (Matthew 19 Oct)
@@ -105,4 +110,4 @@
 - [built v0.12] Text areas (comments, descriptions, observations etc.) auto-grow to fit their content as he types (no inner scroll, no text cut off sideways); on Mac and phone. (19 Oct)
 - [built v0.12] Schedule table rows: add a bin/delete-circuit button (with confirm "Delete circuit N?", offer renumber if sequential) next to edit/copy/spare icons; also on circuit page. (19 Oct)
 - v0.14.1: ring hint on the R1+R2 step of Test across circuits.
-- TODO next batch: Test across circuits R1+R2 step counts a circuit as done when R2 is N/A but R1+R2 is blank. Should need a real value in one of them (N/A in both = not done unless spare).
+- [built v0.15] Test across circuits R1+R2 step counts a circuit as done when R2 is N/A but R1+R2 is blank. Should need a real value in one of them (N/A in both = not done unless spare).

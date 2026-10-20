@@ -399,6 +399,8 @@ route(/^\/settings$/, async () => {
       h('div', { class: 'btns full' },
         h('button', { class: 'btn', onclick: async () => { const b = await backup.exportAll(); await shareOrDownload(b, `${APP_SLUG}-backup-${new Date().toISOString().slice(0, 10)}.json`); } }, 'Save backup file'),
         h('button', { class: 'btn', onclick: async () => { const [f] = await pickFile({ accept: '.json,application/json' }); if (!f) return; try { const n = await backup.importAll(await f.text()); toast(`Restored ${n} item(s)`); } catch (e) { toast(e.message); } } }, 'Restore from file'))),
+    h('div', { class: 'card' }, h('h2', {}, 'Import extra details'), h('p', { class: 'note' }, 'Add details from a Sparky file (a job.json or backup) to certificates you already have. You see every change first. It only fills empty boxes and adds missing boards, circuits and sources; nothing is overwritten or removed.'),
+      h('button', { class: 'btn', onclick: async () => (await import('./importextra.js')).startExtra() }, 'Import extra details')),
     h('div', { class: 'notice amber' }, CHECK_NOTE),
     h('p', { class: 'note' }, `${APP_NAME} ${APP_VERSION}. Forms follow the IET model forms for BS 7671:2018+A4:2026. Not affiliated with the IET.`),
   ], { back: '#/' });

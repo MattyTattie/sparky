@@ -41,12 +41,28 @@ export function quickFor(k) {
   if (k === 'irV') return ['250', '500'];
   return ['N/A'];
 }
+// v0.15: is a circuit done for a step? A typed N/A only counts where it's a
+// deliberate answer, not where a reading is needed:
+//   R1+R2: a real reading in R1+R2 or R2 (N/A in the other is fine).
+//   IR: the voltage and at least one real reading (the other may be N/A).
+//   RCD: on a circuit with an RCD the trip time must be a real reading;
+//        without one, N/A in both is the right answer.
+// Auto N/A (spares) still counts as filled.
+const real = (v) => hasVal(v) && !isNA(v);
+export function stepDone(c, s) {
+  if (typeof s === 'string') s = stepById(s);
+  const filled = (k) => hasVal(c[k]) || autoNA(c, k);
+  if (s.id === 'r1r2') return real(c.r1r2) || real(c.R2);
+  if (s.id === 'ir') return filled('irV') && filled('irLL') && filled('irLE') && (real(c.irLL) || real(c.irLE));
+  if (s.id === 'rcd' && hasRcd(c)) return real(c.rcdMs) && filled('rcdBtn');
+  return s.keys.every(filled);
+}
 // Count of circuits with every box for the step filled (shown in the header).
 export function progress(b, stepId) {
   const s = stepById(stepId); let need = 0, done = 0;
   for (const c of b.circuits) {
     if (rowMode(c, stepId).mode === 'skip') continue; need++;
-    const ok = s.id === 'r1r2' ? hasVal(c.r1r2) || hasVal(c.R2) : s.keys.every((k) => hasVal(c[k]) || autoNA(c, k));
+    const ok = stepDone(c, s);
     if (ok) done++;
   }
   return { need, done };
