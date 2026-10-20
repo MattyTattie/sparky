@@ -4,13 +4,13 @@
 import { h, fill } from './ui.js';
 import { route, page } from './app.js';
 import { CABLES, CABLE_PICKS, AMBIENTS, CI_OPTIONS, SINGLES_CPC, THREE_PHASE_CABLES, UL } from './cables.js';
-import { sizeCircuit, LOAD_TYPES } from './design.js';
+import { sizeCircuit, LOAD_TYPES, START_METHODS } from './design.js';
 import { DEVICES, deviceById, CHECK_NOTE } from './limits.js';
 import { setLastCalc, formKit, icard, more, answerCard, pchip, resline, detailCard, banner } from './calckit.js';
 import { icon } from './icons.js';
 
 const CABLE_ORDER = ['te', 'te3', 'singles', 'swa', 'swaX', 'swa3', 'swa3X'];
-const DEFAULTS = { phase: '1', loadType: 'general', load: '20', unit: 'A', pf: '1', ringLoad: 'spread', length: '32', ze: '0.35', vd: 'auto', cable: 'te', cpcMode: 'core', method: 'C', ambient: '30', grouped: '1', grouping: 'bunched', ci: '1', separateCpc: false, device: 'rcbo', type: 'auto', time: 0.4 };
+const DEFAULTS = { phase: '1', loadType: 'general', load: '20', unit: 'A', pf: '1', ringLoad: 'spread', length: '32', ze: '0.35', vd: 'auto', cable: 'te', cpcMode: 'core', method: 'C', ambient: '30', grouped: '1', grouping: 'bunched', ci: '1', separateCpc: false, device: 'rcbo', type: 'auto', time: 0.4, start: 'dol' };
 
 route(/^\/calc\/size$/, async () => {
   setLastCalc('size');
@@ -35,6 +35,7 @@ route(/^\/calc\/size$/, async () => {
       icard('What it supplies', [
         F.seg('phase', '', [['1', 'Single-phase 230 V'], ['3', 'Three-phase 400 V']], three ? 'Balanced 3-phase load (motor, 3-phase EV charger, heater bank).' : '', 'seg2'),
         F.seg('loadType', 'Type of load', three ? LOAD_TYPES.filter(([k]) => k !== 'ring') : LOAD_TYPES, '', 'small'),
+        v.loadType === 'motor' ? F.seg('start', 'How it starts', START_METHODS.map(([k, l, m]) => [k, `${l} (~${m}×)`]), 'Typical starting current as a multiple of running current. The motor maker\u2019s figure is better if you have it.', 'small') : null,
         h('div', { class: 'grid2' }, F.num('load', v.unit === 'kW' ? (three ? 'Total load' : 'Load') : (three ? 'Current per phase' : 'Load current (Ib)'), { unit: v.unit === 'kW' ? 'kW' : 'A', hint: v.unit === 'kW' ? (three ? 'All 3 phases together' : 'e.g. 9.5 for a shower') : 'What it draws' }),
           F.seg('unit', 'Load in', [['kW', 'kW'], ['A', 'Amps']], '', 'small')),
         ring ? F.seg('ringLoad', 'How the load sits on the ring', [['spread', 'Spread round'], ['point', 'All at the far point']], '', 'small') : null,
@@ -60,7 +61,7 @@ route(/^\/calc\/size$/, async () => {
   };
 
   const draw = () => {
-    const r = sizeCircuit({ load: v.load, unit: v.unit, pf: v.pf, loadType: v.loadType, length: v.length, cable: v.cable, cpcMode: v.cpcMode, method: v.method, ambient: +v.ambient, grouped: +v.grouped, grouping: v.grouping, ci: +v.ci, ze: Number(v.ze) || 0, device: v.device, type: v.type, time: Number(v.time), vdPct: v.vd === 'auto' ? null : v.vd, ringLoad: v.ringLoad, separateCpc: v.separateCpc, phase: Number(v.phase) || 1 });
+    const r = sizeCircuit({ load: v.load, unit: v.unit, pf: v.pf, loadType: v.loadType, length: v.length, cable: v.cable, cpcMode: v.cpcMode, method: v.method, ambient: +v.ambient, grouped: +v.grouped, grouping: v.grouping, ci: +v.ci, ze: Number(v.ze) || 0, device: v.device, type: v.type, time: Number(v.time), vdPct: v.vd === 'auto' ? null : v.vd, ringLoad: v.ringLoad, start: v.start, separateCpc: v.separateCpc, phase: Number(v.phase) || 1 });
     if (!r.ok) { fill(top, banner(r.error, 'Check the load and length above.', 'red')); fill(work); return; }
     const d = deviceById(r.device); const p = r.pick;
     const cpcText = (row) => row.cpc === 'armour' ? ' + armour as CPC' : row.cpc != null ? ` / ${row.cpc} mm² CPC` : '';

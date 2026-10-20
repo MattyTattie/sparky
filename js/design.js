@@ -97,14 +97,19 @@ export function designCurrent({ load, unit = 'A', pf = 1, uo = UO, phase = 1, ul
 // Magnetic (instantaneous) trip of BS EN 60898 / 61009: B 3–5 × In, C 5–10 × In, D 10–20 × In.
 // Direct-on-line motor starting current is typically 6–8 × full-load current (maker's data rules).
 export const MAG_MIN = { B: 3, C: 5, D: 10 };
-export function loadAdvice({ loadType, curve, inA, ib, device, three, auto }) {
+// v0.18.5: typical starting current as a multiple of full-load current. Maker's data rules.
+export const START_METHODS = [['dol', 'Direct on line', 8], ['sd', 'Star-delta', 3], ['soft', 'Soft starter', 4], ['vsd', 'Inverter / VSD', 1.5]];
+export const startMult = (m) => (START_METHODS.find((x) => x[0] === m) || START_METHODS[0])[2];
+const startName = (m) => (START_METHODS.find((x) => x[0] === m) || START_METHODS[0])[1].toLowerCase();
+export function loadAdvice({ loadType, curve, inA, ib, device, three, auto, start = 'dol' }) {
+  const sm = startMult(start), sI = Math.round(sm * ib * 10) / 10;
   const out = []; const mcb = device === 'mcb' || device === 'rcbo';
   if (loadType === 'motor') {
-    if (mcb && curve === 'B') out.push({ level: 'warn', text: `Type B for a motor: it trips instantly at 3 × In (${3 * inA} A), and a direct-on-line start is often 6–8 × running current, so it may trip on starting. Type C is usual for motors; Type D for heavy or high-inertia starts.` });
-    else if (mcb && MAG_MIN[curve] && 6 * ib > MAG_MIN[curve] * inA) out.push({ level: 'warn', text: `A ${inA} A Type ${curve} trips instantly from ${MAG_MIN[curve] * inA} A. A direct-on-line start of about 6 × ${ib} A (≈ ${Math.round(6 * ib)} A) could reach that. Consider ${curve === 'C' ? 'Type D or ' : ''}the next rating up (check Zs and the cable still pass), or a soft starter.` });
-    else if (mcb && curve === 'C') out.push({ level: 'info', text: 'Type C for a motor. For a heavy or high-inertia start (big fans, compressors starting under load) pick Type D, which has a lower max Zs.' });
+    const clear = mcb && MAG_MIN[curve] && sI < MAG_MIN[curve] * inA;
+    if (mcb && MAG_MIN[curve] && !clear) out.push({ level: 'warn', text: `A ${inA} A Type ${curve} can trip instantly from ${MAG_MIN[curve] * inA} A (${MAG_MIN[curve]} × In). A ${startName(start)} start of about ${sm} × ${ib} A ≈ ${sI} A could reach that and trip it on starting. Use Auto, or a higher rating or Type D (check Zs and the cable still pass).` });
+    else if (clear) out.push({ level: 'info', text: `Starting current: ${startName(start)} about ${sm} × ${ib} A ≈ ${sI} A, below the ${MAG_MIN[curve] * inA} A instant trip of a ${inA} A Type ${curve} (${MAG_MIN[curve]} × In). For a heavy or high-inertia start, check with Type D.` });
     out.push({ level: 'info', text: `Set the starter overload to the motor nameplate FLC (about ${ib} A), trip class 10 for a normal start, 10/20 for a heavy start. Check the motor maker's recommendations.` });
-    out.push({ level: 'info', text: 'The breaker here is In ≥ Ib for the cable and fault protection. Starting current and the motor maker’s recommended protective device take priority.' });
+    out.push({ level: 'info', text: 'Starting multiples are typical figures. The motor maker\u2019s data and recommended protective device take priority.' });
   }
   if (loadType === 'ev') {
     out.push({ level: 'info', text: `EV charger (Section 722): its own dedicated circuit. Each charging point needs an RCD of at least Type A with DC fault protection (6 mA DC detection in the charger, or a Type B RCD), unless the charger’s instructions say otherwise. Check the PME earthing rules (722.411.4.1).${mcb && curve === 'B' ? ' Type B curve is normal; follow the charger maker’s recommended device.' : ''}` });
@@ -116,10 +121,26 @@ export function loadAdvice({ loadType, curve, inA, ib, device, three, auto }) {
 }
 
 export function sizeCircuit(o) {
+  // v0.18.5: motor on an MCB/RCBO with Auto: pick curve + rating so the starting current stays under the
+  // instant-trip lower edge (C 5 × In, D 10 × In). Prefer C (bigger rating) if cable and Zs pass, else D.
+  const dv = deviceById(o.device || 'rcbo');
+  if (o.loadType === 'motor' && (o.type || 'auto') === 'auto' && dv && ['B', 'C', 'D'].every((t) => dv.types.includes(t)) && !o._inner) {
+    const ib = designCurrent({ load: o.load, unit: o.unit || 'kW', pf: o.pf || 1, uo: o.uo || UO, phase: o.phase || 1, ul: o.ul || UL });
+    const sI = ib == null ? 0 : startMult(o.start) * ib;
+    let first = null;
+    for (const t of ['C', 'D']) {
+      const r = sizeCircuit({ ...o, type: t, minIn: sI / MAG_MIN[t], _inner: true });
+      if (!first) first = r;
+      if (r.ok && r.pick) { r.steps.unshift(`Type ${t} ${r.inA} A picked so a ${startName(o.start)} start (about ${startMult(o.start)} × ${ib} A ≈ ${Math.round(sI * 10) / 10} A) stays below its instant trip of ${MAG_MIN[t] * r.inA} A.`); r.advice = loadAdvice({ loadType: 'motor', curve: t, inA: r.inA, ib, device: dv.id, auto: true, start: o.start }); return r; }
+    }
+    const r = sizeCircuit({ ...o, type: 'C', _inner: true });
+    if (r.ok) r.advice.unshift({ level: 'warn', text: 'No Type C or D rating keeps clear of the starting current with this cable and Zs. Check the motor maker\u2019s data, or use a soft starter or VSD.' });
+    return r;
+  }
   const {
     load, unit = 'kW', pf = 1, loadType = 'general', length, cable = 'te', cpcMode = 'core', method = 'C',
     ambient = 30, grouped = 1, grouping = 'bunched', ci = 1, ze = 0.35, device = 'rcbo', type = 'auto', time = 0.4,
-    vdPct = null, ringLoad = 'spread', bka = 6, separateCpc = false, uo = UO, phase = 1, ul = UL,
+    vdPct = null, ringLoad = 'spread', bka = 6, separateCpc = false, uo = UO, phase = 1, ul = UL, minIn = 0, start = 'dol',
   } = o;
   const three = Number(phase) === 3;
   if (three && !(CABLES[cable] && CABLES[cable].phase === 3)) return { ok: false, error: 'Pick a three-phase cable (4-core SWA or singles).' };
@@ -145,7 +166,7 @@ export function sizeCircuit(o) {
     if (ib > inA) return { ok: false, error: `${ib} A is more than a ${inA} A ring can supply. Split the load.` };
     steps.push(`Ring final: ${inA} A device (Regulation 433.1.204 / Appendix 15, up to 100 m² floor area).`);
   } else {
-    inA = ratings.find((r) => r >= ib - 1e-9);
+    inA = ratings.find((r) => r >= ib - 1e-9 && r > minIn + 1e-9);
     if (!inA) return { ok: false, ib, error: `No ${d.label.split(' (')[0]} ${curve} rating is big enough for ${ib} A.` };
     steps.push(`Design current Ib = ${ib} A${three ? ' per phase' : ''}${unit === 'kW' ? (three ? ` (${load} kW ÷ (√3 × ${ul} V${Number(pf) !== 1 ? ' × pf ' + pf : ''}))` : ` (${load} kW ÷ ${uo} V${Number(pf) !== 1 ? ' ÷ pf ' + pf : ''})`) : ''}, so the next breaker size up is ${inA} A${three ? ' triple-pole' : ''} (In ≥ Ib).`);
   }
@@ -207,6 +228,6 @@ export function sizeCircuit(o) {
     k.armour ? `⚠ Armour area: ${ARMOUR_CSA.source}` : null,
     three ? '⚠ Three-phase tables typed in from memory of Appendix 4 (and maker\u2019s armour data): check them. Doesn\u2019t check diversity, unbalance, harmonics (triplen currents in the neutral) or the cable\u2019s short-circuit rating.' : 'Doesn\u2019t check diversity, harmonics or the cable\u2019s short-circuit rating at the origin.',
   ].filter(Boolean);
-  const advice = loadAdvice({ loadType, curve, inA, ib, device: d.id, three, auto: type === 'auto' });
+  const advice = loadAdvice({ loadType, curve, inA, ib, device: d.id, three, auto: type === 'auto', start });
   return { ok: true, advice, phase: three ? 3 : 1, vref, ib, inA, curve, device: d.id, limit, factors: { ca, cg, ci: Number(ci) || 1, cf, total: r2(factor) }, rows, pick, reasons, steps, notes, max, k, ring };
 }

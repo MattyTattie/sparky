@@ -52,7 +52,7 @@ test('sizer: 9.5 kW shower → 50 A, 10 mm² (6 mm² fails on current)', () => {
 });
 test('sizer: motor suggests Type C', () => {
   const r = sizeCircuit({ load: 2.2, unit: 'kW', pf: 0.8, length: 15, loadType: 'motor' });
-  assert.equal(r.curve, 'C'); assert.equal(r.inA, 16);
+  assert.equal(r.curve, 'C'); assert.equal(r.inA, 20); // v0.18.5: 8 × 11.96 A DOL start must stay under 5 × In
 });
 test('sizer: ring final 2.5 mm² on 32 A', () => {
   const r = sizeCircuit({ load: 26, unit: 'A', length: 60, loadType: 'ring' });

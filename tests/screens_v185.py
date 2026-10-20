@@ -8,10 +8,10 @@ async def main():
         b = await p.chromium.launch()
         ctx = await b.new_context(viewport={'width': 412, 'height': 915}, device_scale_factor=2.6, service_workers='block', color_scheme='dark')
         page = await ctx.new_page()
-        for name, extra in [('auto-C', {'type': 'auto'}), ('override-B', {'type': 'B'})]:
+        for name, extra in [('auto-C', {'type': 'auto'}), ('override-B', {'type': 'B'}), ('auto-softstart', {'type': 'auto', 'start': 'soft'})]:
             await page.goto('http://localhost:8765/index.html#/'); await page.wait_for_timeout(500)
             await page.evaluate(f"localStorage.setItem('sparky.size1', JSON.stringify({json.dumps({**V, **extra})}))")
             await page.evaluate("location.hash = '#/calc/size'"); await page.wait_for_timeout(1500)
-            await page.screenshot(path=f'{OUT}/v185-motor-{name}-dark.png', full_page=True)
+            await page.screenshot(path=f'{OUT}/v185b-motor-{name}-dark.png', full_page=True)
         await b.close()
 asyncio.run(main())
