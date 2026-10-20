@@ -328,31 +328,53 @@ function signSection(cert, redraw) {
   }));
 }
 // Signature pad: draw with a finger, or reuse the signature you saved.
+// v0.16.1: one sheet that stays open. Clear really wipes the pad (it used to close and
+// reopen the sheet with the old ink still showing, and then "Use this" thought nothing was
+// drawn and silently reopened it). "Use this" checks the actual ink on the pad.
 export async function sigPad() {
-  const saved = await db.getMeta('mysig');
-  const cv = h('canvas', { class: 'sigpad' }); let drawn = false;
+  let saved = null; try { saved = await db.getMeta('mysig'); } catch (e) { saved = null; }
+  const cv = h('canvas', { class: 'sigpad' });
   const keep = h('input', { type: 'checkbox', checked: !saved });
-  setTimeout(() => {
-    const r = cv.getBoundingClientRect(); const dpr = window.devicePixelRatio || 1;
-    cv.width = r.width * dpr; cv.height = r.height * dpr; const g = cv.getContext('2d'); g.scale(dpr, dpr); g.lineWidth = 2.4; g.lineCap = g.lineJoin = 'round'; g.strokeStyle = '#0d2a5c';
-    let last = null;
-    const pt = (e) => { const b = cv.getBoundingClientRect(); return [e.clientX - b.left, e.clientY - b.top]; };
-    cv.onpointerdown = (e) => { cv.setPointerCapture(e.pointerId); last = pt(e); };
-    cv.onpointermove = (e) => { if (!last) return; const p = pt(e); g.beginPath(); g.moveTo(...last); g.lineTo(...p); g.stroke(); last = p; drawn = true; };
-    cv.onpointerup = () => (last = null);
-  }, 60);
-  const btns = [{ label: 'Cancel', value: null }, { label: 'Clear', value: 'clear' }, { label: 'Use this', value: 'ok', cls: 'primary' }];
-  if (saved) btns.splice(1, 0, { label: 'Use my saved signature', value: 'saved', cls: 'primary' });
-  for (;;) {
-    const r = await modal('Sign here', h('div', {}, cv, h('label', { class: 'check' }, keep, 'Save as my signature for next time')), btns);
-    if (r === 'saved') return saved;
-    if (r === 'clear') { drawn = false; continue; }
-    if (r !== 'ok') return null;
-    if (!drawn) { toast('Draw your signature first'); continue; }
-    const img = trimCanvas(cv);
-    if (keep.checked) await db.setMeta('mysig', img);
-    return img;
-  }
+  let g = null, last = null;
+  const setup = () => {
+    const r = cv.getBoundingClientRect(); if (!r.width) return false;
+    const dpr = window.devicePixelRatio || 1;
+    cv.width = Math.round(r.width * dpr); cv.height = Math.round(r.height * dpr); g = cv.getContext('2d'); g.setTransform(dpr, 0, 0, dpr, 0, 0);
+    g.lineWidth = 2.4; g.lineCap = g.lineJoin = 'round'; g.strokeStyle = '#0d2a5c'; return true;
+  };
+  const pt = (e) => { const b = cv.getBoundingClientRect(); return [e.clientX - b.left, e.clientY - b.top]; };
+  cv.onpointerdown = (e) => { if (!g && !setup()) return; e.preventDefault(); try { cv.setPointerCapture(e.pointerId); } catch (_) {} last = pt(e); g.beginPath(); g.arc(last[0], last[1], 1.2, 0, 7); g.fillStyle = g.strokeStyle; g.fill(); };
+  cv.onpointermove = (e) => { if (!last) return; const p = pt(e); g.beginPath(); g.moveTo(...last); g.lineTo(...p); g.stroke(); last = p; };
+  cv.onpointerup = cv.onpointercancel = cv.onlostpointercapture = () => { last = null; };
+  const hasInk = () => { if (!g) return false; const d = g.getImageData(0, 0, cv.width, cv.height).data; for (let i = 3; i < d.length; i += 4) if (d[i] > 10) return true; return false; };
+  return new Promise((res) => {
+    let done = false;
+    const close = (v) => { if (done) return; done = true; bg.remove(); res(v); };
+    // Android Chrome sometimes drops the "click" for a tap that comes straight after a
+    // finger stroke on the pad, so touch taps fire on pointerup; the click is the fallback
+    // for mouse and keyboard. Each tap runs once.
+    let lastTap = 0;
+    const btn = (label, cls, fn) => { let down = null; const run = () => { const t = Date.now(); if (t - lastTap < 400) return; lastTap = t; fn(); };
+      return h('button', { type: 'button', class: 'btn ' + cls,
+        onpointerdown: (e) => { down = e.pointerType !== 'mouse' ? e.pointerId : null; },
+        onpointerup: (e) => { if (down !== null && e.pointerId === down) { down = null; e.preventDefault(); run(); } },
+        onpointercancel: () => { down = null; },
+        onclick: (e) => { e.preventDefault(); e.stopPropagation(); run(); } }, label); };
+    const bg = h('div', { class: 'modal-bg', onclick: (e) => { if (e.target === bg) close(null); } },
+      h('div', { class: 'modal', role: 'dialog' }, h('h3', {}, 'Sign here'), cv, h('label', { class: 'check' }, keep, 'Save as my signature for next time'),
+        h('div', { class: 'btns full' },
+          btn('Cancel', '', () => close(null)),
+          saved ? btn('Use my saved signature', 'primary', () => close(saved)) : null,
+          btn('Clear', '', () => { if (g) { g.save(); g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, cv.width, cv.height); g.restore(); } last = null; }),
+          btn('Use this', 'primary', async () => {
+            if (!hasInk()) { toast('Draw your signature first'); return; }
+            const img = trimCanvas(cv);
+            if (keep.checked) { try { await db.setMeta('mysig', img); } catch (e) { toast('Signed, but couldn\u2019t save it for next time'); } }
+            close(img);
+          }))));
+    document.body.append(bg);
+    requestAnimationFrame(() => setup()); setTimeout(() => { if (!g) setup(); }, 300);
+  });
 }
 function trimCanvas(cv) {
   const g = cv.getContext('2d'); const { width: w, height: hh } = cv; const d = g.getImageData(0, 0, w, hh).data;
