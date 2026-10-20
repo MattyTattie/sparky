@@ -93,6 +93,28 @@ export function designCurrent({ load, unit = 'A', pf = 1, uo = UO, phase = 1, ul
   return Number(phase) === 3 ? r2((v * 1000) / (Math.sqrt(3) * ul * (Number(pf) || 1))) : r2((v * 1000) / (uo * (Number(pf) || 1)));
 }
 
+// v0.18.5: guidance for the load type, shown with the answer. { level: 'warn' | 'info', text }.
+// Magnetic (instantaneous) trip of BS EN 60898 / 61009: B 3–5 × In, C 5–10 × In, D 10–20 × In.
+// Direct-on-line motor starting current is typically 6–8 × full-load current (maker's data rules).
+export const MAG_MIN = { B: 3, C: 5, D: 10 };
+export function loadAdvice({ loadType, curve, inA, ib, device, three, auto }) {
+  const out = []; const mcb = device === 'mcb' || device === 'rcbo';
+  if (loadType === 'motor') {
+    if (mcb && curve === 'B') out.push({ level: 'warn', text: `Type B for a motor: it trips instantly at 3 × In (${3 * inA} A), and a direct-on-line start is often 6–8 × running current, so it may trip on starting. Type C is usual for motors; Type D for heavy or high-inertia starts.` });
+    else if (mcb && MAG_MIN[curve] && 6 * ib > MAG_MIN[curve] * inA) out.push({ level: 'warn', text: `A ${inA} A Type ${curve} trips instantly from ${MAG_MIN[curve] * inA} A. A direct-on-line start of about 6 × ${ib} A (≈ ${Math.round(6 * ib)} A) could reach that. Consider ${curve === 'C' ? 'Type D or ' : ''}the next rating up (check Zs and the cable still pass), or a soft starter.` });
+    else if (mcb && curve === 'C') out.push({ level: 'info', text: 'Type C for a motor. For a heavy or high-inertia start (big fans, compressors starting under load) pick Type D, which has a lower max Zs.' });
+    out.push({ level: 'info', text: `Set the starter overload to the motor nameplate FLC (about ${ib} A), trip class 10 for a normal start, 10/20 for a heavy start. Check the motor maker's recommendations.` });
+    out.push({ level: 'info', text: 'The breaker here is In ≥ Ib for the cable and fault protection. Starting current and the motor maker’s recommended protective device take priority.' });
+  }
+  if (loadType === 'ev') {
+    out.push({ level: 'info', text: `EV charger (Section 722): its own dedicated circuit. Each charging point needs an RCD of at least Type A with DC fault protection (6 mA DC detection in the charger, or a Type B RCD), unless the charger’s instructions say otherwise. Check the PME earthing rules (722.411.4.1).${mcb && curve === 'B' ? ' Type B curve is normal; follow the charger maker’s recommended device.' : ''}` });
+    if (!three && ib > 32) out.push({ level: 'warn', text: 'Above 32 A single-phase is unusual for a home charger (7.4 kW is 32 A). Check the charger rating.' });
+  }
+  if (loadType === 'lighting' && mcb && curve === 'B') out.push({ level: 'info', text: 'LED drivers and transformers have a big switch-on inrush. With many fittings on one circuit a Type B can trip: check the driver maker’s “fittings per breaker” figure, or use Type C if Zs allows.' });
+  if (loadType === 'heating' && mcb && curve !== 'B' && !auto) out.push({ level: 'info', text: 'Resistive loads have no inrush: Type B is normal and gives the highest max Zs.' });
+  return out;
+}
+
 export function sizeCircuit(o) {
   const {
     load, unit = 'kW', pf = 1, loadType = 'general', length, cable = 'te', cpcMode = 'core', method = 'C',
@@ -185,5 +207,6 @@ export function sizeCircuit(o) {
     k.armour ? `⚠ Armour area: ${ARMOUR_CSA.source}` : null,
     three ? '⚠ Three-phase tables typed in from memory of Appendix 4 (and maker\u2019s armour data): check them. Doesn\u2019t check diversity, unbalance, harmonics (triplen currents in the neutral) or the cable\u2019s short-circuit rating.' : 'Doesn\u2019t check diversity, harmonics or the cable\u2019s short-circuit rating at the origin.',
   ].filter(Boolean);
-  return { ok: true, phase: three ? 3 : 1, vref, ib, inA, curve, device: d.id, limit, factors: { ca, cg, ci: Number(ci) || 1, cf, total: r2(factor) }, rows, pick, reasons, steps, notes, max, k, ring };
+  const advice = loadAdvice({ loadType, curve, inA, ib, device: d.id, three, auto: type === 'auto' });
+  return { ok: true, advice, phase: three ? 3 : 1, vref, ib, inA, curve, device: d.id, limit, factors: { ca, cg, ci: Number(ci) || 1, cf, total: r2(factor) }, rows, pick, reasons, steps, notes, max, k, ring };
 }

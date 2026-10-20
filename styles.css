@@ -709,3 +709,6 @@ button.row { font: inherit; cursor: pointer; }
 .f .chips:not(.seg2) .chip.on::before { content: '✓'; font-weight: 800; margin-right: 6px; }
 .syncchip i { width: 10px !important; height: 10px !important; background: #cbd5e1; box-shadow: 0 0 0 2px rgba(255,255,255,.95) !important; }
 .syncchip.green i { background: #22c55e; } .syncchip.amber i { background: #f59e0b; } .syncchip.red i { background: #ef4444; } .syncchip.info i { background: #60a5fa; }
+/* v0.18.5: information banner (calculator load-type guidance) */
+.banner.info { border-color: #c7d2fe; background: var(--brandbg); color: #1e2a6b; }
+.banner.info .bt { font-weight: 600; }

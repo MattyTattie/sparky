@@ -17,7 +17,8 @@ route(/^\/calc\/size$/, async () => {
   const v = { ...DEFAULTS, ...(JSON.parse(localStorage.getItem('sparky.size1') || 'null') || {}) };
   const top = h('div'); const form = h('div'); const work = h('div');
   const save = () => { localStorage.setItem('sparky.size1', JSON.stringify(v)); drawForm(); draw(); };
-  const set = (k, val) => { v[k] = val; save(); };
+  // v0.18.5: a curve picked for one kind of load shouldn't carry over to another (a remembered B on a motor).
+  const set = (k, val) => { if (k === 'loadType' && val !== v.loadType) v.type = 'auto'; v[k] = val; save(); };
   const F = formKit(v, set);
 
   const drawForm = () => {
@@ -54,7 +55,7 @@ route(/^\/calc\/size$/, async () => {
           `method ${v.method}, ${v.ambient} °C, ${v.grouped} grouped, ${String(ciLabel).split(' (')[0].toLowerCase()}, VD ${v.vd === 'auto' ? 'auto' : v.vd + '%'}`)], { step: 2 }),
       icard('The breaker', [
         F.sel('device', 'Device', DEVICES.filter((x) => x.table && x.id !== 'bs1362').map((x) => [x.id, x.label])),
-        d.types.length > 1 ? F.seg('type', 'Type / curve', [['auto', 'Auto'], ...d.types.map((t) => [t, t])], 'Auto = B, or C for motors.', 'small') : null,
+        d.types.length > 1 ? F.seg('type', 'Type / curve', [['auto', 'Auto'], ...d.types.map((t) => [t, t])], 'Auto = B, or C for motors. Pick D for a heavy motor start.', 'small') : null,
         more('size-dev', [F.seg('time', 'Disconnection time', [[0.4, '0.4 s'], [5, '5 s']], '0.4 s for final circuits up to 63 A; 5 s for distribution circuits and over 63 A.', 'small')], `${v.time} s`)], { step: 3 }));
   };
 
@@ -70,6 +71,7 @@ route(/^\/calc\/size$/, async () => {
       big: p ? [`${r.inA} A Type ${r.curve} ${d.label.split(' (')[0]}${r.phase === 3 ? ' (TP)' : ''}`, `${p.size} mm²${cpcText(p)}`] : 'Try another cable or method',
       sub: p ? `${CABLES[v.cable].label.split(',')[0]} · Ib ${r.ib} A · ${v.length} m` : 'Nothing in this table passes current, volt drop and Zs.', chips,
       extra: p ? [why ? h('div', { class: 'ans-why' }, why) : null, h('div', { class: 'ans-test' }, icon('clipboard', { size: 16 }), `When you test: expect R1+R2 about ${p.z.r20} Ω at 20 °C${r.ring ? ' (ring, (r1 + r2) ÷ 4)' : ''}.`)] : null }),
+      (r.advice || []).map((a) => banner(a.text, '', a.level === 'warn' ? 'amber' : 'info')),
       p && p.adi.ok && !p.adi.pass ? banner(`The earth (CPC) may be too small: it needs ${p.adi.smin} mm², it has ${p.adi.area} mm².`, 'This assumes the worst-case 0.1 s let-through. Check the breaker maker\u2019s I²t figure, or go up a cable size.') : null);
     fill(work,
       detailCard('size-how', 'How it worked it out', [

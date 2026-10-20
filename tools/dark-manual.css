@@ -61,3 +61,4 @@ html.dark .thead h2 { color: #b9c4ff !important; }
 html.dark .tkind { color: #aab2c3 !important; }
 /* v0.18.3: small brand-blue section labels were too dark on dark cards */
 html.dark .card h2, html.dark h2.sec, html.dark .ans-k, html.dark .ringhd, html.dark .obscat, html.dark .partgroup h3, html.dark .lastbadge, html.dark h3.subh, html.dark .phd { color: #9fb0ff !important; }
+html.dark .banner.info { background: var(--brandbg) !important; border-color: #2f3c6e !important; color: #cdd6ff !important; }

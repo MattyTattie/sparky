@@ -285,6 +285,7 @@ html.dark .row.addrow .t { color: var(--brand); }
 html.dark .row.frow .fic { color: var(--muted); }
 html.dark .row.frow .rv { color: var(--muted); }
 html.dark .row.frow.danger .t, html.dark .row.frow.danger .fic { color: var(--red); }
+html.dark .banner.info { border-color: #313b65; background: var(--brandbg); color: #acb6e8; }
 /* ===== hand-tuned dark theme (v0.18) ===== */
 html.dark { color-scheme: dark; --ink: #e8ebf3; --ink2: #cfd5e2; --sub: #aab2c3; --muted: #959eb1; --line: #2a3142; --bg: #0e121b; --card: #171c28;
   --brand: #7d93ff; --brand2: #9b7dff; --brandbg: #1f2747; --accent: #ff8f3d;
@@ -348,4 +349,5 @@ html.dark .thead h2 { color: #b9c4ff !important; }
 html.dark .tkind { color: #aab2c3 !important; }
 /* v0.18.3: small brand-blue section labels were too dark on dark cards */
 html.dark .card h2, html.dark h2.sec, html.dark .ans-k, html.dark .ringhd, html.dark .obscat, html.dark .partgroup h3, html.dark .lastbadge, html.dark h3.subh, html.dark .phd { color: #9fb0ff !important; }
+html.dark .banner.info { background: var(--brandbg) !important; border-color: #2f3c6e !important; color: #cdd6ff !important; }
 
