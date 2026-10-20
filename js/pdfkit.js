@@ -188,6 +188,14 @@ export class Kit {
       k.y += 1.6;
     });
   }
+  // v0.18: fit an image inside w x h keeping its shape (left aligned, centred vertically).
+  // Returns the size drawn, so text can follow straight after it.
+  imageContain(dataUrl, x, y, w, h, fmt = 'JPEG') {
+    let iw = w, ih = h;
+    try { const pr = this.doc.getImageProperties(dataUrl); if (pr && pr.width && pr.height) { const r = Math.min(w / pr.width, h / pr.height); iw = pr.width * r; ih = pr.height * r; } } catch {}
+    this.image(dataUrl, x, y + (h - ih) / 2, iw, ih, fmt);
+    return { w: iw, h: ih };
+  }
   image(dataUrl, x, y, w, h, fmt = 'JPEG') { if (!this.dry && dataUrl) { try { this.doc.addImage(dataUrl, fmt, x, y, w, h, undefined, 'FAST'); } catch {} } }
   // v0.5: a neat initials mark (rounded square) for businesses with no logo.
   logoMark(name, x, y, size = 11) {

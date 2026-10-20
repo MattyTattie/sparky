@@ -20,7 +20,7 @@ export const FOOT = 'Based on the IET model forms for BS 7671:2018+A4:2026 (15th
 export function brandStrip(k, profile, title, certNo, sub = '') {
   const p = profile || {};
   let x = k.x0;
-  if (p.logo) { k.image(p.logo, k.x0, k.y, 22, 11, p.logo.startsWith('data:image/png') ? 'PNG' : 'JPEG'); x += 25; }
+  if (p.logo) { const d = k.imageContain(p.logo, k.x0, k.y, 22, 11, p.logo.startsWith('data:image/png') ? 'PNG' : 'JPEG'); x += Math.max(8, d.w) + 3; } // v0.18: never stretched
   else if (p.business || p.name) { k.logoMark(p.business || p.name, k.x0, k.y + 0.5, 11); x += 14; } // v0.5: initials mark when there's no logo
   if (p.business || p.name) {
     k.t(p.business || p.name, x, k.y + 4, { size: 10, bold: true });

@@ -1,4 +1,5 @@
 // main.js — start the app.
+import { start as backNav } from './backnav.js';
 import './app.js';
 import './certui.js';
 import './schedule.js';
@@ -15,5 +16,6 @@ import { render } from './app.js';
 import { persist } from './db.js';
 import { recoverPending } from './state.js';
 persist();
+backNav();
 recoverPending().finally(() => { render(); import('./sync.js').then((m) => m.init()).catch(() => {}); });
 if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) navigator.serviceWorker.register('./sw.js').catch(() => {});

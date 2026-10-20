@@ -1,0 +1,36 @@
+/* ===== hand-tuned dark theme (v0.18) ===== */
+html.dark { color-scheme: dark; --ink: #e8ebf3; --ink2: #cfd5e2; --sub: #aab2c3; --muted: #959eb1; --line: #2a3142; --bg: #0e121b; --card: #171c28;
+  --brand: #7d93ff; --brand2: #9b7dff; --brandbg: #1f2747; --accent: #ff8f3d;
+  --red: #ff7b7b; --redbg: #3a1d22; --amber: #ffbf6b; --amberbg: #382915; --amberline: #8a5a1c; --green: #6fd896; --greenbg: #15301f;
+  --shadow: 0 1px 2px rgba(0,0,0,.4), 0 6px 20px rgba(0,0,0,.35); }
+html.dark body { background: var(--bg); color: var(--ink); }
+html.dark input, html.dark textarea, html.dark select { background: #10141e; color: var(--ink); border-color: #323a4d; }
+html.dark input::placeholder, html.dark textarea::placeholder { color: #6f788b; }
+html.dark input[type=date] { color-scheme: dark; }
+html.dark .card, html.dark .list, html.dark .modal, html.dark .ccard, html.dark .pdfitem, html.dark .calcpick { background: var(--card); border-color: var(--line); }
+html.dark .btn { background: #1d2331; border-color: #323a4d; color: var(--ink); }
+html.dark .btn.primary { background: linear-gradient(135deg, #4b63ff, #7a4dff); color: #fff; border-color: transparent; }
+html.dark .btn.warn { color: var(--red); border-color: #5a2a30; background: #1d2331; }
+html.dark .btn.danger { background: #c62828; border-color: #c62828; color: #fff; }
+html.dark .notice.red { background: var(--redbg); border-color: #5a2a30; color: #ffc9c9; }
+html.dark .notice.amber, html.dark .banner { background: var(--amberbg); border-color: #6b4a1c; color: #ffdcae; }
+html.dark .notice.green { background: var(--greenbg); border-color: #24563a; color: #bff0cf; }
+html.dark .notice.info { background: var(--brandbg); border-color: #2f3c6e; color: #cdd6ff; }
+html.dark .chip { background: #1d2331; border-color: #323a4d; color: var(--ink); }
+html.dark .pill { background: #232a3a; color: var(--ink2); }
+html.dark .pill.green, html.dark .pdfitem .pill.latest { background: var(--greenbg); color: var(--green); }
+html.dark .pill.info { background: var(--brandbg); color: var(--brand); }
+html.dark .pill.amber { background: var(--amberbg); color: var(--amber); }
+html.dark .pdfitem.latest { background: #182038; border-color: #2f3c6e; }
+html.dark .bottomnav { background: rgba(20,24,34,.96); border-top-color: var(--line); }
+html.dark .navi { color: #8790a3; } html.dark .navi.on { color: var(--brand); }
+html.dark .modal-bg { background: rgba(0,0,0,.6); }
+html.dark .sk { background: #232a3a; }
+html.dark .row:active, html.dark a.row:hover { background: #1c2230; }
+html.dark .wiznav { background: rgba(14,18,27,.96); border-top-color: var(--line); }
+/* signatures and logos are drawn for white paper: keep them on white */
+html.dark .sigpad, html.dark .sigimg, html.dark .logoprev { background: #fff; border-radius: 8px; }
+html.dark .sigimg { padding: 4px; }
+/* the PDF viewer shows paper: pages stay white */
+html.dark .pdfpage { background: #fff; }
+html.dark .nextstep { border-color: var(--brand); }

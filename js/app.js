@@ -3,6 +3,7 @@
 // screens are in certui.js, the schedule of test results in schedule.js.
 // =====================================================================
 import { pdfRows, madeAt } from './pdflist.js';
+import { nextStep } from './jobnext.js';
 import * as db from './db.js';
 import { h, fill, toast, modal, confirmBox, fmtDate, pickFile, shrinkImage, blobToDataUrl, shareOrDownload, icon, emptyState, skeleton, withIcon } from './ui.js';
 import { S, flush, getProfile, getInstruments, calibrationWarnings, INSTRUMENT_KINDS, instrumentText, touchJob } from './state.js';
@@ -186,8 +187,9 @@ route(/^\/newjob(?:\/(.+))?$/, async (custId) => {
   page('New job', form, { back: '#/' });
 });
 
+const fmtDateTime = (iso) => { const d = new Date(iso); return isNaN(d) ? '' : d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) + ', ' + d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }); };
 // ---------- Job page ----------
-route(/^\/job\/([^/]+)$/, async (id) => {
+route(/^\/job\/([^/]+)(?:\/(photos|details|next|pdfs|backup|dc))?$/, async (id, sub) => {
   const job = await db.get('jobs', id); if (!job) return go('#/');
   const cust = job.customerId ? await db.get('customers', job.customerId) : null;
   const certs = (await db.byJob('certs', id)).sort((a, b) => (a.createdAt || '').localeCompare(b.createdAt || ''));
@@ -226,28 +228,63 @@ route(/^\/job\/([^/]+)$/, async (id) => {
   };
   const { dcPlansCard } = await import('./calcdcplan.js'); // v0.6: optional job.dcPlans
   const status = (c) => c.status === 'issued' ? h('span', { class: 'pill green' }, 'Issued') : h('span', { class: 'pill' }, 'Draft');
-  page(job.title || 'Job', [
-    h('div', { class: 'card' }, h('h2', {}, 'Certificates'),
-      certs.length ? h('div', { class: 'list' }, certs.map((c) => h('a', { class: 'row', href: '#/cert/' + c.id }, h('span', { class: 'tile' }, icon('fileCheck', { size: 20 })), h('div', { class: 'main' }, h('div', { class: 't' }, `${TYPES[c.type].name}`), h('div', { class: 's' }, `${c.number} · updated ${fmtDate(c.updatedAt)}`)), status(c), h('span', { class: 'go' }, '›')))) : emptyState('fileText', 'No certificates yet. Pick one below to start.'),
-      h('div', { class: 'btns full' }, h('button', { class: 'btn primary', onclick: () => newCert('EIC') }, '+ EIC'), h('button', { class: 'btn primary', onclick: () => newCert('MW') }, '+ Minor Works'), h('button', { class: 'btn primary', onclick: () => newCert('EICR') }, '+ EICR'))),
-    nextCard(job, certs, cust, save),
-    h('div', { class: 'card' }, h('h2', {}, 'Customer'),
-      cust ? h('a', { class: 'row', href: '#/customer/' + cust.id, style: 'padding:6px 0' }, h('div', { class: 'main' }, h('div', { class: 't' }, cust.name), h('div', { class: 's' }, [cust.address, cust.postcode].filter(Boolean).join(', '))), h('span', { class: 'go' }, '›')) : h('p', { class: 'note' }, 'No customer.'),
-      txt('title', 'Job title'), txt('siteAddress', 'Installation address', 'area'), txt('sitePostcode', 'Postcode'), txt('notes', 'Notes', 'area')),
-    h('div', { class: 'card' }, h('h2', {}, `Photos (${photos.length})`),
+  const certRow = (c) => h('a', { class: 'row', href: '#/cert/' + c.id }, h('span', { class: 'tile ctype' }, c.type === 'MW' ? 'MW' : c.type), h('div', { class: 'main' }, h('div', { class: 't' }, c.number), h('div', { class: 's' }, `Updated ${fmtDateTime(c.updatedAt)}`)), status(c), h('span', { class: 'go' }, '›'));
+  const addCert = async () => { const t = await modal('Add certificate', h('p', { class: 'note' }, 'Which certificate for this job?'), [{ label: 'EIC', value: 'EIC', cls: 'primary' }, { label: 'EICR', value: 'EICR', cls: 'primary' }, { label: 'Minor Works', value: 'MW', cls: 'primary' }, { label: 'Cancel', value: null }]); if (t) newCert(t); };
+  const more = async () => { const r = await modal('More', h('p', { class: 'note' }, job.title || 'This job'), [{ label: 'Copy job', value: 'copy' }, { label: 'Delete job', value: 'del', cls: 'warn' }, { label: 'Cancel', value: null }]); if (r === 'copy') copyJob(); else if (r === 'del') delJob(); };
+  const back = '#/job/' + id;
+  // v0.18: the folded parts each open on their own page.
+  if (sub === 'photos') return page(`Photos (${photos.length})`, [h('div', { class: 'card' },
       photos.length ? h('div', { class: 'photos' }, photos.map((f) => h('img', { src: URL.createObjectURL(f.blob), alt: f.caption || 'Photo', onclick: () => photoView(f) }))) : emptyState('camera', 'No photos yet. Add the board, labels and any defects.'),
-      h('div', { class: 'btns full' }, h('button', { class: 'btn', onclick: () => addPhotos(true) }, 'Take photo'), h('button', { class: 'btn', onclick: () => addPhotos(false) }, 'Add from gallery'))),
-    dcPlansCard(job, save, render),
-    pdfs.length ? h('div', { class: 'card', id: 'savedpdfs' }, h('h2', {}, 'Saved PDFs'), h('div', { class: 'pdflist' }, pdfRows(pdfs).map(({ f, latest }) => h('div', { class: 'pdfitem' + (latest ? ' latest' : '') },
+      h('div', { class: 'btns full' }, h('button', { class: 'btn', onclick: () => addPhotos(true) }, 'Take photo'), h('button', { class: 'btn', onclick: () => addPhotos(false) }, 'Add from gallery')))], { back, sub: job.title });
+  if (sub === 'details') return page('Job details & notes', [
+    h('div', { class: 'card' }, h('h2', {}, 'Customer'),
+      cust ? h('a', { class: 'row inrow', href: '#/customer/' + cust.id }, h('div', { class: 'main' }, h('div', { class: 't' }, cust.name), h('div', { class: 's' }, [cust.address, cust.postcode].filter(Boolean).join(', '))), h('span', { class: 'go' }, '›')) : h('p', { class: 'note' }, 'No customer.')),
+    h('div', { class: 'card' }, h('h2', {}, 'Job'), txt('title', 'Job title'), txt('siteAddress', 'Installation address', 'area'), txt('sitePostcode', 'Postcode'), txt('notes', 'Notes', 'area'))], { back, sub: job.title });
+  if (sub === 'next') return page('Next inspection', [nextCard(job, certs, cust, save)], { back, sub: job.title });
+  if (sub === 'pdfs') return page(`Saved PDFs (${pdfs.length})`, [pdfs.length ? h('div', { class: 'card', id: 'savedpdfs' }, h('div', { class: 'pdflist' }, pdfRows(pdfs).map(({ f, latest }) => h('div', { class: 'pdfitem' + (latest ? ' latest' : '') },
       h('div', { class: 'pn' }, f.name),
       h('div', { class: 'pm' }, latest ? h('span', { class: 'pill latest' }, 'Latest') : null, h('span', {}, 'Made ' + madeAt(f.createdAt))),
       h('div', { class: 'btns' },
         h('button', { class: 'btn small', onclick: async () => (await import('./pdfview.js')).viewPdf(f.blob, f.name) }, withIcon('eye', 'View')),
-        h('button', { class: 'btn small', 'aria-label': 'Share ' + f.name, onclick: () => shareOrDownload(f.blob, f.name) }, withIcon('share', 'Share'))))))) : null,
-    h('div', { class: 'card' }, h('h2', {}, 'Backup'),
+        h('button', { class: 'btn small', 'aria-label': 'Share ' + f.name, onclick: () => shareOrDownload(f.blob, f.name) }, withIcon('share', 'Share'))))))) : emptyState('fileText', 'No PDFs yet. Make one from a certificate.')], { back, sub: job.title });
+  if (sub === 'backup') return page('Backup', [h('div', { class: 'card' },
       h('p', { class: 'note' }, job.backedUpAt ? `In Google Drive (folder “${backup.jobFolderName(job, cust)}”), last saved ${new Date(job.backedUpAt).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' })}${(job.version || 0) > (job.backedUpVersion || 0) ? ' — changed since.' : '.'}` : 'Saved on this device. Not in Google Drive yet.'),
-      h('div', { class: 'btns full' }, G.isConfigured() ? h('button', { class: 'btn', onclick: (e) => doBackup(e.currentTarget) }, 'Back up to Drive') : null, h('button', { class: 'btn', onclick: copyJob }, 'Copy job'), h('button', { class: 'btn warn', onclick: delJob }, 'Delete job'))),
-  ], { back: '#/', sub: cust ? cust.name : '' });
+      h('div', { class: 'btns full' }, G.isConfigured() ? h('button', { class: 'btn', onclick: (e) => doBackup(e.currentTarget) }, 'Back up to Drive') : null, h('button', { class: 'btn', onclick: copyJob }, 'Copy job')))], { back, sub: job.title });
+  if (sub === 'dc') return page('DC system plans', [dcPlansCard(job, save, render) || emptyState('zap', 'No DC system plans on this job.')], { back, sub: job.title });
+
+  const ns = nextStep(certs);
+  const nx = nextFor(job, certs);
+  const backedState = job.backedUpAt ? ((job.version || 0) > (job.backedUpVersion || 0) ? ['Changed since backup', 'amber'] : ['Backed up', 'green']) : null;
+  const drafts = certs.filter((c) => c.status !== 'issued');
+  const pills = [
+    ...[...new Set(certs.map((c) => c.type))].map((t) => { const d = drafts.some((c) => c.type === t); return h('span', { class: 'pill ' + (d ? 'info' : 'green') }, `${t === 'MW' ? 'Minor Works' : t} ${d ? 'draft' : 'issued'}`); }),
+    nx ? h('span', { class: 'pill amber' }, 'Re-test ' + new Date(nx.date).toLocaleDateString('en-GB', { month: 'short', year: 'numeric' })) : null,
+    backedState ? h('span', { class: 'pill ' + backedState[1] }, backedState[0]) : null];
+  const frow = (href, label, right = '', ic = null) => h('a', { class: 'row frow', href }, ic ? h('span', { class: 'fic' }, icon(ic, { size: 18 })) : null, h('div', { class: 'main' }, h('div', { class: 't' }, label)), right !== '' ? h('span', { class: 'rv' }, right) : null, h('span', { class: 'go' }, '›'));
+  page(job.title || 'Job', [
+    h('div', { class: 'card jsum' },
+      h('div', { class: 'jname' }, cust ? cust.name : (job.title || 'Job')),
+      h('div', { class: 'note' }, [job.siteAddress, job.sitePostcode].filter(Boolean).join(' ').replace(/\n/g, ', ') || 'No address yet'),
+      pills.filter(Boolean).length ? h('div', { class: 'pills' }, pills) : null),
+    h('div', { class: 'card nextstep', id: 'nextstep' },
+      h('div', { class: 'nsk' }, 'Next step'), h('div', { class: 'nst' }, ns.title),
+      ns.kind !== 'start' ? h('div', { class: 'prog' }, h('i', { style: `width:${ns.pct}%` })) : null,
+      h('div', { class: 'note' }, ns.sub),
+      h('div', { class: 'btns full' }, ns.href ? h('a', { class: 'btn primary big', href: ns.href }, ns.label) : h('button', { class: 'btn primary big', onclick: addCert }, ns.label))),
+    h('h2', { class: 'sec' }, 'Certificates'),
+    h('div', { class: 'list' }, certs.map(certRow), h('button', { class: 'row addrow', onclick: addCert }, h('span', { class: 'tile addt' }, icon('plus', { size: 18 })), h('div', { class: 'main' }, h('div', { class: 't' }, 'Add certificate…')))),
+    h('h2', { class: 'sec' }, 'Photos · notes · customer'),
+    h('div', { class: 'list' },
+      frow(back + '/photos', 'Photos', String(photos.length), 'camera'),
+      frow(back + '/details', 'Job details & notes', cust ? cust.name : '', 'clipboard'),
+      frow(back + '/next', 'Next inspection', nx ? new Date(nx.date).toLocaleDateString('en-GB', { month: 'short', year: 'numeric' }) : 'Not set', 'calendar'),
+      frow(back + '/pdfs', 'Saved PDFs', String(pdfs.length), 'fileText'),
+      job.dcPlans && job.dcPlans.length ? frow(back + '/dc', 'DC system plans', String(job.dcPlans.length), 'zap') : null,
+      frow(back + '/backup', 'Backup', job.backedUpAt ? (backedState[0] === 'Backed up' ? 'In Drive' : 'Changed') : 'This device', 'cloudUp')),
+    h('h2', { class: 'sec' }, 'More'),
+    h('div', { class: 'list' }, h('button', { class: 'row frow', onclick: copyJob }, h('span', { class: 'fic' }, icon('copy', { size: 18 })), h('div', { class: 'main' }, h('div', { class: 't' }, 'Copy job'))),
+      h('button', { class: 'row frow danger', onclick: delJob }, h('span', { class: 'fic' }, icon('trash', { size: 18 })), h('div', { class: 'main' }, h('div', { class: 't' }, 'Delete job')))),
+  ], { back: '#/', sub: cust ? cust.name : '', actions: [h('button', { class: 'iconbtn', 'aria-label': 'More', id: 'jobmore', onclick: more }, icon('more', { size: 22 }))] });
 });
 
 // Next inspection (re-test reminder) for a job.
@@ -292,6 +329,15 @@ route(/^\/customer\/([^/]+)$/, async (id) => {
   ], { back: '#/customers' });
 });
 
+// v0.18: Appearance (this device only).
+function appearanceCard() {
+  const T = window.sparkyTheme || { get: () => 'system', set: () => {} };
+  const box = h('div', { class: 'chips seg2', role: 'radiogroup', 'aria-label': 'Appearance' });
+  const draw = () => fill(box, [['system', 'System'], ['light', 'Light'], ['dark', 'Dark']].map(([v, t]) => h('button', { class: 'chip' + (T.get() === v ? ' on' : ''), role: 'radio', 'aria-checked': T.get() === v ? 'true' : 'false', onclick: () => { T.set(v); draw(); } }, t)));
+  draw();
+  return h('div', { class: 'card', id: 'appearance' }, h('h2', {}, 'Appearance'), box,
+    h('p', { class: 'note', style: 'margin-top:10px' }, 'System follows your device’s dark mode setting. Certificates and PDFs always print on white. Saved on this device only.'));
+}
 // ---------- Settings: you, your logo, test instruments, backup ----------
 route(/^\/settings$/, async () => {
   const p = await getProfile();
@@ -300,7 +346,7 @@ route(/^\/settings$/, async () => {
   const saveI = () => db.setMeta('instruments', ins);
   const txt = (k, label, type = 'text', ph = '') => h('label', { class: 'f' }, h('span', {}, label), h('input', { type, value: p[k] || '', placeholder: ph, oninput: (e) => { p[k] = e.target.value; saveP(); } }));
   const logoBox = h('div');
-  const drawLogo = () => fill(logoBox, p.logo ? h('img', { src: p.logo, style: 'max-height:70px;max-width:220px;display:block;margin-bottom:8px' }) : h('p', { class: 'note' }, 'No logo yet.'),
+  const drawLogo = () => fill(logoBox, p.logo ? h('img', { class: 'logoprev', src: p.logo, style: 'max-height:70px;max-width:220px;display:block;margin-bottom:8px;padding:4px' }) : h('p', { class: 'note' }, 'No logo yet.'),
     h('div', { class: 'btns' }, h('button', { class: 'btn small', onclick: async () => { const [f] = await pickFile({ accept: 'image/*' }); if (!f) return; const b = await shrinkImage(f, 600, 0.9, 'image/png'); p.logo = await blobToDataUrl(b); await saveP(); drawLogo(); } }, p.logo ? 'Change logo' : 'Add logo'), p.logo ? h('button', { class: 'btn small warn', onclick: async () => { delete p.logo; await saveP(); drawLogo(); } }, 'Remove') : null));
   drawLogo();
   const sigBox = h('div');
@@ -408,6 +454,7 @@ route(/^\/settings$/, async () => {
       h('div', { class: 'grid2' }, txt('phone', 'Phone', 'tel'), txt('email', 'Email', 'email')),
       txt('regNo', 'Registration / membership no. (optional)'), txt('certPrefix', 'Certificate number prefix (optional)', 'text', 'e.g. SS-')),
     h('div', { class: 'card' }, h('h2', {}, 'Logo'), logoBox),
+    appearanceCard(),
     h('div', { class: 'card' }, h('h2', {}, 'Signature'), sigBox),
     h('a', { class: 'card linkcard', href: '#/settings/presets' }, h('h2', {}, 'Device presets'), h('p', { class: 'note' }, 'Breakers and RCBOs you\u2019ve used, ready to tap on any circuit. Rename or delete them here.')),
     h('h2', { class: 'sec' }, 'Test instruments'), h('p', { class: 'note' }, 'Fills the instruments box on every new certificate. You\u2019ll get a warning a month before calibration is due, and when it\u2019s out of date.'), insBox,

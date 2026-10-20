@@ -683,3 +683,24 @@ main > h3.fhead { margin: var(--s5) var(--s1) var(--s3); padding-top: 0; border-
 .pdfitem .pill.latest { background: var(--greenbg); color: var(--green); border-color: transparent; font-size: 11.5px; padding: 1px 8px; }
 .pdfitem .btns { margin: var(--s2) 0 0; }
 .pdfitem .btns .btn { flex: 1 1 0; min-height: 40px; }
+
+/* ===== v0.18 job page ===== */
+.jsum .jname { font-size: 18px; font-weight: 750; letter-spacing: -.01em; margin-bottom: 2px; }
+.jsum .pills { display: flex; flex-wrap: wrap; gap: 6px; margin-top: var(--s3); }
+.pill.info { background: var(--brandbg); color: var(--brand); border-color: transparent; }
+.pill.amber { background: var(--amberbg); color: var(--amber); border-color: transparent; }
+.nextstep { border: 2px solid var(--brand); }
+.nextstep .nsk { font-size: 12px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; color: var(--muted); }
+.nextstep .nst { font-size: 18px; font-weight: 750; margin: 4px 0 var(--s2); }
+.nextstep .prog { margin-bottom: 6px; }
+.btn.big { min-height: 54px; font-size: 16.5px; border-radius: 14px; }
+.tile.ctype { font-size: 12px; font-weight: 800; color: var(--brand); background: var(--brandbg); letter-spacing: .02em; }
+.tile.addt { background: transparent; color: var(--brand); }
+.row.addrow .t { color: var(--brand); font-weight: 650; }
+.row.frow { min-height: 54px; }
+.row.frow .fic { color: var(--muted); display: inline-flex; width: 22px; justify-content: center; }
+.row.frow .rv { font-size: 13.5px; color: var(--muted); max-width: 45%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.row.frow.danger .t, .row.frow.danger .fic { color: var(--red); }
+.row.inrow { padding: 6px 0; min-height: 0; border: 0; }
+button.row { font: inherit; cursor: pointer; }
+.card:empty { display: none; } /* v0.18: a card whose fields are all hidden (e.g. EIC sign page, same person) */

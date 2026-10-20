@@ -3,9 +3,10 @@
 // When any file changes, bump CACHE (sparky-v0.1 -> sparky-v0.2).
 // Shares the mattytattie.github.io origin with Hearth, so it only ever
 // deletes caches whose names start with "sparky-".
-const CACHE = 'sparky-v0.17.2';
+const CACHE = 'sparky-v0.18.0';
 const FILES = [
   "./",
+  "./dark.css",
   "./fonts/inter-latin.woff",
   "./icons/icon-192.png",
   "./icons/icon-512.png",
@@ -13,6 +14,7 @@ const FILES = [
   "./icons/icon.svg",
   "./index.html",
   "./js/app.js",
+  "./js/backnav.js",
   "./js/backup.js",
   "./js/cables.js",
   "./js/calc.js",
@@ -22,11 +24,11 @@ const FILES = [
   "./js/calcmd.js",
   "./js/calcsize.js",
   "./js/calcui.js",
+  "./js/certdelete.js",
   "./js/certmodel.js",
   "./js/certui.js",
   "./js/checks.js",
   "./js/config.js",
-  "./js/certdelete.js",
   "./js/cuscan.js",
   "./js/dangermodel.js",
   "./js/dangerpdf.js",
@@ -47,6 +49,7 @@ const FILES = [
   "./js/importres.js",
   "./js/importui.js",
   "./js/inspections.js",
+  "./js/jobnext.js",
   "./js/limits.js",
   "./js/main.js",
   "./js/maxdemand.js",
@@ -65,6 +68,7 @@ const FILES = [
   "./js/templates.js",
   "./js/testacross.js",
   "./js/testlist.js",
+  "./js/theme.js",
   "./js/ui.js",
   "./js/voice.js",
   "./manifest.json",
