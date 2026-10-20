@@ -8,6 +8,7 @@ import * as G from './gdrive.js';
 import { DRIVE_ROOT, APP_SLUG } from './config.js';
 import { deviceLabel } from './syncmerge.js';
 import * as presets from './presets.js';
+import { skipDeleted, DELETED } from './pdflist.js';
 
 const toB64 = (blob) => new Promise((res) => { const r = new FileReader(); r.onload = () => res(String(r.result)); r.readAsDataURL(blob); });
 const fromB64 = async (u) => (await fetch(u)).blob();
@@ -97,6 +98,7 @@ export async function restoreDriveJob(folderId) {
 // Customers and certificates are only replaced by newer ones; files are
 // downloaded when missing or changed. Nothing on this device is deleted.
 export async function applyRemote(d, folderId, jsonId, { onlyIfNewer = false, force = false } = {}) {
+  d = skipDeleted(d, await db.getMeta(DELETED)); // v0.17.1: deleted certificates and their PDFs stay deleted
   if (Array.isArray(d.devicePresets)) await presets.mergeIn(d.devicePresets); // v0.11, optional
   if (d.customer && d.customer.id) { const c = await db.get('customers', d.customer.id); if (!c || (c.updatedAt || '') < (d.customer.updatedAt || '')) await db.put('customers', d.customer); }
   const curJob = await db.get('jobs', d.job.id);

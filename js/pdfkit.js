@@ -46,7 +46,7 @@ export class Kit {
     this.font(size, bold);
     const out = [];
     for (const para of String(text ?? '').split(/\r?\n/)) {
-      const parts = para.match(/[^\s\-\/]+[\-\/]*|[\-\/]+|\s+/g) || [''];
+      const parts = para.match(/\d{1,2}\/\d{1,2}\/\d{2,4}|[^\s\-\/]+[\-\/]*|[\-\/]+|\s+/g) || [''];
       let line = '';
       for (const p of parts) {
         const tryL = line + p;
@@ -64,7 +64,7 @@ export class Kit {
     return out.length ? out : [''];
   }
   // True if wrap() would have to break inside a word.
-  wordsFit(text, w, size = 8, bold = false) { this.font(size, bold); return (String(text ?? '').match(/[^\s\-\/]+[\-\/]*|[\-\/]+/g) || []).every((p) => this.doc.getTextWidth(p) <= w); }
+  wordsFit(text, w, size = 8, bold = false) { this.font(size, bold); return (String(text ?? '').match(/\d{1,2}\/\d{1,2}\/\d{2,4}|[^\s\-\/]+[\-\/]*|[\-\/]+/g) || []).every((p) => this.doc.getTextWidth(p) <= w); }
   // Largest size (down to min) at which text fits on ONE line of width w.
   fitSize(text, w, size, min = 6, bold = false) {
     let sz = size; while (sz > min && this.tw(text, sz, bold) > w) sz = Math.round((sz - 0.25) * 100) / 100;

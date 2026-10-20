@@ -649,3 +649,37 @@ details.more[open] > summary::before { transform: rotate(90deg); }
 b.code { display: inline-block; min-width: 26px; text-align: center; border-radius: 6px; padding: 0 4px; color: #fff; background: var(--red); font-size: 12px; }
 .dnitem { border-left: 4px solid var(--red); }
 .dnown summary { font-weight: 600; color: var(--sub); margin: 6px 0; cursor: pointer; }
+
+/* ===== v0.17.1 spacing rhythm: one scale everywhere =====
+   between blocks on a page: 12px (--s3); inside a card: 12px between parts,
+   headings 12px above content, no stray gap at the top/bottom of a card. */
+main > .card, main > .list, main > .notice, main > .banner { margin-top: 0; margin-bottom: var(--s3); }
+main > .btns { margin: var(--s4) 0 var(--s3); }
+main > p.note { margin: 0 var(--s1) var(--s3); }
+main > h3.fhead { margin: var(--s5) var(--s1) var(--s3); padding-top: 0; border-top: 0; }
+.card > :first-child { margin-top: 0; }
+.card > :last-child { margin-bottom: 0; }
+.card h2 { margin: 0 0 var(--s3); }
+.card > p, .card > p.note { margin: 0 0 var(--s3); }
+.card > .list { margin: 0 0 var(--s3); }
+.card > .list:last-child { margin-bottom: 0; }
+.card > .notice { margin: 0 0 var(--s3); }
+.card > .btns { margin: var(--s3) 0; }
+.card > .btns:first-child { margin-top: 0; }
+.card > .btns:last-child { margin-bottom: 0; }
+.card > .btns + p.note { margin-top: calc(-1 * var(--s1)); }
+.card > .check:last-child, .card > label.f:last-child { margin-bottom: 0; }
+.card > .check + .btns, .card > label.check + button.btn { margin-top: var(--s2); }
+.card > button.btn:last-child, .card > a.btn:last-child { margin-top: var(--s2); }
+.card .card { margin-bottom: var(--s3); }
+.card .card:last-child { margin-bottom: 0; }
+
+/* ===== v0.17.1 Saved PDFs list ===== */
+.pdflist { display: flex; flex-direction: column; gap: var(--s2); }
+.pdfitem { border: 1px solid var(--line); border-radius: 14px; padding: var(--s3); background: #fff; }
+.pdfitem.latest { border-color: #cfd8ff; background: #f8f9ff; }
+.pdfitem .pn { font-weight: 600; font-size: 14.5px; line-height: 1.35; overflow-wrap: anywhere; word-break: break-word; }
+.pdfitem .pm { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 4px; font-size: 13px; color: var(--muted); }
+.pdfitem .pill.latest { background: var(--greenbg); color: var(--green); border-color: transparent; font-size: 11.5px; padding: 1px 8px; }
+.pdfitem .btns { margin: var(--s2) 0 0; }
+.pdfitem .btns .btn { flex: 1 1 0; min-height: 40px; }

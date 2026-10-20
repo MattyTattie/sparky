@@ -11,21 +11,31 @@ import { CODE_TEXT } from './inspections.js';
 import { ACTIONS, blankNotice, blankItem, noticesOf, noticeForObs, noticeMissing, noticeNo, openNotices, addObs, removeObs, dangerCodes, itemFromObs } from './dangermodel.js';
 import { sigPad, savePdf, emailFor } from './certui.js';
 
-// From an observation's button: already on a notice → open it; open notices → add to one or start new.
-async function fromObs(cert, id, obsId) {
-  const o = (cert.observations || []).find((x) => x.id === obsId);
-  const on = o && noticeForObs(cert, o); if (on) return go(`#/cert/${id}/danger/${on.id}`);
-  const open = o ? openNotices(cert) : [];
+// From an observation's button (v0.17.1: asked on the observations page itself, not over a loading screen):
+// already on a notice → open it; unsigned notices → add to one or start new.
+export async function startFromObs(cert, o) {
+  const id = cert.id;
+  if (!Array.isArray(cert.dangerNotices)) cert.dangerNotices = [];
+  const on = noticeForObs(cert, o); if (on) return go(`#/cert/${id}/danger/${on.id}`);
+  const open = openNotices(cert);
   let target = 'new';
   if (open.length) {
     target = await modal('Danger notice', h('p', {}, 'Add this observation to a notice you haven\u2019t signed yet, or start a new one?'),
       [...open.map((n) => ({ label: `Add to ${noticeNo(cert, n)} (${n.items.length} item${n.items.length === 1 ? '' : 's'})`, value: n.id, cls: 'primary' })), { label: 'Start a new notice', value: 'new' }, { label: 'Cancel', value: null }]);
-    if (!target) return go(`#/cert/${id}/s/observations`);
+    if (!target) return;
   }
-  let n;
-  if (target === 'new') { n = blankNotice(cert, null, db.newId()); if (o && !n.items.some((i) => i.obsId === o.id)) n.items.unshift(itemFromObs(o)); cert.dangerNotices.push(n); }
-  else { n = cert.dangerNotices.find((x) => x.id === target); addObs(cert, n, o); }
-  changed(); return go(`#/cert/${id}/danger/${n.id}`);
+  const n = place(cert, o, target);
+  changed(); await flush(); return go(`#/cert/${id}/danger/${n.id}`);
+}
+function place(cert, o, target) {
+  if (target === 'new') { const n = blankNotice(cert, null, db.newId()); if (o && !n.items.some((i) => i.obsId === o.id)) n.items.unshift(itemFromObs(o)); cert.dangerNotices.push(n); return n; }
+  const n = cert.dangerNotices.find((x) => x.id === target); if (o) addObs(cert, n, o); return n;
+}
+// A link straight to .../danger/obs-<id> (no dialog): open its notice, or start a new one.
+async function fromObs(cert, id, obsId) {
+  const o = (cert.observations || []).find((x) => x.id === obsId);
+  const on = o && noticeForObs(cert, o); if (on) return go(`#/cert/${id}/danger/${on.id}`);
+  const n = place(cert, o, 'new'); changed(); return go(`#/cert/${id}/danger/${n.id}`);
 }
 
 route(/^\/cert\/([^/]+)\/danger\/([^/]+)$/, async (id, nid) => {

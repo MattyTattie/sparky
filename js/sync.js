@@ -84,6 +84,7 @@ async function cycle(interactive) {
   try {
     await flush(); pendingPush = false;
     const r = await pull(c);
+    try { await (await import('./certdelete.js')).flushTrash(); } catch {}
     let sent = 0;
     for (const j of await db.all('jobs')) if (needsPush(j)) { await backup.backupJob(j.id); sent++; }
     c.lastSync = new Date().toISOString(); await saveConfig(c);

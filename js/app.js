@@ -2,8 +2,9 @@
 // app.js — screens: jobs, customers, settings, backup. The certificate
 // screens are in certui.js, the schedule of test results in schedule.js.
 // =====================================================================
+import { pdfRows, madeAt } from './pdflist.js';
 import * as db from './db.js';
-import { h, fill, toast, modal, confirmBox, fmtDate, pickFile, shrinkImage, blobToDataUrl, shareOrDownload, icon, emptyState, skeleton } from './ui.js';
+import { h, fill, toast, modal, confirmBox, fmtDate, pickFile, shrinkImage, blobToDataUrl, shareOrDownload, icon, emptyState, skeleton, withIcon } from './ui.js';
 import { S, flush, getProfile, getInstruments, calibrationWarnings, INSTRUMENT_KINDS, instrumentText, touchJob } from './state.js';
 import { APP_NAME, APP_VERSION, APP_SLUG, DRIVE_ROOT } from './config.js';
 import { TYPES, copyCertForJob } from './certmodel.js';
@@ -237,9 +238,12 @@ route(/^\/job\/([^/]+)$/, async (id) => {
       photos.length ? h('div', { class: 'photos' }, photos.map((f) => h('img', { src: URL.createObjectURL(f.blob), alt: f.caption || 'Photo', onclick: () => photoView(f) }))) : emptyState('camera', 'No photos yet. Add the board, labels and any defects.'),
       h('div', { class: 'btns full' }, h('button', { class: 'btn', onclick: () => addPhotos(true) }, 'Take photo'), h('button', { class: 'btn', onclick: () => addPhotos(false) }, 'Add from gallery'))),
     dcPlansCard(job, save, render),
-    pdfs.length ? h('div', { class: 'card' }, h('h2', {}, 'Saved PDFs'), h('div', { class: 'list' }, pdfs.map((f) => h('div', { class: 'row pdfrow' }, h('div', { class: 'main' }, h('div', { class: 't' }, f.name), h('div', { class: 's' }, 'Made ' + fmtDate(f.createdAt))),
-      h('button', { class: 'btn small', onclick: async () => (await import('./pdfview.js')).viewPdf(f.blob, f.name) }, 'View'),
-      h('button', { class: 'btn small', 'aria-label': 'Share ' + f.name, onclick: () => shareOrDownload(f.blob, f.name) }, 'Share'))))) : null,
+    pdfs.length ? h('div', { class: 'card', id: 'savedpdfs' }, h('h2', {}, 'Saved PDFs'), h('div', { class: 'pdflist' }, pdfRows(pdfs).map(({ f, latest }) => h('div', { class: 'pdfitem' + (latest ? ' latest' : '') },
+      h('div', { class: 'pn' }, f.name),
+      h('div', { class: 'pm' }, latest ? h('span', { class: 'pill latest' }, 'Latest') : null, h('span', {}, 'Made ' + madeAt(f.createdAt))),
+      h('div', { class: 'btns' },
+        h('button', { class: 'btn small', onclick: async () => (await import('./pdfview.js')).viewPdf(f.blob, f.name) }, withIcon('eye', 'View')),
+        h('button', { class: 'btn small', 'aria-label': 'Share ' + f.name, onclick: () => shareOrDownload(f.blob, f.name) }, withIcon('share', 'Share'))))))) : null,
     h('div', { class: 'card' }, h('h2', {}, 'Backup'),
       h('p', { class: 'note' }, job.backedUpAt ? `In Google Drive (folder “${backup.jobFolderName(job, cust)}”), last saved ${new Date(job.backedUpAt).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' })}${(job.version || 0) > (job.backedUpVersion || 0) ? ' — changed since.' : '.'}` : 'Saved on this device. Not in Google Drive yet.'),
       h('div', { class: 'btns full' }, G.isConfigured() ? h('button', { class: 'btn', onclick: (e) => doBackup(e.currentTarget) }, 'Back up to Drive') : null, h('button', { class: 'btn', onclick: copyJob }, 'Copy job'), h('button', { class: 'btn warn', onclick: delJob }, 'Delete job'))),
