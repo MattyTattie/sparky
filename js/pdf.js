@@ -326,7 +326,8 @@ export function scheduleRows(cert, b, flags = false) {
     const lim = spare ? { value: null } : limitZs(c, ctx);
     const r = { ...c, maxZs: spare ? (c.maxZsOverride || '') : (lim.value != null ? lim.value.toFixed(2) : (c.maxZsOverride || '')) };
     // v0.10: spare way: empty boxes print an automatic N/A in light grey (typed values as typed).
-    if (spare) for (const f of FIELDS) if (autoNA(c, f.k)) r[f.k] = { v: 'N/A', auto: true };
+    // v0.18.4: also the ring boxes (r1, rn, r2) of a circuit that isn't a ring final.
+    for (const f of FIELDS) if (autoNA(c, f.k)) r[f.k] = { v: 'N/A', auto: true };
     if (flags && !spare) {
       const zs = parseFloat(c.zs);
       if (lim.value != null && !isNaN(zs) && zs > lim.value) r.zs = { v: c.zs, flag: 'red' };

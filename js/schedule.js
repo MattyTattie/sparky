@@ -334,7 +334,9 @@ function circuitEditor({ cert, c, ctx, back, title, prev, next, extra = [], mw =
     const on = isRingLike(c);
     ringInputs.style.display = on ? '' : 'none';
     const hidden = !on && ['r1', 'rn', 'r2'].some((k) => String(c[k] || '').trim());
-    if (!on) { fill(ringBox, hidden ? h('p', { class: 'note' }, `Ring readings hidden (r1 ${c.r1 || '–'}, rn ${c.rn || '–'}, r2 ${c.r2 || '–'}). Tick “Ring final circuit” to see them.`) : null); return; }
+    if (!on) { fill(ringBox, hidden ? h('p', { class: 'note' }, `Ring readings hidden (r1 ${c.r1 || '–'}, rn ${c.rn || '–'}, r2 ${c.r2 || '–'}). Tick “Ring final circuit” to see them.`)
+      : h('div', { class: 'grid3 ringna' }, ['r1', 'rn', 'r2'].map((k) => h('label', { class: 'f' }, h('span', {}, FIELD[k].short), h('input', { class: 'autona', placeholder: 'N/A', disabled: true, 'aria-label': FIELD[k].short + ': N/A, not a ring' })))),
+        hidden ? null : h('p', { class: 'note' }, 'Not a ring final circuit, so r1, rn and r2 show and print N/A. Tick “Ring final circuit” to fill them in.')); return; }
     const rc = ringCheck(c, ctx());
     fill(ringBox, h('div', { class: 'ringchk' }, h('div', { class: 'ringhd' }, 'Ring final check'),
       rc.empty ? h('p', { class: 'note' }, 'Enter the end-to-end readings r1, rn and r2 and the app checks the ring.') :

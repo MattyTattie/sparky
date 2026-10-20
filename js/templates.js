@@ -95,7 +95,13 @@ export const isSpareCircuit = (c) => !!(c && (c.spare || SPARE_RE.test(String(c.
 export const DEVICE_KEYS = ['bs', 'type', 'rating', 'bka', 'maxZs', 'rcdBs', 'rcdType', 'rcdIdn', 'rcdRating'];
 const blankV = (v) => v == null || String(v).trim() === '';
 // Is box k of circuit c an automatic N/A? (irV's 500 V default counts as empty on a spare.)
+// v0.18.4: a circuit that isn't a ring final: empty r1 / rn / r2 boxes are an automatic N/A too.
+// (Same rule as checks.js isRingLike: ticked ring, any real ring reading, or "ring" in the description.)
+export const RING_KEYS = ['r1', 'rn', 'r2'];
+const realV = (v) => v != null && String(v).trim() !== '' && !/^n\/?a$/i.test(String(v).trim());
+export const isRingCircuit = (c) => !!c && (c.ring === true || (c.ring !== false && (RING_KEYS.some((k) => realV(c[k])) || /\bring\b/i.test(c.desc || ''))));
 export function autoNA(c, k) {
+  if (RING_KEYS.includes(k) && !isSpareCircuit(c) && !isRingCircuit(c)) return blankV(c[k]);
   if (!isSpareCircuit(c) || k === 'num' || k === 'desc') return false;
   if (DEVICE_KEYS.includes(k) && !c.noDevice) return false;
   if (k === 'maxZs') return blankV(c.maxZsOverride);

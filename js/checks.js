@@ -17,7 +17,7 @@ export function num(v) {
 }
 const isGreater = (v) => /^\s*[>≥]/.test(String(v || ''));
 
-import { isSpareCircuit } from './templates.js';
+import { isSpareCircuit, isRingCircuit } from './templates.js';
 export const isSpare = isSpareCircuit;
 
 // The max Zs used for a circuit: your own figure (e.g. from the maker's
@@ -35,7 +35,7 @@ export function limitZs(c, ctx = {}) {
 
 // ---- Cable vs device (Appendix 4 tabulated ratings, before correction factors) ----
 const hasVal = (v) => v != null && String(v).trim() !== '' && !/^n\/?a$/i.test(String(v).trim());
-export const isRingLike = (c) => c.ring === true || (c.ring !== false && (['r1', 'rn', 'r2'].some((k) => hasVal(c[k])) || /\bring\b/i.test(c.desc || '')));
+export const isRingLike = isRingCircuit;
 const SOCKETY = /sock|skt|ring/i;
 export function cableTable(c) {
   const p = CABLE_PICKS[c.cable]; if (p) return p.calc;
