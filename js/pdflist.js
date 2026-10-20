@@ -26,3 +26,17 @@ export function skipDeleted(d, del) {
   const c = del.certs || {}; const f = del.files || {};
   return { ...d, certs: (d.certs || []).filter((x) => !c[x.id]), files: (d.files || []).filter((x) => !f[x.id] && !(x.certId && c[x.certId])) };
 }
+// v0.17.2: saved PDFs whose certificate is gone from this device. Careful on purpose:
+//  - only PDFs with a certId (no certId = leave it),
+//  - only when this device has certificates at all (empty/unloaded DB = do nothing),
+//  - only when the PDF's job is still here (a missing job may not be pulled yet),
+//  - never for a certificate Drive still lists in that job (remoteCertIds, if known).
+export function findOrphans(files, certs, jobs, { remoteCertIds = null } = {}) {
+  const certIds = new Set((certs || []).map((c) => c.id));
+  if (!certIds.size) return [];
+  const jobIds = new Set((jobs || []).map((j) => j.id));
+  return (files || []).filter((f) => isCertPdf(f) && f.certId && !certIds.has(f.certId) && f.jobId && jobIds.has(f.jobId) && !(remoteCertIds && remoteCertIds.has(f.certId)));
+}
+// When it's safe to look: sync off (this device is the only copy), or right after a sync
+// that pulled cleanly and wasn't this device's first.
+export const orphanCheckSafe = ({ syncOn, afterSync = false, pulledOk = false, firstSync = true }) => (!syncOn ? true : afterSync && pulledOk && !firstSync);

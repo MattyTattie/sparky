@@ -35,7 +35,7 @@ const saveConfig = (c) => db.setMeta(CONF, c);
 let started = false; let timer = null; let running = null; let again = false;
 export async function init() {
   const c = await getConfig();
-  if (!G.isConfigured() || !c.enabled) return setStatus({ state: 'off' });
+  if (!G.isConfigured() || !c.enabled) { tidyLocal(); return setStatus({ state: 'off' }); }
   setStatus({ state: navigator.onLine ? 'synced' : 'offline', last: c.lastSync || null });
   if (!started) {
     started = true;
@@ -66,6 +66,9 @@ export async function connect() {
 export async function disconnect() { const c = await getConfig(); c.enabled = false; await saveConfig(c); clearTimeout(timer); setStatus({ state: 'off', message: '' }); }
 export async function recordDelete(jobId) { const t = (await db.getMeta(TOMBS)) || {}; t[jobId] = new Date().toISOString(); await db.setMeta(TOMBS, t); }
 
+// v0.17.2: sync off, so this device is the only copy: tidy orphan PDFs once at start.
+let tidied = false;
+function tidyLocal() { if (tidied) return; tidied = true; import('./certdelete.js').then((m) => m.cleanOrphans({ syncOn: false })).then((n) => { if (n) dispatchEvent(new CustomEvent('sparky:synced', { detail: { orphans: n } })); }).catch(() => {}); }
 // One sync at a time; a change during a sync means one more round after.
 export function syncNow({ interactive = false } = {}) {
   if (running) { again = true; return running; }
@@ -83,11 +86,13 @@ async function cycle(interactive) {
   inCycle = true;
   try {
     await flush(); pendingPush = false;
+    const firstSync = !c.lastPull; // v0.17.2: no orphan tidy on a device's first sync
     const r = await pull(c);
     try { await (await import('./certdelete.js')).flushTrash(); } catch {}
     let sent = 0;
     for (const j of await db.all('jobs')) if (needsPush(j)) { await backup.backupJob(j.id); sent++; }
     c.lastSync = new Date().toISOString(); await saveConfig(c);
+    try { const { cleanOrphans } = await import('./certdelete.js'); const n = await cleanOrphans({ syncOn: true, afterSync: true, pulledOk: !r.incomplete, firstSync, remoteCertIds: r.remoteCertIds }); if (n) dispatchEvent(new CustomEvent('sparky:synced', { detail: { orphans: n } })); } catch {}
     setStatus({ state: 'synced', message: '', last: c.lastSync, pulled: r.pulled, sent, conflicts: r.conflicts });
     if (r.pulled || r.conflicts) dispatchEvent(new CustomEvent('sparky:synced', { detail: r }));
   } catch (e) {
@@ -105,10 +110,11 @@ export async function pull(c = null) {
   const q = `name = 'job.json' and trashed = false and mimeType = 'application/json'` + (c.lastPull ? ` and modifiedTime > '${c.lastPull}'` : '');
   const files = await G.list(q);
   const tombs = (await db.getMeta(TOMBS)) || {};
-  const out = { pulled: 0, conflicts: 0, jobIds: [] };
+  const out = { pulled: 0, conflicts: 0, jobIds: [], remoteCertIds: new Set(), incomplete: false };
   for (const f of files) {
-    let d; try { d = await G.readJSON(f.id); } catch { continue; }
+    let d; try { d = await G.readJSON(f.id); } catch { out.incomplete = true; continue; }
     if (!d || d.app !== APP_SLUG || !d.job || !d.job.id) continue;
+    for (const rc of d.certs || []) if (rc && rc.id) out.remoteCertIds.add(rc.id); // v0.17.2: never treat these as orphans
     if (Array.isArray(d.devicePresets)) { try { await presets.mergeIn(d.devicePresets); } catch {} } // v0.11
     const local = await db.get('jobs', d.job.id);
     const plan = planJob(local, d, { deletedAt: tombs[d.job.id] || '' });
