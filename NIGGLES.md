@@ -105,3 +105,4 @@
 - [built v0.12] Text areas (comments, descriptions, observations etc.) auto-grow to fit their content as he types (no inner scroll, no text cut off sideways); on Mac and phone. (19 Oct)
 - [built v0.12] Schedule table rows: add a bin/delete-circuit button (with confirm "Delete circuit N?", offer renumber if sequential) next to edit/copy/spare icons; also on circuit page. (19 Oct)
 - v0.14.1: ring hint on the R1+R2 step of Test across circuits.
+- TODO next batch: Test across circuits R1+R2 step counts a circuit as done when R2 is N/A but R1+R2 is blank. Should need a real value in one of them (N/A in both = not done unless spare).
