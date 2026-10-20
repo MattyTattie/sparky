@@ -222,9 +222,9 @@ html.dark .searchbox input[type=search] { box-shadow: var(--shadow); border-colo
 html.dark input:focus, html.dark select:focus, html.dark textarea:focus { border-color: #363b71 !important; box-shadow: 0 0 0 4px rgba(0,0,0,0.35) !important; }
 html.dark .navi.on .ico { background: linear-gradient(135deg, #141934, #1d1434); }
 html.dark .stat { background: #1d1d1d; border: 1px solid rgba(47,62,98,0.90); box-shadow: var(--shadow); }
-html.dark .stat b { background: linear-gradient(135deg, var(--hdr1), var(--hdr3)); }
+html.dark .stat b { background: linear-gradient(135deg, var(--hdr1), var(--hdr3)); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; }
 html.dark .stat span { color: var(--muted); }
-html.dark .stat.warn b { background: linear-gradient(135deg, #d9480f, #f59f00); }
+html.dark .stat.warn b { background: linear-gradient(135deg, #d9480f, #f59f00); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; }
 html.dark .calcpick:hover { box-shadow: var(--shadow-lift); }
 html.dark .cpic { color: #fff; background: linear-gradient(145deg, #4c5bff, #2a33d8); box-shadow: 0 6px 14px -4px rgba(0,0,0,0.60); }
 html.dark .calcpicks .calcpick:nth-child(6n+2) .cpic { background: linear-gradient(145deg, #8b5cf6, #6d28d9); box-shadow: 0 6px 14px -4px rgba(0,0,0,0.60); }
@@ -341,4 +341,11 @@ html.dark .switch { background: #3a4358; } html.dark .switch.on, html.dark .swit
 html.dark .check input, html.dark .seltick, html.dark input[type=radio] { accent-color: #6d84ff; }
 html.dark .syncchip { background: rgba(255,255,255,.16) !important; color: #fff !important; }
 html.dark .syncline .syncchip { background: #1f2747 !important; color: #cdd6ff !important; }
+/* v0.18.3: stat numbers stay gradient text, lighter so they read on dark tiles; brighter test-across heading */
+html.dark .stat b { background: linear-gradient(135deg, #9fb0ff, #c9a8ff) !important; -webkit-background-clip: text !important; background-clip: text !important; -webkit-text-fill-color: transparent; color: transparent; }
+html.dark .stat.warn b { background: linear-gradient(135deg, #ff8a4c, #ffc94d) !important; -webkit-background-clip: text !important; background-clip: text !important; }
+html.dark .thead h2 { color: #b9c4ff !important; }
+html.dark .tkind { color: #aab2c3 !important; }
+/* v0.18.3: small brand-blue section labels were too dark on dark cards */
+html.dark .card h2, html.dark h2.sec, html.dark .ans-k, html.dark .ringhd, html.dark .obscat, html.dark .partgroup h3, html.dark .lastbadge, html.dark h3.subh, html.dark .phd { color: #9fb0ff !important; }
 

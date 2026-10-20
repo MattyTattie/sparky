@@ -121,7 +121,7 @@ function statsStrip(jobs, certs) {
   return h('div', { class: 'stats' },
     h('div', { class: 'stat' }, h('b', {}, String(open)), h('span', {}, open === 1 ? 'Open job' : 'Open jobs')),
     h('div', { class: 'stat' }, h('b', {}, String(drafts)), h('span', {}, drafts === 1 ? 'Draft cert' : 'Draft certs')),
-    h('div', { class: 'stat' + (due ? ' warn' : '') }, h('b', {}, String(due)), h('span', {}, 'Re-tests due')));
+    h('div', { class: 'stat' + (due ? ' warn' : '') }, h('b', {}, String(due)), h('span', {}, due === 1 ? 'Re-test due' : 'Re-tests due')));
 }
 
 // v0.9: a job changed on both devices: say which copy is which.

@@ -54,3 +54,10 @@ html.dark .switch { background: #3a4358; } html.dark .switch.on, html.dark .swit
 html.dark .check input, html.dark .seltick, html.dark input[type=radio] { accent-color: #6d84ff; }
 html.dark .syncchip { background: rgba(255,255,255,.16) !important; color: #fff !important; }
 html.dark .syncline .syncchip { background: #1f2747 !important; color: #cdd6ff !important; }
+/* v0.18.3: stat numbers stay gradient text, lighter so they read on dark tiles; brighter test-across heading */
+html.dark .stat b { background: linear-gradient(135deg, #9fb0ff, #c9a8ff) !important; -webkit-background-clip: text !important; background-clip: text !important; -webkit-text-fill-color: transparent; color: transparent; }
+html.dark .stat.warn b { background: linear-gradient(135deg, #ff8a4c, #ffc94d) !important; -webkit-background-clip: text !important; background-clip: text !important; }
+html.dark .thead h2 { color: #b9c4ff !important; }
+html.dark .tkind { color: #aab2c3 !important; }
+/* v0.18.3: small brand-blue section labels were too dark on dark cards */
+html.dark .card h2, html.dark h2.sec, html.dark .ans-k, html.dark .ringhd, html.dark .obscat, html.dark .partgroup h3, html.dark .lastbadge, html.dark h3.subh, html.dark .phd { color: #9fb0ff !important; }
