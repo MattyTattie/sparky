@@ -30,6 +30,7 @@ export function rowMode(c, stepId) {
   const s = stepById(stepId);
   if (isSpareCircuit(c)) return { mode: 'skip', why: c.noDevice ? 'Spare way, no device fitted' : 'Spare way' };
   if (s.only === 'ring' && !isRingLike(c)) return { mode: 'skip', why: 'Not a ring final circuit' };
+  if (s.id === 'r1r2' && isRingLike(c)) return { mode: 'edit', note: 'Ring: cross-connect line and CPC (figure-of-eight) at the board, then measure at each socket. Record the highest reading.' };
   if (s.id === 'rcd' && !hasRcd(c)) return { mode: 'edit', note: 'No RCD recorded on this circuit. Tap N/A if there isn\u2019t one.' };
   return { mode: 'edit' };
 }

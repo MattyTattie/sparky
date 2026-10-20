@@ -104,3 +104,4 @@
 - [built v0.12] Status line: replace "All filled in ✓" / "for the green dot" wording with "Section complete ✓" (and "Still to fill in: …" without "for the green dot"). Add the same status line to section H (schedule of inspections) and other special sections. (19 Oct)
 - [built v0.12] Text areas (comments, descriptions, observations etc.) auto-grow to fit their content as he types (no inner scroll, no text cut off sideways); on Mac and phone. (19 Oct)
 - [built v0.12] Schedule table rows: add a bin/delete-circuit button (with confirm "Delete circuit N?", offer renumber if sequential) next to edit/copy/spare icons; also on circuit page. (19 Oct)
+- v0.14.1: ring hint on the R1+R2 step of Test across circuits.
