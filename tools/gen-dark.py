@@ -8,7 +8,7 @@ import re, colorsys, os
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 css = open(os.path.join(ROOT, 'styles.css')).read()
 css = re.sub(r'/\*.*?\*/', '', css, flags=re.S)
-SKIP = re.compile(r'sigpad|sigimg|pdfpage|pdfpages|pdfview|pdfbar|pdfbtn|pdfpn|logoprev|\.bottomnav|header\.top|\.brandmark|\.btn\.primary|\.btn\.danger|\.chip\.on|\.chip\.c[123]|\.chip\.fi|\.fab|\.toast|::selection|b\.code|\.switch|\.beta')
+SKIP = re.compile(r'sigpad|sigimg|pdfpage|pdfpages|pdfview|pdfbar|pdfbtn|pdfpn|logoprev|\.bottomnav|header\.top|\.brandmark|\.btn\.primary|\.btn\.danger|\.chip\.on|\.chip\.c[123]|\.chip\.fi|\.fab|\.toast|::selection|b\.code|\.switch|\.beta|\.syncchip|\.tstep\.on|\.tab\.on')
 COLOR = re.compile(r'#[0-9a-fA-F]{3,8}\b|rgba?\([^)]*\)|\bwhite\b')
 PROPS = ('background', 'background-color', 'color', 'border', 'border-color', 'border-top', 'border-bottom', 'border-left', 'border-right', 'border-top-color', 'border-bottom-color', 'border-left-color', 'outline', 'box-shadow', 'fill', 'stroke', 'caret-color')
 

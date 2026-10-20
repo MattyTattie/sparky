@@ -704,3 +704,8 @@ main > h3.fhead { margin: var(--s5) var(--s1) var(--s3); padding-top: 0; border-
 .row.inrow { padding: 6px 0; min-height: 0; border: 0; }
 button.row { font: inherit; cursor: pointer; }
 .card:empty { display: none; } /* v0.18: a card whose fields are all hidden (e.g. EIC sign page, same person) */
+
+/* ===== v0.18.1: selected choices always obvious; sync dot visible on the header ===== */
+.f .chips:not(.seg2) .chip.on::before { content: '✓'; font-weight: 800; margin-right: 6px; }
+.syncchip i { width: 10px !important; height: 10px !important; background: #cbd5e1; box-shadow: 0 0 0 2px rgba(255,255,255,.95) !important; }
+.syncchip.green i { background: #22c55e; } .syncchip.amber i { background: #f59e0b; } .syncchip.red i { background: #ef4444; } .syncchip.info i { background: #60a5fa; }

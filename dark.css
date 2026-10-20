@@ -47,7 +47,6 @@ html.dark table.sched td.calc { background: #12162f; }
 html.dark .ins.head { color: #a3aee8; }
 html.dark .warnnote { color: #ebceb0; }
 html.dark .tabs { background: #141b34; }
-html.dark .tabs .tab.on { background: #1d1d1d; box-shadow: 0 2px 8px rgba(0,0,0,0.30); }
 html.dark .ringchk { border: 1.5px solid #303963; background: #11152e; }
 html.dark .searchbox input[type=search] { background: #1d1d1d; }
 html.dark .sk { background: linear-gradient(90deg, #1b212e 25%, #161b2b 37%, #1b212e 63%); }
@@ -102,12 +101,6 @@ html.dark .calcpicks .calcpick:nth-child(6n+4) .cpic { box-shadow: 0 6px 14px -4
 html.dark .calcpicks .calcpick:nth-child(6n+5) .cpic { box-shadow: 0 6px 14px -4px rgba(0,0,0,0.60); }
 html.dark .calcpicks .calcpick:nth-child(6n+6) .cpic { box-shadow: 0 6px 14px -4px rgba(0,0,0,0.60); }
 html.dark .calcpick.last { border: 1.5px solid #303764; background: linear-gradient(180deg, #1d1d1d, #12172f); }
-html.dark .syncchip { background: rgba(76,76,76,0.16) !important; }
-html.dark .syncchip i { background: #191d41; }
-html.dark .syncchip.green i { box-shadow: 0 0 0 3px rgba(0,0,0,0.60); }
-html.dark .syncchip.amber i { box-shadow: 0 0 0 3px rgba(0,0,0,0.60); }
-html.dark .syncchip.red i { box-shadow: 0 0 0 3px rgba(0,0,0,0.60); }
-html.dark .syncline .syncchip { background: #131831 !important; color: #a3aee8 !important; }
 html.dark .iconbtn.small { background: #1d1d1d; }
 html.dark .presetbox { background: linear-gradient(180deg, #11152e, #1d1d1d); border: 1px solid #2e3760; }
 html.dark .selbar { background: #1d1d1d; border: 1px solid #2f3861; }
@@ -116,7 +109,6 @@ html.dark td.act button.del { color: #e7a29d; }
 html.dark .tstep { background: #1d1d1d; color: var(--ink, #c5cfdf); }
 html.dark .tstep .tn { background: #192230; }
 html.dark .tstep.live .tn { background: #3b2e16; }
-html.dark .tstep.on .tn { background: rgba(76,76,76,0.25); }
 html.dark .tprog { background: #192230; }
 html.dark .tprog.all { background: #16391f; }
 html.dark .trow { background: #1d1d1d; }
@@ -161,4 +153,24 @@ html.dark .sigimg { padding: 4px; }
 /* the PDF viewer shows paper: pages stay white */
 html.dark .pdfpage { background: #fff; }
 html.dark .nextstep { border-color: var(--brand); }
+/* v0.18.1: selected vs not selected must be obvious in dark */
+html.dark .chip { background: transparent; border-color: #3a4358; color: #aab2c3; }
+html.dark .chip.on, html.dark .subtabs .chip.on { background: #4b63ff; border-color: #8ea0ff; color: #fff; box-shadow: 0 0 0 1px #8ea0ff, 0 4px 12px -4px rgba(75,99,255,.7); }
+html.dark .chip.c1.on, html.dark .chip.c2.on { background: #d32f2f; border-color: #ff8a80; box-shadow: 0 0 0 1px #ff8a80; color: #fff; }
+html.dark .chip.c3.on { background: #1e6fd9; border-color: #90c2ff; box-shadow: 0 0 0 1px #90c2ff; color: #fff; }
+html.dark .chip.fi.on { background: #e07a1f; border-color: #ffc078; box-shadow: 0 0 0 1px #ffc078; color: #fff; }
+html.dark .chips.seg2 { background: #10141e; border: 1px solid #2a3142; }
+html.dark .chips.seg2 .chip { background: transparent; border: 0; box-shadow: none; color: #8f98ab; }
+html.dark .chips.seg2 .chip.on { background: #4b63ff; color: #fff; box-shadow: 0 2px 8px rgba(0,0,0,.4); }
+html.dark .tabs { background: #10141e; border: 1px solid #2a3142; }
+html.dark .tabs .tab { color: #8f98ab; } html.dark .tabs .tab.on { background: #4b63ff; color: #fff; }
+html.dark .tstep { background: transparent; border-color: #3a4358; color: #aab2c3; }
+html.dark .tstep .tn { background: #232a3a; color: var(--ink); }
+html.dark .tstep.live .tn { background: #5a4520; color: #ffd89a; }
+html.dark .tstep.on { background: #4b63ff; border-color: #8ea0ff; color: #fff; }
+html.dark .tstep.on .tn { background: rgba(255,255,255,.25); color: #fff; }
+html.dark .switch { background: #3a4358; } html.dark .switch.on, html.dark .switch:checked { background: #4b63ff; }
+html.dark .check input, html.dark .seltick, html.dark input[type=radio] { accent-color: #6d84ff; }
+html.dark .syncchip { background: rgba(255,255,255,.16) !important; color: #fff !important; }
+html.dark .syncline .syncchip { background: #1f2747 !important; color: #cdd6ff !important; }
 
