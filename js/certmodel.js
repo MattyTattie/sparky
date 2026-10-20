@@ -34,7 +34,7 @@ export function newCert(type, { job = {}, customer = {}, profile = {}, instrumen
     jobId: job.id || '', type, number, status: 'draft',
     createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
     amendedTo: AMENDED_TO,
-    client: { name: customer.name || '', address: [customer.address, customer.postcode].filter(Boolean).join(', ') },
+    client: { name: customer.name || '', address: [customer.address, customer.postcode].filter(Boolean).join(', '), email: customer.email || '' },
     install: { address: job.siteAddress || customer.address || '', postcode: job.sitePostcode || customer.postcode || '', occupier: '', description: '', extentType: 'New installation', extent: '' },
     supply: { earthing: 'TN-C-S (PME)', conductors: '1-phase, 2-wire', acdc: 'AC', u: '230', f: '50', ipf: '', ze: '', polarity: true, otherSources: false, spBs: 'BS 88-3', spType: '', spRating: '', spKa: '' },
     parts: { means: 'Distributor\u2019s facility', maxDemand: '', mdUnit: 'A', elType: '', elLocation: '', elRa: '', ecMat: 'Copper', ecCsa: '16', ecOk: true, bondMat: 'Copper', bondCsa: '10', bondOk: true, bondWater: false, bondGas: false, bondOil: false, bondSteel: false, bondLightning: false, bondOther: '', msLocation: '', msBs: '60947-3', msPoles: '2', msCurrent: '100', msVoltage: '230', msType: '', msRating: '', msKa: '', rcdType: '', rcdIdn: '', rcdDelay: '', rcdMs: '', rcdKa: '' },
@@ -61,7 +61,7 @@ export function copyCertForJob(src, { job = {}, customer = {}, number = '' } = {
   c.id = (globalThis.crypto && crypto.randomUUID) ? crypto.randomUUID() : 'x' + Date.now();
   c.jobId = job.id || ''; c.number = number; c.status = 'draft'; c.sigs = {};
   c.createdAt = c.updatedAt = new Date().toISOString();
-  c.client = { name: customer.name || '', address: [customer.address, customer.postcode].filter(Boolean).join(', ') };
+  c.client = { name: customer.name || '', address: [customer.address, customer.postcode].filter(Boolean).join(', '), email: customer.email || '' };
   c.install.address = job.siteAddress || customer.address || ''; c.install.postcode = job.sitePostcode || customer.postcode || '';
   c.supply.ipf = ''; c.supply.ze = ''; c.photoIds = []; c.observations = [];
   const clear = (ci) => { for (const k of ['r1', 'rn', 'r2', 'r1r2', 'R2', 'irLL', 'irLE', 'pol', 'zs', 'rcdMs', 'rcdBtn', 'afddBtn']) if (ci[k] !== 'N/A') ci[k] = ''; };
@@ -131,7 +131,7 @@ const PARTS = { id: 'parts', title: 'Earthing, bonding and main switch', form: '
 export function sectionsFor(type) {
   if (type === 'EIC') return [
     { id: 'client', title: 'Client and installation', form: 'A / B', fields: [
-      f('client.name', 'Client name'), f('client.address', 'Client address', 'area'),
+      f('client.name', 'Client name'), f('client.address', 'Client address', 'area'), f('client.email', 'Client email (for emailing the certificate)', 'text', { opt: true, placeholder: 'Optional' }), 
       f('install.address', 'Installation address', 'area'), f('install.postcode', 'Installation postcode', 'text', { opt: true }),
       f('install.extentType', 'Type of work', 'chips', { opts: ['New installation', 'Addition to an existing installation', 'Alteration to an existing installation'] }),
       f('install.description', 'Description of installation', 'area'), f('install.extent', 'Extent of installation covered by this certificate', 'area'),
@@ -157,7 +157,7 @@ export function sectionsFor(type) {
   ];
   if (type === 'EICR') return [
     { id: 'client', title: 'Person ordering, reason', form: 'A / B', fields: [
-      f('client.name', 'Person ordering the report'), f('client.address', 'Their address', 'area'),
+      f('client.name', 'Person ordering the report'), f('client.address', 'Their address', 'area'), f('client.email', 'Client email (for emailing the certificate)', 'text', { opt: true, placeholder: 'Optional' }), 
       f('eicr.reason', 'Reason for producing this report', 'chips', { opts: ['Change of tenancy', 'Landlord requirement', 'Sale of property', 'Periodic inspection', 'Insurance', 'Other'] }),
       f('eicr.datesDone', 'Date(s) inspection and testing carried out'),
     ] },
@@ -188,7 +188,7 @@ export function sectionsFor(type) {
   ];
   return [
     { id: 'mwA', title: 'The minor works', form: 'A', fields: [
-      f('client.name', 'Details of the client'), f('mw.completed', 'Date minor works completed', 'date'),
+      f('client.name', 'Details of the client'), f('client.email', 'Client email (for emailing the certificate)', 'text', { opt: true, placeholder: 'Optional' }),  f('mw.completed', 'Date minor works completed', 'date'),
       f('install.address', 'Installation location/address', 'area'), f('mw.description', 'Description of the minor works', 'area'),
       f('mw.departures', 'Departures from BS 7671', 'area', { opt: true }), f('mw.exceptions', 'Permitted exceptions (411.3.3)', 'area', { opt: true }), f('mw.risk', 'Risk assessment attached', 'check'),
       f('mw.comments', 'Comments on the existing installation (644.1.2)', 'area', { opt: true }),

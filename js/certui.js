@@ -11,6 +11,7 @@ import { TYPES, newCert, sectionsFor, sectionDone, missingFields, visible, get, 
 import { EIC_ITEMS, EIC_OUTCOMES, EICR_ITEMS, EICR_OUTCOMES, CODE_TEXT, OBSERVATIONS, OBS_CATS, EIC_HELP, EICR_HELP } from './inspections.js';
 import { checkCircuit, isSpare } from './checks.js';
 import { CHECK_NOTE } from './limits.js';
+import { dangerCodes, noticeForObs, noticesOf, noticeMissing, noticeNo } from './dangermodel.js';
 
 export async function createCert(type, job, cust) {
   const profile = await getProfile();
@@ -66,11 +67,17 @@ route(/^\/cert\/([^/]+)$/, async (id) => {
       h('a', { class: 'row', href: `#/cert/${id}/s/instruments` }, h('span', { class: 'dot ' + (Object.values(cert.instruments || {}).some(Boolean) ? 'ok' : '') }), h('div', { class: 'main' }, h('div', { class: 't' }, 'Test instruments'), h('div', { class: 's' }, 'From your settings; change for this certificate')), h('span', { class: 'go' }, '›')),
       job ? h('a', { class: 'row', href: `#/cert/${id}/photos` }, h('span', { class: 'dot ' + ((cert.photoIds || []).length ? 'ok' : '') }), h('div', { class: 'main' }, h('div', { class: 't' }, 'Photos on the certificate'), h('div', { class: 's' }, `${(cert.photoIds || []).length} chosen`)), h('span', { class: 'go' }, '›')) : null),
     h('div', { class: 'card' }, h('h2', {}, 'PDF'),
-      h('p', { class: 'note' }, 'Makes the certificate as a PDF laid out like the IET model forms, with your logo. “View PDF” shows it here first so you can check it before printing or sharing. Sharing opens your phone\u2019s share menu: you choose the app and who it goes to. Nothing is sent by itself.'),
+      h('p', { class: 'note' }, 'Makes the certificate as a PDF laid out like the IET model forms, with your logo. “View PDF” shows it here first so you can check it before printing or sharing. Sharing opens the share menu on your device: you choose the app and who it goes to. Nothing is sent by itself.'),
       h('div', { class: 'btns full' }, h('button', { class: 'btn primary', onclick: (e) => makePdf(cert, e.currentTarget, 'share') }, 'Make PDF and share'), h('button', { class: 'btn', onclick: (e) => makePdf(cert, e.currentTarget, 'view') }, 'View PDF'),
+        h('button', { class: 'btn', id: 'emailbtn', onclick: (e) => makePdf(cert, e.currentTarget, 'email') }, withIcon('mail', 'Email to customer')),
         cert.type !== 'MW' ? h('button', { class: 'btn', onclick: (e) => makeChart(cert, e.currentTarget) }, 'Circuit chart') : null),
+      h('p', { class: 'note' }, 'Email to customer opens your own mail app with the PDF attached' + (cert.client.email ? ' (to ' + cert.client.email + ')' : '') + '. You check it and press send yourself.'),
       h('label', { class: 'check' }, h('input', { type: 'checkbox', checked: !!cert.pdfFlags, onchange: (e) => { cert.pdfFlags = e.target.checked; changed(); } }), 'Highlight readings over the limit in red on the PDF'),
       cert.status !== 'issued' ? h('button', { class: 'btn', onclick: async () => { if (await confirmBox('Mark as issued?', 'Records today as the issue date. You can still edit it.', 'Mark issued')) { cert.status = 'issued'; cert.issuedAt = new Date().toISOString(); changed(); await flush(); render(); } } }, 'Mark as issued') : null),
+    h('div', { class: 'card', id: 'dangercard' }, h('h2', {}, 'Danger notices'),
+      h('p', { class: 'note' }, 'A one-page notice to hand over when you find something dangerous (C1) or potentially dangerous (C2). It prints as its own PDF.'),
+      noticesOf(cert).length ? h('div', { class: 'list' }, noticesOf(cert).map((n) => h('a', { class: 'row', href: `#/cert/${id}/danger/${n.id}` }, h('span', { class: 'dot ' + (noticeMissing(n).length ? '' : 'ok') }), h('div', { class: 'main' }, h('div', { class: 't' }, noticeNo(cert, n) + ' · ' + n.code), h('div', { class: 's' }, (n.text || 'No description yet').slice(0, 70))), h('span', { class: 'go' }, '›')))) : null,
+      h('div', { class: 'btns full' }, h('a', { class: 'btn', href: `#/cert/${id}/danger/new` }, '+ New danger notice'))),
     h('div', { class: 'btns full' }, h('button', { class: 'btn warn', onclick: async () => { if (await confirmBox('Delete certificate?', cert.number + ' will be removed from this device.', 'Delete', 'warn')) { await db.del('certs', id); S.cert = null; go(job ? '#/job/' + job.id : '#/'); } } }, 'Delete certificate')),
   ], { back: job ? '#/job/' + job.id : '#/', sub: cert.number });
 });
@@ -88,13 +95,18 @@ export async function savePdf(cert, blob, name, kind = 'pdf') {
   const old = findOldPdf(files, cert.id, name, kind);
   await db.put('files', { ...(old || { id: db.newId(), createdAt: new Date().toISOString() }), jobId: cert.jobId, certId: cert.id, kind, name, blob, createdAt: new Date().toISOString(), version: ((old && old.version) || 0) + 1, driveId: old && old.driveId, driveVersion: old && old.driveVersion });
 }
+export async function emailFor(cert, blob, name, notice = null) {
+  const { emailPdf } = await import('./email.js');
+  return emailPdf(cert, blob, name, { notice, profile: await getProfile() });
+}
 async function makePdf(cert, btn, how) {
   await flush(); const label = btn.textContent; btn.disabled = true; btn.textContent = 'Making PDF…';
   try {
     const { certificatePdf, pdfName } = await import('./pdf.js');
     const blob = await certificatePdf(cert, { profile: await getProfile(), photos: await pdfPhotos(cert) });
     const name = pdfName(cert); await savePdf(cert, blob, name);
-    if (how === 'view') (await import('./pdfview.js')).viewPdf(blob, name, { shareText: `${TYPES[cert.type].name} ${cert.number}` });
+    if (how === 'view') (await import('./pdfview.js')).viewPdf(blob, name, { shareText: `${TYPES[cert.type].name} ${cert.number}`, email: () => emailFor(cert, blob, name) });
+    else if (how === 'email') await emailFor(cert, blob, name);
     else { const r = await shareOrDownload(blob, name, `${TYPES[cert.type].name} ${cert.number}`); if (r === 'downloaded') toast('Saved to your downloads'); }
   } catch (e) { console.error(e); toast('Couldn\u2019t make the PDF: ' + ((e && e.message) || 'the browser wouldn\u2019t save it (private browsing?)')); }
   btn.disabled = false; btn.textContent = label;
@@ -266,12 +278,21 @@ function bondingSection(cert, redraw) {
       h('p', { class: 'note' }, 'Limit for RCD-protected circuits (415.2.2): R ≤ 50 V ÷ IΔn, e.g. 1667 Ω for 30 mA. In practice a sound bond reads a few hundredths of an ohm.')]);
 }
 
+// v0.17: a "Danger notice" button on C1/C2 observations (or "View danger notice" once there is one).
+function dangerBtn(cert, o) {
+  if (!dangerCodes(o)) return null;
+  if (!o.id) { o.id = db.newId(); changed(); }
+  const n = noticeForObs(cert, o);
+  return h('div', { class: 'dnrow' }, h('a', { class: 'btn small danger', href: `#/cert/${cert.id}/danger/${n ? n.id : 'obs-' + o.id}` }, withIcon('alert', n ? 'View danger notice' : 'Danger notice')),
+    h('span', { class: 'note' }, n ? (noticeMissing(n).length ? 'Started, not finished' : 'Issued ' + fmtDate(n.date)) : 'Fill in and hand over a danger notification'));
+}
+
 // ---------- Observations (EICR) ----------
 function observationsSection(cert, redraw) {
   const obs = cert.observations;
   const card = (o, i) => {
     const codeChips = h('div', { class: 'chips' });
-    const dc = () => fill(codeChips, ...['C1', 'C2', 'C3', 'FI'].map((c) => h('button', { class: 'chip ' + c.toLowerCase() + (o.code === c ? ' on' : ''), onclick: () => { o.code = c; changed(); dc(); } }, c)));
+    const dc = () => fill(codeChips, ...['C1', 'C2', 'C3', 'FI'].map((c) => h('button', { class: 'chip ' + c.toLowerCase() + (o.code === c ? ' on' : ''), onclick: () => { const was = dangerCodes(o); o.code = c; changed(); if (was !== dangerCodes(o)) redraw(); else dc(); } }, c)));
     dc();
     return h('div', { class: 'card' },
       h('div', { style: 'display:flex;justify-content:space-between' }, h('b', {}, 'Observation ' + (i + 1)), h('button', { class: 'btn small warn', onclick: async () => { if (await confirmBox('Remove observation?', o.text, 'Remove', 'warn')) { obs.splice(i, 1); changed(); redraw(); } } }, 'Remove')),
@@ -279,7 +300,8 @@ function observationsSection(cert, redraw) {
       h('div', { class: 'btns' }, h('button', { class: 'btn tiny', onclick: () => pick(o) }, 'Use wording from the library')),
       h('label', { class: 'f' }, h('span', {}, 'Location / circuit'), h('input', { value: o.location || '', oninput: (e) => { o.location = e.target.value; changed(); } })),
       h('div', { class: 'grid2' }, h('label', { class: 'f' }, h('span', {}, 'Regulation(s)'), h('input', { value: o.reg || '', oninput: (e) => { o.reg = e.target.value; changed(); } })), h('div', {}, h('span', { class: 'note' }, 'Code'), codeChips)),
-      o.item ? h('div', { class: 'note' }, 'From schedule item ' + o.item) : null);
+      o.item ? h('div', { class: 'note' }, 'From schedule item ' + o.item) : null,
+      dangerBtn(cert, o));
   };
   const pick = async (replace = null) => { const o = await pickObservation(); if (!o) return; if (replace) { Object.assign(replace, { text: o.text, code: o.code, reg: o.reg }); changed(); redraw(); } else add(o); };
   const add = (o) => { obs.push({ id: db.newId(), text: o.text, code: o.code, reg: o.reg, location: '' }); changed(); redraw(); };

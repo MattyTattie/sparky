@@ -11,7 +11,7 @@ async function pdfjs() {
   return lib;
 }
 
-export async function viewPdf(blob, name = 'certificate.pdf', { shareText = '' } = {}) {
+export async function viewPdf(blob, name = 'certificate.pdf', { shareText = '', email = null } = {}) {
   const pages = h('div', { class: 'pdfpages' }, h('p', { class: 'note', style: 'color:#fff;padding:20px' }, 'Opening…'));
   const count = h('span', { class: 'pdfcount' });
   const close = () => { bg.remove(); document.body.classList.remove('noscroll'); window.removeEventListener('hashchange', close); };
@@ -20,6 +20,7 @@ export async function viewPdf(blob, name = 'certificate.pdf', { shareText = '' }
       h('button', { class: 'pdfbtn', 'aria-label': 'Close', onclick: close }, '✕'),
       h('div', { class: 'pdfname' }, name, count),
       h('button', { class: 'pdfbtn', 'aria-label': 'Zoom', onclick: () => { if (!doc) return; zoom = zoom === 1 ? 2 : 1; draw(); } }, icon('search', { size: 20 })),
+      email ? h('button', { class: 'pdfbtn wide', id: 'pdfemail', onclick: () => email() }, 'Email') : null,
       h('button', { class: 'pdfbtn wide', onclick: async () => { const r = await shareOrDownload(blob, name, shareText); if (r === 'downloaded') toast('Saved to your downloads'); } }, 'Share / print')),
     pages);
   document.body.append(bg); document.body.classList.add('noscroll');

@@ -637,3 +637,11 @@ details.more > summary::before { content: '›'; display: inline-block; margin-r
 details.more[open] > summary::before { transform: rotate(90deg); }
 @media (prefers-reduced-motion: reduce) { .switch, .switch::after, details.more > summary::before { transition: none; } }
 .btns.stack .btn { flex: 1 1 100%; justify-content: flex-start; }
+/* v0.17 danger notices + email */
+.btn.danger { color: #fff; background: var(--red); border-color: var(--red); }
+.dnrow { display: flex; align-items: center; gap: 10px; margin-top: 10px; padding-top: 10px; border-top: 1px dashed #f0b9b9; flex-wrap: wrap; }
+.dnrow .note { margin: 0; }
+.dnhead { display: flex; flex-direction: column; gap: 2px; }
+.dnhead svg { vertical-align: -3px; margin-right: 6px; }
+.sigcard .sigimg { display: block; max-width: 100%; max-height: 80px; margin: 8px 0; background: #fff; }
+.check.radio { margin: 6px 0; }

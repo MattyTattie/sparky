@@ -10,13 +10,14 @@ import { limitZs, isSpare } from './checks.js';
 import { FIELDS, autoNA } from './templates.js';
 const AUTO_GREY = [170, 170, 170]; // v0.10: automatic N/A on spare ways
 import { STANDARD } from './limits.js';
+import { noticeFor, withNotices } from './dangermodel.js';
 
 const yes = (v) => v === true || v === 'yes' || v === '✓';
-const fmtDate = (d) => (d && /^\d{4}-\d{2}-\d{2}$/.test(d) ? d.split('-').reverse().join('/') : d || '');
-const FOOT = 'Based on the IET model forms for BS 7671:2018+A4:2026 (15th April 2026).';
+export const fmtDate = (d) => (d && /^\d{4}-\d{2}-\d{2}$/.test(d) ? d.split('-').reverse().join('/') : d || '');
+export const FOOT = 'Based on the IET model forms for BS 7671:2018+A4:2026 (15th April 2026).';
 
 // The brand strip at the top of the first page of each form.
-function brandStrip(k, profile, title, certNo, sub = '') {
+export function brandStrip(k, profile, title, certNo, sub = '') {
   const p = profile || {};
   let x = k.x0;
   if (p.logo) { k.image(p.logo, k.x0, k.y, 22, 11, p.logo.startsWith('data:image/png') ? 'PNG' : 'JPEG'); x += 25; }
@@ -51,7 +52,7 @@ function measure(k, fn) { const y0 = k.y; const d = k.dry; k.dry = true; fn(); c
 const rowFit = (k, headTotal, below, n) => Math.max(4.6, Math.min(6.2, (k.H - 13 - below - k.y - headTotal) / n));
 
 // A row of fields across the section width: [[label, value, fraction, opts], ...]
-function row(k, x, w, items, gap = 3) {
+export function row(k, x, w, items, gap = 3) {
   let cx = x; let extra = 0; const y = k.y + 3.4;
   for (const [label, value, frac, opts] of items) {
     const iw = w * frac - gap;
@@ -60,13 +61,13 @@ function row(k, x, w, items, gap = 3) {
   }
   k.y += 4.6 + extra;
 }
-function checks(k, x, list, { label = '', size = 7.5 } = {}) {
+export function checks(k, x, list, { label = '', size = 7.5 } = {}) {
   const y = k.y + 3.4; let cx = x;
   if (label) { k.t(label, cx, y, { size }); cx += k.tw(label, size) + 2; }
   for (const [lab, on] of list) cx = k.cb(cx, y, on, lab, { size });
   k.y += 4.8;
 }
-function textBlock(k, x, w, label, value, { minLines = 1 } = {}) {
+export function textBlock(k, x, w, label, value, { minLines = 1 } = {}) {
   if (label) { k.t(label, x, k.y + 3.2, { size: 7.5 }); k.y += 3.6; }
   const lines = k.wrap(value || '', w - 1, 8.5);
   const n = Math.max(minLines, lines.length);
@@ -77,7 +78,7 @@ function textBlock(k, x, w, label, value, { minLines = 1 } = {}) {
   }
   k.y += n * 4.2 + 1;
 }
-function sig(k, x, y, w, s, label = 'Signature') {
+export function sig(k, x, y, w, s, label = 'Signature') {
   k.t(label + ':', x, y, { size: 7.5 });
   const lx = x + k.tw(label + ':', 7.5) + 1.5;
   k.line(lx, y + 0.9, x + w, y + 0.9, { w: 0.15, color: [150, 150, 150], dash: [0.4, 0.6] });
@@ -541,7 +542,7 @@ function eic(k, cert, profile) {
     });
     k.y = y0 + half * 4.6 + 1;
   });
-  k.section('SECTION I: COMMENTS ON EXISTING INSTALLATION (in the case of an addition or alteration see Regulation 644.1.2):', (k, x, w) => textBlock(k, x, w, '', cert.comments, { minLines: 2 }));
+  k.section('SECTION I: COMMENTS ON EXISTING INSTALLATION (in the case of an addition or alteration see Regulation 644.1.2):', (k, x, w) => textBlock(k, x, w, '', withNotices(cert, cert.comments), { minLines: 2 }));
   const nb = (cert.boards || []).length;
   k.section('SECTION J: SCHEDULES', (k, x, w) => {
     k.y += k.para(`${contSheets(cert)}  Continuation sheet(s)${contWhat(cert)}    1  Schedule(s) of Inspection    ${nb}  Schedule(s) of Circuit Details and Schedule(s) of Test Results`, x, k.y + 3, w, { size: 7.5 }) + 1;
@@ -581,7 +582,7 @@ function eicr(k, cert, profile) {
     k.t(overall, okX + w * 0.15, y + 0.6, { size: 10, bold: true, color: overall === 'UNSATISFACTORY' ? RED : VALUE, align: 'center' });
     k.y += 7;
     k.y += k.para('*An unsatisfactory assessment indicates that dangerous (code C1) and/or potentially dangerous (code C2) conditions have been identified. Where the overall assessment is UNSATISFACTORY, any observations classified as \u2018Danger present\u2019 (code C1) or \u2018Potentially dangerous\u2019 (code C2) should be acted on as a matter of urgency.', x, k.y + 2, w, { size: 6.6 });
-    textBlock(k, x, w, 'General condition of the installation (in terms of electrical safety)', R.general, { minLines: 2 });
+    textBlock(k, x, w, 'General condition of the installation (in terms of electrical safety)', withNotices(cert, R.general), { minLines: 2 });
     k.y += k.para('Any observation classified as \u2018Improvement recommended\u2019 (code C3), or \u2018Further investigation\u2019 (code FI), is advisory and does not affect the overall assessment but should be given due consideration.', x, k.y + 2, w, { size: 6.6 });
   });
   k.section('SECTION F: RECOMMENDATION FOR NEXT INSPECTION', (k, x, w) => {
@@ -625,7 +626,7 @@ function observationsSection(k, cert) {
   const table = (title, list, foot) => {
     const x = k.x0; const w = k.cw;
     const rows = list.length ? list : [{}, {}, {}];
-    const txtOf = (o) => (o.text ? `${o.text}${o.location ? ' — ' + o.location : ''}${o.reg ? '  (Reg. ' + o.reg + ')' : ''}` : '');
+    const txtOf = (o) => (o.text ? `${o.text}${o.location ? ' — ' + o.location : ''}${o.reg ? '  (Reg. ' + o.reg + ')' : ''}${noticeFor(cert, o) ? '  ' + noticeFor(cert, o) : ''}` : '');
     const rowH = (o) => Math.max(6, k.wrap(txtOf(o), w - 50, 8).length * 3.6 + 2.4);
     const footH = measure(k, () => { k.y += 1; foot.forEach((s) => { k.y += k.para(s, x, k.y + 2.5, w, { size: 6.8, gap: 0.3 }); }); k.y += 2; });
     const head = (cont) => {
@@ -689,7 +690,7 @@ function mw(k, cert, profile) {
     k.t('Details of permitted exceptions (Regulation 411.3.3). Where applicable, a suitable risk assessment(s) must be attached to this Certificate.', x, k.y + 3, { size: 7, bold: true }); k.y += 3.4;
     textBlock(k, x, w * 0.75, '', M.exceptions); k.cb(x + w * 0.78, k.y - 1.6, yes(M.risk), 'Risk assessment attached', { size: 7 });
     k.t('5. Comments on (including any defects observed in) the existing installation (Regulation 644.1.2):', x, k.y + 3, { size: 7.5, bold: true }); k.y += 3.4;
-    textBlock(k, x, w, '', M.comments);
+    textBlock(k, x, w, '', withNotices(cert, M.comments));
   });
   k.section('SECTION B: Presence and adequacy of installation earthing and bonding arrangements (Regulation 132.16)', (k, x, w) => {
     checks(k, x, ['TN-S', 'TN-C-S (PME)', 'TN-C-S (PNB)', 'TT', 'TN-C', 'IT'].map((e) => [e, M.earthing === e]), { label: '1. System earthing arrangement:' });
