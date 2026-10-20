@@ -1,5 +1,12 @@
 # Sparky — niggles and update lists
 
+## [BUILT v0.16 on branch `v0.16`, 20 Oct 2026 — NOT LIVE] screenshots in /workspace/sparky-shots/v0.16, publish only on his OK
+- [built] Settings tidy: one Sync card (status, on/off, connected as, Disconnect; backup-all / restore from Drive under "More"), then one Files card (Save backup, Restore from file, Import extra details, Import results file → pick the certificate). (Matthew 20 Oct)
+- [built] Certificate page: Earlier results card gone (both imports are in Settings → Files). (Matthew 20 Oct)
+- [built] PDF: multi-line addresses wrap and push Postcode down (Section E signatories, client and installation addresses, EIC/EICR/MW). (Matthew 20 Oct)
+- [built] PDF with 2+ boards: all DB1 schedules, then all DB2. (Matthew 20 Oct)
+- Still on the list: "Hybrid (battery + PV)" option in other-source types (offered, not confirmed).
+
 ## [BUILT v0.15 on branch `v0.15`, 20 Oct 2026 — NOT LIVE] screenshots in /workspace/sparky-shots/v0.15, publish only on his OK
 - [built] Import extra details (Settings, and on each certificate under Earlier results): pick a Sparky .json (synced job.json, backup, or one certificate). Preview lists what will be added, which empty boxes get filled, and what's skipped because there's already a value; then Import or Cancel. Never overwrites or deletes. Matches certificates by id then number; boards by id then DB ref; circuits by id then number; sources by id then make. Touches updatedAt so it syncs. (Matthew 20 Oct)
 - [built] Test across circuits count: R1+R2 needs a real value in R1+R2 or R2 (N/A in R2 with R1+R2 blank no longer counts). IR needs at least one real reading; RCD on a circuit with an RCD needs a real trip time. Deliberate N/A (e.g. RCD on a non-RCD circuit) and spare auto N/A still count. (Matthew 20 Oct)

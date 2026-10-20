@@ -79,7 +79,7 @@ export class Kit {
   lh(size) { return size * 0.3528 * 1.2; } // line height in mm
   t(text, x, y, { size = 8, bold = false, color = INK, align = 'left', angle = 0, maxW = 0 } = {}) {
     if (this.dry) return; this.font(size, bold, color);
-    const s = String(text ?? '');
+    const s = String(text ?? '').replace(/\s*\r?\n\s*/g, ' '); // one line only (callers wrap first)
     let out = s;
     if (maxW && this.doc.getTextWidth(s) > maxW) { // shrink to fit (down to 4.5 pt), then cut with "…"
       const sz = this.fitSize(s, maxW, size, 4.5, bold);
@@ -122,7 +122,11 @@ export class Kit {
   //    shrink to 6.5 pt first, otherwise wrap on whole words at full size
   //    and draw a dotted line under each line.
   field(label, value, x, y, w, { size = 7.5, vsize = 8.5, unit = '', lines = 1, grow = false } = {}) {
-    const val = value == null ? '' : String(value);
+    // v0.16: a typed multi-line value (e.g. an address) wraps line by line on growing
+    // fields; on a fixed one-line field the lines are joined with commas.
+    const raw = value == null ? '' : String(value).replace(/\r/g, '').replace(/[ \t]*\n+[ \t]*/g, '\n').trim();
+    const multi = raw.includes('\n') && (grow || lines > 1);
+    const val = multi ? raw : raw.replace(/,?\n/g, ', ');
     const unitW = unit ? this.tw(unit, size) + 1.5 : 0;
     let lsize = size; let lab = label;
     // the label (and unit) must leave at least 10 mm for the value: shrink the label, then cut it
@@ -132,7 +136,7 @@ export class Kit {
     const step = this.lh(vsize) + 0.6;
     let vl = []; let vs = vsize; let n = Math.max(1, lines);
     if (val) {
-      const one = this.fitSize(val, vw - 1, vsize, grow || lines > 1 ? 6.5 : 6);
+      const one = multi ? 0 : this.fitSize(val, vw - 1, vsize, grow || lines > 1 ? 6.5 : 6);
       if (one) { vl = [val]; vs = one; }
       else if (grow || lines > 1) {
         vs = vsize; while (vs > 6.5 && !this.wordsFit(val, vw - 1, vs)) vs -= 0.25;

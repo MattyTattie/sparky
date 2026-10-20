@@ -5,14 +5,15 @@
 second. If the app is closed in that gap, a copy goes into the browser's local storage
 straight away and is put back next time. Nothing waits for a Save button.
 
-**Backups.** Settings has two kinds:
-1. *Google Drive:* each job gets its own folder in "Sparky jobs" in your Drive, holding
-   the job's data (`job.json`), its photos and its PDFs. The app uses the `drive.file`
-   permission, so it can only see files it made itself. You can back up one job, all
-   jobs, or automatically when you leave a job. "Restore from Drive" brings jobs back
-   onto a new phone.
-2. *Backup file:* one JSON file with everything. Restoring adds to what's on the phone
-   and never deletes.
+**Sync and files.** Settings has two cards:
+1. *Sync:* each job gets its own folder in "Sparky jobs" in your Drive, holding
+   the job's data (`job.json`), its photos and its PDFs, and every change goes up by
+   itself and comes down on your other devices. The app uses the `drive.file`
+   permission, so it can only see files it made itself. Under "More": back up all jobs
+   now, and "Restore from Drive" to bring jobs back onto a new device.
+2. *Files:* one JSON backup file with everything (restoring adds to what's there and
+   never deletes), plus Import extra details and Import results file (you pick the
+   certificate). Imports show every change first and never overwrite.
 
 **Limits.** All of them are in `js/limits.js` (max Zs tables, Table 41.5, Table 64, RCD
 times, ring checks, volt drop limits), each with its source. `js/checks.js` uses them to

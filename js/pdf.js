@@ -334,8 +334,8 @@ export function scheduleRows(cert, b, flags = false) {
   });
 }
 function pad(rows, n) { const out = rows.slice(); while (out.length < n) out.push({}); return out; }
-// v0.5: all Schedule of Circuit Details pages first (every board, every
-// sheet), then all Schedule of Test Results pages, in the same order, so
+// Schedules (v0.16 order): board by board; within a board all its Circuit
+// Details sheets, then its Test Results sheets in the same order, so
 // sheet n of one matches sheet n of the other. 16 circuits a sheet.
 export const PER_SHEET = 16;
 export function scheduleSheets(cert) {
@@ -347,10 +347,24 @@ export function scheduleSheets(cert) {
   }
   return out;
 }
+// Page order for the schedules: [{ kind: 'cd' | 'tr', b, rows, part, parts }].
+export function scheduleOrder(cert) {
+  const sheets = scheduleSheets(cert); const out = [];
+  for (const b of cert.boards || []) {
+    const mine = sheets.filter((s) => s.b === b);
+    for (const s of mine) out.push({ kind: 'cd', ...s });
+    for (const s of mine) out.push({ kind: 'tr', ...s });
+  }
+  return out;
+}
 function schedules(k, cert, certNo) {
-  const sheets = scheduleSheets(cert);
-  for (const s of sheets) circuitDetailsPage(k, cert, s.b, certNo, s.rows, s.part, s.parts);
-  for (const s of sheets) testResultsPage(k, cert, s.b, certNo, s.rows, s.part, s.parts);
+  // v0.16: board by board — all of DB1 (its circuit details sheets, then its test
+  // results sheets), then all of DB2, and so on. Before, every board's circuit
+  // details came first and the test results followed, so the boards were mixed.
+  for (const g of scheduleOrder(cert)) {
+    if (g.kind === 'cd') circuitDetailsPage(k, cert, g.b, certNo, g.rows, g.part, g.parts);
+    else testResultsPage(k, cert, g.b, certNo, g.rows, g.part, g.parts);
+  }
   bondingSchedule(k, cert, certNo);
   sourcesSheet(k, cert, certNo);
 }
