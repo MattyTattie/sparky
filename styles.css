@@ -645,3 +645,7 @@ details.more[open] > summary::before { transform: rotate(90deg); }
 .dnhead svg { vertical-align: -3px; margin-right: 6px; }
 .sigcard .sigimg { display: block; max-width: 100%; max-height: 80px; margin: 8px 0; background: #fff; }
 .check.radio { margin: 6px 0; }
+.check.dim { opacity: .55; }
+b.code { display: inline-block; min-width: 26px; text-align: center; border-radius: 6px; padding: 0 4px; color: #fff; background: var(--red); font-size: 12px; }
+.dnitem { border-left: 4px solid var(--red); }
+.dnown summary { font-weight: 600; color: var(--sub); margin: 6px 0; cursor: pointer; }

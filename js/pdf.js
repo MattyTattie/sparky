@@ -42,7 +42,7 @@ function formTitle(k, title, certNo, sub = '') {
 }
 // v0.5: continuation/schedule pages carry a tag under the title, e.g.
 // "DB/CU: DB1  ·  Sheet 2 of 3" (page X of Y is in the footer).
-function contTitle(k, title, certNo, tag = '') {
+export function contTitle(k, title, certNo, tag = '') {
   formTitle(k, title, certNo);
   if (tag) { k.t(tag, k.x0, k.y + 1.2, { size: 8, bold: true, color: VALUE, maxW: k.cw * 0.7 }); k.y += 3.6; }
 }

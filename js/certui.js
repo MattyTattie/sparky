@@ -76,7 +76,7 @@ route(/^\/cert\/([^/]+)$/, async (id) => {
       cert.status !== 'issued' ? h('button', { class: 'btn', onclick: async () => { if (await confirmBox('Mark as issued?', 'Records today as the issue date. You can still edit it.', 'Mark issued')) { cert.status = 'issued'; cert.issuedAt = new Date().toISOString(); changed(); await flush(); render(); } } }, 'Mark as issued') : null),
     h('div', { class: 'card', id: 'dangercard' }, h('h2', {}, 'Danger notices'),
       h('p', { class: 'note' }, 'A one-page notice to hand over when you find something dangerous (C1) or potentially dangerous (C2). It prints as its own PDF.'),
-      noticesOf(cert).length ? h('div', { class: 'list' }, noticesOf(cert).map((n) => h('a', { class: 'row', href: `#/cert/${id}/danger/${n.id}` }, h('span', { class: 'dot ' + (noticeMissing(n).length ? '' : 'ok') }), h('div', { class: 'main' }, h('div', { class: 't' }, noticeNo(cert, n) + ' · ' + n.code), h('div', { class: 's' }, (n.text || 'No description yet').slice(0, 70))), h('span', { class: 'go' }, '›')))) : null,
+      noticesOf(cert).length ? h('div', { class: 'list' }, noticesOf(cert).map((n) => h('a', { class: 'row', href: `#/cert/${id}/danger/${n.id}` }, h('span', { class: 'dot ' + (noticeMissing(n).length ? '' : 'ok') }), h('div', { class: 'main' }, h('div', { class: 't' }, noticeNo(cert, n) + ' · ' + n.items.length + ' item' + (n.items.length === 1 ? '' : 's') + (n.items.length ? ' · ' + [...new Set(n.items.map((i) => i.code))].join('/') : '')), h('div', { class: 's' }, (n.items.map((i) => i.text).filter(Boolean).join('; ') || 'No items yet').slice(0, 80))), h('span', { class: 'go' }, '›')))) : null,
       h('div', { class: 'btns full' }, h('a', { class: 'btn', href: `#/cert/${id}/danger/new` }, '+ New danger notice'))),
     h('div', { class: 'btns full' }, h('button', { class: 'btn warn', onclick: async () => { if (await confirmBox('Delete certificate?', cert.number + ' will be removed from this device.', 'Delete', 'warn')) { await db.del('certs', id); S.cert = null; go(job ? '#/job/' + job.id : '#/'); } } }, 'Delete certificate')),
   ], { back: job ? '#/job/' + job.id : '#/', sub: cert.number });
@@ -284,7 +284,7 @@ function dangerBtn(cert, o) {
   if (!o.id) { o.id = db.newId(); changed(); }
   const n = noticeForObs(cert, o);
   return h('div', { class: 'dnrow' }, h('a', { class: 'btn small danger', href: `#/cert/${cert.id}/danger/${n ? n.id : 'obs-' + o.id}` }, withIcon('alert', n ? 'View danger notice' : 'Danger notice')),
-    h('span', { class: 'note' }, n ? (noticeMissing(n).length ? 'Started, not finished' : 'Issued ' + fmtDate(n.date)) : 'Fill in and hand over a danger notification'));
+    h('span', { class: 'note' }, n ? noticeNo(cert, n) + (n.items.length > 1 ? ` (${n.items.length} items)` : '') + ' · ' + (noticeMissing(n).length ? 'started, not finished' : 'issued ' + fmtDate(n.date)) : 'Fill in and hand over a danger notification'));
 }
 
 // ---------- Observations (EICR) ----------
