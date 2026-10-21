@@ -286,6 +286,10 @@ html.dark .row.frow .fic { color: var(--muted); }
 html.dark .row.frow .rv { color: var(--muted); }
 html.dark .row.frow.danger .t, html.dark .row.frow.danger .fic { color: var(--red); }
 html.dark .banner.info { border-color: #313b65; background: var(--brandbg); color: #acb6e8; }
+html.dark .convline { color: #bcc6d5; }
+html.dark .usepre { border: 1px solid #354761; background: #141e2e; }
+html.dark .usetab td.was { color: #8a94a3; }
+html.dark .usetab td.to { color: #aeebcc; }
 /* ===== hand-tuned dark theme (v0.18) ===== */
 html.dark { color-scheme: dark; --ink: #e8ebf3; --ink2: #cfd5e2; --sub: #aab2c3; --muted: #959eb1; --line: #2a3142; --bg: #0e121b; --card: #171c28;
   --brand: #7d93ff; --brand2: #9b7dff; --brandbg: #1f2747; --accent: #ff8f3d;

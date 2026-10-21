@@ -1,7 +1,7 @@
 // =====================================================================
 // calc.js — the sums behind the calculators. Plain JS, tested with Node.
 // =====================================================================
-import { CABLES, CA, CA_NOTES, CG, CF_BS3036, CABLE_TEMP, CU_MOHM_PER_M, ARMOUR_MOHM_PER_M, TEMP_MULT } from './cables.js';
+import { CABLES, CA, CA_NOTES, CG, CF_BS3036, CABLE_TEMP, CU_MOHM_PER_M, ARMOUR_MOHM_PER_M, TEMP_MULT, CU5_MOHM_PER_M } from './cables.js';
 import { UO, VOLT_DROP, maxZs } from './limits.js';
 
 const r2 = (n) => Math.round(n * 100) / 100;
@@ -66,9 +66,10 @@ export function sizeCable({ cable = 'te', method = 'C', ib, inA, length, ambient
 // Expected (R1+R2) at 20 °C, Ω — what you'd measure. cpc = csa number, or 'armour'.
 // Ring: end-to-end (r1 + r2) ÷ 4 at any socket on a sound ring, using the loop length.
 export const MOHM_PER_M = CU_MOHM_PER_M;
-export function r1r2At20({ live, cpc, length, cores = 2, ring = false }) {
-  const a = CU_MOHM_PER_M[live];
-  const b = cpc === 'armour' ? (ARMOUR_MOHM_PER_M[cores] || ARMOUR_MOHM_PER_M[3])[live] : CU_MOHM_PER_M[cpc];
+export function r1r2At20({ live, cpc, length, cores = 2, ring = false, rTable = null }) {
+  const R = rTable === 'cu5' ? CU5_MOHM_PER_M : CU_MOHM_PER_M; // v0.19: fine-stranded flexes (class 5)
+  const a = R[live];
+  const b = cpc === 'armour' ? (ARMOUR_MOHM_PER_M[cores] || ARMOUR_MOHM_PER_M[3])[live] : R[cpc];
   if (a == null || b == null || !Number(length)) return null;
   const r = ((a + b) * Number(length)) / 1000;
   return r3(ring ? r / 4 : r);

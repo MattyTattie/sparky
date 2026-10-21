@@ -7,6 +7,7 @@ import './testacross.js';
 import './calcui.js';
 import './calcmd.js';
 import './calcsize.js';
+import './calcmore.js';
 import './calcdc.js';
 import './calcdcplan.js';
 import './importui.js';

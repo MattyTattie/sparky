@@ -451,7 +451,7 @@ route(/^\/settings$/, async () => {
     h('div', { class: 'card' }, h('h2', {}, 'You'), h('p', { class: 'note' }, 'Shown on your certificates. Kept on this device (and in your Drive backup), never in the app\u2019s code.'),
       txt('name', 'Your name'), txt('business', 'Business name'), txt('position', 'Position', 'text', 'e.g. Proprietor'),
       txt('address1', 'Address line 1'), txt('address2', 'Address line 2'), h('div', { class: 'grid2' }, txt('town', 'Town'), txt('postcode', 'Postcode')),
-      h('div', { class: 'grid2' }, txt('phone', 'Phone', 'tel'), txt('email', 'Email', 'email')),
+      txt('phone', 'Phone', 'tel'), txt('email', 'Email', 'email'), // v0.19: email on its own full-width line
       txt('regNo', 'Registration / membership no. (optional)'), txt('certPrefix', 'Certificate number prefix (optional)', 'text', 'e.g. SS-')),
     h('div', { class: 'card' }, h('h2', {}, 'Logo'), logoBox),
     appearanceCard(),

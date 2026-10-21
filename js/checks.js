@@ -63,7 +63,7 @@ export function cableCheck(c) {
 export function applyCable(c) {
   const p = CABLE_PICKS[c.cable]; if (!p || c.cableSize === '' || c.cableSize == null) return c;
   const cp = p.sizes[c.cableSize]; if (cp === undefined) return c;
-  c.live = String(c.cableSize); c.cpc = cp === 'armour' ? 'SWA' : String(cp);
+  c.live = String(c.cableSize); c.cpc = cp === 'armour' ? 'SWA' : cp === 'none' ? 'N/A' : String(cp); // v0.19: 'none' = 2-core flex (Class II)
   return c;
 }
 

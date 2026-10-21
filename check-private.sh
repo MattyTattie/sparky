@@ -11,7 +11,7 @@ DIR="${1:-$(dirname "$0")}"
 PRIV="${PRIVATE_PATTERNS:-$(dirname "$0")/../sparky-work/private-patterns.txt}"
 # Generic: personal email providers, UK mobile numbers, and any UK postcode
 # that isn't one of the fake ZZ ones used in the samples.
-GEN='([A-Za-z0-9._%+-]+@(gmail|googlemail|hotmail|outlook|live|yahoo|icloud|btinternet|me|nhs)\.[a-z.]+|\b(\+44 ?7|07)[0-9]{3} ?[0-9]{3} ?[0-9]{3}\b|\b(?!ZZ)(?!AB12)[A-PR-UWYZ][A-HK-Y]?[0-9][0-9A-HJKMNPR-Y]? ?[0-9][ABD-HJLNP-UW-Z]{2}\b)'
+GEN='([A-Za-z0-9._%+-]+@(gmail|googlemail|hotmail|outlook|live|yahoo|icloud|btinternet|me|nhs)\.[a-z.]+|\b(\+44 ?7|07)[0-9]{3} ?[0-9]{3} ?[0-9]{3}\b|\b(?!ZZ)(?!AB12)(?!H07RN)[A-PR-UWYZ][A-HK-Y]?[0-9][0-9A-HJKMNPR-Y]? ?[0-9][ABD-HJLNP-UW-Z]{2}\b)'
 fail=0
 echo "Checking $DIR for private details…"
 scan() { # $1 = pattern, $2 = label

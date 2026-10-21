@@ -712,3 +712,15 @@ button.row { font: inherit; cursor: pointer; }
 /* v0.18.5: information banner (calculator load-type guidance) */
 .banner.info { border-color: #c7d2fe; background: var(--brandbg); color: #1e2a6b; }
 .banner.info .bt { font-weight: 600; }
+
+/* v0.19: kW ↔ A line, Use on a circuit preview and the Undo toast */
+.convline { margin: -4px 0 8px; color: #3b4a5e; font-weight: 600; }
+.usecirc .f { margin-bottom: 10px; }
+.usepre { margin-top: 6px; padding: 10px; border: 1px solid #d9e0ea; border-radius: 10px; background: #f6f8fb; }
+.usepre-h { font-weight: 700; margin-bottom: 6px; }
+.usetab td.was { color: #8a94a3; text-decoration: line-through; }
+.usetab td.to { color: #0b6b3a; font-weight: 700; }
+.toast .undotoast { display: flex; align-items: center; gap: 12px; }
+.toast .btn.undo { background: #ffffff; color: #1d2b3c; border: 0; padding: 6px 14px; min-height: 0; font-weight: 700; }
+.toast:has(.undotoast) { border-radius: 14px; width: min(92vw, 380px); max-width: 92vw; }
+.toast .undotoast > span { flex: 1; }

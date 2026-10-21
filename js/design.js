@@ -4,8 +4,8 @@
 // passes current, volt drop, Zs and adiabatic). Plain JS, tested by
 // tests/design.test.mjs. Every table comes from cables.js / limits.js.
 // =====================================================================
-import { CABLES, CABLE_PICKS, CABLE_TEMP, CG, CF_BS3036, SINGLES_CPC, ARMOUR_CSA, K_VALUES, UL } from './cables.js';
-import { UO, CMIN, MAX_ZS, deviceById, ratingsFor, maxZs, INSTANT_MULT, MCB_INSTANT_T, MCB_CLASS3_I2T, RCD_TIMES } from './limits.js';
+import { CABLES, CABLE_PICKS, CABLE_TEMP, CG, CF_BS3036, SINGLES_CPC, ARMOUR_CSA, K_VALUES, UL, TAILS_CPC, TYPICAL_NOTE } from './cables.js';
+import { UO, CMIN, MAX_ZS, deviceById, ratingsFor, maxZs, INSTANT_MULT, MCB_INSTANT_T, MCB_CLASS3_I2T, RCD_TIMES, MPCB_MAG_MULT, mpcbRange, MCCB_FRAMES, maxZsForTrip } from './limits.js';
 import { ambientFactor, r1r2At20, RING_DIVISOR } from './calc.js';
 import { TEMP_MULT } from './cables.js';
 
@@ -19,7 +19,11 @@ export function kFor({ cable, cpcMode = 'core', separate = false }) {
   const pick = CABLE_PICKS[cable];
   const calc = pick ? pick.calc : cable;
   const armour = cpcMode === 'armour' || (pick && pick.cpc === 'armour') || calc === 'swa' || calc === 'swaX' || calc === 'swa4' || calc === 'swa4X';
-  const hot = (CABLE_TEMP[calc] || 70) === 90;
+  const temp = CABLE_TEMP[calc] || 70; const hot = temp === 90;
+  // v0.19: 60 °C rubber (H07RN-F) and 90 °C thermoplastic (tri-rated): Table 54.3.
+  if (!armour && temp === 60) return { key: 'core60', ...K_VALUES.core60 };
+  if (!armour && (calc === 'tri' || calc === 'tri3')) return { key: 'core90tp', ...K_VALUES.core90tp };
+  if (!armour && calc === 'tails') return { key: 'sep70', ...K_VALUES.sep70 };
   if (armour) return { key: hot ? 'armour90' : 'armour70', ...K_VALUES[hot ? 'armour90' : 'armour70'], armour: true };
   if (separate) return { key: hot ? 'sep90' : 'sep70', ...K_VALUES[hot ? 'sep90' : 'sep70'] };
   return { key: hot ? 'core90' : 'core70', ...K_VALUES[hot ? 'core90' : 'core70'] };
@@ -29,6 +33,8 @@ export function cpcAreaFor(cable, size, cpcMode = 'core') {
   const c = CABLES[cable]; if (!c) return null;
   if (cable === 'te' || cable === 'te3') return { cpc: (cable === 'te3' ? CABLE_PICKS.te3 : CABLE_PICKS.te).sizes[size] ?? null };
   if (cable === 'singles' || cable === 'singles3') return { cpc: SINGLES_CPC[size] ?? null };
+  if (c.tails) return { cpc: TAILS_CPC[size] ?? null };
+  if (c.cpcCore) return { cpc: Number(size) };
   if (c.cores === 4) { const a = ARMOUR_CSA[4][size]; return { cpc: 'armour', area: a ?? null }; }
   if (c.cores === 2 || cpcMode === 'armour') { const a = (ARMOUR_CSA[c.cores || 2] || ARMOUR_CSA[2])[size]; return { cpc: 'armour', area: a ?? null }; }
   return { cpc: Number(size) };
@@ -38,10 +44,15 @@ export function cpcAreaFor(cable, size, cpcMode = 'core') {
 // Returns { t, i2t, how, trips } for an earth fault current (A).
 // iTrip is the current that must flow to trip in time = Uo × Cmin / Zs; the
 // energy uses Uo / Zs (the usual GN6 / OSG method).
-export function clearance({ device, type, rating, zs, uo = UO, rcd = false, rcdS = false, bka = 6, time = 0.4 }) {
+export function clearance({ device, type, rating, zs, uo = UO, rcd = false, rcdS = false, bka = 6, time = 0.4, imag = null }) {
   const Z = Number(zs); const In = Number(rating);
   if (!(Z > 0)) return { ok: false, error: 'Need Zs' };
   const ifault = uo / Z; const imin = (uo * CMIN) / Z;
+  // v0.19: MPCB / MCCB: instant once the fault current reaches the magnetic setting (worst case 0.1 s).
+  if (Number(imag) > 0) {
+    if (imin >= Number(imag) - 1e-9) return { ok: true, ifault: r2(ifault), t: MCB_INSTANT_T, i2t: ifault * ifault * MCB_INSTANT_T, how: `Trips on its magnetic setting (${Math.round(imag)} A); the app uses ${MCB_INSTANT_T} s as the worst case.` };
+    return { ok: false, ifault: r2(ifault), error: `Fault current ${Math.round(imin)} A (with Cmin) is below the magnetic setting of ${Math.round(imag)} A. Zs is over the limit.` };
+  }
   const d = deviceById(device); const tbl = d && d.table && MAX_ZS[d.table];
   const row = tbl && tbl[type] && tbl[type][In];
   const rcdT = (rcdS ? RCD_TIMES.S.maxMs : RCD_TIMES.general.maxMs) / 1000;
@@ -69,8 +80,8 @@ export function clearance({ device, type, rating, zs, uo = UO, rcd = false, rcdS
 }
 
 // S = √(I²t) / k  (543.1.3)
-export function adiabatic({ zs, device, type, rating, k = 115, cpcCsa, rcd = false, rcdS = false, bka = 6, time = 0.4, uo = UO }) {
-  const cl = clearance({ device, type, rating, zs, uo, rcd, rcdS, bka, time });
+export function adiabatic({ zs, device, type, rating, k = 115, cpcCsa, rcd = false, rcdS = false, bka = 6, time = 0.4, uo = UO, imag = null }) {
+  const cl = clearance({ device, type, rating, zs, uo, rcd, rcdS, bka, time, imag });
   if (!cl.ok) return { ok: false, ...cl };
   const smin = Math.sqrt(cl.i2t) / Number(k);
   const have = Number(cpcCsa);
@@ -87,10 +98,28 @@ export const LOAD_TYPES = [
   ['ev', 'EV charger'],
 ];
 // v0.5: phase 3 → balanced three-phase load, Ib = P ÷ (√3 × UL × pf) per line.
-export function designCurrent({ load, unit = 'A', pf = 1, uo = UO, phase = 1, ul = UL }) {
+// v0.19: eff = motor efficiency (motors are rated on shaft output, so input power = kW ÷ efficiency).
+export function designCurrent({ load, unit = 'A', pf = 1, uo = UO, phase = 1, ul = UL, eff = 1 }) {
   const v = Number(load); if (!(v > 0)) return null;
   if (unit !== 'kW') return r2(v);
-  return Number(phase) === 3 ? r2((v * 1000) / (Math.sqrt(3) * ul * (Number(pf) || 1))) : r2((v * 1000) / (uo * (Number(pf) || 1)));
+  const e = Number(eff) > 0 && Number(eff) <= 1 ? Number(eff) : 1;
+  return Number(phase) === 3 ? r2((v * 1000) / (Math.sqrt(3) * ul * (Number(pf) || 1) * e)) : r2((v * 1000) / (uo * (Number(pf) || 1) * e));
+}
+// v0.19: the other way round, amps → kW (output kW for a motor, allowing for efficiency).
+export function kwFromAmps({ amps, pf = 1, uo = UO, phase = 1, ul = UL, eff = 1 }) {
+  const a = Number(amps); if (!(a > 0)) return null;
+  const e = Number(eff) > 0 && Number(eff) <= 1 ? Number(eff) : 1;
+  const w = Number(phase) === 3 ? Math.sqrt(3) * ul * a * (Number(pf) || 1) * e : uo * a * (Number(pf) || 1) * e;
+  return r2(w / 1000);
+}
+// Line under the load box: "≈ 37.4 A per phase" or "≈ 22 kW". Motors: efficiency and nameplate hint.
+export function convertLine({ load, unit, pf = 1, phase = 1, eff = 1, motor = false }) {
+  const three = Number(phase) === 3; const e = motor ? eff : 1;
+  if (!(Number(load) > 0)) return '';
+  const how = `${three ? '3-phase √3 × 400 V' : 'single-phase 230 V'}, pf ${Number(pf) || 1}${motor ? `, efficiency ${e}` : ''}`;
+  const tail = motor ? ' Motors: use the nameplate full-load current (FLC) if you have it.' : '';
+  if (unit === 'kW') return `≈ ${designCurrent({ load, unit: 'kW', pf, phase, eff: e })} A${three ? ' per phase' : ''} (${how}).${tail}`;
+  return `≈ ${kwFromAmps({ amps: load, pf, phase, eff: e })} kW${motor ? ' output' : ''} (${how}).${tail}`;
 }
 
 // v0.18.5: guidance for the load type, shown with the answer. { level: 'warn' | 'info', text }.
@@ -100,14 +129,16 @@ export const MAG_MIN = { B: 3, C: 5, D: 10 };
 // v0.18.5: typical starting current as a multiple of full-load current. Maker's data rules.
 export const START_METHODS = [['dol', 'Direct on line', 8], ['sd', 'Star-delta', 3], ['soft', 'Soft starter', 4], ['vsd', 'Inverter / VSD', 1.5]];
 export const startMult = (m) => (START_METHODS.find((x) => x[0] === m) || START_METHODS[0])[2];
-const startName = (m) => (START_METHODS.find((x) => x[0] === m) || START_METHODS[0])[1].toLowerCase();
+const startName = (m) => { const n = (START_METHODS.find((x) => x[0] === m) || START_METHODS[0])[1]; return n.replace(/^[A-Z][a-z]/, (x) => x.toLowerCase()); };
+const heavyStart = (m) => !m || m === 'dol';
 export function loadAdvice({ loadType, curve, inA, ib, device, three, auto, start = 'dol' }) {
   const sm = startMult(start), sI = Math.round(sm * ib * 10) / 10;
   const out = []; const mcb = device === 'mcb' || device === 'rcbo';
   if (loadType === 'motor') {
     const clear = mcb && MAG_MIN[curve] && sI < MAG_MIN[curve] * inA;
     if (mcb && MAG_MIN[curve] && !clear) out.push({ level: 'warn', text: `A ${inA} A Type ${curve} can trip instantly from ${MAG_MIN[curve] * inA} A (${MAG_MIN[curve]} × In). A ${startName(start)} start of about ${sm} × ${ib} A ≈ ${sI} A could reach that and trip it on starting. Use Auto, or a higher rating or Type D (check Zs and the cable still pass).` });
-    else if (clear) out.push({ level: 'info', text: `Starting current: ${startName(start)} about ${sm} × ${ib} A ≈ ${sI} A, below the ${MAG_MIN[curve] * inA} A instant trip of a ${inA} A Type ${curve} (${MAG_MIN[curve]} × In). For a heavy or high-inertia start, check with Type D.` });
+    // v0.19: only suggest Type D when it isn't already D, and only for a direct-on-line start.
+    else if (clear) out.push({ level: 'info', text: `Starting current: ${startName(start)} about ${sm} × ${ib} A ≈ ${sI} A, below the ${MAG_MIN[curve] * inA} A instant trip of a ${inA} A Type ${curve} (${MAG_MIN[curve]} × In).${curve !== 'D' && heavyStart(start) ? ' For a heavy or high-inertia start, check with Type D.' : ''}` });
     out.push({ level: 'info', text: `Set the starter overload to the motor nameplate FLC (about ${ib} A), trip class 10 for a normal start, 10/20 for a heavy start. Check the motor maker's recommendations.` });
     out.push({ level: 'info', text: 'Starting multiples are typical figures. The motor maker\u2019s data and recommended protective device take priority.' });
   }
@@ -125,7 +156,7 @@ export function sizeCircuit(o) {
   // instant-trip lower edge (C 5 × In, D 10 × In). Prefer C (bigger rating) if cable and Zs pass, else D.
   const dv = deviceById(o.device || 'rcbo');
   if (o.loadType === 'motor' && (o.type || 'auto') === 'auto' && dv && ['B', 'C', 'D'].every((t) => dv.types.includes(t)) && !o._inner) {
-    const ib = designCurrent({ load: o.load, unit: o.unit || 'kW', pf: o.pf || 1, uo: o.uo || UO, phase: o.phase || 1, ul: o.ul || UL });
+    const ib = designCurrent({ load: o.load, unit: o.unit || 'kW', pf: o.pf || 1, uo: o.uo || UO, phase: o.phase || 1, ul: o.ul || UL, eff: o.eff || 1 });
     const sI = ib == null ? 0 : startMult(o.start) * ib;
     let first = null;
     for (const t of ['C', 'D']) {
@@ -137,16 +168,23 @@ export function sizeCircuit(o) {
     if (r.ok) r.advice.unshift({ level: 'warn', text: 'No Type C or D rating keeps clear of the starting current with this cable and Zs. Check the motor maker\u2019s data, or use a soft starter or VSD.' });
     return r;
   }
+  // v0.19: a Type D picked by hand on a motor: say so when a Type C would do (soft start, VSD, star-delta).
+  if (o.loadType === 'motor' && o.type === 'D' && dv && dv.types.includes('C') && !o._inner) {
+    const r = sizeCircuit({ ...o, _inner: true }); const c = sizeCircuit({ ...o, type: 'auto' });
+    if (r.ok && c.ok && c.pick && c.curve === 'C') r.advice.unshift({ level: 'info', text: `A ${c.inA} A Type C would do here: the start stays below its ${MAG_MIN.C * c.inA} A instant trip and ${c.pick.size} mm² passes. Type C gives a higher max Zs than D. Tap Auto to use it.` });
+    return r;
+  }
+  if (dv && dv.adj && !o._inner) return sizeAdj(o, dv);
   const {
     load, unit = 'kW', pf = 1, loadType = 'general', length, cable = 'te', cpcMode = 'core', method = 'C',
     ambient = 30, grouped = 1, grouping = 'bunched', ci = 1, ze = 0.35, device = 'rcbo', type = 'auto', time = 0.4,
-    vdPct = null, ringLoad = 'spread', bka = 6, separateCpc = false, uo = UO, phase = 1, ul = UL, minIn = 0, start = 'dol',
+    vdPct = null, ringLoad = 'spread', bka = 6, separateCpc = false, uo = UO, phase = 1, ul = UL, minIn = 0, start = 'dol', eff = 1, cutout = 100, adj = null,
   } = o;
   const three = Number(phase) === 3;
   if (three && !(CABLES[cable] && CABLES[cable].phase === 3)) return { ok: false, error: 'Pick a three-phase cable (4-core SWA or singles).' };
   if (!three && CABLES[cable] && CABLES[cable].phase === 3) return { ok: false, error: 'That cable is for three-phase. Pick a single-phase cable or switch to 3-phase.' };
   if (three && loadType === 'ring') return { ok: false, error: 'Ring finals are single-phase. Pick another load type for 3-phase.' };
-  const ib = designCurrent({ load, unit, pf, uo, phase, ul });
+  const ib = designCurrent({ load, unit, pf, uo, phase, ul, eff: loadType === 'motor' ? eff : 1 });
   const vref = three ? ul : uo; // volt drop % is of 400 V line voltage on 3-phase
   if (ib == null) return { ok: false, error: 'Enter the load (kW or amps).' };
   const L = Number(length);
@@ -154,13 +192,17 @@ export function sizeCircuit(o) {
   const cab = CABLES[cable]; const m = cab && cab.methods[method];
   if (!m) return { ok: false, error: 'Pick a cable and how it\u2019s installed.' };
   const ring = loadType === 'ring' ? ringLoad : false;
-  const d = deviceById(device) || deviceById('rcbo');
-  const curve = type === 'auto' ? (d.types.includes('B') ? (loadType === 'motor' ? 'C' : 'B') : d.types[0]) : type;
+  const d = adj ? deviceById(device) : (deviceById(device) && deviceById(device).table ? deviceById(device) : deviceById('rcbo'));
+  const curve = adj ? 'adj' : type === 'auto' ? (d.types.includes('B') ? (loadType === 'motor' ? 'C' : 'B') : d.types[0]) : type;
   const steps = [];
   if (type === 'auto' && loadType === 'motor' && curve === 'C') steps.push('Type C suggested: motors and pumps draw a big starting current that can trip a Type B. A Type C has a lower max Zs, so it\u2019s checked against that.');
-  const ratings = ratingsFor(d.id, curve).map(Number).sort((a, b) => a - b);
+  const ratings = adj ? [adj.inA] : ratingsFor(d.id, curve).map(Number).sort((a, b) => a - b);
   let inA;
-  if (ring) {
+  if (adj) {
+    inA = adj.inA;
+    if (inA < ib - 1e-9) return { ok: false, ib, error: `The thermal setting (${inA} A) is below the load current (${ib} A). Set it at least to the load.` };
+    steps.push(...adj.steps);
+  } else if (ring) {
     inA = ratings.includes(32) ? 32 : ratings.includes(30) ? 30 : null;
     if (!inA) return { ok: false, error: 'A ring final needs a 30 or 32 A device.' };
     if (ib > inA) return { ok: false, error: `${ib} A is more than a ${inA} A ring can supply. Split the load.` };
@@ -174,12 +216,12 @@ export function sizeCircuit(o) {
   // correction factors
   let { ca, note: caNote } = ambientFactor(cable, ambient);
   if (/^D/.test(method)) { ca = 1; caNote = 'Buried: air-temperature factor not used.'; }
-  const cg = (CG[grouping] || CG.bunched)[Math.min(9, Math.max(1, Number(grouped) || 1))] ?? 1;
+  const cg = (CG[m.bunched ? 'bunched' : grouping] || CG.bunched)[Math.min(9, Math.max(1, Number(grouped) || 1))] ?? 1;
   const cf = device === 'bs3036' ? CF_BS3036 : 1;
   const factor = ca * cg * (Number(ci) || 1) * cf;
   const ringRule = (s) => ring && [30, 32].includes(inA) && s >= 2.5;
   const needIz = (s) => (ringRule(s) ? 20 : inA);
-  const max = maxZs({ device: d.id, type: curve, rating: inA, time });
+  const max = adj ? maxZsForTrip(adj.imag, uo) : maxZs({ device: d.id, type: curve, rating: inA, time });
   const temp = CABLE_TEMP[cable] || 70; const mult = TEMP_MULT[temp] || 1.2;
   const k = kFor({ cable, cpcMode, separate: separateCpc });
   const div = ring ? RING_DIVISOR[ring] || 4 : 1;
@@ -189,11 +231,11 @@ export function sizeCircuit(o) {
     const mv = cab.mvam[s]; const v = (mv * ib * L) / 1000 / div; const pct = (v / vref) * 100;
     const vd = { pass: pct <= limit + 1e-9, volts: r2(v), pct: r2(pct), limit, mvam: mv, div };
     const cp = cpcAreaFor(cable, s, cpcMode);
-    const r20 = cp && cp.cpc != null ? r1r2At20({ live: s, cpc: cp.cpc, length: L, cores: cab.cores || 2, ring: !!ring }) : null;
+    const r20 = cp && cp.cpc != null ? r1r2At20({ live: s, cpc: cp.cpc, length: L, cores: cab.cores || 2, ring: !!ring, rTable: cab.rTable || null }) : null;
     const zs = r20 == null ? null : r2(Number(ze) + r20 * mult);
     const z = { pass: zs != null && max != null ? zs <= max + 1e-9 : null, zs, max, r20, rHot: r20 == null ? null : r3(r20 * mult) };
     const area = cp ? (cp.cpc === 'armour' ? cp.area : cp.cpc) : null;
-    const ad = zs ? adiabatic({ zs, device: d.id, type: curve, rating: inA, k: k.k, cpcCsa: area, rcd: !!d.rcd, bka, time }) : { ok: false };
+    const ad = zs ? adiabatic({ zs, device: d.id, type: curve, rating: inA, k: k.k, cpcCsa: area, rcd: !!d.rcd, bka, time, imag: adj ? adj.imag : null }) : { ok: false };
     const adi = { pass: ad.ok ? ad.pass : null, ...ad, area, armour: cp && cp.cpc === 'armour' };
     const ok = cur.pass && vd.pass && z.pass !== false && adi.pass !== false;
     return { size: s, cpc: cp ? cp.cpc : null, cur, vd, z, adi, ok };
@@ -202,10 +244,10 @@ export function sizeCircuit(o) {
   // plain-words reasons for every size that was too small
   const why = (r) => {
     const out = [];
-    if (!r.cur.pass) out.push(r.cur.it == null ? `${r.size} mm² isn\u2019t rated for this method` : `${r.size} fails on current: after factors it carries ${r.cur.iz} A, needs ${r.cur.needIz} A`);
-    if (!r.vd.pass) out.push(`${r.size} fails on volt drop at ${L} m (${r.vd.pct}%, limit ${limit}%)`);
-    if (r.z.pass === false) out.push(`${r.size} fails on Zs (${r.z.zs} Ω, max ${r.z.max} Ω)`);
-    if (r.adi.pass === false) out.push(`${r.size} fails the adiabatic check (CPC needs ${r.adi.smin} mm², ${r.adi.armour ? 'armour is ' : 'it has '}${r.adi.area} mm²)`);
+    if (!r.cur.pass) out.push(r.cur.it == null ? `${r.size} mm² isn\u2019t rated for this method` : `${r.size} mm² fails on current: after factors it carries ${r.cur.iz} A, needs ${r.cur.needIz} A`);
+    if (!r.vd.pass) out.push(`${r.size} mm² fails on volt drop at ${L} m (${r.vd.pct}%, limit ${limit}%)`);
+    if (r.z.pass === false) out.push(`${r.size} mm² fails on Zs (${r.z.zs} Ω, max ${r.z.max} Ω)`);
+    if (r.adi.pass === false) out.push(`${r.size} mm² fails the adiabatic check (CPC needs ${r.adi.smin} mm², ${r.adi.armour ? 'armour is ' : 'it has '}${r.adi.area} mm²)`);
     return out;
   };
   const upto = pick ? rows.slice(0, rows.indexOf(pick)) : rows;
@@ -228,6 +270,43 @@ export function sizeCircuit(o) {
     k.armour ? `⚠ Armour area: ${ARMOUR_CSA.source}` : null,
     three ? '⚠ Three-phase tables typed in from memory of Appendix 4 (and maker\u2019s armour data): check them. Doesn\u2019t check diversity, unbalance, harmonics (triplen currents in the neutral) or the cable\u2019s short-circuit rating.' : 'Doesn\u2019t check diversity, harmonics or the cable\u2019s short-circuit rating at the origin.',
   ].filter(Boolean);
-  const advice = loadAdvice({ loadType, curve, inA, ib, device: d.id, three, auto: type === 'auto', start });
-  return { ok: true, advice, phase: three ? 3 : 1, vref, ib, inA, curve, device: d.id, limit, factors: { ca, cg, ci: Number(ci) || 1, cf, total: r2(factor) }, rows, pick, reasons, steps, notes, max, k, ring };
+  const advice = adj ? [...adj.advice] : loadAdvice({ loadType, curve, inA, ib, device: d.id, three, auto: type === 'auto', start });
+  // v0.19: meter tails against the cutout fuse.
+  if (cab.tails && pick) { const cut = Number(cutout) || 100; const iz = pick.cur.it * factor; advice.unshift(iz >= cut - 1e-9 ? { level: 'info', text: `Tails ${pick.size} mm² carry ${r2(iz)} A as installed, at least the ${cut} A cutout fuse. ✓` } : { level: 'warn', text: `Tails ${pick.size} mm² only carry ${r2(iz)} A as installed, less than the ${cut} A cutout fuse. Go up a size or change how they’re run (check the DNO’s rules).` }); }
+  if (cab.typical) notes.push('⚠ ' + TYPICAL_NOTE);
+  return { ok: true, adj: adj || null, cable, advice, phase: three ? 3 : 1, vref, ib, inA, curve, device: d.id, limit, factors: { ca, cg, ci: Number(ci) || 1, cf, total: r2(factor) }, rows, pick, reasons, steps, notes, max, k, ring };
+}
+
+// ---------- v0.19: MPCB and MCCB (adjustable devices) ----------
+// MPCB: thermal dial set to the motor FLC; magnetic trip ≈ 13 × the top of the dial range (typical,
+// check the maker). MCCB: Ir (thermal) and Im (magnetic) typed in; Zs ≤ Uo × Cmin ÷ Im.
+export function adjSettings(o, dv) {
+  const ib = designCurrent({ load: o.load, unit: o.unit || 'kW', pf: o.pf || 1, uo: o.uo || UO, phase: o.phase || 1, ul: o.ul || UL, eff: o.loadType === 'motor' ? (o.eff || 1) : 1 });
+  if (ib == null) return { ok: false, error: 'Enter the load (kW or amps).' };
+  const sI = o.loadType === 'motor' ? startMult(o.start) * ib : 0;
+  const steps = []; const advice = [];
+  if (dv.adj === 'mpcb') {
+    const rng = Number(o.mpcbMax) > 0 ? [Number(o.mpcbMin) || 0, Number(o.mpcbMax)] : mpcbRange(ib);
+    if (!rng) return { ok: false, ib, error: `No typical MPCB range covers ${ib} A. Use an MCCB, or put in the MPCB’s range.` };
+    const mult = Number(o.magMult) > 0 ? Number(o.magMult) : MPCB_MAG_MULT;
+    const set = Number(o.mpcbSet) > 0 ? Number(o.mpcbSet) : ib; const imag = r2(mult * rng[1]);
+    steps.push(`MPCB range ${rng[0]}–${rng[1]} A, thermal dial set to ${set} A (the motor FLC). Magnetic trip about ${mult} × ${rng[1]} A = ${imag} A (typical, check the maker).`);
+    if (set > rng[1] + 1e-9 || set < rng[0] - 1e-9) advice.push({ level: 'warn', text: `${set} A is outside the ${rng[0]}–${rng[1]} A dial range. Pick an MPCB with the FLC inside its range.` });
+    if (sI) advice.push(sI < imag ? { level: 'info', text: `Starting current about ${startMult(o.start)} × ${ib} A ≈ ${r2(sI)} A, below the ${imag} A magnetic trip. ✓` } : { level: 'warn', text: `Starting current about ${r2(sI)} A could reach the ${imag} A magnetic trip. Check the maker’s data, or use a soft starter or VSD.` });
+    advice.push({ level: 'info', text: `The MPCB is the motor overload too: set the dial to the nameplate FLC. Magnetic trip of ${mult} × the range top is typical, check the maker. If the dial can be turned up to ${rng[1]} A, the cable should carry ${rng[1]} A.` });
+    return { ok: true, ib, inA: set, imag, range: rng, mult, steps, advice, kind: 'mpcb', label: `MPCB ${rng[0]}–${rng[1]} A, set ${set} A` };
+  }
+  const ir = Number(o.ir) > 0 ? Number(o.ir) : (MCCB_FRAMES.find((f) => f >= ib - 1e-9) || null);
+  if (!ir) return { ok: false, ib, error: `${ib} A is above the MCCB sizes in the app.` };
+  const im = Number(o.im) > 0 ? Number(o.im) : 10 * ir;
+  steps.push(`MCCB thermal setting Ir ${ir} A (Ir ≥ Ib ${ib} A), magnetic setting Im ${im} A${Number(o.im) > 0 ? '' : ' (10 × Ir, typical: put in your setting)'}. Max Zs = ${UO} V × ${CMIN} ÷ ${im} A.`);
+  if (sI) advice.push(sI < im ? { level: 'info', text: `Starting current ≈ ${r2(sI)} A, below the ${im} A magnetic setting. ✓` } : { level: 'warn', text: `Starting current ≈ ${r2(sI)} A could reach the ${im} A magnetic setting. Turn Im up (then re-check Zs) or check the maker.` });
+  advice.push({ level: 'info', text: 'MCCB settings are what you dial in on the breaker. Check the maker’s trip curve and its tolerance (often ±20% on Im).' });
+  return { ok: true, ib, inA: ir, imag: im, steps, advice, kind: 'mccb', label: `MCCB Ir ${ir} A, Im ${im} A` };
+}
+function sizeAdj(o, dv) {
+  const a = adjSettings(o, dv); if (!a.ok) return a;
+  const r = sizeCircuit({ ...o, _inner: true, adj: a });
+  if (r.ok) { r.curve = ''; r.adjLabel = a.label; }
+  return r;
 }

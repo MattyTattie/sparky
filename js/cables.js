@@ -254,3 +254,137 @@ CABLE_TEMP.swa4 = 70; CABLE_TEMP.swa4X = 90; CABLE_TEMP.singles3 = 70;
 ARMOUR_CSA[4] = { 1.5: 18, 2.5: 20, 4: 24, 6: 35, 10: 40, 16: 46, 25: 62, 35: 68 };
 ARMOUR_MOHM_PER_M[4] = { 1.5: 9.5, 2.5: 7.9, 4: 6.8, 6: 4.0, 10: 3.6, 16: 3.2, 25: 2.3, 35: 2.0 };
 export const THREE_PHASE_CABLES = ['swa4', 'swa4X', 'singles3'];
+
+// =====================================================================
+// v0.19 additions. Every figure marked TYPICAL below is shown in the app
+// with "typical, check your books" (see TYPICAL_NOTE).
+// =====================================================================
+export const TYPICAL_NOTE = 'Typical figures: check your books (BS 7671 Appendix 4) or the cable maker\u2019s data.';
+const ext = (tbl, add) => { for (const [k, v] of Object.entries(add)) tbl[k] = v; };
+const addSizes = (c, mv, amps) => { c.sizes = [...c.sizes, 50, 70, 95]; ext(c.mvam, mv); for (const [m, a] of Object.entries(amps)) ext(c.methods[m].amps, a); c.big = true; };
+// 50, 70 and 95 mm² (stop at 95). Current: Table 4D4A / 4E4A (SWA), 4D1A (singles).
+// Volt drop: Tables 4D4B / 4E4B / 4D1B, the z (impedance) column above 35 mm².
+// ⚠ TYPICAL: typed in from memory of Appendix 4, check against your copy.
+addSizes(CABLES.swa, { 50: 0.94, 70: 0.65, 95: 0.5 }, { C: { 50: 176, 70: 224, 95: 271 }, D: { 50: 140, 70: 173, 95: 206 } });
+addSizes(CABLES.swa3, { 50: 0.94, 70: 0.65, 95: 0.5 }, { C: { 50: 176, 70: 224, 95: 271 }, D: { 50: 140, 70: 173, 95: 206 } });
+addSizes(CABLES.swaX, { 50: 1.0, 70: 0.71, 95: 0.53 }, { C: { 50: 219, 70: 279, 95: 338 }, D: { 50: 164, 70: 203, 95: 239 } });
+addSizes(CABLES.swa3X, { 50: 1.0, 70: 0.71, 95: 0.53 }, { C: { 50: 219, 70: 279, 95: 338 }, D: { 50: 164, 70: 203, 95: 239 } });
+addSizes(CABLES.swa4, { 50: 0.81, 70: 0.57, 95: 0.43 }, { C: { 50: 151, 70: 192, 95: 232 }, D: { 50: 116, 70: 143, 95: 169 } });
+addSizes(CABLES.swa4X, { 50: 0.87, 70: 0.61, 95: 0.45 }, { C: { 50: 187, 70: 238, 95: 289 }, D: { 50: 135, 70: 167, 95: 197 } });
+addSizes(CABLES.singles, { 50: 1.0, 70: 0.72, 95: 0.56 }, { A: { 50: 119, 70: 151, 95: 182 }, B: { 50: 151, 70: 192, 95: 232 }, C: { 50: 182, 70: 234, 95: 284 } });
+addSizes(CABLES.singles3, { 50: 0.87, 70: 0.62, 95: 0.48 }, { A: { 50: 108, 70: 136, 95: 164 }, B: { 50: 134, 70: 171, 95: 207 }, C: { 50: 167, 70: 214, 95: 261 } });
+// Copper class 2 conductors, BS EN 60228 Table 1 maxima at 20 °C.
+ext(CU_MOHM_PER_M, { 50: 0.387, 70: 0.268, 95: 0.193 });
+// Table 54.7: CPC S/2 above 35 mm².
+ext(SINGLES_CPC, { 50: 25, 70: 35, 95: 50 });
+// ⚠ TYPICAL maker's armour figures (BS 5467 / BS 6346 data sheets) for 50–95 mm².
+ext(ARMOUR_MOHM_PER_M[2], { 50: 2.0, 70: 1.4, 95: 1.2 }); ext(ARMOUR_MOHM_PER_M[3], { 50: 1.9, 70: 1.3, 95: 1.1 }); ext(ARMOUR_MOHM_PER_M[4], { 50: 1.7, 70: 1.2, 95: 0.98 });
+ext(ARMOUR_CSA[2], { 50: 62, 70: 70, 95: 98 }); ext(ARMOUR_CSA[3], { 50: 68, 70: 78, 95: 113 }); ext(ARMOUR_CSA[4], { 50: 77, 70: 90, 95: 128 });
+for (const k of ['swa2', 'swa3a', 'swa3aX']) ext(CABLE_PICKS[k].sizes, { 50: 'armour', 70: 'armour', 95: 'armour' });
+for (const k of ['swa3c', 'swa3cX']) ext(CABLE_PICKS[k].sizes, { 50: 50, 70: 70, 95: 95 });
+CABLE_PICKS.swa4a = { label: '4-core SWA (armour as CPC)', calc: 'swa4', wiring: 'F', cores: 4, cpc: 'armour', sizes: Object.fromEntries(CABLES.swa4.sizes.map((s) => [s, 'armour'])) };
+CABLE_PICKS.swa4aX = { label: '4-core XLPE SWA 6944X (armour as CPC)', calc: 'swa4X', wiring: 'G', cores: 4, cpc: 'armour', sizes: Object.fromEntries(CABLES.swa4X.sizes.map((s) => [s, 'armour'])) };
+
+// Fine-stranded (class 5) copper, BS EN 60228 Table 3 maxima at 20 °C, mΩ/m. Used for flexes.
+export const CU5_MOHM_PER_M = { 0.5: 39.0, 0.75: 26.0, 1: 19.5, 1.25: 15.6, 1.5: 13.3, 2.5: 7.98, 4: 4.95, 6: 3.3, 10: 1.91, 16: 1.21, 25: 0.78, 35: 0.554, 50: 0.386, 70: 0.272, 95: 0.206 };
+// Ambient factor for 60 °C rubber (Table 4B1, 60 °C column) and the hot-resistance multiplier.
+CA[60] = { 20: 1.04, 25: 1.04, 30: 1.0, 35: 0.91, 40: 0.82, 45: 0.71, 50: 0.58, 55: 0.41, 60: 0.01 };
+TEMP_MULT[60] = 1.16; // (234.5 + 60) ÷ (234.5 + 20)
+// k (Table 54.3): 60 °C thermosetting (rubber) core 141; 90 °C thermoplastic core 100 (BS 7671 Table 54.3).
+K_VALUES.core60 = { k: 141, label: 'Copper core in a 60 °C rubber cable (Table 54.3)' };
+K_VALUES.core90tp = { k: 100, label: 'Copper core, 90 °C thermoplastic, bunched (Table 54.3)' };
+// Three-phase version of a single-phase table (TYPICAL: ratings × ampF, volt drop × √3/2).
+const three = (c, label, ampF, extra = {}) => ({ ...c, ...extra, label, phase: 3, cores: c.cores, mvam: Object.fromEntries(Object.entries(c.mvam).map(([s, v]) => [s, Math.round(v * 0.866 * 100) / 100])),
+  methods: Object.fromEntries(Object.entries(c.methods).map(([m, x]) => [m, { ...x, amps: Object.fromEntries(Object.entries(x.amps).map(([s, a]) => [s, Math.round(a * ampF * 2) / 2])) }])) });
+
+// 1. H07RN-F heavy rubber flex (60 °C). ⚠ TYPICAL: Appendix 4 Table 4F1A (sheathed rubber flexible
+// cables, 4 mm² up) and 4F3A (cords, up to 4 mm²) as remembered, with maker's data (e.g. H07RN-F
+// data sheets) for the gaps. One core is the CPC (same size as the live).
+const RN_SIZES = [1, 1.5, 2.5, 4, 6, 10, 16, 25, 35, 50, 70, 95];
+CABLES.h07 = {
+  label: 'H07RN-F rubber flex, 60 °C (3-core: L, N, E)', cores: 3, cpcCore: true, rTable: 'cu5', typical: true,
+  source: 'Table 4F1A / 4F3A (60 °C rubber flexible cables) and maker\u2019s H07RN-F data',
+  note: '⚠ H07RN-F ratings are typical, check your books (Appendix 4 Table 4F1A / 4F3A) or the maker\u2019s data. One core is the CPC. Rubber runs at 60 °C, so hot rooms derate it hard.',
+  sizes: RN_SIZES,
+  mvam: { 1: 46, 1.5: 31, 2.5: 19, 4: 12, 6: 7.8, 10: 4.6, 16: 2.9, 25: 1.9, 35: 1.35, 50: 0.98, 70: 0.7, 95: 0.53 },
+  methods: {
+    C: { label: 'Clipped direct or in free air (C)', amps: { 1: 15, 1.5: 19, 2.5: 26, 4: 34, 6: 43, 10: 60, 16: 80, 25: 105, 35: 128, 50: 157, 70: 197, 95: 238 } },
+    E: { label: 'On a perforated tray (E)', amps: { 1: 16, 1.5: 20, 2.5: 28, 4: 36, 6: 46, 10: 64, 16: 85, 25: 112, 35: 137, 50: 167, 70: 210, 95: 254 } },
+  },
+};
+CABLES.h073 = three(CABLES.h07, 'H07RN-F rubber flex, 60 °C, 3-phase (4/5-core, a core as CPC)', 0.85, { cores: 5 });
+CABLE_TEMP.h07 = 60; CABLE_TEMP.h073 = 60;
+const sameCore = (sizes) => Object.fromEntries(sizes.map((s) => [s, s]));
+CABLE_PICKS.h07r2 = { label: 'H07RN-F rubber flex 2-core (no CPC, Class II only)', calc: 'h07', wiring: 'O', cpc: 'none', sizes: Object.fromEntries(RN_SIZES.map((s) => [s, 'none'])) };
+CABLE_PICKS.h07r3 = { label: 'H07RN-F rubber flex 3-core (core as CPC)', calc: 'h07', wiring: 'O', cpc: 'core', sizes: sameCore(RN_SIZES) };
+CABLE_PICKS.h07r4 = { label: 'H07RN-F rubber flex 4-core, 3-phase (core as CPC)', calc: 'h073', wiring: 'O', cpc: 'core', sizes: sameCore(RN_SIZES) };
+CABLE_PICKS.h07r5 = { label: 'H07RN-F rubber flex 5-core, 3-phase + N (core as CPC)', calc: 'h073', wiring: 'O', cpc: 'core', sizes: sameCore(RN_SIZES) };
+
+// 9. Meter tails 6181Y (70 °C single-core, double insulated): Table 4D1A ratings (single-core 70 °C
+// thermoplastic, with or without sheath), Table 4D1B volt drop. Earth is a separate 16 mm² (Table 54.7).
+CABLES.tails = {
+  label: 'Meter tails 6181Y, 70 °C (separate earth)', cores: 2, tails: true,
+  source: 'Table 4D1A (current) and 4D1B (volt drop), single-core 70 °C thermoplastic',
+  note: 'Meter tails: the app also checks the tails\u2019 rating against the cutout (supplier\u2019s) fuse. Most DNOs want 25 mm² for a 100 A fuse and tails kept short; check the DNO\u2019s rules.',
+  sizes: [16, 25, 35],
+  mvam: { 16: 2.8, 25: 1.8, 35: 1.3 },
+  methods: {
+    C: { label: 'Clipped direct (C)', amps: { 16: 87, 25: 114, 35: 141 } },
+    B: { label: 'In conduit or trunking on a wall (B)', amps: { 16: 76, 25: 101, 35: 125 } },
+    A: { label: 'In conduit in an insulated wall (A)', amps: { 16: 61, 25: 80, 35: 99 } },
+  },
+};
+CABLE_TEMP.tails = 70;
+export const TAILS_CPC = { 16: 16, 25: 16, 35: 16 };
+export const CUTOUT_FUSES = [60, 80, 100];
+CABLE_PICKS.tails = { label: 'Meter tails 6181Y (16 mm² earth)', calc: 'tails', wiring: 'O', cpc: 'sep', sizes: TAILS_CPC };
+
+// 10. PVC flex 3183Y (70 °C, 3-core with earth): Table 4F3A (flexible cords) current and
+// Table 4F3B volt drop, single-phase. ⚠ TYPICAL (from memory), check your copy.
+const FLEX_SIZES = [0.5, 0.75, 1, 1.25, 1.5, 2.5, 4];
+CABLES.flex = {
+  label: 'PVC flex 3183Y, 70 °C (3-core: L, N, E)', cores: 3, cpcCore: true, rTable: 'cu5', typical: true,
+  source: 'Table 4F3A (flexible cords, current) and 4F3B (volt drop)',
+  note: '⚠ 3183Y ratings are typical, check your books (Appendix 4 Table 4F3A). For appliances and pendants: the flex is usually protected by the plug or spur fuse.',
+  sizes: FLEX_SIZES,
+  mvam: { 0.5: 93, 0.75: 62, 1: 46, 1.25: 37, 1.5: 32, 2.5: 19, 4: 12 },
+  methods: { C: { label: 'In free air (flexible cord)', amps: { 0.5: 3, 0.75: 6, 1: 10, 1.25: 13, 1.5: 16, 2.5: 25, 4: 32 } } },
+};
+CABLE_TEMP.flex = 70;
+CABLE_PICKS.flex = { label: 'PVC flex 3183Y (core as CPC)', calc: 'flex', wiring: 'O', cpc: 'core', sizes: sameCore(FLEX_SIZES) };
+
+// 12. Tri-rated panel wire (BS 6231 / H07V2-K, 90 °C thermoplastic, single-core). ⚠ TYPICAL: Table
+// 4E1A (90 °C single-core) method B ratings used for panel trunking, maker's data below 1 mm².
+// Grouping (Table 4C1, bunched) always applies in a panel. Terminals are often only rated 70 °C
+// (Regulation 512.1.5): check the equipment before running at 90 °C.
+const TRI_SIZES = [0.5, 0.75, 1, 1.5, 2.5, 4, 6, 10, 16];
+CABLES.tri = {
+  label: 'Tri-rated panel wire (BS 6231 / H07V2-K), 90 °C', cores: 2, cpcCore: true, rTable: 'cu5', typical: true, panel: true,
+  source: 'Table 4E1A (90 °C single-core, method B) and maker\u2019s tri-rated data',
+  note: '⚠ Tri-rated ratings are typical, check your books or the maker\u2019s data. Grouping is applied (bunched). Many terminals are only rated 70 °C (512.1.5): if so, use the 70 °C figures.',
+  sizes: TRI_SIZES,
+  mvam: { 0.5: 93, 0.75: 62, 1: 46, 1.5: 31, 2.5: 19, 4: 12, 6: 7.9, 10: 4.7, 16: 2.9 },
+  methods: {
+    panel: { label: 'In panel trunking', amps: { 0.5: 9, 0.75: 12, 1: 17, 1.5: 23, 2.5: 31, 4: 42, 6: 54, 10: 75, 16: 100 } },
+    bunch: { label: 'Bunched in a panel', bunched: true, amps: { 0.5: 9, 0.75: 12, 1: 17, 1.5: 23, 2.5: 31, 4: 42, 6: 54, 10: 75, 16: 100 } },
+  },
+};
+CABLES.tri3 = three(CABLES.tri, 'Tri-rated panel wire, 90 °C, 3-phase', 0.88, { cores: 4 });
+CABLE_TEMP.tri = 90; CABLE_TEMP.tri3 = 90;
+CABLE_PICKS.tri = { label: 'Tri-rated panel wire (separate CPC, same size)', calc: 'tri', wiring: 'O', cpc: 'core', sizes: sameCore(TRI_SIZES) };
+
+// 13. SY / CY control cable (70 °C PVC multicore, braid or screen). ⚠ TYPICAL: rated like
+// Table 4F3A flexible cords as a cautious figure; maker's data varies, check maker data.
+const SY_SIZES = [0.5, 0.75, 1, 1.5, 2.5, 4];
+CABLES.sycy = {
+  label: 'SY / CY control cable, 70 °C (a core as CPC)', cores: 3, cpcCore: true, rTable: 'cu5', typical: true,
+  source: 'Maker\u2019s data (typical), rated like Table 4F3A flexible cords',
+  note: '⚠ SY / CY ratings are typical, check maker data. The braid (SY) or screen (CY) isn\u2019t used as the CPC here: a core is.',
+  sizes: SY_SIZES,
+  mvam: { 0.5: 93, 0.75: 62, 1: 46, 1.5: 32, 2.5: 19, 4: 12 },
+  methods: { C: { label: 'Clipped direct or in free air (C)', amps: { 0.5: 3, 0.75: 6, 1: 10, 1.5: 16, 2.5: 25, 4: 32 } } },
+};
+CABLES.sycy3 = three(CABLES.sycy, 'SY / CY control cable, 70 °C, 3-phase (a core as CPC)', 0.85, { cores: 5 });
+CABLE_TEMP.sycy = 70; CABLE_TEMP.sycy3 = 70;
+CABLE_PICKS.sycy = { label: 'SY / CY control cable (core as CPC)', calc: 'sycy', wiring: 'O', cpc: 'core', sizes: sameCore(SY_SIZES) };
+THREE_PHASE_CABLES.push('h073', 'tri3', 'sycy3');

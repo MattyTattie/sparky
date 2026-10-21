@@ -78,6 +78,9 @@ export const DEVICES = [
   { id: 'bs3036', label: 'Rewirable fuse BS 3036', bs: '3036', table: 'bs3036', types: ['rewirable'] },
   { id: 'bs1362', label: 'Plug fuse BS 1362', bs: '1362', table: 'bs1362', types: ['plug'] },
   { id: 'bs3871', label: 'Old MCB BS 3871 (legacy)', bs: '3871', table: 'bs3871', types: ['1', '2', '3'] },
+  // v0.19: adjustable breakers. No BS 7671 max Zs table: max Zs = Uo × Cmin ÷ the magnetic trip current.
+  { id: 'mpcb', label: 'MPCB motor breaker (BS EN 60947-4-1)', bs: '60947-4-1', table: null, types: ['adj'], adj: 'mpcb' },
+  { id: 'mccb', label: 'MCCB (BS EN 60947-2)', bs: '60947-2', table: null, types: ['adj'], adj: 'mccb' },
   { id: 'other', label: 'Other (enter max Zs yourself)', bs: '', table: null, types: [] },
 ];
 export const deviceById = (id) => DEVICES.find((d) => d.id === id) || null;
@@ -92,6 +95,8 @@ export function deviceFromBs(bs) {
   if (/3036/.test(s)) return deviceById('bs3036');
   if (/1362/.test(s)) return deviceById('bs1362');
   if (/3871/.test(s)) return deviceById('bs3871');
+  if (/60947-?4/.test(s)) return deviceById('mpcb');
+  if (/60947/.test(s)) return deviceById('mccb');
   return null;
 }
 export const ratingsFor = (deviceId, type) => {
@@ -163,3 +168,14 @@ export const MCB_CLASS3_I2T = {
   upTo16: { 3000: 15000, 4500: 25000, 6000: 35000, 10000: 70000 },
   upTo32: { 3000: 18000, 4500: 32000, 6000: 45000, 10000: 90000 },
 };
+
+// ---------- v0.19: MPCB and MCCB (adjustable) ----------
+// Max Zs for a device with a magnetic trip current Im: Zs ≤ Uo × Cmin ÷ Im (the same way Table 41.3 is
+// worked out for circuit-breakers). ⚠ TYPICAL: MPCB magnetic trip about 13 × the top of the dial range
+// (e.g. ABB MS132, Schneider GV2, Eaton PKZM0), check the maker.
+export const MPCB_MAG_MULT = 13;
+// Typical MPCB dial ranges (A). Pick the smallest range that has the FLC in it.
+export const MPCB_RANGES = [[0.1, 0.16], [0.16, 0.25], [0.25, 0.4], [0.4, 0.63], [0.63, 1], [1, 1.6], [1.6, 2.5], [2.5, 4], [4, 6.3], [6.3, 10], [9, 14], [13, 18], [17, 23], [20, 25], [24, 32], [30, 40], [37, 50], [48, 65], [63, 80], [80, 100]];
+export const mpcbRange = (flc) => MPCB_RANGES.find(([a, b]) => flc <= b + 1e-9 && flc >= a - 1e-9) || MPCB_RANGES.find(([, b]) => flc <= b) || null;
+export const MCCB_FRAMES = [16, 20, 25, 32, 40, 50, 63, 80, 100, 125, 160, 200, 250, 320, 400, 630];
+export const maxZsForTrip = (im, uo = UO) => (Number(im) > 0 ? Math.round(((uo * CMIN) / Number(im)) * 100) / 100 : null);

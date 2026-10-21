@@ -3,7 +3,7 @@
 // When any file changes, bump CACHE (sparky-v0.1 -> sparky-v0.2).
 // Shares the mattytattie.github.io origin with Hearth, so it only ever
 // deletes caches whose names start with "sparky-".
-const CACHE = 'sparky-v0.18.5';
+const CACHE = 'sparky-v0.19.0';
 const FILES = [
   "./",
   "./dark.css",
@@ -20,7 +20,9 @@ const FILES = [
   "./js/calc.js",
   "./js/calcdc.js",
   "./js/calcdcplan.js",
+  "./js/calcextra.js",
   "./js/calckit.js",
+  "./js/calcmore.js",
   "./js/calcmd.js",
   "./js/calcsize.js",
   "./js/calcui.js",
@@ -70,6 +72,8 @@ const FILES = [
   "./js/testlist.js",
   "./js/theme.js",
   "./js/ui.js",
+  "./js/usecircuit.js",
+  "./js/usecore.js",
   "./js/voice.js",
   "./manifest.json",
   "./styles.css",
