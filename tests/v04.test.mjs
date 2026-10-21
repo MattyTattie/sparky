@@ -22,7 +22,7 @@ test('adiabatic: B32 at Zs 0.6 needs ~1.05 mm² (0.1 s worst case)', () => {
   assert.equal(a.t, 0.1); assert.equal(a.smin, 1.05); assert.equal(a.pass, true);
 });
 test('adiabatic: capped at class 3 let-through for 6 kA', () => {
-  const a = adiabatic({ zs: 0.3, device: 'mcb', type: 'B', rating: 32, k: 115, cpcCsa: 1.5 });
+  const a = adiabatic({ zs: 0.05, device: 'mcb', type: 'B', rating: 32, k: 115, cpcCsa: 1.5 }); // 4.6 kA fault → 6 kA column (v0.19.1)
   assert.equal(a.i2t, 45000); assert.equal(a.pass, false);
 });
 test('adiabatic: Zs over the max cannot clear instantly', () => {
@@ -99,7 +99,7 @@ test('ring check: broken neutral and spurred socket flagged', () => {
   assert.match(bad, /r1 0.52 Ω and rn 0.7 Ω/); assert.match(bad, /R1\+R2 0.55/);
 });
 test('circuit adiabatic flag on the CPC', () => {
-  const c = { ...blankCircuit(1), cable: 'te', cableSize: '2.5', live: '2.5', cpc: '1.5', device: 'mcb', type: 'B', rating: '20', zs: '0.25' };
+  const c = { ...blankCircuit(1), cable: 'te', cableSize: '2.5', live: '2.5', cpc: '1.5', device: 'mcb', type: 'B', rating: '20', zs: '0.04' }; // v0.19.1: ~5.8 kA fault, so 1.5 mm² is too small
   assert.equal(circuitAdiabatic(c).pass, false);
   assert.equal(checkCircuit(c).flags.cpc.level, 'amber');
   c.zs = '0.7'; assert.equal(checkCircuit(c).flags.cpc, undefined);

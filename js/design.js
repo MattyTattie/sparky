@@ -64,8 +64,13 @@ export function clearance({ device, type, rating, zs, uo = UO, rcd = false, rcdS
     if (ia04 && imin >= ia04 - 1e-9) {
       let i2t = ifault * ifault * MCB_INSTANT_T; let capped = false;
       const cls = In <= 16 ? MCB_CLASS3_I2T.upTo16 : In <= 32 ? MCB_CLASS3_I2T.upTo32 : null;
-      if (cls && ['B', 'C'].includes(type)) { const ka = Number(bka) || 6; const key = Object.keys(cls).map(Number).sort((a, b) => a - b).find((x) => x >= ka * 1000) || Math.max(...Object.keys(cls).map(Number)); if (cls[key] < i2t) { i2t = cls[key]; capped = true; } }
-      return { ok: true, ifault: r2(ifault), t: MCB_INSTANT_T, i2t, capped, how: `Trips instantly (${INSTANT_MULT[type] ? INSTANT_MULT[type] + ' × In' : 'magnetic trip'}), in under ${MCB_INSTANT_T} s; the app uses ${MCB_INSTANT_T} s${capped ? ', capped at the class 3 let-through for ' + (Number(bka) || 6) + ' kA (' + i2t + ' A²s)' : ''}.` };
+      if (cls && ['B', 'C'].includes(type)) { const ka = Number(bka) || 6; const cols = Object.keys(cls).map(Number).sort((a, b) => a - b);
+        // v0.19.1: let-through rises with prospective fault current, so read the class 3 column for the
+        // fault current actually flowing (the smallest column at or above it), not the breaker's full kA.
+        const atKa = cols.find((x) => x >= ka * 1000) || cols[cols.length - 1];
+        const atFault = cols.find((x) => x >= ifault - 1e-9) || atKa;
+        const key = Math.min(atKa, atFault); if (cls[key] < i2t) { i2t = cls[key]; capped = key; } }
+      return { ok: true, ifault: r2(ifault), t: MCB_INSTANT_T, i2t, capped, how: `Trips instantly (${INSTANT_MULT[type] ? INSTANT_MULT[type] + ' × In' : 'magnetic trip'}), in under ${MCB_INSTANT_T} s; the app uses ${MCB_INSTANT_T} s${capped ? ', capped at the class 3 let-through for faults up to ' + capped / 1000 + ' kA (' + i2t + ' A²s)' : ''}.` };
     }
     if (ia5 && imin >= ia5 - 1e-9 && Number(time) >= 5) return { ok: true, ifault: r2(ifault), t: 5, i2t: ifault * ifault * 5, how: 'Within 5 s (Table 41.4); the app uses 5 s.' };
     return rcd ? viaRcd('Too little fault current to trip the breaker instantly.') : { ok: false, ifault: r2(ifault), error: `Fault current ${Math.round(imin)} A (with Cmin) is too low to trip the breaker instantly (needs ${Math.round(ia04 || ia5)} A). Zs is over the limit.` };
