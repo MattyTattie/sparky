@@ -17,7 +17,7 @@ import { FIELDS, FIELD, TEMPLATES, blankCircuit, applyTemplate, copyCircuit, cop
 import { checkCircuit, limitZs, isSpare } from './checks.js';
 import { DEVICES, deviceById, deviceFromBs, ratingsFor, CHECK_NOTE } from './limits.js';
 import { voiceSupported, listen } from './voice.js';
-import { CABLE_PICKS, WIRING_TYPES, REF_METHODS } from './cables.js';
+import { CABLES, CABLE_PICKS, WIRING_TYPES, REF_METHODS } from './cables.js';
 import { lengthFromR1R2 } from './calc.js';
 import { cableCheck, isRingLike, applyCable, ringCheck, circuitAdiabatic } from './checks.js';
 
@@ -281,6 +281,7 @@ function circuitEditor({ cert, c, ctx, back, title, prev, next, extra = [], mw =
         h('option', { value: '' }, '— pick —'), DEVICES.map((x) => h('option', { value: x.id, selected: d && d.id === x.id ? true : null }, x.label)))),
       d && d.types.length > 1 ? h('div', { class: 'f', style: 'margin-bottom:10px' }, h('span', { class: 'note' }, 'Type (col 9)'), h('div', { class: 'chips' }, d.types.map((t) => h('button', { class: 'chip' + (c.type === t ? ' on' : ''), onclick: () => { c.type = t; changed(); drawDev(); refresh(); } }, t)))) : null,
       ratings.length ? h('div', { class: 'f', style: 'margin-bottom:10px' }, h('span', { class: 'note' }, 'Rating, A (col 10)'), h('div', { class: 'chips' }, ratings.map((r) => h('button', { class: 'chip' + (String(c.rating) === String(r) ? ' on' : ''), onclick: () => { c.rating = String(r); if (d.rcd) c.rcdRating = String(r); changed(); drawDev(); refresh(); } }, r)))) : inp('rating'),
+      d && d.adj ? h('label', { class: 'f' }, h('span', {}, d.adj === 'mpcb' ? 'Magnetic trip, A (MPCB: about 13 × the top of the dial)' : 'Magnetic setting Im / Ii, A (MCCB: e.g. 10 × Ir)'), h('input', { inputmode: 'decimal', 'aria-label': 'Magnetic trip setting', value: c.im || '', oninput: (e) => { c.im = e.target.value.trim(); changed(); refresh(); } }), h('span', { class: 'note' }, c.im ? `Max Zs = 230 × 0.95 ÷ ${c.im} A. Check the maker\u2019s setting.` : 'Gives the max Zs and the adiabatic check. Leave blank to type your own max Zs below.')) : null,
       h('div', { class: 'grid2' }, inp('bs'), inp('bka')),
       h('div', { class: 'f', style: 'margin-bottom:10px' }, h('span', { class: 'note' }, 'Disconnection time'), h('div', { class: 'chips' }, [0.4, 5].map((t) => h('button', { class: 'chip' + (Number(c.time || 0.4) === t ? ' on' : ''), onclick: () => { c.time = t; changed(); drawDev(); refresh(); } }, t + ' s' + (t === 5 ? ' (distribution / >63 A)' : ' (final ≤63 A)'))))),
       limBox,
@@ -306,7 +307,7 @@ function circuitEditor({ cert, c, ctx, back, title, prev, next, extra = [], mw =
     if (pick && pick.cpc === 'armour') hint.push(h('p', { class: 'note' }, '⚠ CPC is the steel armour: R1+R2 uses maker’s armour resistance (check your cable’s data sheet), and the armour must pass the adiabatic check (543.1.3).'));
     const cab = cableCheck(c);
     if (cab && cab.msg && !cab.level) hint.push(h('p', { class: 'note' }, cab.msg));
-    const len = lengthFromR1R2({ r1r2: c.r1r2, live: Number(c.live), cpc: pick && pick.cpc === 'armour' ? 'armour' : Number(c.cpc), cores: pick && pick.cores });
+    const pc = pick && CABLES[pick.calc]; const len = lengthFromR1R2({ r1r2: c.r1r2, live: Number(c.live), cpc: pick && pick.cpc === 'armour' ? 'armour' : Number(c.cpc), cores: (pick && pick.cores) || (pc && pc.cores) || 2, rTable: pc && pc.rTable });
     if (len && !isRingLike(c)) hint.push(h('p', { class: 'note' }, `Your R1+R2 of ${c.r1r2} Ω is about ${len} m of this cable (at 20 °C).`));
     const ad = circuitAdiabatic(c, ctx());
     if (ad && ad.ok) hint.push(h('div', { class: 'resline ' + (ad.pass ? 'ok' : ad.pass === false ? 'bad' : 'na') }, h('b', {}, ad.pass ? '✓' : ad.pass === false ? '!' : '–'),

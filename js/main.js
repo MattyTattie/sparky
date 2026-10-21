@@ -14,6 +14,8 @@ import './importui.js';
 import './dangerui.js';
 import './importextra.js';
 import { render } from './app.js';
+import { startSymbols } from './symbols.js';
+startSymbols();
 import { persist } from './db.js';
 import { recoverPending } from './state.js';
 persist();

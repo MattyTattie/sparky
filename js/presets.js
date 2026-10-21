@@ -30,7 +30,8 @@ export const keyOf = (f) => PRESET_KEYS.map((k) => (k === 'rcdS' ? (f[k] ? 'S' :
 export function nameFor(f) {
   const d = deviceById(f.device); const kind = d ? d.label.split(' (')[0] : f.bs ? 'BS EN ' + f.bs : 'Device';
   const rcd = real(f.rcdIdn) ? `${f.rcdIdn} mA${real(f.rcdType) ? ' Type ' + f.rcdType : ''}${f.rcdS ? ' S' : ''}` : '';
-  return [`${f.type || ''}${f.rating} ${kind}`, rcd, real(f.bka) ? f.bka + ' kA' : ''].filter(Boolean).join(' · ');
+  const tp = /^[BCD123]$/.test(String(f.type || '')) ? f.type : ''; // v0.20: no 'adj32 MCCB' / 'plug13'
+  return [tp ? `${tp}${f.rating} ${kind}` : `${f.rating} A ${kind}`, rcd, real(f.bka) ? f.bka + ' kA' : ''].filter(Boolean).join(' · ');
 }
 // Fill a circuit's device boxes from a preset. Returns the keys changed.
 export function applyPreset(c, p) {

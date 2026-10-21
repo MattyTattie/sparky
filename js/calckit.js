@@ -15,6 +15,7 @@ export const CALCS = [
   { key: 'fault', href: '#/calc/fault', ic: 'zap', title: 'Fault level at a sub-board', sub: 'PFC at the origin and the sub-main: get the PSCC and PEFC at the far end against the 6 or 10 kA rating.' },
   { key: 'contactor', href: '#/calc/contactor', ic: 'layers', title: 'Contactor picker', sub: 'Pick the load type: get the AC-1 / AC-3 category and the size, with a margin.' },
   { key: 'xfmr', href: '#/calc/xfmr', ic: 'gauge', title: 'Control transformer', sub: 'VA and voltages: primary and secondary current, and the fuse each side.' },
+  { key: 'symbols', href: '#/calc/symbols', ic: 'clipboard', title: 'Symbols', sub: 'Ib, In, Iz, Zs, Ca, Icu, AC-3\u2026: what each one means, in one line.' },
   { key: 'pv', href: '#/calc/dc/pv', ic: 'sun', title: 'Solar string & battery checks', sub: 'Cold-morning string voltage, PV cable and string fuses; battery-to-inverter leads.' },
   { key: 'plan', href: '#/calc/dc/plan', ic: 'layers', title: 'DC system planner', sub: 'Vans, boats, sheds: step by step to a battery, cables, fuses, wiring diagram and parts list.' },
 ];

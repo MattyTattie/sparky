@@ -6,7 +6,7 @@ import { route, page } from './app.js';
 import { CABLES, CABLE_PICKS, AMBIENTS, CI_OPTIONS, SINGLES_CPC, THREE_PHASE_CABLES, UL, CUTOUT_FUSES, TYPICAL_NOTE } from './cables.js';
 import { sizeCircuit, LOAD_TYPES, START_METHODS, convertLine } from './design.js';
 import { useOnCircuit } from './usecircuit.js';
-import { DEVICES, deviceById, CHECK_NOTE } from './limits.js';
+import { DEVICES, deviceById, CHECK_NOTE, devName } from './limits.js';
 import { setLastCalc, formKit, icard, more, answerCard, pchip, resline, detailCard, banner } from './calckit.js';
 import { icon } from './icons.js';
 
@@ -37,7 +37,7 @@ route(/^\/calc\/size$/, async () => {
         F.seg('phase', '', [['1', 'Single-phase 230 V'], ['3', 'Three-phase 400 V']], three ? 'Balanced 3-phase load (motor, 3-phase EV charger, heater bank).' : '', 'seg2'),
         F.seg('loadType', 'Type of load', three ? LOAD_TYPES.filter(([k]) => k !== 'ring') : LOAD_TYPES, '', 'small'),
         v.loadType === 'motor' ? F.seg('start', 'How it starts', START_METHODS.map(([k, l, m]) => [k, `${l} (~${m}×)`]), 'Typical starting current as a multiple of running current. The motor maker\u2019s figure is better if you have it.', 'small') : null,
-        h('div', { class: 'grid2' }, F.num('load', v.unit === 'kW' ? (three ? 'Total load' : 'Load') : (three ? 'Current per phase' : 'Load current (Ib)'), { unit: v.unit === 'kW' ? 'kW' : 'A', hint: v.unit === 'kW' ? (three ? 'All 3 phases together' : 'e.g. 9.5 for a shower') : 'What it draws' }),
+        h('div', { class: 'grid2' }, F.num('load', v.unit === 'kW' ? (three ? 'Total load (P)' : 'Load (P)') : (three ? 'Design current per phase (Ib)' : 'Load / design current (Ib)'), { unit: v.unit === 'kW' ? 'kW' : 'A', hint: v.unit === 'kW' ? (three ? 'All 3 phases together' : 'e.g. 9.5 for a shower') : 'What it draws' }),
           F.seg('unit', 'Load in', [['kW', 'kW'], ['A', 'Amps']], '', 'small')),
         ring ? F.seg('ringLoad', 'How the load sits on the ring', [['spread', 'Spread round'], ['point', 'All at the far point']], '', 'small') : null,
         // v0.19: kW ↔ amps, using pf (and efficiency for motors).
@@ -80,7 +80,7 @@ route(/^\/calc\/size$/, async () => {
     const chips = p ? [pchip(p.cur.pass, 'Current'), pchip(p.vd.pass, `Volt drop ${p.vd.pct}%`), pchip(p.z.pass, `Zs ${p.z.zs} / ${p.z.max ?? '?'} Ω`), p.adi.ok ? pchip(p.adi.pass ? true : 'warn', 'Earth size (adiabatic)') : pchip(null, 'Earth size')] : [];
     const why = r.steps.length ? r.steps[r.steps.length - 1] : '';
     fill(top, answerCard({ kicker: p ? 'Use' : 'No cable passes', good: p ? (p.adi.ok && !p.adi.pass ? 'warn' : true) : false,
-      big: p ? [r.adjLabel ? `${r.adjLabel}${r.phase === 3 ? ' (TP)' : ''}` : `${r.inA} A Type ${r.curve} ${d.label.split(' (')[0]}${r.phase === 3 ? ' (TP)' : ''}`, `${p.size} mm²${cpcText(p)}`] : 'Try another cable or method',
+      big: p ? [r.adjLabel ? `${r.adjLabel}${r.phase === 3 ? ' (TP)' : ''}` : `${devName(d, r.curve, r.inA)}${r.phase === 3 ? ' (TP)' : ''}`, `${p.size} mm²${cpcText(p)}`] : 'Try another cable or method',
       sub: p ? `${CABLES[v.cable].label.split(',')[0]} · Ib ${r.ib} A · ${v.length} m` : 'Nothing in this table passes current, volt drop and Zs.', chips,
       extra: p ? [why ? h('div', { class: 'ans-why' }, why) : null, h('div', { class: 'ans-test' }, icon('clipboard', { size: 16 }), `When you test: expect R1+R2 about ${p.z.r20} Ω at 20 °C${r.ring ? ' (ring, (r1 + r2) ÷ 4)' : ''}.`),
         h('button', { class: 'btn primary', style: 'margin-top:10px;width:100%', 'data-use': '1', onclick: () => useOnCircuit({ cable: v.cable, size: p.size, cpc: p.cpc, device: r.device, curve: r.curve, rating: r.inA, three: r.phase === 3, cpcMode: v.cpcMode }) }, icon('clipboard', { size: 16 }), 'Use on a circuit')] : null }),

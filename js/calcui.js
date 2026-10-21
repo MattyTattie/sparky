@@ -6,21 +6,20 @@ import { route, page } from './app.js';
 import { CALCS, setLastCalc, lastCalc, formKit, icard, more, answerCard, pchip, resline, detailCard, banner } from './calckit.js';
 import { ringCheck } from './checks.js';
 import { icon } from './icons.js';
+import { SYMBOLS } from './symbols.js';
 import { CABLES, CABLE_PICKS, AMBIENTS, CA_SOURCE, ARMOUR_MOHM_PER_M, TEMP_MULT, THREE_PHASE_CABLES, UL } from './cables.js';
 import { voltDrop, sizeCable, designZs, r1r2At20 } from './calc.js';
 import { adiabatic, kFor, cpcAreaFor } from './design.js';
-import { CHECK_NOTE, DEVICES, deviceById, ratingsFor, maxZs, maxZsSource } from './limits.js';
+import { CHECK_NOTE, DEVICES, deviceById, ratingsFor, maxZs, maxZsSource, maxZsForTrip, devName } from './limits.js';
 
-const CABLE_ORDER = ['te', 'swa', 'swaX', 'swa3', 'swa3X'];
+const CABLE_ORDER = ['te', 'te3', 'swa', 'swaX', 'swa3', 'swa3X', 'singles', 'tails', 'h07', 'flex', 'tri', 'sycy'];
 const DEFAULTS = { phase: '1', device: 'rcbo', type: 'B', rating: '32', ib: '20', shape: 'radial', length: '25', lighting: false, ze: '0.35', cable: 'te', method: 'C', size: 'auto', cpcMode: 'core', ambient: '30', grouped: '1', grouping: 'bunched', ci: '1', time: 0.4 };
 const SHAPES = [['radial', 'Radial'], ['ring-point', 'Ring: load at far point'], ['ring-spread', 'Ring: load spread']];
 
 // CPC for a cable + size (T&E has a smaller CPC; SWA uses a core or the armour).
 export function cpcFor(cable, size, cpcMode) {
-  if (cable === 'te') return CABLE_PICKS.te.sizes[size] ?? null;
-  if (CABLES[cable] && CABLES[cable].phase === 3) { const a = cpcAreaFor(cable, size, cpcMode); return a ? a.cpc : null; } // v0.9: 4-core SWA armour / singles CPC
-  if (CABLES[cable] && CABLES[cable].cores === 2) return 'armour';
-  return cpcMode === 'armour' ? 'armour' : Number(size);
+  // v0.20: one rule for every cable (tri-rated and tails are 2-core but NOT armoured).
+  const a = cpcAreaFor(cable, size, cpcMode); return a ? a.cpc : null;
 }
 
 // v0.7: Calculators home — big cards, one line each, last used at the top.
@@ -54,27 +53,29 @@ route(/^\/calc\/check$/, async () => {
     if (!three && !CABLE_ORDER.includes(v.cable)) v.cable = 'te';
     if (three) v.shape = 'radial';
     const d = deviceById(v.device) || deviceById('rcbo');
+    if (d.adj && !(Number(v.rating) > 0)) v.rating = '20';
     if (!d.types.includes(v.type)) v.type = d.types[0] || '';
-    const ratings = ratingsFor(d.id, v.type); if (ratings.length && !ratings.map(String).includes(String(v.rating))) v.rating = String(ratings.find((r) => r >= 20) || ratings[0]);
+    const ratings = ratingsFor(d.id, v.type); if (!d.adj && ratings.length && !ratings.map(String).includes(String(v.rating))) v.rating = String(ratings.find((r) => r >= 20) || ratings[0]);
     const cab = CABLES[v.cable] || CABLES.te; if (!cab.methods[v.method]) v.method = Object.keys(cab.methods)[0];
     if (v.size !== 'auto' && !cab.sizes.map(String).includes(String(v.size))) v.size = 'auto';
     const amb = AMBIENTS.includes(Number(v.ambient)) ? v.ambient : v.ambient;
     fill(form,
       icard('The breaker', [
-        F.sel('device', 'Device', DEVICES.filter((x) => x.table).map((x) => [x.id, x.label])),
+        F.sel('device', 'Device', DEVICES.filter((x) => x.table || x.adj).map((x) => [x.id, x.label])),
         d.types.length > 1 ? F.seg('type', 'Type / curve', d.types.map((t) => [t, t]), 'B for most domestic circuits, C for motors and big inrush.') : null,
-        F.seg('rating', 'Rating (In)', ratings.map((r) => [r, r + ' A']), '', 'small'),
+        d.adj ? h('div', { class: 'grid2' }, F.num('rating', d.adj === 'mpcb' ? 'Dial setting (In)' : 'Thermal setting Ir (In)', { unit: 'A' }), F.num('im', 'Magnetic trip (Im)', { unit: 'A', ph: d.adj === 'mpcb' ? '13 × dial top' : '10 × Ir', hint: 'Blank = ' + (d.adj === 'mpcb' ? '13' : '10') + ' × the setting.' }))
+          : F.seg('rating', 'Rating (In)', ratings.map((r) => [r, r + ' A']), '', 'small'),
         more('chk-dev', [F.seg('time', 'Disconnection time', [[0.4, '0.4 s'], [5, '5 s']], '0.4 s for final circuits up to 63 A; 5 s for distribution circuits and over 63 A.', 'small')], `${v.time} s`)], { step: 1 }),
       icard('The circuit', [
         F.seg('phase', 'Supply', [['1', 'Single-phase 230 V'], ['3', '3-phase 400 V']], three ? 'Balanced 3-phase load. Put in the current in each phase. ⚠ 3-phase cable figures are from memory of Appendix 4: check them.' : '', 'small'),
         three ? null : F.seg('shape', 'Shape', SHAPES, v.shape === 'radial' ? '' : 'Ring: put in the length all the way round the ring.', 'small'),
-        h('div', { class: 'grid2' }, F.num('ib', three ? 'Load per phase (Ib)' : 'Load (Ib)', { unit: 'A', hint: three ? 'kW × 1000 ÷ (1.732 × 400)' : 'Design current' }), F.num('length', v.shape === 'radial' ? 'Length' : 'Ring length', { unit: 'm', hint: v.shape === 'radial' ? 'Board to the far end' : 'All the way round' })),
+        h('div', { class: 'grid2' }, F.num('ib', three ? 'Design current per phase (Ib)' : 'Load / design current (Ib)', { unit: 'A', hint: three ? 'kW × 1000 ÷ (1.732 × 400)' : 'Design current' }), F.num('length', v.shape === 'radial' ? 'Length' : 'Ring length', { unit: 'm', hint: v.shape === 'radial' ? 'Board to the far end' : 'All the way round' })),
         F.num('ze', 'Ze at the board', { unit: 'Ω', ph: '0.35', hint: '0.35 Ω is the usual TN-C-S (PME) figure, 0.8 Ω TN-S. Measured is best.' }),
         F.chk('lighting', 'Lighting circuit', 'Ticked = 3% volt drop limit instead of 5%.')], { step: 2 }),
       icard('The cable', [
         F.sel('cable', 'Cable', (three ? THREE_PHASE_CABLES : CABLE_ORDER).map((k) => [k, CABLES[k].label])),
-        CABLES[v.cable].cores === 3 ? F.seg('cpcMode', 'Earth (CPC)', [['core', '3rd core'], ['armour', 'Armour']], '', 'small') : null,
-        F.sel('size', 'Size', [['auto', 'Smallest that passes'], ...cab.sizes.map((s) => [s, s + ' mm²' + (v.cable === 'te' ? ` / ${CABLE_PICKS.te.sizes[s]} CPC` : v.cable === 'singles3' ? ` + ${cpcFor('singles3', s)} CPC` : '')])], 'Leave on "Smallest that passes", or pick the size you\u2019re fitting.'),
+        CABLES[v.cable].cores === 3 && !CABLES[v.cable].cpcCore ? F.seg('cpcMode', 'Earth (CPC)', [['core', '3rd core'], ['armour', 'Armour']], '', 'small') : null,
+        F.sel('size', 'Size', [['auto', 'Smallest that passes'], ...cab.sizes.map((s) => [s, s + ' mm²' + (() => { const cp = cpcFor(v.cable, s, v.cpcMode); return cp === 'armour' || cp == null || Number(cp) === Number(s) ? '' : ` / ${cp} CPC`; })()])], 'Leave on "Smallest that passes", or pick the size you\u2019re fitting.'),
         more('chk-cable', [
           F.sel('method', 'How it\u2019s installed (reference method)', Object.entries(cab.methods).map(([k, m]) => [k, m.label])),
           h('div', { class: 'grid2' }, F.sel('ambient', 'Hottest air round it', AMBIENTS.map((t) => [t, t + ' °C'])), F.num('grouped', 'Circuits grouped', { hint: 'Run together with this one' })),
@@ -88,16 +89,18 @@ route(/^\/calc\/check$/, async () => {
     const d = deviceById(v.device); const ring = v.shape === 'radial' ? false : v.shape.slice(5);
     const three = v.phase === '3' && CABLES[v.cable] && CABLES[v.cable].phase === 3;
     const s = sizeCable({ cable: v.cable, method: v.method, ib: +v.ib, inA: +v.rating, length: +v.length, ambient: +v.ambient, grouped: +v.grouped, grouping: v.grouping, insulationCi: +v.ci, bs3036: v.device === 'bs3036', lighting: v.lighting, ring, uo: three ? UL : undefined });
-    const max = maxZs({ device: v.device, type: v.type, rating: v.rating, time: v.time });
+    const imag = d && d.adj ? (Number(v.im) > 0 ? Number(v.im) : Number(v.rating) * (d.adj === 'mpcb' ? 13 : 10)) : null;
+    const max = imag ? maxZsForTrip(imag) : maxZs({ device: v.device, type: v.type, rating: v.rating, time: v.time });
     if (!s.ok) { fill(top, banner(s.error, 'Change the breaker rating or the load so the rating is at least the load.', 'red')); fill(work); return; }
     const size = v.size === 'auto' ? (s.pick ? s.pick.size : null) : Number(v.size);
     const row = s.rows.find((r) => r.size === size);
     const cpc = size != null ? cpcFor(v.cable, size, v.cpcMode) : null;
     const z = size != null ? designZs({ ze: v.ze, cable: v.cable, live: size, cpc, length: +v.length, ring, device: v.device, type: v.type, rating: v.rating, time: v.time }) : null;
+    if (z && z.ok && imag) { z.max = max; z.pass = z.zs == null ? null : z.zs <= max; }
     const line = resline;
     const allOk = row && row.currentOk && (!row.vd || row.vd.pass) && (!z || z.pass !== false);
     let adi = null, adiCp = null, adiK = null, adiArea = null;
-    if (z && z.ok && z.zs != null) { adiCp = cpcAreaFor(v.cable, size, v.cpcMode); adiArea = adiCp ? (adiCp.cpc === 'armour' ? adiCp.area : adiCp.cpc) : null; adiK = kFor({ cable: v.cable, cpcMode: v.cpcMode }); adi = adiabatic({ zs: z.zs, device: v.device, type: v.type, rating: v.rating, k: adiK.k, cpcCsa: adiArea, rcd: !!(d && d.rcd), time: v.time }); }
+    if (z && z.ok && z.zs != null) { adiCp = cpcAreaFor(v.cable, size, v.cpcMode); adiArea = adiCp ? (adiCp.cpc === 'armour' ? adiCp.area : adiCp.cpc) : null; adiK = kFor({ cable: v.cable, cpcMode: v.cpcMode }); adi = adiabatic({ zs: z.zs, device: v.device, type: v.type, rating: v.rating, k: adiK.k, cpcCsa: adiArea, rcd: !!(d && d.rcd), time: v.time, imag }); }
     const cableName = size == null ? 'No size passes' : `${size} mm²${cpc === 'armour' ? ' + armour CPC' : cpc ? ` / ${cpc} CPC` : ''}`;
     const chips = [
       row ? pchip(row.currentOk, 'Current') : pchip(false, 'Current'),
@@ -105,15 +108,15 @@ route(/^\/calc\/check$/, async () => {
       z && z.ok && z.zs != null ? pchip(z.pass === false ? false : z.pass === true ? true : null, `Zs ${z.zs} / ${max ?? '?'} Ω`) : pchip(null, 'Zs'),
       adi ? (adi.ok ? pchip(adi.pass ? true : 'warn', 'Earth size (adiabatic)') : pchip(false, 'Earth size')) : pchip(null, 'Earth size'),
     ];
-    fill(top, answerCard({ kicker: allOk ? 'This circuit passes' : 'This circuit needs a look', big: [size == null ? cableName : `${size} mm²${cpc === 'armour' ? ' + armour CPC' : cpc ? ` / ${cpc} mm² CPC` : ''}`, `on a ${v.type}${v.rating}${three ? ' triple-pole' : ''} ${d ? d.label.split(' (')[0] : ''}`], good: allOk ? (adi && adi.ok && !adi.pass ? 'warn' : true) : false,
+    fill(top, answerCard({ kicker: allOk ? 'This circuit passes' : 'This circuit needs a look', big: [size == null ? cableName : `${size} mm²${cpc === 'armour' ? ' + armour CPC' : cpc ? ` / ${cpc} mm² CPC` : ''}`, devName(d, v.type, v.rating, three, imag)], good: allOk ? (adi && adi.ok && !adi.pass ? 'warn' : true) : false,
       sub: `${three ? '3-phase 400 V · ' : ''}${CABLES[v.cable].label.split(',')[0]} · ${v.shape === 'radial' ? 'radial' : 'ring'} ${v.length} m · ${v.ib} A ${three ? 'per phase' : 'load'}${v.lighting ? ' · lighting' : ''}`, chips,
-      extra: size != null && Number(v.length) ? h('div', { class: 'ans-test' }, icon('clipboard', { size: 16 }), `When you test: expect R1+R2 about ${r1r2At20({ live: size, cpc, length: +v.length, cores: CABLES[v.cable].cores, ring })} Ω at 20 °C${ring ? ' (ring, end-to-end ÷ 4)' : ''}.`) : null }),
+      extra: size != null && Number(v.length) ? h('div', { class: 'ans-test' }, icon('clipboard', { size: 16 }), `When you test: expect R1+R2 about ${r1r2At20({ live: size, cpc, length: +v.length, cores: CABLES[v.cable].cores, ring, rTable: CABLES[v.cable].rTable || null })} Ω at 20 °C${ring ? ' (ring, end-to-end ÷ 4)' : ''}.`) : null }),
       adi && adi.ok && !adi.pass ? banner(`The earth (CPC) may be too small for the fault: it needs ${adi.smin} mm², it\u2019s ${adiArea} mm².`, 'This assumes the worst-case 0.1 s let-through. Check the breaker maker\u2019s I²t figure, or go up a cable size.') : null);
     fill(work,
       detailCard('chk-how', 'How it worked it out', [
         row ? line(row.currentOk, `Current: cable ${row.it} A tabulated, needs ${row.needIt} A`, `Iz after factors ${row.iz} A (needs ${row.needIz} A). Factors ${s.factors.total}${s.caNote ? ' · ' + s.caNote : ''}`) : line(false, 'Current: no size passes. Try a bigger cable or another method.'),
         row && row.vd ? line(row.vd.pass, `Volt drop: ${row.vd.volts} V (${row.vd.pct}%), limit ${row.vd.limitPct}%`, `${row.vd.mvam} mV/A/m × ${v.ib} A × ${v.length} m ÷ 1000${row.vd.divisor > 1 ? ' ÷ ' + row.vd.divisor + ' (ring)' : ''}`) : line(null, 'Volt drop: enter a length'),
-        z && z.ok ? line(z.pass, z.zs != null ? `Zs: ${z.zs} Ω, max ${max ?? '?'} Ω` : `Zs: enter Ze. Max ${max ?? '?'} Ω`, `Ze ${v.ze || '?'} + (R1+R2) ${z.r20} Ω × ${z.mult} hot = ${z.rHot} Ω. ${max != null ? maxZsSource(v.device) : 'No table figure for this device.'}${z.note ? ' ' + z.note : ''}`) : line(null, `Zs: max ${max ?? '?'} Ω (need a size and length)`),
+        z && z.ok ? line(z.pass, z.zs != null ? `Zs: ${z.zs} Ω, max ${max ?? '?'} Ω` : `Zs: enter Ze. Max ${max ?? '?'} Ω`, `Ze ${v.ze || '?'} + (R1+R2) ${z.r20} Ω × ${z.mult} hot = ${z.rHot} Ω. ${max != null ? (imag ? `Max Zs = Uo × 0.95 ÷ ${Math.round(imag)} A magnetic trip.` : maxZsSource(v.device)) : 'No table figure for this device.'}${z.note ? ' ' + z.note : ''}`) : line(null, `Zs: max ${max ?? '?'} Ω (need a size and length)`),
         (() => { if (!adi) return line(null, 'Adiabatic: enter Ze, a size and a length'); const a = adi; const cp = adiCp; const area = adiArea; const k = adiK;
           return a.ok ? line(a.pass, `Adiabatic: CPC needs ${a.smin} mm², ${cp.cpc === 'armour' ? 'armour is' : 'it\u2019s'} ${area} mm²`, `Fault ${Math.round(a.ifault)} A at Zs ${z.zs} Ω. ${a.how} S = √(${a.i2t}) ÷ k ${a.k} (${k.label}).${cp.cpc === 'armour' ? ' ⚠ Armour area is maker\u2019s data.' : ''}`) : line(false, 'Adiabatic: ' + a.error); })()]),
       detailCard('chk-sizes', 'Every size', [
@@ -167,4 +170,12 @@ route(/^\/calc\/ring$/, async () => {
   };
   drawForm(); draw();
   page('Ring final check', [top, form, work], { back: '#/calc' });
+});
+
+// v0.20: Symbols sheet (same definitions as the tap pop-ups).
+route(/^\/calc\/symbols$/, async () => {
+  setLastCalc('symbols');
+  const groups = [...new Set(SYMBOLS.map((x) => x[3]))];
+  page('Symbols', [h('p', { class: 'note calcintro' }, 'Tap any symbol in the app (like Ib or Zs) to see this in a pop-up.'),
+    groups.map((g) => [h('h2', { class: 'sec' }, g), h('div', { class: 'card symlist nosym' }, SYMBOLS.filter((x) => x[3] === g).map(([s, n, d]) => h('div', { class: 'symrow' }, h('b', { class: 'symk' }, s), h('div', {}, h('div', { class: 'symn' }, n), h('div', { class: 'note' }, d)))))])], { back: '#/calc' });
 });

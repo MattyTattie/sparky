@@ -724,3 +724,16 @@ button.row { font: inherit; cursor: pointer; }
 .toast .btn.undo { background: #ffffff; color: #1d2b3c; border: 0; padding: 6px 14px; min-height: 0; font-weight: 700; }
 .toast:has(.undotoast) { border-radius: 14px; width: min(92vw, 380px); max-width: 92vw; }
 .toast .undotoast > span { flex: 1; }
+
+/* v0.20: tap-to-explain symbols */
+.sym { display: inline; font: inherit; color: inherit; background: none; border: 0; padding: 0 1px; margin: 0; min-height: 0; border-bottom: 1.5px dotted var(--brand); cursor: help; line-height: inherit; }
+.sympop { position: fixed; z-index: 9999; background: var(--card); color: var(--ink); border: 1px solid var(--line); border-radius: 14px; padding: 12px 14px; box-shadow: 0 8px 28px rgba(16,24,40,.22); font-size: 14px; }
+.symhd { display: flex; gap: 8px; align-items: baseline; margin-bottom: 4px; }
+.symhd b { color: var(--brand); font-size: 16px; }
+.symhd span { font-weight: 700; }
+.symtx { color: var(--sub); }
+.symall { display: inline-block; margin-top: 8px; font-size: 13px; font-weight: 700; color: var(--brand); text-decoration: none; }
+.symrow { display: flex; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--line); }
+.symrow:last-child { border-bottom: 0; }
+.symk { min-width: 62px; color: var(--brand); font-size: 15px; }
+.symn { font-weight: 700; }

@@ -185,3 +185,15 @@ export const MPCB_RANGES = [[0.1, 0.16], [0.16, 0.25], [0.25, 0.4], [0.4, 0.63],
 export const mpcbRange = (flc) => MPCB_RANGES.find(([a, b]) => flc <= b + 1e-9 && flc >= a - 1e-9) || MPCB_RANGES.find(([, b]) => flc <= b) || null;
 export const MCCB_FRAMES = [16, 20, 25, 32, 40, 50, 63, 80, 100, 125, 160, 200, 250, 320, 400, 630];
 export const maxZsForTrip = (im, uo = UO) => (Number(im) > 0 ? Math.round(((uo * CMIN) / Number(im)) * 100) / 100 : null);
+
+// v0.20: plain device name for the answer ('13 A plug fuse (BS 1362)', not 'Type plug').
+export function devName(d, type, rating, three = false, imag = null) {
+  if (!d) return `${rating} A`;
+  const tp = three ? ' triple-pole' : '';
+  if (d.adj) return `${d.label.split(' (')[0]} set ${rating} A${imag ? `, trips at ${Math.round(imag)} A` : ''}${tp}`;
+  if (['B', 'C', 'D'].includes(type)) return `${type}${rating}${tp} ${d.label.split(' (')[0]}`;
+  if (d.id === 'bs1362') return `${rating} A plug fuse (BS 1362)`;
+  if (d.id === 'bs3871') return `${rating} A Type ${type} ${d.label.split(' (')[0]}${tp}`;
+  return `${rating} A ${d.label.split(' (')[0]}${tp}`;
+}
+

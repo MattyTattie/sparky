@@ -79,7 +79,7 @@ export function expectedR1R2(live, cpc, length) { const v = r1r2At20({ live, cpc
 // Design check of Zs: Ze + (R1+R2) × temperature multiplier, against the BS 7671 max Zs for the device.
 export function designZs({ ze, cable = 'te', live, cpc, length, ring = false, device, type, rating, time = 0.4 }) {
   const c = CABLES[cable] || {}; const temp = CABLE_TEMP[cable] || 70;
-  const r20 = r1r2At20({ live, cpc, length, cores: c.cores || 2, ring });
+  const r20 = r1r2At20({ live, cpc, length, cores: c.cores || 2, ring, rTable: c.rTable || null }); // v0.20: flexes use class 5 copper
   const max = maxZs({ device, type, rating, time });
   if (r20 == null) return { ok: false, max, error: 'Need cable sizes and a length' };
   const mult = TEMP_MULT[temp] || 1.2;
@@ -89,7 +89,7 @@ export function designZs({ ze, cable = 'te', live, cpc, length, ring = false, de
     armour: cpc === 'armour', note: cpc === 'armour' ? 'Armour resistance from maker\u2019s data (check your cable); the armour must also pass the adiabatic check (543.1.3).' : '' };
 }
 // Length of cable a measured R1+R2 corresponds to (a sanity check on the circuit page).
-export function lengthFromR1R2({ r1r2, live, cpc, cores = 2 }) {
-  const per = r1r2At20({ live, cpc, length: 1000, cores }); const v = Number(String(r1r2).replace(/^[<>]/, ''));
+export function lengthFromR1R2({ r1r2, live, cpc, cores = 2, rTable = null }) {
+  const per = r1r2At20({ live, cpc, length: 1000, cores, rTable }); const v = Number(String(r1r2).replace(/^[<>]/, ''));
   if (per == null || !v) return null; return Math.round((v / per) * 1000);
 }

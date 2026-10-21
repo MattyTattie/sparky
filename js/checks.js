@@ -4,6 +4,7 @@
 // Plain JS (no browser needed), tested by tests/checks.test.mjs.
 // Every limit comes from limits.js.
 import { CABLES, CABLE_PICKS, CU_MOHM_PER_M, ARMOUR_CSA } from './cables.js';
+import { maxZsForTrip } from './limits.js';
 import { adiabatic, kFor } from './design.js';
 import { maxZs, coldLimit, irMinFor, IR_TABLE, rcdTimeLimit, RING, RCD_ZS, deviceById, isLegacyTable, RULE_OF_THUMB } from './limits.js';
 
@@ -25,6 +26,8 @@ export const isSpare = isSpareCircuit;
 export function limitZs(c, ctx = {}) {
   const own = num(c.maxZsOverride);
   if (own != null) return { value: own, source: 'Entered by you (state source in Remarks)' };
+  // v0.20: MPCB / MCCB: max Zs from the magnetic trip setting (optional field c.im, amps).
+  if ((deviceById(c.device) || {}).adj && num(c.im) > 0) return { value: maxZsForTrip(num(c.im)), source: `Uo × Cmin ÷ magnetic trip ${num(c.im)} A (maker\u2019s setting)` };
   if (ctx.earthing === 'TT' && (c.rcdIdn || (deviceById(c.device) || {}).rcd)) {
     const idn = Number(c.rcdIdn) || 30;
     if (RCD_ZS[idn]) return { value: RCD_ZS[idn], source: RCD_ZS.source, tt: true };
@@ -141,13 +144,13 @@ export function circuitAdiabatic(c, ctx = {}) {
   let area = num(c.cpc); let armourNote = '';
   const t = cableTable(c) || (String(c.wiring).toUpperCase() === 'G' ? 'swaX' : 'te');
   if (isArmour) {
-    const cores = (pick && pick.cores) || (CABLES[t] && CABLES[t].cores) || 2;
+    const cores = (pick && pick.cores) || (pick && CABLES[pick.calc] && CABLES[pick.calc].cores) || (CABLES[t] && CABLES[t].cores) || 2;
     area = (ARMOUR_CSA[cores] || ARMOUR_CSA[2])[num(c.live)] ?? null; armourNote = ' (armour area from maker\u2019s data)';
   }
   if (area == null) return null;
   const k = kFor({ cable: pick ? c.cable : t, cpcMode: isArmour ? 'armour' : 'core' });
   const rcd = !!(c.rcdIdn && num(c.rcdIdn)) || !!(deviceById(c.device) || {}).rcd;
-  const r = adiabatic({ zs, device: c.device, type: c.type, rating: In, k: k.k, cpcCsa: area, rcd, rcdS: !!c.rcdS, bka: num(c.bka) || 6, time: c.time || 0.4 });
+  const r = adiabatic({ zs, device: c.device, type: c.type, rating: In, k: k.k, cpcCsa: area, rcd, rcdS: !!c.rcdS, bka: num(c.bka) || 6, time: c.time || 0.4, imag: (deviceById(c.device) || {}).adj && num(c.im) > 0 ? num(c.im) : null });
   return { ...r, cpc: area, kLabel: k.label, armourNote };
 }
 

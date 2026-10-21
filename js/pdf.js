@@ -328,6 +328,7 @@ export function scheduleRows(cert, b, flags = false) {
     // v0.10: spare way: empty boxes print an automatic N/A in light grey (typed values as typed).
     // v0.18.4: also the ring boxes (r1, rn, r2) of a circuit that isn't a ring final.
     for (const f of FIELDS) if (autoNA(c, f.k)) r[f.k] = { v: 'N/A', auto: true };
+    if (r.type === 'adj') r.type = ''; // v0.20: MPCB/MCCB 'adj' is an app code, not a form Type
     if (flags && !spare) {
       const zs = parseFloat(c.zs);
       if (lim.value != null && !isNaN(zs) && zs > lim.value) r.zs = { v: c.zs, flag: 'red' };
@@ -748,7 +749,7 @@ export async function boardChartPdf(cert, board, profile) {
   k.t([p.phone, p.email].filter(Boolean).join('  ·  '), k.x1, k.y + 11, { size: 8, color: GREY, align: 'right' });
   k.y += 17;
   const cols = [{ k: 'num', label: 'Way', w: 10 }, { k: 'desc', label: 'Circuit', w: 62, left: true }, { k: 'dev', label: 'Device', w: 24 }, { k: 'rating', label: 'Rating (A)', w: 16 }, { k: 'rcd', label: 'RCD (mA)', w: 16 }, { k: 'cable', label: 'Cable (mm²)', w: 22 }, { k: 'pts', label: 'Points', w: 12 }];
-  const rows = board.circuits.map((c) => isSpare(c) ? { num: c.num, desc: 'SPARE' } : { num: c.num, desc: c.desc, dev: [c.type, c.device === 'rcbo' ? 'RCBO' : c.device === 'mcb' ? 'MCB' : c.bs].filter(Boolean).join(' '), rating: c.rating, rcd: c.rcdIdn, cable: [c.live, c.cpc].filter(Boolean).join(' / '), pts: c.points });
+  const rows = board.circuits.map((c) => isSpare(c) ? { num: c.num, desc: 'SPARE' } : { num: c.num, desc: c.desc, dev: [c.type === 'adj' ? '' : c.type, c.device === 'rcbo' ? 'RCBO' : c.device === 'mcb' ? 'MCB' : c.bs].filter(Boolean).join(' '), rating: c.rating, rcd: c.rcdIdn, cable: [c.live, c.cpc].filter(Boolean).join(' / '), pts: c.points });
   const x = k.x0; const W = cols.reduce((a, c) => a + c.w, 0); const sc = k.cw / W; let cx = x; const xs = cols.map((c) => { const v = cx; cx += c.w * sc; return v; });
   k.rect(x, k.y, k.cw, 8, { lw: 0.4, color: INK, fill: [235, 235, 235] });
   cols.forEach((c, i) => k.t(c.label, c.left ? xs[i] + 2 : xs[i] + (c.w * sc) / 2, k.y + 5.4, { size: 9, bold: true, align: c.left ? 'left' : 'center' }));

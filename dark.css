@@ -290,6 +290,13 @@ html.dark .convline { color: #bcc6d5; }
 html.dark .usepre { border: 1px solid #354761; background: #141e2e; }
 html.dark .usetab td.was { color: #8a94a3; }
 html.dark .usetab td.to { color: #aeebcc; }
+html.dark .sym { border-bottom: 1.5px dotted var(--brand); }
+html.dark .sympop { background: var(--card); color: var(--ink); border: 1px solid var(--line); box-shadow: 0 8px 28px rgba(0,0,0,0.55); }
+html.dark .symhd b { color: var(--brand); }
+html.dark .symtx { color: var(--sub); }
+html.dark .symall { color: var(--brand); }
+html.dark .symrow { border-bottom: 1px solid var(--line); }
+html.dark .symk { color: var(--brand); }
 /* ===== hand-tuned dark theme (v0.18) ===== */
 html.dark { color-scheme: dark; --ink: #e8ebf3; --ink2: #cfd5e2; --sub: #aab2c3; --muted: #959eb1; --line: #2a3142; --bg: #0e121b; --card: #171c28;
   --brand: #7d93ff; --brand2: #9b7dff; --brandbg: #1f2747; --accent: #ff8f3d;

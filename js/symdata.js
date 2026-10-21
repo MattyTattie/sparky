@@ -1,0 +1,68 @@
+// symdata.js — v0.20: symbol definitions (no DOM). Shared by the pop-ups and the Symbols sheet.
+// [symbol, full name, one plain line, group]
+export const SYMBOLS = [
+  ['Ib', 'Design current', 'The current the circuit is meant to carry in normal use (the load).', 'Currents'],
+  ['In', 'Nominal current of the device', 'The rating of the breaker or fuse, e.g. 32 A.', 'Currents'],
+  ['Iz', 'Current-carrying capacity', 'What the cable can carry where it\u2019s installed, after correction factors.', 'Currents'],
+  ['It', 'Tabulated current rating', 'The cable\u2019s rating straight from the Appendix 4 table, before factors.', 'Currents'],
+  ['I2', 'Effective operating current', 'Current that makes the device trip within the conventional time (1.45 × In for MCBs).', 'Currents'],
+  ['IΔn', 'Rated residual operating current', 'The RCD\u2019s trip rating, e.g. 30 mA.', 'Currents'],
+  ['Ca', 'Ambient temperature factor', 'Derates the cable when the air round it is hotter than 30 °C.', 'Correction factors'],
+  ['Cg', 'Grouping factor', 'Derates the cable when it runs with other loaded circuits.', 'Correction factors'],
+  ['Ci', 'Thermal insulation factor', 'Derates the cable where it runs in or through insulation.', 'Correction factors'],
+  ['Cc', 'Circuit factor', '0.9 for cables buried in the ground; 1 otherwise.', 'Correction factors'],
+  ['Cf', 'Semi-enclosed fuse factor', '0.725 when the device is a BS 3036 rewirable fuse.', 'Correction factors'],
+  ['Ze', 'External earth fault loop impedance', 'The loop impedance of the supply, outside the installation.', 'Impedance & resistance'],
+  ['Zs', 'Earth fault loop impedance', 'Ze plus R1+R2: the whole loop at the end of the circuit.', 'Impedance & resistance'],
+  ['Zdb', 'Zs at the distribution board', 'The loop impedance measured at a sub-board.', 'Impedance & resistance'],
+  ['R1', 'Line conductor resistance', 'Resistance of the line conductor, board to the far end.', 'Impedance & resistance'],
+  ['R2', 'CPC resistance', 'Resistance of the protective (earth) conductor, board to the far end.', 'Impedance & resistance'],
+  ['R1+R2', 'Line plus CPC resistance', 'The two added together: what you measure for the continuity test.', 'Impedance & resistance'],
+  ['r1', 'Ring line end-to-end', 'Line conductor resistance measured end to end round a ring.', 'Impedance & resistance'],
+  ['rn', 'Ring neutral end-to-end', 'Neutral resistance end to end round a ring.', 'Impedance & resistance'],
+  ['r2', 'Ring CPC end-to-end', 'CPC resistance end to end round a ring.', 'Impedance & resistance'],
+  ['Rn', 'Neutral conductor resistance', 'Resistance of the neutral, board to the far end.', 'Impedance & resistance'],
+  ['RA', 'Earth electrode resistance', 'Sum of the electrode and protective conductor resistance on a TT system.', 'Impedance & resistance'],
+  ['PFC', 'Prospective fault current', 'The bigger of the PSCC and PEFC: what goes on the cert.', 'Fault current'],
+  ['PSCC', 'Prospective short-circuit current', 'Fault current line to neutral (or line to line).', 'Fault current'],
+  ['PEFC', 'Prospective earth fault current', 'Fault current line to earth.', 'Fault current'],
+  ['Ipf', 'Prospective fault current', 'Same as PFC, as written on the IET forms.', 'Fault current'],
+  ['U0', 'Nominal voltage to earth', '230 V on a normal UK supply (written U0 on the forms).', 'Voltage'],
+  ['Uo', 'Nominal voltage to earth', '230 V on a normal UK supply.', 'Voltage'],
+  ['U', 'Nominal voltage line to line', '400 V on a UK three-phase supply.', 'Voltage'],
+  ['Cmin', 'Minimum voltage factor', '0.95: allows for the supply voltage being low.', 'Voltage'],
+  ['k', 'Conductor k factor', 'A figure for the conductor and insulation used in the adiabatic sum (e.g. 115).', 'Adiabatic check'],
+  ['S', 'CPC cross-section', 'Size of the protective conductor in mm².', 'Adiabatic check'],
+  ['t', 'Disconnection time', 'How long the device takes to clear the fault, in seconds.', 'Adiabatic check'],
+  ['I²t', 'Let-through energy', 'Fault current squared times time: the energy the cable must survive.', 'Adiabatic check'],
+  ['CPC', 'Circuit protective conductor', 'The earth wire of the circuit.', 'Adiabatic check'],
+  ['mV/A/m', 'Volt drop per amp per metre', 'From the cable table: used to work out volt drop.', 'Cables'],
+  ['Ir', 'Long-time (thermal) setting', 'MCCB overload setting, often a fraction of In.', 'MCCB / MPCB settings'],
+  ['tr', 'Long-time delay', 'How long the MCCB waits on an overload before tripping.', 'MCCB / MPCB settings'],
+  ['Isd', 'Short-time pick-up', 'MCCB delayed short-circuit setting, a multiple of Ir.', 'MCCB / MPCB settings'],
+  ['tsd', 'Short-time delay', 'Delay before the short-time trip acts, for discrimination.', 'MCCB / MPCB settings'],
+  ['Ii', 'Instantaneous trip', 'Current that trips the breaker straight away (same idea as Im).', 'MCCB / MPCB settings'],
+  ['Im', 'Magnetic trip current', 'Current that trips it straight away. Max Zs = Uo × 0.95 ÷ Im.', 'MCCB / MPCB settings'],
+  ['Icu', 'Ultimate breaking capacity', 'Biggest fault the breaker can clear once (it may need replacing after).', 'MCCB / MPCB settings'],
+  ['Ics', 'Service breaking capacity', 'Fault it can clear and still be fit to use, often a % of Icu.', 'MCCB / MPCB settings'],
+  ['Icw', 'Short-time withstand current', 'Current it can carry for a set time (e.g. 1 s) without tripping.', 'MCCB / MPCB settings'],
+  ['Icn', 'Rated short-circuit capacity', 'MCB/RCBO breaking capacity, e.g. 6 kA or 10 kA.', 'MCCB / MPCB settings'],
+  ['Ue', 'Rated operational voltage', 'The voltage the device is rated to work at.', 'MCCB / MPCB settings'],
+  ['Ui', 'Rated insulation voltage', 'The voltage its insulation is designed for.', 'MCCB / MPCB settings'],
+  ['Uimp', 'Rated impulse withstand voltage', 'The voltage spike it can take, e.g. 6 kV or 8 kV.', 'MCCB / MPCB settings'],
+  ['AC-1', 'Utilisation category AC-1', 'Resistive or near-resistive loads (heaters).', 'Contactors'],
+  ['AC-3', 'Utilisation category AC-3', 'Squirrel-cage motors: starting and switching off while running.', 'Contactors'],
+  ['AC-4', 'Utilisation category AC-4', 'Motors that are inched or plugged (heavy duty).', 'Contactors'],
+  ['AC-5a', 'Utilisation category AC-5a', 'Discharge lamps (fluorescent, HID).', 'Contactors'],
+  ['AC-5b', 'Utilisation category AC-5b', 'Incandescent (filament) lamps.', 'Contactors'],
+  ['AC-7a', 'Utilisation category AC-7a', 'Light household loads.', 'Contactors'],
+  ['AC-15', 'Utilisation category AC-15', 'Control of electromagnetic loads such as coils.', 'Contactors'],
+];
+export const SYM = Object.fromEntries(SYMBOLS.map(([s, n, d, g]) => [s, { s, name: n, desc: d, group: g }]));
+
+// Words that are also ordinary English only count in a symbol context.
+const SAFE = ['R1+R2', 'mV/A/m', 'PSCC', 'PEFC', 'PFC', 'Ipf', 'IΔn', 'Icu', 'Ics', 'Icw', 'Icn', 'Isd', 'tsd', 'Uimp', 'Cmin', 'Zdb', 'Ib', 'Iz', 'Ze', 'Zs', 'Ca', 'Cg', 'Ci', 'Cc', 'Cf', 'R1', 'R2', 'Rn', 'Uo', 'U0', 'I²t', 'Ir', 'Ii', 'Im', 'AC-1', 'AC-3', 'AC-4', 'AC-15', 'AC-5a', 'AC-5b', 'AC-7a'];
+const esc = (x) => x.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&');
+// In / It only in brackets "(In)" or next to a maths sign ("In ≥ Ib").
+export const SYM_RE = new RegExp(`(?<![\\w/+])(${SAFE.map(esc).join('|')})(?![\\w+²])|(?<=\\()(In|It)(?=\\))|(?<=[≥≤×÷=] )(In|It)\\b|\\b(In|It)(?= [≥≤×÷=])`, 'g');
+
