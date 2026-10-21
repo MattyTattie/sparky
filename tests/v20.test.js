@@ -43,3 +43,20 @@ test('v0.20 preset names and PDF type for adjustable breakers', async () => {
   assert.equal(nameFor({ device: 'mccb', type: 'adj', rating: '32', rcdIdn: '', rcdType: '', bka: '' }), '32 A MCCB');
   assert.equal(nameFor({ device: 'mcb', type: 'B', rating: '32', rcdIdn: '', rcdType: '', bka: '6' }), 'B32 MCB · 6 kA');
 });
+test('v0.20b singles on the circuit picker; Use on a circuit carries MCCB Im', async () => {
+  const { CABLE_PICKS } = await import('../js/cables.js');
+  const { newValues, pickFor } = await import('../js/usecore.js');
+  assert.equal(CABLE_PICKS.singles.sizes[95], 50); assert.equal(pickFor('singles'), 'singles');
+  const v = newValues({ cable: 'swa3X', size: 25, cpc: 25, device: 'mccb', curve: '', rating: 100, im: 1000 });
+  assert.equal(v.im, '1000'); assert.equal(v.type, '');
+  assert.equal(newValues({ cable: 'te', size: 2.5, device: 'mcb', curve: 'B', rating: 20 }).im, undefined);
+  const { sizeCircuit } = await import('../js/design.js');
+  const r = sizeCircuit({ load: '90', unit: 'A', loadType: 'general', length: '30', cable: 'swa3X', method: 'C', ambient: 30, grouped: 1, grouping: 'bunched', ci: 1, ze: 0.1, device: 'mccb', type: 'auto', time: 0.4, im: '1000', phase: 1 });
+  assert.equal(r.ok, true); assert.equal(r.imag, 1000);
+});
+test('v0.20b PDF schedule row: MCCB type box blank, not "adj"', async () => {
+  const { scheduleRows } = await import('../js/pdf.js').catch(() => ({}));
+  if (!scheduleRows) return; // pdf.js needs the browser jsPDF global in some builds
+  const rows = scheduleRows({ supply: {} }, { circuits: [{ num: '1', desc: 'Motor', device: 'mccb', type: 'adj', rating: '100', im: '1000' }] });
+  assert.equal(rows[0].type, ''); assert.equal(rows[0].maxZs, '0.22');
+});

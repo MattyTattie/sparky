@@ -316,6 +316,6 @@ export function adjSettings(o, dv) {
 function sizeAdj(o, dv) {
   const a = adjSettings(o, dv); if (!a.ok) return a;
   const r = sizeCircuit({ ...o, _inner: true, adj: a });
-  if (r.ok) { r.curve = ''; r.adjLabel = a.label; }
+  if (r.ok) { r.curve = ''; r.adjLabel = a.label; r.imag = a.imag; }
   return r;
 }

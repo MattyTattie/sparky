@@ -6,14 +6,14 @@ import { deviceById } from './limits.js';
 
 // Calculator cable table (+ CPC choice) → circuit-page cable picker key (or '' to type sizes in).
 export function pickFor(cable, cpcMode = 'core') {
-  const m = { te: 'te', te3: 'te3', swa: 'swa2', swa4: 'swa4a', swa4X: 'swa4aX', h07: 'h07r3', h073: 'h07r5', tails: 'tails', flex: 'flex', tri: 'tri', tri3: 'tri', sycy: 'sycy', sycy3: 'sycy' };
+  const m = { te: 'te', te3: 'te3', swa: 'swa2', swa4: 'swa4a', swa4X: 'swa4aX', h07: 'h07r3', h073: 'h07r5', tails: 'tails', flex: 'flex', tri: 'tri', tri3: 'tri', sycy: 'sycy', sycy3: 'sycy', singles: 'singles', singles3: 'singles3' };
   if (cable === 'swa3') return cpcMode === 'armour' ? 'swa3a' : 'swa3c';
   if (cable === 'swa3X') return cpcMode === 'armour' ? 'swa3aX' : 'swa3cX';
   return m[cable] || '';
 }
 // The fields "Use on a circuit" may change. Everything else on the circuit is left alone.
-export const USE_FIELDS = ['cable', 'cableSize', 'live', 'cpc', 'wiring', 'device', 'bs', 'type', 'rating'];
-export const FIELD_NAMES = { cable: 'Cable type', cableSize: 'Cable size', live: 'Live mm² (col 7)', cpc: 'CPC mm² (col 8)', wiring: 'Type of wiring (col 3)', device: 'Protective device', bs: 'BS (EN) (col 8)', type: 'Type / curve (col 9)', rating: 'Rating A (col 10)' };
+export const USE_FIELDS = ['cable', 'cableSize', 'live', 'cpc', 'wiring', 'device', 'bs', 'type', 'rating', 'im'];
+export const FIELD_NAMES = { cable: 'Cable type', cableSize: 'Cable size', live: 'Live mm² (col 7)', cpc: 'CPC mm² (col 8)', wiring: 'Type of wiring (col 3)', device: 'Protective device', bs: 'BS (EN) (col 8)', type: 'Type / curve (col 9)', rating: 'Rating A (col 10)', im: 'Magnetic trip Im (A)' };
 // res = { cable, size, cpc, device, curve, rating, cpcMode } from the calculator answer.
 export function newValues(res, circuit = {}) {
   const key = pickFor(res.cable, res.cpcMode); const p = CABLE_PICKS[key];
@@ -28,6 +28,7 @@ export function newValues(res, circuit = {}) {
   }
   const d = deviceById(res.device);
   if (d) Object.assign(out, { device: d.id, bs: d.bs, type: d.adj ? '' : String(res.curve || ''), rating: String(res.rating) });
+  if (d && d.adj && Number(res.im) > 0) out.im = String(res.im); // v0.20: MPCB/MCCB magnetic trip
   return out;
 }
 // What would change: [{ k, name, from, to }] (only boxes whose value actually changes).

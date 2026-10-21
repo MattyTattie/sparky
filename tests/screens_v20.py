@@ -41,7 +41,11 @@ async def main():
             if await cab.count():
                 await cab.select_option('flex'); await pg.wait_for_timeout(300); await cab.scroll_into_view_if_needed(); await shot('11-circuit-flex-picker', False)
             z = pg.locator('.sym[data-sym="Zs"]').first
-            if await z.count(): await z.scroll_into_view_if_needed(); await z.click(force=True, timeout=5000); await shot('12-popup-Zs-circuit', False)
+            await pg.goto('http://localhost:8765/index.html#/cert/cert-eic/b/0/c/0'); await pg.wait_for_timeout(800)
+            z = pg.locator('.sym[data-sym="Zs"]').first
+            if await z.count(): await z.scroll_into_view_if_needed(); await pg.wait_for_timeout(300); await z.click(timeout=5000); await shot('12-popup-Zs-circuit', False)
+            if await cab.count():
+                await cab.select_option('singles'); await pg.wait_for_timeout(300); await cab.scroll_into_view_if_needed(); await shot('13-circuit-singles-picker', False)
             await ctx.close()
         await b.close()
     print('errors:', errs)

@@ -420,3 +420,8 @@ ext(CABLES.sycy3.methods.C.amps, { 0.5: 3, 0.75: 6, 1: 10, 1.5: 16, 2.5: 20, 4: 
 CABLE_TEMP.sycy = 70; CABLE_TEMP.sycy3 = 70;
 CABLE_PICKS.sycy = { label: 'SY / CY control cable (core as CPC)', calc: 'sycy', wiring: 'O', cpc: 'core', sizes: sameCore(SY_SIZES) };
 THREE_PHASE_CABLES.push('h073', 'tri3', 'sycy3');
+
+// v0.20: singles on the circuit page picker (separate CPC to Table 54.7). Wiring code left for you to pick
+// (B/C/D/E depend on conduit or trunking, metal or plastic).
+CABLE_PICKS.singles = { label: 'Singles 6491X in conduit / trunking (separate CPC)', calc: 'singles', wiring: '', cpc: 'sep', sizes: { ...SINGLES_CPC } };
+CABLE_PICKS.singles3 = { label: 'Singles 6491X, 3-phase (separate CPC)', calc: 'singles3', wiring: '', cpc: 'sep', sizes: { ...SINGLES_CPC } };

@@ -51,7 +51,7 @@ route(/^\/calc\/size$/, async () => {
         cab.tails ? F.seg('cutout', 'Cutout (supplier’s) fuse', CUTOUT_FUSES.map((a) => [String(a), a + ' A']), 'The tails must carry at least this, as installed.', 'small') : null,
         cab.typical ? h('p', { class: 'note warnnote' }, 'Typical, check your books. ' + TYPICAL_NOTE) : null,
         more('size-run', [
-          !three && CABLES[v.cable].cores === 3 ? F.seg('cpcMode', 'Earth (CPC)', [['core', '3rd core'], ['armour', 'Armour']], '', 'small') : null,
+          !three && CABLES[v.cable].cores === 3 && !CABLES[v.cable].cpcCore ? F.seg('cpcMode', 'Earth (CPC)', [['core', '3rd core'], ['armour', 'Armour']], '', 'small') : null,
           F.sel('method', 'How it\u2019s installed (reference method)', Object.entries(cab.methods).map(([k, m]) => [k, m.label])),
           h('div', { class: 'grid2' }, F.sel('ambient', 'Hottest air round it', AMBIENTS.map((t) => [t, t + ' °C'])), F.num('grouped', 'Circuits grouped', { hint: 'Run together with this one' })),
           F.sel('grouping', 'Grouped how', [['bunched', 'Bunched / enclosed'], ['clipped', 'One layer on a wall']]),
@@ -83,7 +83,7 @@ route(/^\/calc\/size$/, async () => {
       big: p ? [r.adjLabel ? `${r.adjLabel}${r.phase === 3 ? ' (TP)' : ''}` : `${devName(d, r.curve, r.inA)}${r.phase === 3 ? ' (TP)' : ''}`, `${p.size} mm²${cpcText(p)}`] : 'Try another cable or method',
       sub: p ? `${CABLES[v.cable].label.split(',')[0]} · Ib ${r.ib} A · ${v.length} m` : 'Nothing in this table passes current, volt drop and Zs.', chips,
       extra: p ? [why ? h('div', { class: 'ans-why' }, why) : null, h('div', { class: 'ans-test' }, icon('clipboard', { size: 16 }), `When you test: expect R1+R2 about ${p.z.r20} Ω at 20 °C${r.ring ? ' (ring, (r1 + r2) ÷ 4)' : ''}.`),
-        h('button', { class: 'btn primary', style: 'margin-top:10px;width:100%', 'data-use': '1', onclick: () => useOnCircuit({ cable: v.cable, size: p.size, cpc: p.cpc, device: r.device, curve: r.curve, rating: r.inA, three: r.phase === 3, cpcMode: v.cpcMode }) }, icon('clipboard', { size: 16 }), 'Use on a circuit')] : null }),
+        h('button', { class: 'btn primary', style: 'margin-top:10px;width:100%', 'data-use': '1', onclick: () => useOnCircuit({ cable: v.cable, size: p.size, cpc: p.cpc, device: r.device, curve: r.curve, rating: r.inA, three: r.phase === 3, cpcMode: v.cpcMode, im: r.imag }) }, icon('clipboard', { size: 16 }), 'Use on a circuit')] : null }),
       (r.advice || []).map((a) => banner(a.text, '', a.level === 'warn' ? 'amber' : 'info')),
       p && p.adi.ok && !p.adi.pass ? banner(`The earth (CPC) may be too small: it needs ${p.adi.smin} mm², it has ${p.adi.area} mm².`, 'This assumes the worst-case 0.1 s let-through. Check the breaker maker\u2019s I²t figure, or go up a cable size.') : null);
     fill(work,

@@ -39,7 +39,8 @@ export function startSymbols() {
     if (s) { e.preventDefault(); e.stopPropagation(); if (pop && pop.dataset.for === s.dataset.sym) return closeSym(); openSym(s); pop.dataset.for = s.dataset.sym; return; }
     if (!(e.target.closest && e.target.closest('.sympop'))) closeSym();
   }, true);
-  window.addEventListener('hashchange', closeSym); window.addEventListener('scroll', closeSym, { passive: true });
+  window.addEventListener('hashchange', closeSym); let y0 = 0; document.addEventListener('click', () => { y0 = window.scrollY; }, true);
+  window.addEventListener('scroll', () => { if (pop && Math.abs(window.scrollY - y0) > 40) closeSym(); }, { passive: true }); // small tap-scrolls (focus, address bar) don't close it
   let q = false; const run = () => { q = false; const app = document.getElementById('app') || document.body; wrapSymbols(app); };
   new MutationObserver(() => { if (!q) { q = true; requestAnimationFrame(run); } }).observe(document.body, { childList: true, subtree: true });
   run();
