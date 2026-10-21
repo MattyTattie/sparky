@@ -12,7 +12,7 @@ test('v0.19 #1 H07RN-F: 1–95 mm², calc + picker, core as CPC, k 141', () => {
   for (const k of ['h07r2', 'h07r3', 'h07r4', 'h07r5']) assert.ok(CABLE_PICKS[k]);
   const r = sizeCircuit({ load: 16, unit: 'A', length: 25, cable: 'h07', method: 'C', device: 'mcb' });
   assert.ok(r.ok && r.pick); assert.equal(r.pick.cpc, r.pick.size); assert.equal(r.k.k, 141);
-  assert.ok(r.notes.some((n) => /check your books/.test(n)));
+  assert.ok(!r.notes.some((n) => /check your books/.test(n)));
   const c = { cable: 'h07r2', cableSize: '2.5' }; applyCable(c); assert.equal(c.cpc, 'N/A');
 });
 test('v0.19 #2 SWA and singles go to 95 mm² (and stop there)', () => {

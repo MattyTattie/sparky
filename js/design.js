@@ -298,6 +298,10 @@ export function adjSettings(o, dv) {
   }
   const ir = Number(o.ir) > 0 ? Number(o.ir) : (MCCB_FRAMES.find((f) => f >= ib - 1e-9) || null);
   if (!ir) return { ok: false, ib, error: `${ib} A is above the MCCB sizes in the app.` };
+  // 10 × Ir default (kept TYPICAL): ABB Tmax TMD fixed I3 = 10 × In
+  // (https://library.e.abb.com/public/84b236604b4b1930c1257e3600387edf/TMax%20MCCBs%209AKK106354A1408.pdf), but
+  // Schneider NSX TM-D differs (e.g. 160 A fixed Ii 1250 A ≈ 7.8 ×; 200–250 A adjustable 5–10 ×,
+  // https://www.se.com/eg/en/faqs/FA174342/). Put in the breaker's own Im.
   const im = Number(o.im) > 0 ? Number(o.im) : 10 * ir;
   steps.push(`MCCB thermal setting Ir ${ir} A (Ir ≥ Ib ${ib} A), magnetic setting Im ${im} A${Number(o.im) > 0 ? '' : ' (10 × Ir, typical: put in your setting)'}. Max Zs = ${UO} V × ${CMIN} ÷ ${im} A.`);
   if (sI) advice.push(sI < im ? { level: 'info', text: `Starting current ≈ ${r2(sI)} A, below the ${im} A magnetic setting. ✓` } : { level: 'warn', text: `Starting current ≈ ${r2(sI)} A could reach the ${im} A magnetic setting. Turn Im up (then re-check Zs) or check the maker.` });

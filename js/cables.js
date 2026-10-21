@@ -264,7 +264,11 @@ const ext = (tbl, add) => { for (const [k, v] of Object.entries(add)) tbl[k] = v
 const addSizes = (c, mv, amps) => { c.sizes = [...c.sizes, 50, 70, 95]; ext(c.mvam, mv); for (const [m, a] of Object.entries(amps)) ext(c.methods[m].amps, a); c.big = true; };
 // 50, 70 and 95 mm² (stop at 95). Current: Table 4D4A / 4E4A (SWA), 4D1A (singles).
 // Volt drop: Tables 4D4B / 4E4B / 4D1B, the z (impedance) column above 35 mm².
-// ⚠ TYPICAL: typed in from memory of Appendix 4, check against your copy.
+// v0.19.1: checked against published copies of BS 7671 (Oct 2026), all within 5%:
+//  4D4A/4D4B: https://www.elandcables.com/media/of4pe0xx/table-4d4a-and-4d4b.pdf (D = column D1, ducts)
+//  4E4A/4E4B: https://intrelec.co.uk/2020/10/21/swa-cable-sizing-charts/ and Anixter BS 5467 sheet https://objects.eanixter.com/PD372902-AN.PDF
+//  4D1A/4D1B: https://www.elandcables.com/media/vyrp3kxq/table-4d1a-and-4d1b.pdf and https://www.ukcables.co.uk/wp-content/uploads/2025/03/6491X_UK-CABLES-DATA-SHEETS-.pdf
+//  Singles 3-phase volt drop changed 0.87/0.62 -> 0.85/0.61 (4D1B col 6 z).
 addSizes(CABLES.swa, { 50: 0.94, 70: 0.65, 95: 0.5 }, { C: { 50: 176, 70: 224, 95: 271 }, D: { 50: 140, 70: 173, 95: 206 } });
 addSizes(CABLES.swa3, { 50: 0.94, 70: 0.65, 95: 0.5 }, { C: { 50: 176, 70: 224, 95: 271 }, D: { 50: 140, 70: 173, 95: 206 } });
 addSizes(CABLES.swaX, { 50: 1.0, 70: 0.71, 95: 0.53 }, { C: { 50: 219, 70: 279, 95: 338 }, D: { 50: 164, 70: 203, 95: 239 } });
@@ -272,14 +276,19 @@ addSizes(CABLES.swa3X, { 50: 1.0, 70: 0.71, 95: 0.53 }, { C: { 50: 219, 70: 279,
 addSizes(CABLES.swa4, { 50: 0.81, 70: 0.57, 95: 0.43 }, { C: { 50: 151, 70: 192, 95: 232 }, D: { 50: 116, 70: 143, 95: 169 } });
 addSizes(CABLES.swa4X, { 50: 0.87, 70: 0.61, 95: 0.45 }, { C: { 50: 187, 70: 238, 95: 289 }, D: { 50: 135, 70: 167, 95: 197 } });
 addSizes(CABLES.singles, { 50: 1.0, 70: 0.72, 95: 0.56 }, { A: { 50: 119, 70: 151, 95: 182 }, B: { 50: 151, 70: 192, 95: 232 }, C: { 50: 182, 70: 234, 95: 284 } });
-addSizes(CABLES.singles3, { 50: 0.87, 70: 0.62, 95: 0.48 }, { A: { 50: 108, 70: 136, 95: 164 }, B: { 50: 134, 70: 171, 95: 207 }, C: { 50: 167, 70: 214, 95: 261 } });
-// Copper class 2 conductors, BS EN 60228 Table 1 maxima at 20 °C.
+addSizes(CABLES.singles3, { 50: 0.85, 70: 0.61, 95: 0.48 }, { A: { 50: 108, 70: 136, 95: 164 }, B: { 50: 134, 70: 171, 95: 207 }, C: { 50: 167, 70: 214, 95: 261 } });
+// Copper class 2 conductors, BS EN 60228 Table 1 maxima at 20 °C (matches Prysmian 6491X sheet
+// https://datasheet.prysmian.com/pdf/datasheet/en-GB/312411/GB00_6491X).
 ext(CU_MOHM_PER_M, { 50: 0.387, 70: 0.268, 95: 0.193 });
 // Table 54.7: CPC S/2 above 35 mm².
 ext(SINGLES_CPC, { 50: 25, 70: 35, 95: 50 });
-// ⚠ TYPICAL maker's armour figures (BS 5467 / BS 6346 data sheets) for 50–95 mm².
-ext(ARMOUR_MOHM_PER_M[2], { 50: 2.0, 70: 1.4, 95: 1.2 }); ext(ARMOUR_MOHM_PER_M[3], { 50: 1.9, 70: 1.3, 95: 1.1 }); ext(ARMOUR_MOHM_PER_M[4], { 50: 1.7, 70: 1.2, 95: 0.98 });
-ext(ARMOUR_CSA[2], { 50: 62, 70: 70, 95: 98 }); ext(ARMOUR_CSA[3], { 50: 68, 70: 78, 95: 113 }); ext(ARMOUR_CSA[4], { 50: 77, 70: 90, 95: 128 });
+// Armour 50–95 mm², v0.19.1 corrected to maker's data (BS 5467 XLPE/SWA 600/1000 V):
+//  resistance = BS 5467 Table F.2 maxima at 20 °C, shaped conductors, as in Anixter p.20•31
+//  https://objects.eanixter.com/PD372902-AN.PDF (was 2.0/1.4/1.2, 1.9/1.3/1.1, 1.7/1.2/0.98: too low);
+//  gross armour area = Anixter p.20•33 and Dungannon https://www.dungannonelectrical.co.uk/pdf/cable/SWA.pdf
+//  (was 62/70/98, 68/78/113, 77/90/128). PVC/SWA (BS 6346) can differ slightly: check the drum sheet.
+ext(ARMOUR_MOHM_PER_M[2], { 50: 2.3, 70: 2.0, 95: 1.4 }); ext(ARMOUR_MOHM_PER_M[3], { 50: 2.0, 70: 1.8, 95: 1.3 }); ext(ARMOUR_MOHM_PER_M[4], { 50: 1.8, 70: 1.2, 95: 1.1 });
+ext(ARMOUR_CSA[2], { 50: 68, 70: 80, 95: 113 }); ext(ARMOUR_CSA[3], { 50: 78, 70: 90, 95: 128 }); ext(ARMOUR_CSA[4], { 50: 90, 70: 131, 95: 147 });
 for (const k of ['swa2', 'swa3a', 'swa3aX']) ext(CABLE_PICKS[k].sizes, { 50: 'armour', 70: 'armour', 95: 'armour' });
 for (const k of ['swa3c', 'swa3cX']) ext(CABLE_PICKS[k].sizes, { 50: 50, 70: 70, 95: 95 });
 CABLE_PICKS.swa4a = { label: '4-core SWA (armour as CPC)', calc: 'swa4', wiring: 'F', cores: 4, cpc: 'armour', sizes: Object.fromEntries(CABLES.swa4.sizes.map((s) => [s, 'armour'])) };
@@ -297,22 +306,31 @@ K_VALUES.core90tp = { k: 100, label: 'Copper core, 90 °C thermoplastic, bunched
 const three = (c, label, ampF, extra = {}) => ({ ...c, ...extra, label, phase: 3, cores: c.cores, mvam: Object.fromEntries(Object.entries(c.mvam).map(([s, v]) => [s, Math.round(v * 0.866 * 100) / 100])),
   methods: Object.fromEntries(Object.entries(c.methods).map(([m, x]) => [m, { ...x, amps: Object.fromEntries(Object.entries(x.amps).map(([s, a]) => [s, Math.round(a * ampF * 2) / 2])) }])) });
 
-// 1. H07RN-F heavy rubber flex (60 °C). ⚠ TYPICAL: Appendix 4 Table 4F1A (sheathed rubber flexible
-// cables, 4 mm² up) and 4F3A (cords, up to 4 mm²) as remembered, with maker's data (e.g. H07RN-F
-// data sheets) for the gaps. One core is the CPC (same size as the live).
+// 1. H07RN-F heavy rubber flex (60 °C). v0.19.1: CORRECTED (v0.19 ratings were 10–25% too high).
+//  4–95 mm²: BS 7671 Table 4F1A (free air, may rest on a surface; one column only) and 4F1B, as
+//  reproduced by UK Cables https://www.ukcables.co.uk/wp-content/uploads/2025/03/H07RN-F-SINGLE-MULTICORE_UK-CABLES-DATA-SHEETS-.pdf
+//  and Multicomp/Farnell https://www.farnell.com/datasheets/2922063.pdf
+//  1–2.5 mm²: Table 4F3A / 4F3B (60 °C flexible cords), same two sheets.
+//  4F1A gives no two-core figure above 25 mm², so 35–95 mm² single-phase uses the 3/4/5-core figure
+//  (on the safe side), and single-phase volt drop above 25 mm² = three-phase z × 2/√3.
+//  One core is the CPC (same size as the live).
 const RN_SIZES = [1, 1.5, 2.5, 4, 6, 10, 16, 25, 35, 50, 70, 95];
+const RN1 = { 1: 10, 1.5: 16, 2.5: 25, 4: 30, 6: 39, 10: 51, 16: 73, 25: 97, 35: 102, 50: 124, 70: 158, 95: 192 };
+const RN3 = { 1: 10, 1.5: 16, 2.5: 20, 4: 26, 6: 34, 10: 47, 16: 63, 25: 83, 35: 102, 50: 124, 70: 158, 95: 192 };
 CABLES.h07 = {
-  label: 'H07RN-F rubber flex, 60 °C (3-core: L, N, E)', cores: 3, cpcCore: true, rTable: 'cu5', typical: true,
-  source: 'Table 4F1A / 4F3A (60 °C rubber flexible cables) and maker\u2019s H07RN-F data',
-  note: '⚠ H07RN-F ratings are typical, check your books (Appendix 4 Table 4F1A / 4F3A) or the maker\u2019s data. One core is the CPC. Rubber runs at 60 °C, so hot rooms derate it hard.',
+  label: 'H07RN-F rubber flex, 60 °C (3-core: L, N, E)', cores: 3, cpcCore: true, rTable: 'cu5',
+  source: 'Table 4F1A / 4F1B (4 mm² up) and 4F3A / 4F3B (1–2.5 mm²), 60 °C rubber flexible cables',
+  note: 'H07RN-F: Table 4F1A / 4F3A ratings (free air or resting on a surface). One core is the CPC. 35–95 mm² use the three-core figure. Reduce the rating if it\u2019s on a drum or coiled up. Rubber runs at 60 °C, so hot rooms derate it hard.',
   sizes: RN_SIZES,
-  mvam: { 1: 46, 1.5: 31, 2.5: 19, 4: 12, 6: 7.8, 10: 4.6, 16: 2.9, 25: 1.9, 35: 1.35, 50: 0.98, 70: 0.7, 95: 0.53 },
+  mvam: { 1: 46, 1.5: 32, 2.5: 19, 4: 12, 6: 7.8, 10: 4.6, 16: 2.9, 25: 1.85, 35: 1.33, 50: 0.97, 70: 0.67, 95: 0.51 },
   methods: {
-    C: { label: 'Clipped direct or in free air (C)', amps: { 1: 15, 1.5: 19, 2.5: 26, 4: 34, 6: 43, 10: 60, 16: 80, 25: 105, 35: 128, 50: 157, 70: 197, 95: 238 } },
-    E: { label: 'On a perforated tray (E)', amps: { 1: 16, 1.5: 20, 2.5: 28, 4: 36, 6: 46, 10: 64, 16: 85, 25: 112, 35: 137, 50: 167, 70: 210, 95: 254 } },
+    C: { label: 'In free air or resting on a surface', amps: RN1 },
+    E: { label: 'On a perforated tray (same as free air, Table 4F1A)', amps: { ...RN1 } },
   },
 };
-CABLES.h073 = three(CABLES.h07, 'H07RN-F rubber flex, 60 °C, 3-phase (4/5-core, a core as CPC)', 0.85, { cores: 5 });
+CABLES.h073 = { ...CABLES.h07, label: 'H07RN-F rubber flex, 60 °C, 3-phase (4/5-core, a core as CPC)', phase: 3, cores: 3,
+  mvam: { 1: 40, 1.5: 27, 2.5: 16, 4: 10, 6: 6.7, 10: 4.0, 16: 2.5, 25: 1.55, 35: 1.15, 50: 0.84, 70: 0.58, 95: 0.44 },
+  methods: { C: { label: 'In free air or resting on a surface', amps: RN3 }, E: { label: 'On a perforated tray (same as free air, Table 4F1A)', amps: { ...RN3 } } } };
 CABLE_TEMP.h07 = 60; CABLE_TEMP.h073 = 60;
 const sameCore = (sizes) => Object.fromEntries(sizes.map((s) => [s, s]));
 CABLE_PICKS.h07r2 = { label: 'H07RN-F rubber flex 2-core (no CPC, Class II only)', calc: 'h07', wiring: 'O', cpc: 'none', sizes: Object.fromEntries(RN_SIZES.map((s) => [s, 'none'])) };
@@ -340,28 +358,34 @@ export const CUTOUT_FUSES = [60, 80, 100];
 CABLE_PICKS.tails = { label: 'Meter tails 6181Y (16 mm² earth)', calc: 'tails', wiring: 'O', cpc: 'sep', sizes: TAILS_CPC };
 
 // 10. PVC flex 3183Y (70 °C, 3-core with earth): Table 4F3A (flexible cords) current and
-// Table 4F3B volt drop, single-phase. ⚠ TYPICAL (from memory), check your copy.
+// Table 4F3B volt drop, single-phase. v0.19.1: confirmed against
+// https://www.cse-distributors.co.uk/cable/technical-tables-useful-info/table-4f3a.html and .../table-4f3b.html
+// (also https://www.farnell.com/datasheets/1661791.pdf for 3183Y). ⚠ 4F3A/4F3B are 60 °C tables.
 const FLEX_SIZES = [0.5, 0.75, 1, 1.25, 1.5, 2.5, 4];
 CABLES.flex = {
-  label: 'PVC flex 3183Y, 70 °C (3-core: L, N, E)', cores: 3, cpcCore: true, rTable: 'cu5', typical: true,
+  label: 'PVC flex 3183Y, rated at 60 °C (3-core: L, N, E)', cores: 3, cpcCore: true, rTable: 'cu5',
   source: 'Table 4F3A (flexible cords, current) and 4F3B (volt drop)',
-  note: '⚠ 3183Y ratings are typical, check your books (Appendix 4 Table 4F3A). For appliances and pendants: the flex is usually protected by the plug or spur fuse.',
+  note: '3183Y: Table 4F3A ratings, 4F3B volt drop. For appliances and pendants: the flex is usually protected by the plug or spur fuse.',
   sizes: FLEX_SIZES,
   mvam: { 0.5: 93, 0.75: 62, 1: 46, 1.25: 37, 1.5: 32, 2.5: 19, 4: 12 },
   methods: { C: { label: 'In free air (flexible cord)', amps: { 0.5: 3, 0.75: 6, 1: 10, 1.25: 13, 1.5: 16, 2.5: 25, 4: 32 } } },
 };
-CABLE_TEMP.flex = 70;
+CABLE_TEMP.flex = 60; // v0.19.1: Table 4F3A is a 60 °C table, so use the 60 °C Ca (was 70).
 CABLE_PICKS.flex = { label: 'PVC flex 3183Y (core as CPC)', calc: 'flex', wiring: 'O', cpc: 'core', sizes: sameCore(FLEX_SIZES) };
 
-// 12. Tri-rated panel wire (BS 6231 / H07V2-K, 90 °C thermoplastic, single-core). ⚠ TYPICAL: Table
-// 4E1A (90 °C single-core) method B ratings used for panel trunking, maker's data below 1 mm².
+// 12. Tri-rated panel wire (BS 6231 / H07V2-K, 90 °C thermoplastic, single-core). Table 4E1A
+// (90 °C single-core) method B ratings used for panel trunking. v0.19.1: 1–16 mm² confirmed against
+// https://www.cse-distributors.co.uk/cable/technical-tables-useful-info/table-4e1a.html (cols 4 and 5) and
+// volt drop against .../table-4e1b.html. ⚠ 0.5 / 0.75 mm² are NOT in BS 7671: 9 / 12 A are kept as a
+// cautious figure (CSE quote about 11 / 14 A in free air, single cable:
+// https://www.cse-distributors.co.uk/tri-rated-panel-cable/tri-rated-cable-sizes-current-ratings.html).
 // Grouping (Table 4C1, bunched) always applies in a panel. Terminals are often only rated 70 °C
 // (Regulation 512.1.5): check the equipment before running at 90 °C.
 const TRI_SIZES = [0.5, 0.75, 1, 1.5, 2.5, 4, 6, 10, 16];
 CABLES.tri = {
   label: 'Tri-rated panel wire (BS 6231 / H07V2-K), 90 °C', cores: 2, cpcCore: true, rTable: 'cu5', typical: true, panel: true,
   source: 'Table 4E1A (90 °C single-core, method B) and maker\u2019s tri-rated data',
-  note: '⚠ Tri-rated ratings are typical, check your books or the maker\u2019s data. Grouping is applied (bunched). Many terminals are only rated 70 °C (512.1.5): if so, use the 70 °C figures.',
+  note: '⚠ Tri-rated: 1–16 mm² from Table 4E1A (method B); 0.5 and 0.75 mm² aren\u2019t in BS 7671, so those are typical, check the maker\u2019s data. Grouping is applied (bunched). Many terminals are only rated 70 °C (512.1.5): if so, use the 70 °C figures.',
   sizes: TRI_SIZES,
   mvam: { 0.5: 93, 0.75: 62, 1: 46, 1.5: 31, 2.5: 19, 4: 12, 6: 7.9, 10: 4.7, 16: 2.9 },
   methods: {
@@ -369,12 +393,19 @@ CABLES.tri = {
     bunch: { label: 'Bunched in a panel', bunched: true, amps: { 0.5: 9, 0.75: 12, 1: 17, 1.5: 23, 2.5: 31, 4: 42, 6: 54, 10: 75, 16: 100 } },
   },
 };
+// 3-phase: Table 4E1A col 5 and 4E1B col 6 (0.5 / 0.75 mm² scaled, typical).
 CABLES.tri3 = three(CABLES.tri, 'Tri-rated panel wire, 90 °C, 3-phase', 0.88, { cores: 4 });
+for (const m of ['panel', 'bunch']) ext(CABLES.tri3.methods[m].amps, { 1: 15, 1.5: 20, 2.5: 28, 4: 37, 6: 48, 10: 66, 16: 88 });
+ext(CABLES.tri3.mvam, { 1: 40, 1.5: 27, 2.5: 16, 4: 10, 6: 6.8, 10: 4.0, 16: 2.5 });
 CABLE_TEMP.tri = 90; CABLE_TEMP.tri3 = 90;
 CABLE_PICKS.tri = { label: 'Tri-rated panel wire (separate CPC, same size)', calc: 'tri', wiring: 'O', cpc: 'core', sizes: sameCore(TRI_SIZES) };
 
-// 13. SY / CY control cable (70 °C PVC multicore, braid or screen). ⚠ TYPICAL: rated like
-// Table 4F3A flexible cords as a cautious figure; maker's data varies, check maker data.
+// 13. SY / CY control cable (70 °C PVC multicore, braid or screen), rated to Table 4F3A flexible
+// cords. v0.19.1: a stockist's SY sheet uses 4F3A too
+// (https://allenbros.co.uk/storage/shop/products/files/SY%20Current%20Rating.pdf) and the single-phase
+// figures match https://www.cse-distributors.co.uk/cable/technical-tables-useful-info/table-4f3a.html.
+// 3-phase now uses the 4F3A three-phase column (was single-phase × 0.85). Kept TYPICAL: SY/CY makers
+// don't all publish ratings, and multicores with more loaded cores need derating.
 const SY_SIZES = [0.5, 0.75, 1, 1.5, 2.5, 4];
 CABLES.sycy = {
   label: 'SY / CY control cable, 70 °C (a core as CPC)', cores: 3, cpcCore: true, rTable: 'cu5', typical: true,
@@ -385,6 +416,7 @@ CABLES.sycy = {
   methods: { C: { label: 'Clipped direct or in free air (C)', amps: { 0.5: 3, 0.75: 6, 1: 10, 1.5: 16, 2.5: 25, 4: 32 } } },
 };
 CABLES.sycy3 = three(CABLES.sycy, 'SY / CY control cable, 70 °C, 3-phase (a core as CPC)', 0.85, { cores: 5 });
+ext(CABLES.sycy3.methods.C.amps, { 0.5: 3, 0.75: 6, 1: 10, 1.5: 16, 2.5: 20, 4: 25 }); ext(CABLES.sycy3.mvam, { 0.5: 80, 0.75: 54, 1: 40, 1.5: 27, 2.5: 16, 4: 10 });
 CABLE_TEMP.sycy = 70; CABLE_TEMP.sycy3 = 70;
 CABLE_PICKS.sycy = { label: 'SY / CY control cable (core as CPC)', calc: 'sycy', wiring: 'O', cpc: 'core', sizes: sameCore(SY_SIZES) };
 THREE_PHASE_CABLES.push('h073', 'tri3', 'sycy3');

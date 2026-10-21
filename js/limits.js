@@ -173,6 +173,12 @@ export const MCB_CLASS3_I2T = {
 // Max Zs for a device with a magnetic trip current Im: Zs ≤ Uo × Cmin ÷ Im (the same way Table 41.3 is
 // worked out for circuit-breakers). ⚠ TYPICAL: MPCB magnetic trip about 13 × the top of the dial range
 // (e.g. ABB MS132, Schneider GV2, Eaton PKZM0), check the maker.
+// v0.19.1 check (kept TYPICAL): Siemens 3RV2 instantaneous release 13 × In (catalogue IC 10,
+// https://www.energeia.gr/images/products/documents/catalogs/sie-sirius3rv2motorstarterprotector-circuitbreakers.pdf);
+// Schneider GV2ME fixed magnetic trip is about 12–14 × the range top (e.g. 4–6.3 A → 78 A, 24–32 A → 416 A;
+// GV2ME01 only ~9 ×), https://www.electrocentr.com.ua/files/documentation/SE/motor-control/cb/TeSys_GV_cat_2017_en.pdf;
+// ABB MS132 12.5 × up to 6.3 A, 15 × above (https://library.e.abb.com/public/65a7bfff98c1f020c1257b04002a355b/2CDC131021D0201.pdf).
+// Ranges up to 32 A follow GV2 / MS132; 30–40 A and up are GV3-style and not checked.
 export const MPCB_MAG_MULT = 13;
 // Typical MPCB dial ranges (A). Pick the smallest range that has the FLC in it.
 export const MPCB_RANGES = [[0.1, 0.16], [0.16, 0.25], [0.25, 0.4], [0.4, 0.63], [0.63, 1], [1, 1.6], [1.6, 2.5], [2.5, 4], [4, 6.3], [6.3, 10], [9, 14], [13, 18], [17, 23], [20, 25], [24, 32], [30, 40], [37, 50], [48, 65], [63, 80], [80, 100]];

@@ -13,6 +13,10 @@ const r3 = (n) => Math.round(n * 1000) / 1000;
 // Fuse sizes: BS 88 / IEC 60269 R10 series (A). ⚠ TYPICAL rule of thumb: primary fuse time-delay or aM
 // about 2 × the primary current to ride the switch-on inrush (often 10–25 × In for a few ms); secondary
 // fuse gG just above the secondary full-load current so it protects the winding. Check the maker.
+// v0.19.1 check (kept TYPICAL): maker tables put the aM primary fuse at about 2–2.5 × the primary current
+// for 250 VA–1 kVA, and 3–5 × for small ones: Birmingham Transformers 400 V table
+// (http://www.industrial-transformers.co.uk/wp-content/uploads/2016/03/PRIMARY-protection-FUSE-MCB.pdf),
+// Legrand (https://assets.legrand.com/pim/NP-FT-GT/F00870EN-03.pdf). Inrush 25–40 × for a half cycle (Mersen).
 export const FUSE_SIZES = [0.5, 1, 1.6, 2, 2.5, 3.15, 4, 5, 6.3, 8, 10, 12, 16, 20, 25, 32, 40, 50, 63];
 export const nextFuse = (a) => FUSE_SIZES.find((f) => f >= a - 1e-9) || null;
 export function transformer({ va, vp = 400, vs = 230, primaryMult = 2 }) {
@@ -24,12 +28,14 @@ export function transformer({ va, vp = 400, vs = 230, primaryMult = 2 }) {
     notes: [`Primary current = ${S} VA ÷ ${P} V = ${r3(ip)} A. Secondary current = ${S} VA ÷ ${Sv} V = ${r3(is)} A.`,
       `Primary fuse: time-delay or aM, about ${primaryMult} × ${r3(ip)} A so it rides the switch-on inrush (typical, check the maker).`,
       'Secondary fuse: gG, the next size at or above the secondary current, so it protects the winding and the control wiring.',
-      'Typical figures: the transformer maker\u2019s fuse table takes priority (some list primary fuses at 2.5–3 × In).'] };
+      'Typical figures: the transformer maker\u2019s fuse table takes priority (makers list about 2–2.5 × for 250 VA–1 kVA, and up to 3–5 × for small transformers).'] };
 }
 
 // ---------- Contactor picker ----------
 // Utilisation categories, IEC / BS EN 60947-4-1 Annex A. mult = margin on the load current; list =
-// which line on the side of the contactor you read. ⚠ TYPICAL margins (AC-4, AC-5, AC-6 especially):
+// which line on the side of the contactor you read. v0.19.1: categories match ABB's contactor guide
+// (https://library.e.abb.com/public/61931bb764074e4c8b0e82f2f386cf58/1SAC200017M0002_en_C_Contactors%20and%20Overload%20relays%20guide.pdf),
+// but no maker publishes these fixed margins: they're rules of thumb. ⚠ TYPICAL margins (AC-4, AC-5, AC-6 especially):
 // the maker's figure for that category takes priority.
 export const AC_STD = {
   ac1: [16, 20, 25, 32, 40, 45, 50, 63, 80, 100, 125, 160, 200, 250],
@@ -59,7 +65,8 @@ export function contactor({ cat = 'AC-1', load, unit = 'kW', phase = 3, pf = 1, 
 // From the origin: Zsource = Uo ÷ PSCC (L–N) and Ze (or Uo ÷ PEFC). Far end, with the cable at 20 °C
 // (the cold cable gives the highest fault current, the safe side for kA ratings):
 //   PSCC (L–N) = Uo ÷ (Zsource + (R phase + R neutral) × L),  PEFC = Uo ÷ (Ze + R1+R2 × L).
-// Three-phase symmetrical fault ≈ 2 × L–N PSCC at the origin (GN3 rule of thumb), then
+// Three-phase symmetrical fault ≈ 2 × L–N PSCC at the origin (GN3 rule of thumb, on the safe side; see
+// https://www.kewtechcorp.com/news/the-measurement-of-prospective-fault-current/), then
 //   Ik3 = Uo ÷ (Uo ÷ Ik3 origin + R phase × L). Resistance only: reactance ignored (on the safe side
 // for small cables; above about 35 mm² reactance matters, so it's flagged).
 export const KA_RATINGS = [3, 4.5, 6, 10, 15, 16, 25, 36, 50];
