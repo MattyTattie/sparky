@@ -74,7 +74,6 @@ route(/^\/calc\/dc\/plan(?:\/(\w+))?$/, async (stepArg) => {
           F.num('dod', 'Usable part of the battery (depth of discharge)', { unit: '%', ph: String(Math.round((CHEMS[v.chem] || CHEMS.lifepo4).dod * 100)), hint: `Blank = ${Math.round((CHEMS[v.chem] || CHEMS.lifepo4).dod * 100)}% for ${(CHEMS[v.chem] || CHEMS.lifepo4).label}.` }),
           F.num('bmsA', 'Battery BMS max continuous current', { unit: 'A', ph: 'data sheet', hint: 'BMS = the battery\u2019s own protection board. Optional: lets Sparky check it can feed everything at once.' })],
           `${v.dod || Math.round((CHEMS[v.chem] || CHEMS.lifepo4).dod * 100)}% usable${v.bmsA ? `, BMS ${v.bmsA} A` : ''}`)], { step: 1 }),
-      icard('Battery', [have('battAh', { auto: `Size for me${p.battery.suggestAh ? ` (${p.battery.suggestAh} Ah)` : ''}`, mine: 'Your battery', unit: 'Ah', hint: `You need about ${p.battery.needAh} Ah for what you\u2019ve put in.`, dflt: String(p.battery.suggestAh || '') })]),
       h('div', { class: 'btns full' }, h('button', { class: 'btn', onclick: () => { Object.assign(v, clone(VAN_EXAMPLE)); delete v._off; delete v._have; save(); toast('Camper van example loaded'); } }, 'Load camper van example'),
         h('button', { class: 'btn', onclick: () => { Object.keys(v).forEach((k) => delete v[k]); Object.assign(v, clone(PLAN_DEFAULTS)); v.loads = []; save(); } }, 'Start again'))],
 
@@ -101,7 +100,9 @@ route(/^\/calc\/dc\/plan(?:\/(\w+))?$/, async (stepArg) => {
             h('label', { class: 'check' }, h('input', { type: 'checkbox', checked: !!l.lighting, onchange: (e) => setLoad(i, 'lighting', e.target.checked) }), '10% volt drop is OK'), h('span', { class: 'help' }, 'Lighting and other things that don\u2019t mind a bit less voltage (the usual marine rule). Otherwise 3%.')],
             `${l.peak ? 'peak ' + l.peak + (l.unit === 'A' ? ' A' : ' W') : 'no peak'}, ${l.lighting ? '10%' : '3%'} drop`))),
         h('div', { class: 'help' }, 'Hours a day = how long it runs at that power. A fridge cycles on and off, so about 8 h on a warm day.')]),
-      h('div', { class: 'tot' }, `That\u2019s ${p.daily.wh} Wh a day = ${p.daily.ah} Ah at ${p.V} V`)],
+      h('div', { class: 'tot' }, `That\u2019s ${p.daily.wh} Wh a day = ${p.daily.ah} Ah at ${p.V} V`),
+      // v0.21: battery sized after the loads (it needs them), so it moved here from System.
+      icard('Battery', [have('battAh', { auto: `Size for me${p.battery.suggestAh ? ` (${p.battery.suggestAh} Ah)` : ''}`, mine: 'Your battery', unit: 'Ah', hint: `You need about ${p.battery.needAh} Ah for what you\u2019ve put in.`, dflt: String(p.battery.suggestAh || '') })])],
 
     charging: (p) => {
       const sOn = !!String(v.solarW || '').trim(), dOn = !!String(v.dcdcA || '').trim(), mOn = !!String(v.shoreA || '').trim();

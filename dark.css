@@ -297,6 +297,7 @@ html.dark .symtx { color: var(--sub); }
 html.dark .symall { color: var(--brand); }
 html.dark .symrow { border-bottom: 1px solid var(--line); }
 html.dark .symk { color: var(--brand); }
+html.dark .icard h2 .gives { color: var(--brand); background: var(--brandbg); }
 /* ===== hand-tuned dark theme (v0.18) ===== */
 html.dark { color-scheme: dark; --ink: #e8ebf3; --ink2: #cfd5e2; --sub: #aab2c3; --muted: #959eb1; --line: #2a3142; --bg: #0e121b; --card: #171c28;
   --brand: #7d93ff; --brand2: #9b7dff; --brandbg: #1f2747; --accent: #ff8f3d;

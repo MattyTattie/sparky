@@ -34,16 +34,16 @@ route(/^\/calc\/dc\/pv$/, async () => {
           h('div', { class: 'grid2' }, F.num('vmp', 'Vmp', { unit: 'V', hint: 'Max-power volts' }), F.num('imp', 'Imp', { unit: 'A', hint: 'Max-power amps' })),
           h('div', { class: 'grid2' }, F.num('coef', 'Voc temperature coefficient', { unit: '%/°C', ph: '-0.27', hint: 'How much Voc rises per °C colder' }), F.num('maxFuse', 'Max series fuse', { unit: 'A', ph: '25', hint: 'From the panel label' })),
           F.num('tmin', 'Coldest morning', { unit: '°C', hint: '−10 °C is the usual UK design figure; colder for exposed or high sites.' })],
-          `Vmp ${v.vmp} V, coeff ${v.coef} %/°C, coldest ${v.tmin} °C, max fuse ${v.maxFuse || '–'} A`)], { step: 1 }),
+          `Vmp ${v.vmp} V, coeff ${v.coef} %/°C, coldest ${v.tmin} °C, max fuse ${v.maxFuse || '–'} A`)], { step: 1, gives: 'cold Voc, string current', key: 'panels' }),
       icard('Inverter and cable run', [
         h('div', { class: 'grid2' }, F.num('invMax', 'Inverter max DC input', { unit: 'V', hint: 'Must never be exceeded' }), F.num('pvLen', 'Cable run, one way', { unit: 'm', hint: 'Panels to inverter' })),
-        more('pv-inv', [F.num('mpptMax', 'MPPT range top', { unit: 'V', hint: 'Optional: where the inverter stops tracking' }), cableMore('pvPct', 'pv-cable')], `MPPT top ${v.mpptMax || '–'} V`)], { step: 2 })] : [
+        more('pv-inv', [F.num('mpptMax', 'MPPT range top', { unit: 'V', hint: 'Optional: where the inverter stops tracking' }), cableMore('pvPct', 'pv-cable')], `MPPT top ${v.mpptMax || '–'} V`)], { step: 2, gives: 'voltage check, cable, fuses', key: 'run' })] : [
       icard('Battery and inverter', [
         h('div', { class: 'grid2' }, F.num('bV', 'Battery voltage', { unit: 'V', hint: 'Nominal, e.g. 51.2' }), F.num('bKw', 'Inverter power', { unit: 'kW', hint: 'Or the current below' })),
         F.num('bLen', 'Cable run, one way', { unit: 'm', hint: 'Battery to inverter' }),
         more('bat-more', [
           h('div', { class: 'grid2' }, F.num('bI', 'Max continuous current', { unit: 'A', ph: 'data sheet', hint: 'If filled in, it\u2019s used instead of kW' }), F.num('bEff', 'Inverter efficiency', { ph: '0.95', hint: '0.95 = 95%' })),
-          cableMore('bPct', 'bat-cable')], `${v.bI ? v.bI + ' A' : 'from kW'}, efficiency ${v.bEff}`)], { step: 1 })]);
+          cableMore('bPct', 'bat-cable')], `${v.bI ? v.bI + ' A' : 'from kW'}, efficiency ${v.bEff}`)], { step: 1, gives: 'current, cable, fuse', key: 'battery' })]);
 
   const draw = () => {
     const tbl = DC_AMPS[v.cable] || DC_AMPS.xlpe90;

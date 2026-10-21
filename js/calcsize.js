@@ -11,6 +11,8 @@ import { setLastCalc, formKit, icard, more, answerCard, pchip, resline, detailCa
 import { icon } from './icons.js';
 
 const CABLE_ORDER = ['te', 'te3', 'singles', 'swa', 'swaX', 'swa3', 'swa3X', 'h07', 'tails', 'flex', 'tri', 'sycy'];
+// v0.21: the cards in the order an engineer works a design (tests/v21.test.js checks this).
+export const SIZE_CARDS = ['supply', 'breaker', 'cable', 'earth'];
 const DEFAULTS = { phase: '1', loadType: 'general', load: '20', unit: 'A', pf: '1', ringLoad: 'spread', length: '32', ze: '0.35', vd: 'auto', cable: 'te', cpcMode: 'core', method: 'C', ambient: '30', grouped: '1', grouping: 'bunched', ci: '1', separateCpc: false, device: 'rcbo', type: 'auto', time: 0.4, start: 'dol', eff: '0.85', cutout: '100', mpcbMax: '', mpcbSet: '', magMult: '13', ir: '', im: '' };
 
 route(/^\/calc\/size$/, async () => {
@@ -44,31 +46,32 @@ route(/^\/calc\/size$/, async () => {
         h('p', { class: 'note convline', 'data-conv': '1' }, convertLine({ load: v.load, unit: v.unit, pf: v.pf, phase: v.phase, eff: v.eff, motor: v.loadType === 'motor' })),
         more('size-load', [F.num('pf', 'Power factor', { hint: '1 for heaters and showers, about 0.8 for motors.' }),
           v.loadType === 'motor' ? F.num('eff', 'Motor efficiency', { hint: 'Motors are rated on shaft output. About 0.85 for small motors, 0.9+ for big ones; the nameplate may say.' }) : null],
-          `pf ${v.pf}${v.loadType === 'motor' ? ', efficiency ' + v.eff : ''}`)], { step: 1 }),
-      icard('The run', [
-        h('div', { class: 'grid2' }, F.num('length', ring ? 'Ring length' : 'Length of run', { unit: 'm', hint: ring ? 'All the way round' : 'Board to the far end' }), F.num('ze', 'Ze at the board', { unit: 'Ω', ph: '0.35', hint: '0.35 PME, 0.8 TN-S' })),
-        F.sel('cable', 'Cable', order.map((k) => [k, CABLES[k].label])),
-        cab.tails ? F.seg('cutout', 'Cutout (supplier’s) fuse', CUTOUT_FUSES.map((a) => [String(a), a + ' A']), 'The tails must carry at least this, as installed.', 'small') : null,
-        cab.typical ? h('p', { class: 'note warnnote' }, 'Typical, check your books. ' + TYPICAL_NOTE) : null,
-        more('size-run', [
-          !three && CABLES[v.cable].cores === 3 && !CABLES[v.cable].cpcCore ? F.seg('cpcMode', 'Earth (CPC)', [['core', '3rd core'], ['armour', 'Armour']], '', 'small') : null,
-          F.sel('method', 'How it\u2019s installed (reference method)', Object.entries(cab.methods).map(([k, m]) => [k, m.label])),
-          h('div', { class: 'grid2' }, F.sel('ambient', 'Hottest air round it', AMBIENTS.map((t) => [t, t + ' °C'])), F.num('grouped', 'Circuits grouped', { hint: 'Run together with this one' })),
-          F.sel('grouping', 'Grouped how', [['bunched', 'Bunched / enclosed'], ['clipped', 'One layer on a wall']]),
-          F.sel('ci', 'Thermal insulation', CI_OPTIONS),
-          /^10[0-3]$/.test(String(v.method)) && v.ci !== '1' ? h('p', { class: 'note warnnote' }, 'Methods 100–103 already allow for the insulation. Leave this at “None” unless the cable is also buried in it elsewhere.') : null,
-          v.cable === 'singles' ? F.chk('separateCpc', 'CPC run separately, not bunched with the circuit', 'k 143 instead of 115 for the adiabatic check.') : null,
-          F.seg('vd', 'Volt drop limit', [['auto', v.loadType === 'lighting' ? 'Auto (3% lighting)' : 'Auto (5% other)'], ['3', '3%'], ['5', '5%']], 'From the origin. If this is fed from a sub-board, leave room for its drop.', 'small'),
-          cab.methods[v.method] && cab.methods[v.method].bunched ? h('p', { class: 'note' }, 'Bunched in a panel: the bunched grouping factor (Table 4C1) is used with the number of circuits above.') : null,
-          cab.note ? h('p', { class: 'note warnnote' }, cab.note) : null],
-          `method ${v.method}, ${v.ambient} °C, ${v.grouped} grouped, ${String(ciLabel).split(' (')[0].toLowerCase()}, VD ${v.vd === 'auto' ? 'auto' : v.vd + '%'}`)], { step: 2 }),
+          `pf ${v.pf}${v.loadType === 'motor' ? ', efficiency ' + v.eff : ''}`)], { step: 1, gives: 'Ib', key: 'supply' }),
       icard('The breaker', [
         F.sel('device', 'Device', DEVICES.filter((x) => (x.table && x.id !== 'bs1362') || x.adj).map((x) => [x.id, x.label])),
         d.adj === 'mpcb' ? [h('div', { class: 'grid2' }, F.num('mpcbSet', 'Thermal dial setting', { unit: 'A', ph: 'FLC', hint: 'Set to the motor FLC. Blank = the load current.' }), F.num('mpcbMax', 'Top of dial range', { unit: 'A', ph: 'auto', hint: 'Blank = a typical range for the FLC.' })),
           F.num('magMult', 'Magnetic trip × range top', { hint: 'About 13 × is typical, check the maker.' })] : null,
         d.adj === 'mccb' ? h('div', { class: 'grid2' }, F.num('ir', 'Thermal setting Ir', { unit: 'A', ph: 'auto', hint: 'What the dial is set to.' }), F.num('im', 'Magnetic setting Im / Ii', { unit: 'A', ph: '10 × Ir', hint: 'In amps (e.g. 10 × Ir = 1000 A on 100 A).' })) : null,
         d.types.length > 1 ? F.seg('type', 'Type / curve', [['auto', 'Auto'], ...d.types.map((t) => [t, t])], 'Auto = B, or C for motors. Pick D for a heavy motor start.', 'small') : null,
-        more('size-dev', [F.seg('time', 'Disconnection time', [[0.4, '0.4 s'], [5, '5 s']], '0.4 s for final circuits up to 63 A; 5 s for distribution circuits and over 63 A.', 'small')], `${v.time} s`)], { step: 3 }));
+        more('size-dev', [F.seg('time', 'Disconnection time', [[0.4, '0.4 s'], [5, '5 s']], '0.4 s for final circuits up to 63 A; 5 s for distribution circuits and over 63 A.', 'small')], `${v.time} s`)], { step: 2, gives: 'In', key: 'breaker' }),
+      icard('The cable and where it runs', [
+        F.sel('cable', 'Cable', order.map((k) => [k, CABLES[k].label])),
+        cab.tails ? F.seg('cutout', 'Cutout (supplier’s) fuse', CUTOUT_FUSES.map((a) => [String(a), a + ' A']), 'The tails must carry at least this, as installed.', 'small') : null,
+        cab.typical ? h('p', { class: 'note warnnote' }, 'Typical, check your books. ' + TYPICAL_NOTE) : null,
+        more('size-run', [
+          F.sel('method', 'How it\u2019s installed (reference method)', Object.entries(cab.methods).map(([k, m]) => [k, m.label])),
+          h('div', { class: 'grid2' }, F.sel('ambient', 'Hottest air round it', AMBIENTS.map((t) => [t, t + ' °C'])), F.num('grouped', 'Circuits grouped', { hint: 'Run together with this one' })),
+          F.sel('grouping', 'Grouped how', [['bunched', 'Bunched / enclosed'], ['clipped', 'One layer on a wall']]),
+          F.sel('ci', 'Thermal insulation', CI_OPTIONS),
+          /^10[0-3]$/.test(String(v.method)) && v.ci !== '1' ? h('p', { class: 'note warnnote' }, 'Methods 100–103 already allow for the insulation. Leave this at “None” unless the cable is also buried in it elsewhere.') : null,
+          cab.methods[v.method] && cab.methods[v.method].bunched ? h('p', { class: 'note' }, 'Bunched in a panel: the bunched grouping factor (Table 4C1) is used with the number of circuits above.') : null,
+          cab.note ? h('p', { class: 'note warnnote' }, cab.note) : null],
+          `method ${v.method}, ${v.ambient} °C, ${v.grouped} grouped, ${String(ciLabel).split(' (')[0].toLowerCase()}`)], { step: 3, gives: 'Iz', key: 'cable' }),
+      icard('Length and earthing', [
+        h('div', { class: 'grid2' }, F.num('length', ring ? 'Ring length' : 'Length of run', { unit: 'm', hint: ring ? 'All the way round' : 'Board to the far end' }), F.num('ze', 'Ze at the board', { unit: 'Ω', ph: '0.35', hint: '0.35 PME, 0.8 TN-S' })),
+        !three && CABLES[v.cable].cores === 3 && !CABLES[v.cable].cpcCore ? F.seg('cpcMode', 'Earth (CPC)', [['core', '3rd core'], ['armour', 'Armour']], '', 'small') : null,
+        v.cable === 'singles' ? F.chk('separateCpc', 'CPC run separately, not bunched with the circuit', 'k 143 instead of 115 for the adiabatic check.') : null,
+        more('size-vd', [F.seg('vd', 'Volt drop limit', [['auto', v.loadType === 'lighting' ? 'Auto (3% lighting)' : 'Auto (5% other)'], ['3', '3%'], ['5', '5%']], 'From the origin. If this is fed from a sub-board, leave room for its drop.', 'small')], `VD ${v.vd === 'auto' ? 'auto' : v.vd + '%'}`)], { step: 4, gives: 'VD, Zs, adiabatic', key: 'earth' }));
   };
 
   const draw = () => {

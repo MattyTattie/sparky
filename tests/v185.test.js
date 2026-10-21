@@ -18,5 +18,5 @@ test('v0.18.5 tight motor rating warns, D accepted, other loads advised', () => 
 });
 test('v0.18.5 starting methods change the pick', () => {
   assert.equal(sizeCircuit({ ...his, type: 'auto', start: 'vsd' }).inA, 6);
-  const r = sizeCircuit({ ...his, type: 'auto', start: 'dol' }); assert.ok(r.steps[0].includes('31.8 A'));
+  const r = sizeCircuit({ ...his, type: 'auto', start: 'dol' }); assert.ok(r.steps[1].includes('31.8 A')); // v0.21: Ib is step 0
 });

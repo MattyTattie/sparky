@@ -167,7 +167,7 @@ export function sizeCircuit(o) {
     for (const t of ['C', 'D']) {
       const r = sizeCircuit({ ...o, type: t, minIn: sI / MAG_MIN[t], _inner: true });
       if (!first) first = r;
-      if (r.ok && r.pick) { r.steps.unshift(`Type ${t} ${r.inA} A picked so a ${startName(o.start)} start (about ${startMult(o.start)} × ${ib} A ≈ ${Math.round(sI * 10) / 10} A) stays below its instant trip of ${MAG_MIN[t] * r.inA} A.`); r.advice = loadAdvice({ loadType: 'motor', curve: t, inA: r.inA, ib, device: dv.id, auto: true, start: o.start }); return r; }
+      if (r.ok && r.pick) { r.steps.splice(1, 0, `Type ${t} ${r.inA} A picked so a ${startName(o.start)} start (about ${startMult(o.start)} × ${ib} A ≈ ${Math.round(sI * 10) / 10} A) stays below its instant trip of ${MAG_MIN[t] * r.inA} A.`); r.advice = loadAdvice({ loadType: 'motor', curve: t, inA: r.inA, ib, device: dv.id, auto: true, start: o.start }); return r; }
     }
     const r = sizeCircuit({ ...o, type: 'C', _inner: true });
     if (r.ok) r.advice.unshift({ level: 'warn', text: 'No Type C or D rating keeps clear of the starting current with this cable and Zs. Check the motor maker\u2019s data, or use a soft starter or VSD.' });
@@ -279,6 +279,17 @@ export function sizeCircuit(o) {
   // v0.19: meter tails against the cutout fuse.
   if (cab.tails && pick) { const cut = Number(cutout) || 100; const iz = pick.cur.it * factor; advice.unshift(iz >= cut - 1e-9 ? { level: 'info', text: `Tails ${pick.size} mm² carry ${r2(iz)} A as installed, at least the ${cut} A cutout fuse. ✓` } : { level: 'warn', text: `Tails ${pick.size} mm² only carry ${r2(iz)} A as installed, less than the ${cut} A cutout fuse. Go up a size or change how they’re run (check the DNO’s rules).` }); }
   if (cab.typical) notes.push('⚠ ' + TYPICAL_NOTE);
+  // v0.21: steps in design order: Ib -> In -> Iz -> volt drop -> Zs -> adiabatic, then the size reason last.
+  { const isIb = (t) => /^Design current Ib/.test(t); const last = steps.pop();
+    const ibStep = steps.find(isIb) || `Design current Ib = ${ib} A${three ? ' per phase' : ''}.`;
+    let ibS = ibStep; const dev = steps.filter((t) => !isIb(t));
+    const cut = ibS.indexOf(', so the next breaker size up is ');
+    if (cut > 0) { dev.unshift('Breaker: the next size up is ' + ibS.slice(cut + ', so the next breaker size up is '.length)); ibS = ibS.slice(0, cut) + '.'; }
+    const chk = pick ? [`Iz = It ${pick.cur.it} A × ${r2(factor)} = ${pick.cur.iz} A, needs ${pick.cur.needIz} A (Iz ≥ In).`,
+      `Volt drop ${pick.vd.volts} V (${pick.vd.pct}%), limit ${limit}%.`,
+      pick.z.zs != null ? `Zs ${pick.z.zs} Ω, max ${pick.z.max ?? '?'} Ω.` : null,
+      pick.adi.ok ? `Adiabatic: CPC needs ${pick.adi.smin} mm², ${pick.adi.armour ? 'armour is' : 'it has'} ${pick.adi.area} mm².` : null].filter(Boolean) : [];
+    steps.length = 0; steps.push(ibS, ...dev, ...chk, last); }
   return { ok: true, adj: adj || null, cable, advice, phase: three ? 3 : 1, vref, ib, inA, curve, device: d.id, limit, factors: { ca, cg, ci: Number(ci) || 1, cf, total: r2(factor) }, rows, pick, reasons, steps, notes, max, k, ring };
 }
 

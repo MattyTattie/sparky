@@ -60,29 +60,31 @@ route(/^\/calc\/check$/, async () => {
     if (v.size !== 'auto' && !cab.sizes.map(String).includes(String(v.size))) v.size = 'auto';
     const amb = AMBIENTS.includes(Number(v.ambient)) ? v.ambient : v.ambient;
     fill(form,
+      icard('Supply and load', [
+        F.seg('phase', 'Supply', [['1', 'Single-phase 230 V'], ['3', '3-phase 400 V']], three ? 'Balanced 3-phase load. Put in the current in each phase. ⚠ 3-phase cable figures are from memory of Appendix 4: check them.' : '', 'small'),
+        three ? null : F.seg('shape', 'Shape', SHAPES, v.shape === 'radial' ? '' : 'Ring: put in the length all the way round the ring.', 'small'),
+        F.num('ib', three ? 'Design current per phase (Ib)' : 'Load / design current (Ib)', { unit: 'A', hint: three ? 'kW × 1000 ÷ (1.732 × 400)' : 'Design current' }),
+      ], { step: 1, gives: 'Ib', key: 'supply' }),
       icard('The breaker', [
         F.sel('device', 'Device', DEVICES.filter((x) => x.table || x.adj).map((x) => [x.id, x.label])),
         d.types.length > 1 ? F.seg('type', 'Type / curve', d.types.map((t) => [t, t]), 'B for most domestic circuits, C for motors and big inrush.') : null,
         d.adj ? h('div', { class: 'grid2' }, F.num('rating', d.adj === 'mpcb' ? 'Dial setting (In)' : 'Thermal setting Ir (In)', { unit: 'A' }), F.num('im', 'Magnetic trip (Im)', { unit: 'A', ph: d.adj === 'mpcb' ? '13 × dial top' : '10 × Ir', hint: 'Blank = ' + (d.adj === 'mpcb' ? '13' : '10') + ' × the setting.' }))
           : F.seg('rating', 'Rating (In)', ratings.map((r) => [r, r + ' A']), '', 'small'),
-        more('chk-dev', [F.seg('time', 'Disconnection time', [[0.4, '0.4 s'], [5, '5 s']], '0.4 s for final circuits up to 63 A; 5 s for distribution circuits and over 63 A.', 'small')], `${v.time} s`)], { step: 1 }),
-      icard('The circuit', [
-        F.seg('phase', 'Supply', [['1', 'Single-phase 230 V'], ['3', '3-phase 400 V']], three ? 'Balanced 3-phase load. Put in the current in each phase. ⚠ 3-phase cable figures are from memory of Appendix 4: check them.' : '', 'small'),
-        three ? null : F.seg('shape', 'Shape', SHAPES, v.shape === 'radial' ? '' : 'Ring: put in the length all the way round the ring.', 'small'),
-        h('div', { class: 'grid2' }, F.num('ib', three ? 'Design current per phase (Ib)' : 'Load / design current (Ib)', { unit: 'A', hint: three ? 'kW × 1000 ÷ (1.732 × 400)' : 'Design current' }), F.num('length', v.shape === 'radial' ? 'Length' : 'Ring length', { unit: 'm', hint: v.shape === 'radial' ? 'Board to the far end' : 'All the way round' })),
-        F.num('ze', 'Ze at the board', { unit: 'Ω', ph: '0.35', hint: '0.35 Ω is the usual TN-C-S (PME) figure, 0.8 Ω TN-S. Measured is best.' }),
-        F.chk('lighting', 'Lighting circuit', 'Ticked = 3% volt drop limit instead of 5%.')], { step: 2 }),
-      icard('The cable', [
+        more('chk-dev', [F.seg('time', 'Disconnection time', [[0.4, '0.4 s'], [5, '5 s']], '0.4 s for final circuits up to 63 A; 5 s for distribution circuits and over 63 A.', 'small')], `${v.time} s`)], { step: 2, gives: 'In', key: 'breaker' }),
+      icard('The cable and how it\u2019s installed', [
         F.sel('cable', 'Cable', (three ? THREE_PHASE_CABLES : CABLE_ORDER).map((k) => [k, CABLES[k].label])),
-        CABLES[v.cable].cores === 3 && !CABLES[v.cable].cpcCore ? F.seg('cpcMode', 'Earth (CPC)', [['core', '3rd core'], ['armour', 'Armour']], '', 'small') : null,
-        F.sel('size', 'Size', [['auto', 'Smallest that passes'], ...cab.sizes.map((s) => [s, s + ' mm²' + (() => { const cp = cpcFor(v.cable, s, v.cpcMode); return cp === 'armour' || cp == null || Number(cp) === Number(s) ? '' : ` / ${cp} CPC`; })()])], 'Leave on "Smallest that passes", or pick the size you\u2019re fitting.'),
         more('chk-cable', [
           F.sel('method', 'How it\u2019s installed (reference method)', Object.entries(cab.methods).map(([k, m]) => [k, m.label])),
           h('div', { class: 'grid2' }, F.sel('ambient', 'Hottest air round it', AMBIENTS.map((t) => [t, t + ' °C'])), F.num('grouped', 'Circuits grouped', { hint: 'Run together with this one' })),
           F.sel('grouping', 'Grouped how', [['bunched', 'Bunched / enclosed'], ['clipped', 'One layer on a wall']]),
           F.sel('ci', 'Thermal insulation', [['1', 'None (Ci 1.0)'], ['0.5', 'Totally surrounded for 0.5 m or more (Ci 0.5)']]),
           cab.note ? h('p', { class: 'note warnnote' }, cab.note) : null],
-          `method ${v.method}, ${amb} °C, ${v.grouped} grouped, ${v.ci === '0.5' ? 'in insulation' : 'no insulation'}`)], { step: 3 }));
+          `method ${v.method}, ${amb} °C, ${v.grouped} grouped, ${v.ci === '0.5' ? 'in insulation' : 'no insulation'}`)], { step: 3, gives: 'Iz', key: 'cable' }),
+      icard('Length and earthing', [
+        h('div', { class: 'grid2' }, F.num('length', v.shape === 'radial' ? 'Length' : 'Ring length', { unit: 'm', hint: v.shape === 'radial' ? 'Board to the far end' : 'All the way round' }), F.num('ze', 'Ze at the board', { unit: 'Ω', ph: '0.35', hint: '0.35 Ω PME (TN-C-S), 0.8 Ω TN-S. Measured is best.' })),
+        CABLES[v.cable].cores === 3 && !CABLES[v.cable].cpcCore ? F.seg('cpcMode', 'Earth (CPC)', [['core', '3rd core'], ['armour', 'Armour']], '', 'small') : null,
+        F.chk('lighting', 'Lighting circuit', 'Ticked = 3% volt drop limit instead of 5%.'),
+      ], { step: 4, gives: 'VD, Zs, adiabatic', key: 'earth' }));
   };
 
   const draw = () => {
@@ -146,15 +148,15 @@ route(/^\/calc\/ring$/, async () => {
   const set = (k, val) => { v[k] = val; save(); };
   const F = formKit(v, set);
   const drawForm = () => fill(form,
-    icard('The cable', [F.seg('csa', 'Twin & earth', [['2.5', '2.5 / 1.5 mm²'], ['4', '4 / 1.5 mm²']], 'Sets what r2 should be compared with (CPC smaller than the live).')], { step: 1 }),
+    icard('The cable', [F.seg('csa', 'Twin & earth', [['2.5', '2.5 / 1.5 mm²'], ['4', '4 / 1.5 mm²']], 'Sets what r2 should be compared with (CPC smaller than the live).')], { step: 1, key: 'cable' }),
     icard('End-to-end readings', [
       h('div', { class: 'grid3' }, F.num('r1', 'r1 (line)', { unit: 'Ω' }), F.num('rn', 'rn (neutral)', { unit: 'Ω' }), F.num('r2', 'r2 (CPC)', { unit: 'Ω' })),
-      h('p', { class: 'help' }, 'Measure each leg end to end at the board, ring split.')], { step: 2 }),
+      h('p', { class: 'help' }, 'Measure each leg end to end at the board, ring split.')], { step: 2, gives: 'r1 = rn, r2 ratio', key: 'ends' }),
     icard('Cross-connected', [
       F.num('r1r2', 'Highest R1+R2 at a socket', { unit: 'Ω', hint: 'Line and CPC crossed over at the board; the highest reading round the ring.' }),
       more('ring-more', [
         h('div', { class: 'grid2' }, F.num('zdb', 'Zdb at the board', { unit: 'Ω', hint: 'For the expected Zs' }), F.num('zs', 'Measured Zs', { unit: 'Ω', hint: 'At the furthest socket' })),
-        F.seg('rating', 'Breaker', [['30', '30 A'], ['32', 'B32 / 32 A']], '', 'small')], v.zdb ? `Zdb ${v.zdb} Ω` : 'no Zs check')], { step: 3 }));
+        F.seg('rating', 'Breaker', [['30', '30 A'], ['32', 'B32 / 32 A']], '', 'small')], v.zdb ? `Zdb ${v.zdb} Ω` : 'no Zs check')], { step: 3, gives: 'R1+R2, Zs', key: 'cross' }));
   const draw = () => {
     const [live, cpc] = RING_CSA[v.csa] || RING_CSA['2.5'];
     const r = ringCheck({ r1: v.r1, rn: v.rn, r2: v.r2, r1r2: v.r1r2, zs: v.zs, live, cpc, device: v.device, type: v.type, rating: v.rating }, { zdb: v.zdb });

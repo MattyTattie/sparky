@@ -49,7 +49,8 @@ export function formKit(v, set) {
     seg: (k, label, opts, hint = '', cls = '') => h('div', { class: 'f fld2' }, label ? h('span', { class: 'lab' }, label) : null, h('div', { class: 'chips ' + cls }, opts.map(([val, t]) => h('button', { class: 'chip' + (String(v[k]) === String(val) ? ' on' : ''), type: 'button', onclick: () => set(k, val) }, t))), help(hint)),
   };
 }
-export const icard = (title, kids, { step = null, cls = '' } = {}) => h('div', { class: 'card icard ' + cls }, h('h2', {}, step ? h('span', { class: 'stepno' }, step) : null, title), kids);
+// v0.21: gives = what this step works out (e.g. 'Ib'), shown as a small tag; key = data-card for tests/screens.
+export const icard = (title, kids, { step = null, cls = '', gives = '', key = '' } = {}) => h('div', { class: 'card icard ' + cls, 'data-card': key || null }, h('h2', {}, step ? h('span', { class: 'stepno' }, step) : null, title, gives ? h('span', { class: 'gives' }, '→ ' + gives) : null), kids);
 
 // Answer card: a kicker, the big answer, a line under it, and pass/fail chips.
 // state: true = pass, false = fail, 'warn' = check it, null = not worked out.
