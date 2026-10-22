@@ -23,7 +23,7 @@ test('v0.21 Size a cable steps go Ib -> In -> Iz -> VD -> Zs -> adiabatic', () =
     assert.equal(r.ok, true); const st = r.steps;
     assert.match(st[0], /^Design current Ib/);
     const at = (re) => st.findIndex((t) => re.test(t));
-    const iz = at(/^Iz = /), vd = at(/^Volt drop/), zs = at(/^Zs /), ad = at(/^Adiabatic/);
+    const iz = at(/after factors \(Iz = /), vd = at(/^Volt drop/), zs = at(/^Zs /), ad = at(/^Adiabatic/);
     assert.ok(iz > 0 && iz < vd && vd < zs && zs < ad, st.join(' | '));
     assert.ok(st.slice(1, iz).length >= 1, 'a breaker step sits between Ib and Iz');
   }

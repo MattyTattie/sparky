@@ -6,7 +6,7 @@
 // =====================================================================
 import { CABLES, CABLE_PICKS, CABLE_TEMP, CG, cgFor, CF_BS3036, SINGLES_CPC, ARMOUR_CSA, K_VALUES, UL, TAILS_CPC, TYPICAL_NOTE } from './cables.js';
 import { UO, CMIN, MAX_ZS, deviceById, ratingsFor, maxZs, INSTANT_MULT, MCB_INSTANT_T, MCB_CLASS3_I2T, RCD_TIMES, MPCB_MAG_MULT, mpcbRange, MCCB_FRAMES, maxZsForTrip } from './limits.js';
-import { ambientFactor, r1r2At20, RING_DIVISOR } from './calc.js';
+import { ambientFactor, r1r2At20, RING_DIVISOR, izLine } from './calc.js';
 import { TEMP_MULT } from './cables.js';
 
 const r2 = (n) => Math.round(n * 100) / 100;
@@ -285,12 +285,13 @@ export function sizeCircuit(o) {
     let ibS = ibStep; const dev = steps.filter((t) => !isIb(t));
     const cut = ibS.indexOf(', so the next breaker size up is ');
     if (cut > 0) { dev.unshift('Breaker: the next size up is ' + ibS.slice(cut + ', so the next breaker size up is '.length)); ibS = ibS.slice(0, cut) + '.'; }
-    const chk = pick ? [`Iz = It ${pick.cur.it} A × ${r2(factor)} = ${pick.cur.iz} A, needs ${pick.cur.needIz} A (Iz ≥ In).`,
+    const chk = pick ? [izLine({ size: pick.size, it: pick.cur.it, iz: pick.cur.iz, needIz: pick.cur.needIz, f: { ca, cg, ci: Number(ci) || 1, cf }, ring: ringRule(pick.size), inA }).text,
       `Volt drop ${pick.vd.volts} V (${pick.vd.pct}%), limit ${limit}%.`,
       pick.z.zs != null ? `Zs ${pick.z.zs} Ω, max ${pick.z.max ?? '?'} Ω.` : null,
       pick.adi.ok ? `Adiabatic: CPC needs ${pick.adi.smin} mm², ${pick.adi.armour ? 'armour is' : 'it has'} ${pick.adi.area} mm².` : null].filter(Boolean) : [];
     steps.length = 0; steps.push(ibS, ...dev, ...chk, last); }
-  return { ok: true, adj: adj || null, cable, advice, phase: three ? 3 : 1, vref, ib, inA, curve, device: d.id, limit, factors: { ca, cg, ci: Number(ci) || 1, cf, total: r2(factor) }, rows, pick, reasons, steps, notes, max, k, ring };
+  const izInfo = pick ? izLine({ size: pick.size, it: pick.cur.it, iz: pick.cur.iz, needIz: pick.cur.needIz, f: { ca, cg, ci: Number(ci) || 1, cf }, ring: ringRule(pick.size), inA }) : null;
+  return { ok: true, izInfo, adj: adj || null, cable, advice, phase: three ? 3 : 1, vref, ib, inA, curve, device: d.id, limit, factors: { ca, cg, ci: Number(ci) || 1, cf, total: r2(factor) }, rows, pick, reasons, steps, notes, max, k, ring };
 }
 
 // ---------- v0.19: MPCB and MCCB (adjustable devices) ----------
