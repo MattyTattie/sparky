@@ -27,7 +27,7 @@ async def main():
                     if await m.count(): await m.click(); await pg.wait_for_timeout(300); await pg.screenshot(path=f'{OUT}/v23-{n}-moreinfo-{scheme}.png')
                     how = pg.locator('details:has(summary:has-text("How it worked it out"))').first
                     if await how.count():
-                        if not await how.evaluate('d => d.open'): await how.locator('summary').click()
+                        if not await how.evaluate('d => d.open'): await how.locator('summary').first.click()
                         await how.scroll_into_view_if_needed(); await pg.wait_for_timeout(300)
                         for mm in await how.locator('details.izmore > summary').all(): await mm.click()
                         await pg.wait_for_timeout(300)
