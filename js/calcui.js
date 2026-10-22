@@ -7,6 +7,7 @@ import { CALCS, setLastCalc, lastCalc, formKit, icard, more, answerCard, pchip, 
 import { ringCheck } from './checks.js';
 import { icon } from './icons.js';
 import { SYMBOLS } from './symbols.js';
+import { groupSel, groupWords } from './calckit.js';
 import { CABLES, CABLE_PICKS, AMBIENTS, CA_SOURCE, ARMOUR_MOHM_PER_M, TEMP_MULT, THREE_PHASE_CABLES, UL } from './cables.js';
 import { voltDrop, sizeCable, designZs, r1r2At20 } from './calc.js';
 import { adiabatic, kFor, cpcAreaFor } from './design.js';
@@ -75,11 +76,11 @@ route(/^\/calc\/check$/, async () => {
         F.sel('cable', 'Cable', (three ? THREE_PHASE_CABLES : CABLE_ORDER).map((k) => [k, CABLES[k].label])),
         more('chk-cable', [
           F.sel('method', 'How it\u2019s installed (reference method)', Object.entries(cab.methods).map(([k, m]) => [k, m.label])),
-          h('div', { class: 'grid2' }, F.sel('ambient', 'Hottest air round it', AMBIENTS.map((t) => [t, t + ' °C'])), F.num('grouped', 'Circuits grouped', { hint: 'Run together with this one' })),
-          F.sel('grouping', 'Grouped how', [['bunched', 'Bunched / enclosed'], ['clipped', 'One layer on a wall']]),
+          h('div', { class: 'grid2' }, F.sel('ambient', 'Hottest air round it', AMBIENTS.map((t) => [t, t + ' °C'])), F.num('grouped', 'Circuits grouped', { ph: '1', hint: 'Including this one. Blank = 1' })),
+          groupSel(F, v),
           F.sel('ci', 'Thermal insulation', [['1', 'None (Ci 1.0)'], ['0.5', 'Totally surrounded for 0.5 m or more (Ci 0.5)']]),
           cab.note ? h('p', { class: 'note warnnote' }, cab.note) : null],
-          `method ${v.method}, ${amb} °C, ${v.grouped} grouped, ${v.ci === '0.5' ? 'in insulation' : 'no insulation'}`)], { step: 3, gives: 'Iz', key: 'cable' }),
+          `method ${v.method}, ${amb} °C, ${groupWords(v)}, ${v.ci === '0.5' ? 'in insulation' : 'no insulation'}`)], { step: 3, gives: 'Iz', key: 'cable' }),
       icard('Length and earthing', [
         h('div', { class: 'grid2' }, F.num('length', v.shape === 'radial' ? 'Length' : 'Ring length', { unit: 'm', hint: v.shape === 'radial' ? 'Board to the far end' : 'All the way round' }), F.num('ze', 'Ze at the board', { unit: 'Ω', ph: '0.35', hint: '0.35 Ω PME (TN-C-S), 0.8 Ω TN-S. Measured is best.' })),
         CABLES[v.cable].cores === 3 && !CABLES[v.cable].cpcCore ? F.seg('cpcMode', 'Earth (CPC)', [['core', '3rd core'], ['armour', 'Armour']], '', 'small') : null,

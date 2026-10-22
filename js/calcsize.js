@@ -3,6 +3,7 @@
 // saying in plain words why it went up a size.
 import { h, fill } from './ui.js';
 import { route, page } from './app.js';
+import { groupSel, groupWords } from './calckit.js';
 import { CABLES, CABLE_PICKS, AMBIENTS, CI_OPTIONS, SINGLES_CPC, THREE_PHASE_CABLES, UL, CUTOUT_FUSES, TYPICAL_NOTE } from './cables.js';
 import { sizeCircuit, LOAD_TYPES, START_METHODS, convertLine } from './design.js';
 import { useOnCircuit } from './usecircuit.js';
@@ -60,13 +61,13 @@ route(/^\/calc\/size$/, async () => {
         cab.typical ? h('p', { class: 'note warnnote' }, 'Typical, check your books. ' + TYPICAL_NOTE) : null,
         more('size-run', [
           F.sel('method', 'How it\u2019s installed (reference method)', Object.entries(cab.methods).map(([k, m]) => [k, m.label])),
-          h('div', { class: 'grid2' }, F.sel('ambient', 'Hottest air round it', AMBIENTS.map((t) => [t, t + ' °C'])), F.num('grouped', 'Circuits grouped', { hint: 'Run together with this one' })),
-          F.sel('grouping', 'Grouped how', [['bunched', 'Bunched / enclosed'], ['clipped', 'One layer on a wall']]),
+          h('div', { class: 'grid2' }, F.sel('ambient', 'Hottest air round it', AMBIENTS.map((t) => [t, t + ' °C'])), F.num('grouped', 'Circuits grouped', { ph: '1', hint: 'Including this one. Blank = 1' })),
+          groupSel(F, v),
           F.sel('ci', 'Thermal insulation', CI_OPTIONS),
           /^10[0-3]$/.test(String(v.method)) && v.ci !== '1' ? h('p', { class: 'note warnnote' }, 'Methods 100–103 already allow for the insulation. Leave this at “None” unless the cable is also buried in it elsewhere.') : null,
           cab.methods[v.method] && cab.methods[v.method].bunched ? h('p', { class: 'note' }, 'Bunched in a panel: the bunched grouping factor (Table 4C1) is used with the number of circuits above.') : null,
           cab.note ? h('p', { class: 'note warnnote' }, cab.note) : null],
-          `method ${v.method}, ${v.ambient} °C, ${v.grouped} grouped, ${String(ciLabel).split(' (')[0].toLowerCase()}`)], { step: 3, gives: 'Iz', key: 'cable' }),
+          `method ${v.method}, ${v.ambient} °C, ${groupWords(v)}, ${String(ciLabel).split(' (')[0].toLowerCase()}`)], { step: 3, gives: 'Iz', key: 'cable' }),
       icard('Length and earthing', [
         h('div', { class: 'grid2' }, F.num('length', ring ? 'Ring length' : 'Length of run', { unit: 'm', hint: ring ? 'All the way round' : 'Board to the far end' }), F.num('ze', 'Ze at the board', { unit: 'Ω', ph: '0.35', hint: '0.35 PME, 0.8 TN-S' })),
         !three && CABLES[v.cable].cores === 3 && !CABLES[v.cable].cpcCore ? F.seg('cpcMode', 'Earth (CPC)', [['core', '3rd core'], ['armour', 'Armour']], '', 'small') : null,

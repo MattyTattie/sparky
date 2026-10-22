@@ -5,6 +5,7 @@
 // and the details folded away. Layout only: no sums in here.
 // =====================================================================
 import { h, icon } from './ui.js';
+import { GROUPINGS, GROUP_HINT, cgFor } from './cables.js';
 
 // The calculator picker (Calculators home). key = what's remembered as "last used".
 export const CALCS = [
@@ -68,3 +69,11 @@ export const banner = (text, todo = '', kind = 'amber') => h('div', { class: 'ba
 export const resline = (ok, text, sub) => h('div', { class: 'resline ' + (ok === true ? 'ok' : ok === false ? 'bad' : 'na') }, h('b', {}, ok === true ? '✓' : ok === false ? '✗' : '–'), h('div', {}, h('div', {}, text), sub ? h('div', { class: 'note' }, sub) : null));
 // "Every size" etc. folded into a card.
 export const detailCard = (id, title, kids, opts = {}) => h('div', { class: 'card foldcard' }, fold(id, title, kids, opts));
+
+// v0.22: 'Grouped how' (BS 7671 Table 4C1 rows). Shows N/A, greyed, until 2 or more circuits are grouped.
+export const isGrouped = (v) => Math.floor(Number(v.grouped) || 1) > 1;
+export function groupSel(F, v) {
+  if (!isGrouped(v)) return h('label', { class: 'f fld2' }, h('span', {}, 'Grouped how'), h('select', { disabled: true, class: 'autona', 'aria-label': 'Grouped how: N/A, not grouped' }, h('option', {}, 'N/A (not grouped)')), h('span', { class: 'help' }, GROUP_HINT));
+  return [F.sel('grouping', 'Grouped how', GROUPINGS), h('p', { class: 'help' }, `Cg ${cgFor(v.grouping, v.grouped)} (Table 4C1). ${GROUP_HINT}`)];
+}
+export const groupWords = (v) => (isGrouped(v) ? `${Math.floor(Number(v.grouped))} grouped, ${((GROUPINGS.find(([k]) => k === v.grouping) || GROUPINGS[0])[1]).split(/[,(]/)[0].trim().toLowerCase()}` : 'not grouped');

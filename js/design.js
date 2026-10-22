@@ -4,7 +4,7 @@
 // passes current, volt drop, Zs and adiabatic). Plain JS, tested by
 // tests/design.test.mjs. Every table comes from cables.js / limits.js.
 // =====================================================================
-import { CABLES, CABLE_PICKS, CABLE_TEMP, CG, CF_BS3036, SINGLES_CPC, ARMOUR_CSA, K_VALUES, UL, TAILS_CPC, TYPICAL_NOTE } from './cables.js';
+import { CABLES, CABLE_PICKS, CABLE_TEMP, CG, cgFor, CF_BS3036, SINGLES_CPC, ARMOUR_CSA, K_VALUES, UL, TAILS_CPC, TYPICAL_NOTE } from './cables.js';
 import { UO, CMIN, MAX_ZS, deviceById, ratingsFor, maxZs, INSTANT_MULT, MCB_INSTANT_T, MCB_CLASS3_I2T, RCD_TIMES, MPCB_MAG_MULT, mpcbRange, MCCB_FRAMES, maxZsForTrip } from './limits.js';
 import { ambientFactor, r1r2At20, RING_DIVISOR } from './calc.js';
 import { TEMP_MULT } from './cables.js';
@@ -221,7 +221,7 @@ export function sizeCircuit(o) {
   // correction factors
   let { ca, note: caNote } = ambientFactor(cable, ambient);
   if (/^D/.test(method)) { ca = 1; caNote = 'Buried: air-temperature factor not used.'; }
-  const cg = (CG[m.bunched ? 'bunched' : grouping] || CG.bunched)[Math.min(9, Math.max(1, Number(grouped) || 1))] ?? 1;
+  const cg = (Number(grouped) || 1) > 1 ? cgFor(m.bunched ? 'bunched' : grouping, grouped) : 1; // v0.22: blank / 1 = not grouped
   const cf = device === 'bs3036' ? CF_BS3036 : 1;
   const factor = ca * cg * (Number(ci) || 1) * cf;
   const ringRule = (s) => ring && [30, 32].includes(inA) && s >= 2.5;

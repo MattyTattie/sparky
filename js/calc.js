@@ -1,7 +1,7 @@
 // =====================================================================
 // calc.js — the sums behind the calculators. Plain JS, tested with Node.
 // =====================================================================
-import { CABLES, CA, CA_NOTES, CG, CF_BS3036, CABLE_TEMP, CU_MOHM_PER_M, ARMOUR_MOHM_PER_M, TEMP_MULT, CU5_MOHM_PER_M } from './cables.js';
+import { CABLES, CA, CA_NOTES, CG, cgFor, CF_BS3036, CABLE_TEMP, CU_MOHM_PER_M, ARMOUR_MOHM_PER_M, TEMP_MULT, CU5_MOHM_PER_M } from './cables.js';
 import { UO, VOLT_DROP, maxZs } from './limits.js';
 
 const r2 = (n) => Math.round(n * 100) / 100;
@@ -38,7 +38,7 @@ export function sizeCable({ cable = 'te', method = 'C', ib, inA, length, ambient
   if (!(Number(inA) >= Number(ib))) return { ok: false, error: 'The device rating (In) must be at least the design current (Ib).' };
   let { ca, note: caNote } = ambientFactor(cable, ambient);
   if (/^D/.test(method)) { ca = 1; caNote = 'Buried (method D): the tables assume 20 °C ground; the air-temperature factor isn\u2019t used. Check ground temperature and soil (Tables 4B2, 4B3).'; }
-  const cg = (CG[grouping] || CG.bunched)[Math.min(9, Math.max(1, Number(grouped) || 1))] ?? 1;
+  const cg = (Number(grouped) || 1) > 1 ? cgFor(grouping, grouped) : 1; // v0.22: blank / 1 = not grouped
   const ci = Number(insulationCi) || 1;
   const cf = bs3036 ? CF_BS3036 : 1;
   const factor = ca * cg * ci * cf;

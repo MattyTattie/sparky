@@ -5,7 +5,7 @@ import fs from 'node:fs';
 import { APP_VERSION } from '../js/config.js';
 import { sizeCircuit } from '../js/design.js';
 const keys = (file, from, to) => { let s = fs.readFileSync(new URL('../js/' + file, import.meta.url), 'utf8'); const a = from ? s.indexOf(from) : 0; s = s.slice(a, to ? s.indexOf(to, a + 1) : undefined); return [...s.matchAll(/key: '(\w+)' \}\)/g)].map((m) => m[1]); };
-test('v0.21 version', () => assert.match(APP_VERSION, /^0\.21\.0/));
+test('v0.21 version', () => assert.match(APP_VERSION, /^0\.2[1-9]\./));
 test('v0.21 card order per calculator', () => {
   assert.deepEqual(keys('calcsize.js', "route(/^\\/calc\\/size", 'const draw = ()'), ['supply', 'breaker', 'cable', 'earth']);
   assert.deepEqual(keys('calcui.js', "route(/^\\/calc\\/check", 'const draw = ()'), ['supply', 'breaker', 'cable', 'earth']);
