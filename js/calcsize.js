@@ -8,7 +8,7 @@ import { CABLES, CABLE_PICKS, AMBIENTS, CI_OPTIONS, SINGLES_CPC, THREE_PHASE_CAB
 import { sizeCircuit, LOAD_TYPES, START_METHODS, convertLine } from './design.js';
 import { useOnCircuit } from './usecircuit.js';
 import { DEVICES, deviceById, CHECK_NOTE, devName } from './limits.js';
-import { setLastCalc, formKit, icard, more, answerCard, pchip, resline, detailCard, banner } from './calckit.js';
+import { ccc, setLastCalc, formKit, icard, more, answerCard, pchip, resline, detailCard, banner } from './calckit.js';
 import { icon } from './icons.js';
 
 const CABLE_ORDER = ['te', 'te3', 'singles', 'swa', 'swaX', 'swa3', 'swa3X', 'h07', 'tails', 'flex', 'tri', 'sycy'];
@@ -86,13 +86,13 @@ route(/^\/calc\/size$/, async () => {
     fill(top, answerCard({ kicker: p ? 'Use' : 'No cable passes', good: p ? (p.adi.ok && !p.adi.pass ? 'warn' : true) : false,
       big: p ? [r.adjLabel ? `${r.adjLabel}${r.phase === 3 ? ' (TP)' : ''}` : `${devName(d, r.curve, r.inA)}${r.phase === 3 ? ' (TP)' : ''}`, `${p.size} mm²${cpcText(p)}`] : 'Try another cable or method',
       sub: p ? `${CABLES[v.cable].label.split(',')[0]} · Ib ${r.ib} A · ${v.length} m` : 'Nothing in this table passes current, volt drop and Zs.', chips,
-      extra: p ? [why ? h('div', { class: 'ans-why' }, why) : null, r.izInfo ? h('div', { class: 'ans-iz ' + (r.izInfo.pass ? 'ok' : 'bad'), 'data-iz': '1' }, (r.izInfo.pass ? '✓ ' : '✗ ') + r.izInfo.text) : null, h('div', { class: 'ans-test' }, icon('clipboard', { size: 16 }), `When you test: expect R1+R2 about ${p.z.r20} Ω at 20 °C${r.ring ? ' (ring, (r1 + r2) ÷ 4)' : ''}.`),
+      extra: p ? [why ? h('div', { class: 'ans-why' }, why) : null, ccc(r.izInfo), h('div', { class: 'ans-test' }, icon('clipboard', { size: 16 }), `When you test: expect R1+R2 about ${p.z.r20} Ω at 20 °C${r.ring ? ' (ring, (r1 + r2) ÷ 4)' : ''}.`),
         h('button', { class: 'btn primary', style: 'margin-top:10px;width:100%', 'data-use': '1', onclick: () => useOnCircuit({ cable: v.cable, size: p.size, cpc: p.cpc, device: r.device, curve: r.curve, rating: r.inA, three: r.phase === 3, cpcMode: v.cpcMode, im: r.imag }) }, icon('clipboard', { size: 16 }), 'Use on a circuit')] : null }),
       (r.advice || []).map((a) => banner(a.text, '', a.level === 'warn' ? 'amber' : 'info')),
       p && p.adi.ok && !p.adi.pass ? banner(`The earth (CPC) may be too small: it needs ${p.adi.smin} mm², it has ${p.adi.area} mm².`, 'This assumes the worst-case 0.1 s let-through. Check the breaker maker\u2019s I²t figure, or go up a cable size.') : null);
     fill(work,
       detailCard('size-how', 'How it worked it out', [
-        h('ol', { class: 'steps' }, r.steps.map((t) => h('li', {}, t))),
+        h('ol', { class: 'steps' }, r.steps.map((t) => h('li', {}, t, r.izInfo && t === r.izInfo.text && r.izInfo.detail ? h('details', { class: 'izmore' }, h('summary', {}, 'More info'), h('div', { class: 'izdetail' }, r.izInfo.detail)) : null))),
         p ? [
           line(p.cur.pass, `Current: carries ${p.cur.iz} A after factors, needs ${p.cur.needIz} A`, `Tabulated ${p.cur.it} A × factors ${r.factors.total}.`),
           line(p.vd.pass, `Volt drop: ${p.vd.volts} V (${p.vd.pct}% of ${r.vref} V), limit ${p.vd.limit}%`, `${p.vd.mvam} mV/A/m × ${r.ib} A × ${v.length} m ÷ 1000${p.vd.div > 1 ? ' ÷ ' + p.vd.div + ' (ring)' : ''}.`),

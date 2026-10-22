@@ -309,6 +309,8 @@ html.dark .pklab > span { color: var(--sub); }
 html.dark .pkfield > .help { color: var(--muted); }
 html.dark .ans-iz { background: var(--greenbg); color: var(--green); }
 html.dark .ans-iz.bad { background: var(--redbg); color: var(--red); }
+html.dark .izmore > summary { color: var(--brand); }
+html.dark .izdetail { color: var(--sub); }
 /* ===== hand-tuned dark theme (v0.18) ===== */
 html.dark { color-scheme: dark; --ink: #e8ebf3; --ink2: #cfd5e2; --sub: #aab2c3; --muted: #959eb1; --line: #2a3142; --bg: #0e121b; --card: #171c28;
   --brand: #7d93ff; --brand2: #9b7dff; --brandbg: #1f2747; --accent: #ff8f3d;

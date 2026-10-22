@@ -3,7 +3,7 @@
 // current, the volt drop is OK, and the Zs will be within the limit.
 import { h, fill } from './ui.js';
 import { route, page } from './app.js';
-import { CALCS, setLastCalc, lastCalc, formKit, icard, more, answerCard, pchip, resline, detailCard, banner } from './calckit.js';
+import { ccc, CALCS, setLastCalc, lastCalc, formKit, icard, more, answerCard, pchip, resline, detailCard, banner } from './calckit.js';
 import { ringCheck } from './checks.js';
 import { icon } from './icons.js';
 import { SYMBOLS } from './symbols.js';
@@ -101,7 +101,7 @@ route(/^\/calc\/check$/, async () => {
     const z = size != null ? designZs({ ze: v.ze, cable: v.cable, live: size, cpc, length: +v.length, ring, device: v.device, type: v.type, rating: v.rating, time: v.time }) : null;
     if (z && z.ok && imag) { z.max = max; z.pass = z.zs == null ? null : z.zs <= max; }
     const line = resline;
-    const izText = (rw) => izLine({ size: rw.size, it: rw.it, iz: rw.iz, needIz: rw.needIz, f: s.factors, ring: !!ring && rw.needIz === 20, inA: +v.rating }).text;
+    const izInfo = (rw) => izLine({ size: rw.size, it: rw.it, iz: rw.iz, needIz: rw.needIz, f: s.factors, ring: !!ring && rw.needIz === 20, inA: +v.rating });
     const allOk = row && row.currentOk && (!row.vd || row.vd.pass) && (!z || z.pass !== false);
     let adi = null, adiCp = null, adiK = null, adiArea = null;
     if (z && z.ok && z.zs != null) { adiCp = cpcAreaFor(v.cable, size, v.cpcMode); adiArea = adiCp ? (adiCp.cpc === 'armour' ? adiCp.area : adiCp.cpc) : null; adiK = kFor({ cable: v.cable, cpcMode: v.cpcMode }); adi = adiabatic({ zs: z.zs, device: v.device, type: v.type, rating: v.rating, k: adiK.k, cpcCsa: adiArea, rcd: !!(d && d.rcd), time: v.time, imag }); }
@@ -114,11 +114,11 @@ route(/^\/calc\/check$/, async () => {
     ];
     fill(top, answerCard({ kicker: allOk ? 'This circuit passes' : 'This circuit needs a look', big: [size == null ? cableName : `${size} mm²${cpc === 'armour' ? ' + armour CPC' : cpc ? ` / ${cpc} mm² CPC` : ''}`, devName(d, v.type, v.rating, three, imag)], good: allOk ? (adi && adi.ok && !adi.pass ? 'warn' : true) : false,
       sub: `${three ? '3-phase 400 V · ' : ''}${CABLES[v.cable].label.split(',')[0]} · ${v.shape === 'radial' ? 'radial' : 'ring'} ${v.length} m · ${v.ib} A ${three ? 'per phase' : 'load'}${v.lighting ? ' · lighting' : ''}`, chips,
-      extra: [row ? h('div', { class: 'ans-iz ' + (row.currentOk ? 'ok' : 'bad'), 'data-iz': '1' }, (row.currentOk ? '✓ ' : '✗ ') + izText(row)) : null, size != null && Number(v.length) ? h('div', { class: 'ans-test' }, icon('clipboard', { size: 16 }), `When you test: expect R1+R2 about ${r1r2At20({ live: size, cpc, length: +v.length, cores: CABLES[v.cable].cores, ring, rTable: CABLES[v.cable].rTable || null })} Ω at 20 °C${ring ? ' (ring, end-to-end ÷ 4)' : ''}.`) : null] }),
+      extra: [row ? ccc(izInfo(row)) : null, size != null && Number(v.length) ? h('div', { class: 'ans-test' }, icon('clipboard', { size: 16 }), `When you test: expect R1+R2 about ${r1r2At20({ live: size, cpc, length: +v.length, cores: CABLES[v.cable].cores, ring, rTable: CABLES[v.cable].rTable || null })} Ω at 20 °C${ring ? ' (ring, end-to-end ÷ 4)' : ''}.`) : null] }),
       adi && adi.ok && !adi.pass ? banner(`The earth (CPC) may be too small for the fault: it needs ${adi.smin} mm², it\u2019s ${adiArea} mm².`, 'This assumes the worst-case 0.1 s let-through. Check the breaker maker\u2019s I²t figure, or go up a cable size.') : null);
     fill(work,
       detailCard('chk-how', 'How it worked it out', [
-        row ? line(row.currentOk, izText(row), `Iz after factors ${row.iz} A (needs ${row.needIz} A). Factors ${s.factors.total}${s.caNote ? ' · ' + s.caNote : ''}`) : line(false, 'Current: no size passes. Try a bigger cable or another method.'),
+        row ? h('div', { class: 'resline ' + (row.currentOk ? 'ok' : 'bad') }, h('b', {}, row.currentOk ? '✓' : '✗'), h('div', {}, h('div', {}, izInfo(row).text), h('details', { class: 'izmore' }, h('summary', {}, 'More info'), h('div', { class: 'izdetail' }, izInfo(row).detail, ` Tabulated It needed: ${row.needIt} A.${s.caNote ? ' ' + s.caNote : ''}`))))) : line(false, 'Current: no size passes. Try a bigger cable or another method.'),
         row && row.vd ? line(row.vd.pass, `Volt drop: ${row.vd.volts} V (${row.vd.pct}%), limit ${row.vd.limitPct}%`, `${row.vd.mvam} mV/A/m × ${v.ib} A × ${v.length} m ÷ 1000${row.vd.divisor > 1 ? ' ÷ ' + row.vd.divisor + ' (ring)' : ''}`) : line(null, 'Volt drop: enter a length'),
         z && z.ok ? line(z.pass, z.zs != null ? `Zs: ${z.zs} Ω, max ${max ?? '?'} Ω` : `Zs: enter Ze. Max ${max ?? '?'} Ω`, `Ze ${v.ze || '?'} + (R1+R2) ${z.r20} Ω × ${z.mult} hot = ${z.rHot} Ω. ${max != null ? (imag ? `Max Zs = Uo × 0.95 ÷ ${Math.round(imag)} A magnetic trip.` : maxZsSource(v.device)) : 'No table figure for this device.'}${z.note ? ' ' + z.note : ''}`) : line(null, `Zs: max ${max ?? '?'} Ω (need a size and length)`),
         (() => { if (!adi) return line(null, 'Adiabatic: enter Ze, a size and a length'); const a = adi; const cp = adiCp; const area = adiArea; const k = adiK;

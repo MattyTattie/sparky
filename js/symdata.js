@@ -4,6 +4,7 @@ export const SYMBOLS = [
   ['Ib', 'Design current', 'The current the circuit is meant to carry in normal use (the load).', 'Currents'],
   ['In', 'Nominal current of the device', 'The rating of the breaker or fuse, e.g. 32 A.', 'Currents'],
   ['Iz', 'Current-carrying capacity', 'What the cable can carry where it\u2019s installed, after correction factors.', 'Currents'],
+  ['CCC', 'Current-carrying capacity', 'Same as Iz: what the cable can carry where it\u2019s installed, after correction factors.', 'Currents'],
   ['It', 'Tabulated current rating', 'The cable\u2019s rating straight from the Appendix 4 table, before factors.', 'Currents'],
   ['I2', 'Effective operating current', 'Current that makes the device trip within the conventional time (1.45 × In for MCBs).', 'Currents'],
   ['IΔn', 'Rated residual operating current', 'The RCD\u2019s trip rating, e.g. 30 mA.', 'Currents'],
@@ -61,7 +62,7 @@ export const SYMBOLS = [
 export const SYM = Object.fromEntries(SYMBOLS.map(([s, n, d, g]) => [s, { s, name: n, desc: d, group: g }]));
 
 // Words that are also ordinary English only count in a symbol context.
-const SAFE = ['R1+R2', 'mV/A/m', 'PSCC', 'PEFC', 'PFC', 'Ipf', 'IΔn', 'Icu', 'Ics', 'Icw', 'Icn', 'Isd', 'tsd', 'Uimp', 'Cmin', 'Zdb', 'Ib', 'Iz', 'Ze', 'Zs', 'Ca', 'Cg', 'Ci', 'Cc', 'Cf', 'R1', 'R2', 'Rn', 'Uo', 'U0', 'I²t', 'Ir', 'Ii', 'Im', 'AC-1', 'AC-3', 'AC-4', 'AC-15', 'AC-5a', 'AC-5b', 'AC-7a'];
+const SAFE = ['CCC', 'R1+R2', 'mV/A/m', 'PSCC', 'PEFC', 'PFC', 'Ipf', 'IΔn', 'Icu', 'Ics', 'Icw', 'Icn', 'Isd', 'tsd', 'Uimp', 'Cmin', 'Zdb', 'Ib', 'Iz', 'Ze', 'Zs', 'Ca', 'Cg', 'Ci', 'Cc', 'Cf', 'R1', 'R2', 'Rn', 'Uo', 'U0', 'I²t', 'Ir', 'Ii', 'Im', 'AC-1', 'AC-3', 'AC-4', 'AC-15', 'AC-5a', 'AC-5b', 'AC-7a'];
 const esc = (x) => x.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&');
 // In / It only in brackets "(In)" or next to a maths sign ("In ≥ Ib").
 export const SYM_RE = new RegExp(`(?<![\\w/+])(${SAFE.map(esc).join('|')})(?![\\w+²])|(?<=\\()(In|It)(?=\\))|(?<=[≥≤×÷=] )(In|It)\\b|\\b(In|It)(?= [≥≤×÷=])`, 'g');

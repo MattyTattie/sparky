@@ -762,3 +762,11 @@ button.row { font: inherit; cursor: pointer; }
 /* v0.23: chosen cable's Iz after factors */
 .ans-iz { margin-top: 8px; font-size: 13.5px; line-height: 1.4; padding: 8px 10px; border-radius: 10px; background: var(--greenbg); color: var(--green); }
 .ans-iz.bad { background: var(--redbg); color: var(--red); }
+
+/* v0.23b: CCC workings */
+.izmore { margin-top: 6px; }
+.izmore > summary { cursor: pointer; font-weight: 700; color: var(--brand); font-size: 13px; list-style: none; }
+.izmore > summary::-webkit-details-marker { display: none; }
+.izmore > summary::after { content: ' ▾'; }
+.izmore[open] > summary::after { content: ' ▴'; }
+.izdetail { margin-top: 6px; font-size: 13px; color: var(--sub); line-height: 1.45; }

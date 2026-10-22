@@ -23,10 +23,14 @@ async def main():
                     await pg.goto('http://localhost:8765/index.html#/calc'); await pg.wait_for_timeout(200)
                     await pg.goto('http://localhost:8765/index.html' + route); await pg.wait_for_timeout(900)
                     await pg.screenshot(path=f'{OUT}/v23-{n}-{scheme}.png')
+                    m = pg.locator('.ans-iz details.izmore > summary').first
+                    if await m.count(): await m.click(); await pg.wait_for_timeout(300); await pg.screenshot(path=f'{OUT}/v23-{n}-moreinfo-{scheme}.png')
                     how = pg.locator('details:has(summary:has-text("How it worked it out"))').first
                     if await how.count():
                         if not await how.evaluate('d => d.open'): await how.locator('summary').click()
                         await how.scroll_into_view_if_needed(); await pg.wait_for_timeout(300)
+                        for mm in await how.locator('details.izmore > summary').all(): await mm.click()
+                        await pg.wait_for_timeout(300)
                         await pg.screenshot(path=f'{OUT}/v23-{n}-how-{scheme}.png')
             await ctx.close()
         await b.close()
