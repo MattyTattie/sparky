@@ -35,3 +35,15 @@ test('v0.23b Size a cable summary Current line uses CCC wording', async () => {
   const src = (await import('node:fs')).readFileSync(new URL('../js/calcsize.js', import.meta.url), 'utf8');
   assert.doesNotMatch(src, /Current: carries/); assert.match(src, /'Current: ' \+ r\.izInfo\.text/);
 });
+
+test('v0.23b failing-size reason uses CCC wording', () => {
+  const r = sc({ grouped: '4', grouping: 'bunched' });
+  assert.match(r.steps.join(' '), /mm² can only carry [\d.]+ A after factors, but needs at least 32 A current-carrying capacity \(CCC\)(; [^,]+)?, so \d+ mm²\./);
+  assert.doesNotMatch(r.steps.join(' '), /fails on current/);
+});
+
+test('v0.23b fail explanation box is styled red', async () => {
+  const fs = await import('node:fs');
+  assert.match(fs.readFileSync(new URL('../js/calcsize.js', import.meta.url), 'utf8'), /'ans-why' \+ \(\/can only carry/);
+  assert.match(fs.readFileSync(new URL('../styles.css', import.meta.url), 'utf8'), /\.ans-why\.bad \{[^}]*--redbg/);
+});

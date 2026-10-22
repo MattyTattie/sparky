@@ -308,6 +308,7 @@ html.dark .inforow { border-bottom: 1px solid var(--line); }
 html.dark .pklab > span { color: var(--sub); }
 html.dark .pkfield > .help { color: var(--muted); }
 html.dark .ans-iz { background: var(--greenbg); color: var(--green); }
+html.dark .ans-why.bad { background: var(--redbg); color: var(--red); }
 html.dark .ans-iz.bad { background: var(--redbg); color: var(--red); }
 html.dark .izmore > summary { color: var(--brand); }
 html.dark .izdetail { color: var(--sub); }
