@@ -5,7 +5,7 @@
 // and the details folded away. Layout only: no sums in here.
 // =====================================================================
 import { h, icon } from './ui.js';
-import { GROUPINGS, GROUP_HINT, cgFor } from './cables.js';
+import { GROUPINGS, GROUP_INFO, METHOD_INFO, JOIST_HINT, cgFor } from './cables.js';
 
 // The calculator picker (Calculators home). key = what's remembered as "last used".
 export const CALCS = [
@@ -70,10 +70,37 @@ export const resline = (ok, text, sub) => h('div', { class: 'resline ' + (ok ===
 // "Every size" etc. folded into a card.
 export const detailCard = (id, title, kids, opts = {}) => h('div', { class: 'card foldcard' }, fold(id, title, kids, opts));
 
+// v0.22b: a picker that never cuts the wording short. The field shows the full chosen text, wrapped;
+// tapping opens a sheet where every option wraps in full. Optional 'More info' opens a plain-words sheet.
+export function sheet(title, body) {
+  const bg = h('div', { class: 'modal-bg', onclick: (e) => { if (e.target === bg) bg.remove(); } },
+    h('div', { class: 'modal pksheet', role: 'dialog', 'aria-label': title }, h('h3', {}, title), body,
+      h('div', { class: 'btns full' }, h('button', { class: 'btn', type: 'button', onclick: () => bg.remove() }, 'Close'))));
+  document.body.append(bg); return bg;
+}
+export function infoSheet(title, rows, extra = null) {
+  return sheet(title, [h('div', { class: 'infolist nosym' }, rows.map(([name, words]) => h('div', { class: 'inforow' }, h('div', { class: 'infoname' }, name),
+    (words || []).map((w, i) => h('p', { class: i ? 'note' : '' }, w))))), extra ? h('div', { class: 'notice amber' }, extra) : null]);
+}
+export function pickField({ label, value, options, onPick, info = null, disabled = false, naText = 'N/A', hint = '' }) {
+  const cur = options.find(([k]) => String(k) === String(value));
+  const open = () => { const bg = sheet(label, h('div', { class: 'pklist', role: 'listbox' }, options.map(([k, t]) => h('button', { type: 'button', role: 'option', class: 'pkopt' + (cur && String(cur[0]) === String(k) ? ' on' : ''), 'aria-selected': cur && String(cur[0]) === String(k) ? 'true' : 'false', onclick: () => { bg.remove(); onPick(k); } }, t)))); };
+  return h('div', { class: 'f fld2 pkfield' },
+    h('div', { class: 'pklab' }, h('span', {}, label), info ? h('button', { type: 'button', class: 'infolink', onclick: info }, 'More info') : null),
+    h('button', { type: 'button', class: 'pkbtn' + (disabled ? ' autona' : ''), disabled: disabled || null, 'aria-label': label + ': ' + (disabled ? naText : cur ? cur[1] : ''), onclick: open }, h('span', { class: 'pktxt' }, disabled ? naText : cur ? cur[1] : '— pick —'), disabled ? null : h('span', { class: 'pkchev', 'aria-hidden': 'true' }, '▾')),
+    hint ? h('span', { class: 'help' }, hint) : null);
+}
+export const groupInfo = () => infoSheet('Grouped how: what each one means', GROUPINGS.map(([k, t]) => [t, GROUP_INFO[k]]), JOIST_HINT + ' One circuit on its own (or blank) is not grouped.');
+export const methodInfo = (methods) => infoSheet('How it\u2019s installed: what each one means', Object.entries(methods).map(([k, m]) => [m.label, METHOD_INFO[k] || ['See the cable maker\u2019s data or Appendix 4 for this one.']]));
+// The method picker for a cable table.
+export const methodPick = (v, set, cab) => pickField({ label: 'How it\u2019s installed (reference method)', value: v.method, options: Object.entries(cab.methods).map(([k, m]) => [k, m.label]), onPick: (k) => set('method', k), info: () => methodInfo(cab.methods) });
+// Plain long-label picker bound to v/set.
+export const longPick = (v, set, k, label, options, hint = '') => pickField({ label, value: v[k], options, onPick: (x) => set(k, x), hint });
+
 // v0.22: 'Grouped how' (BS 7671 Table 4C1 rows). Shows N/A, greyed, until 2 or more circuits are grouped.
 export const isGrouped = (v) => Math.floor(Number(v.grouped) || 1) > 1;
-export function groupSel(F, v) {
-  if (!isGrouped(v)) return h('label', { class: 'f fld2' }, h('span', {}, 'Grouped how'), h('select', { disabled: true, class: 'autona', 'aria-label': 'Grouped how: N/A, not grouped' }, h('option', {}, 'N/A (not grouped)')), h('span', { class: 'help' }, GROUP_HINT));
-  return [F.sel('grouping', 'Grouped how', GROUPINGS), h('p', { class: 'help' }, `Cg ${cgFor(v.grouping, v.grouped)} (Table 4C1). ${GROUP_HINT}`)];
+export function groupSel(F, v, set) {
+  const on = isGrouped(v);
+  return pickField({ label: 'Grouped how', value: v.grouping, options: GROUPINGS, onPick: (k) => set('grouping', k), info: groupInfo, disabled: !on, naText: 'N/A (not grouped)', hint: on ? `Cg ${cgFor(v.grouping, v.grouped)} (Table 4C1)` : '' });
 }
-export const groupWords = (v) => (isGrouped(v) ? `${Math.floor(Number(v.grouped))} grouped, ${((GROUPINGS.find(([k]) => k === v.grouping) || GROUPINGS[0])[1]).split(/[,(]/)[0].trim().toLowerCase()}` : 'not grouped');
+export const groupWords = (v) => (isGrouped(v) ? `${Math.floor(Number(v.grouped))} grouped, ${((GROUPINGS.find(([k]) => k === v.grouping) || GROUPINGS[0])[1]).split(/[,(:]/)[0].trim().toLowerCase()}` : 'not grouped');

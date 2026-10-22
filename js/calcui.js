@@ -7,7 +7,7 @@ import { CALCS, setLastCalc, lastCalc, formKit, icard, more, answerCard, pchip, 
 import { ringCheck } from './checks.js';
 import { icon } from './icons.js';
 import { SYMBOLS } from './symbols.js';
-import { groupSel, groupWords } from './calckit.js';
+import { groupSel, groupWords, methodPick, longPick } from './calckit.js';
 import { CABLES, CABLE_PICKS, AMBIENTS, CA_SOURCE, ARMOUR_MOHM_PER_M, TEMP_MULT, THREE_PHASE_CABLES, UL } from './cables.js';
 import { voltDrop, sizeCable, designZs, r1r2At20 } from './calc.js';
 import { adiabatic, kFor, cpcAreaFor } from './design.js';
@@ -73,12 +73,12 @@ route(/^\/calc\/check$/, async () => {
           : F.seg('rating', 'Rating (In)', ratings.map((r) => [r, r + ' A']), '', 'small'),
         more('chk-dev', [F.seg('time', 'Disconnection time', [[0.4, '0.4 s'], [5, '5 s']], '0.4 s for final circuits up to 63 A; 5 s for distribution circuits and over 63 A.', 'small')], `${v.time} s`)], { step: 2, gives: 'In', key: 'breaker' }),
       icard('The cable and how it\u2019s installed', [
-        F.sel('cable', 'Cable', (three ? THREE_PHASE_CABLES : CABLE_ORDER).map((k) => [k, CABLES[k].label])),
+        longPick(v, set, 'cable', 'Cable', (three ? THREE_PHASE_CABLES : CABLE_ORDER).map((k) => [k, CABLES[k].label])),
         more('chk-cable', [
-          F.sel('method', 'How it\u2019s installed (reference method)', Object.entries(cab.methods).map(([k, m]) => [k, m.label])),
+          methodPick(v, set, cab),
           h('div', { class: 'grid2' }, F.sel('ambient', 'Hottest air round it', AMBIENTS.map((t) => [t, t + ' °C'])), F.num('grouped', 'Circuits grouped', { ph: '1', hint: 'Including this one. Blank = 1' })),
-          groupSel(F, v),
-          F.sel('ci', 'Thermal insulation', [['1', 'None (Ci 1.0)'], ['0.5', 'Totally surrounded for 0.5 m or more (Ci 0.5)']]),
+          groupSel(F, v, set),
+          longPick(v, set, 'ci', 'Thermal insulation', [['1', 'None (Ci 1.0)'], ['0.5', 'Totally surrounded for 0.5 m or more (Ci 0.5)']]),
           cab.note ? h('p', { class: 'note warnnote' }, cab.note) : null],
           `method ${v.method}, ${amb} °C, ${groupWords(v)}, ${v.ci === '0.5' ? 'in insulation' : 'no insulation'}`)], { step: 3, gives: 'Iz', key: 'cable' }),
       icard('Length and earthing', [

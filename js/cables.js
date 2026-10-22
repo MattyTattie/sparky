@@ -92,14 +92,23 @@ export const CG = {
 };
 // The 'Grouped how' list, in Table 4C1 order.
 export const GROUPINGS = [
-  ['bunched', 'Bunched in air, or enclosed in conduit / trunking (4C1 row 1)'],
-  ['clipped', 'Single layer on a wall or floor, touching (row 2)'],
-  ['ceiling', 'Single layer of multicores under a ceiling (row 3)'],
-  ['tray', 'Single layer on perforated tray, flat or upright (row 4)'],
-  ['ladder', 'Single layer on ladder, cleats or brackets (row 5)'],
-  ['spaced', 'Spaced apart, gap at least 2 × cable diameter (Cg 1.0)'],
+  ['bunched', 'Bunched in air, on a surface, embedded or enclosed (Table 4C1, item 1)'],
+  ['clipped', 'Single layer on wall, floor or unperforated cable tray (item 2)'],
+  ['ceiling', 'Single layer multicore on a ceiling (item 3)'],
+  ['tray', 'Single layer multicore on a perforated horizontal or vertical cable tray system (item 4)'],
+  ['ladder', 'Single layer multicore on cable ladder system or cleats etc. (item 5)'],
+  ['spaced', 'Spaced: horizontal clearance between adjacent cables more than twice their overall diameter (no factor, Cg 1.0)'],
 ];
-export const GROUP_HINT = 'Cables just passing through the same joist holes don\u2019t count as grouped; cables bunched together along the void do.';
+// v0.22b: plain words for the More info sheet (same keys as GROUPINGS).
+export const GROUP_INFO = {
+  bunched: ['The usual one for houses. Cables run together touching: bunched along a void, tied in a bundle, in the same conduit or trunking, or buried together in plaster.', 'Example: three T&E circuits clipped side by side along a joist and touching, or several circuits in one length of trunking.'],
+  clipped: ['Cables side by side in one flat layer, touching each other, fixed to a wall, floor or solid (unperforated) tray. Not stacked.', 'Example: a row of SWA cables cleated flat along a wall in a plant room, touching.'],
+  ceiling: ['Multicore cables in one flat layer, touching, fixed underneath a ceiling. Heat can\u2019t rise away so easily, so the factors are lower.', 'Example: several SWA cables clipped side by side to the underside of a concrete soffit.'],
+  tray: ['Multicore cables in one layer on perforated tray, laid flat or run up a wall. The holes let air move.', 'Example: SWA sub-mains in a single layer on perforated tray across a warehouse.'],
+  ladder: ['Multicore cables in one layer on cable ladder, or held off the surface on cleats or brackets, so air gets all round them.', 'Example: big SWA cables on ladder rack in a riser.'],
+  spaced: ['The cables are kept apart with a gap of more than twice their own diameter, so they don\u2019t heat each other. No grouping factor needed.', 'Example: two 20 mm SWA cables cleated 50 mm apart along a wall.'],
+};
+
 // Cg for a grouping and number of circuits (row 1 steps to 12 / 16 / 20; the others stop at 9).
 export function cgFor(grouping, n) {
   const t = CG[grouping] || CG.bunched; const k = Math.max(1, Math.floor(Number(n) || 1));
@@ -448,3 +457,39 @@ THREE_PHASE_CABLES.push('h073', 'tri3', 'sycy3');
 // (B/C/D/E depend on conduit or trunking, metal or plastic).
 CABLE_PICKS.singles = { label: 'Singles 6491X in conduit / trunking (separate CPC)', calc: 'singles', wiring: '', cpc: 'sep', sizes: { ...SINGLES_CPC } };
 CABLE_PICKS.singles3 = { label: 'Singles 6491X, 3-phase (separate CPC)', calc: 'singles3', wiring: '', cpc: 'sep', sizes: { ...SINGLES_CPC } };
+
+// v0.22b: installation method wording as BS 7671 Table 4A2 / 4D5 / 4F1A (labels only, ratings unchanged).
+const METHOD_WORDING = {
+  'Clipped direct (C)': 'Reference Method C: clipped direct',
+  'Direct in the ground (D)': 'Reference Method D: in the ground, direct or in a duct',
+  'In conduit or trunking on a wall (B)': 'Reference Method B: enclosed in conduit on a wall or in trunking',
+  'In conduit in an insulated wall (A)': 'Reference Method A: enclosed in conduit in a thermally insulating wall',
+  'Clipped direct or in free air (C)': 'Reference Method C: clipped direct (or in free air)',
+  'On a perforated tray (same as free air, Table 4F1A)': 'Reference Method E: on a perforated cable tray (free air, Table 4F1A)',
+  'In free air or resting on a surface': 'In free air, or resting on a surface (Table 4F1A)',
+  'In free air (flexible cord)': 'In free air (flexible cord, Table 4F3A)',
+};
+const TE_WORDING = {
+  100: 'Installation Method 100: clipped direct to a wooden joist, or touching the plasterboard ceiling surface, above a plasterboard ceiling with thermal insulation not exceeding 100 mm in thickness',
+  101: 'Installation Method 101: clipped direct to a wooden joist, or touching the plasterboard ceiling surface, above a plasterboard ceiling with thermal insulation exceeding 100 mm in thickness',
+  102: 'Installation Method 102: in a stud wall with thermal insulation, with the cable touching the inner wall surface',
+  103: 'Installation Method 103: in a stud wall with thermal insulation, with the cable not touching the inner wall surface',
+};
+for (const c of Object.values(CABLES)) for (const [k, m] of Object.entries(c.methods || {})) {
+  if (TE_WORDING[k]) m.label = TE_WORDING[k]; else if (METHOD_WORDING[m.label]) m.label = METHOD_WORDING[m.label];
+}
+// Plain words for the More info sheet, by method key.
+export const METHOD_INFO = {
+  A: ['In conduit buried in, or behind, an insulated wall. Insulation on one side traps the heat.', 'Example: singles in conduit in a timber-frame wall full of insulation.'],
+  B: ['In conduit or trunking fixed to the surface of a wall, or in trunking. Not in insulation.', 'Example: T&E in mini-trunking along a skirting, or singles in steel conduit on a garage wall.'],
+  C: ['Clipped straight to a wall or ceiling, or buried in plaster or masonry with no insulation round it. The best-cooled everyday method.', 'Example: T&E clipped along a garage wall, or chased into a brick wall and plastered over.'],
+  D: ['Buried in the ground, either straight in the trench or pulled through a duct. The app uses the duct figures where the table gives both.', 'Example: SWA to a garden office, in a duct under the lawn.'],
+  E: ['Multicore cable in free air, or on perforated tray, with air round it.', 'Example: a rubber flex run across open tray, or hanging free.'],
+  100: ['T&E in a loft or ceiling void, fixed to a joist or lying on the plasterboard, with loft insulation over it up to 100 mm deep.', 'Example: a lighting circuit clipped to the joists with 100 mm of quilt laid on top.'],
+  101: ['As 100, but with loft insulation deeper than 100 mm over it (most modern lofts: 250–300 mm).', 'Example: a shower cable across the loft under 270 mm of insulation.'],
+  102: ['T&E in an insulated stud wall, touching the back of the plasterboard (the inner wall surface).', 'Example: a socket drop down a stud filled with insulation, cable pressed against the board.'],
+  103: ['T&E in an insulated stud wall, NOT touching the board: fully surrounded by insulation. Lowest rating of all.', 'Example: a cable running through the middle of a wall full of mineral wool.'],
+  panel: ['Tri-rated wire laid in slotted panel trunking inside an enclosure.', 'Example: control wiring in a motor control panel.'],
+  bunch: ['Tri-rated wire bunched or tied together inside a panel. The bunched grouping factor is used.', 'Example: a loom of control wires tied together.'],
+};
+export const JOIST_HINT = 'Cables just passing through the same joist holes don\u2019t count as grouped; cables bunched together along the void do.';

@@ -3,7 +3,7 @@
 // saying in plain words why it went up a size.
 import { h, fill } from './ui.js';
 import { route, page } from './app.js';
-import { groupSel, groupWords } from './calckit.js';
+import { groupSel, groupWords, methodPick, longPick } from './calckit.js';
 import { CABLES, CABLE_PICKS, AMBIENTS, CI_OPTIONS, SINGLES_CPC, THREE_PHASE_CABLES, UL, CUTOUT_FUSES, TYPICAL_NOTE } from './cables.js';
 import { sizeCircuit, LOAD_TYPES, START_METHODS, convertLine } from './design.js';
 import { useOnCircuit } from './usecircuit.js';
@@ -56,14 +56,14 @@ route(/^\/calc\/size$/, async () => {
         d.types.length > 1 ? F.seg('type', 'Type / curve', [['auto', 'Auto'], ...d.types.map((t) => [t, t])], 'Auto = B, or C for motors. Pick D for a heavy motor start.', 'small') : null,
         more('size-dev', [F.seg('time', 'Disconnection time', [[0.4, '0.4 s'], [5, '5 s']], '0.4 s for final circuits up to 63 A; 5 s for distribution circuits and over 63 A.', 'small')], `${v.time} s`)], { step: 2, gives: 'In', key: 'breaker' }),
       icard('The cable and where it runs', [
-        F.sel('cable', 'Cable', order.map((k) => [k, CABLES[k].label])),
+        longPick(v, set, 'cable', 'Cable', order.map((k) => [k, CABLES[k].label])),
         cab.tails ? F.seg('cutout', 'Cutout (supplier’s) fuse', CUTOUT_FUSES.map((a) => [String(a), a + ' A']), 'The tails must carry at least this, as installed.', 'small') : null,
         cab.typical ? h('p', { class: 'note warnnote' }, 'Typical, check your books. ' + TYPICAL_NOTE) : null,
         more('size-run', [
-          F.sel('method', 'How it\u2019s installed (reference method)', Object.entries(cab.methods).map(([k, m]) => [k, m.label])),
+          methodPick(v, set, cab),
           h('div', { class: 'grid2' }, F.sel('ambient', 'Hottest air round it', AMBIENTS.map((t) => [t, t + ' °C'])), F.num('grouped', 'Circuits grouped', { ph: '1', hint: 'Including this one. Blank = 1' })),
-          groupSel(F, v),
-          F.sel('ci', 'Thermal insulation', CI_OPTIONS),
+          groupSel(F, v, set),
+          longPick(v, set, 'ci', 'Thermal insulation', CI_OPTIONS),
           /^10[0-3]$/.test(String(v.method)) && v.ci !== '1' ? h('p', { class: 'note warnnote' }, 'Methods 100–103 already allow for the insulation. Leave this at “None” unless the cable is also buried in it elsewhere.') : null,
           cab.methods[v.method] && cab.methods[v.method].bunched ? h('p', { class: 'note' }, 'Bunched in a panel: the bunched grouping factor (Table 4C1) is used with the number of circuits above.') : null,
           cab.note ? h('p', { class: 'note warnnote' }, cab.note) : null],

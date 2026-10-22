@@ -740,3 +740,18 @@ button.row { font: inherit; cursor: pointer; }
 
 /* v0.21: what each calculator step works out */
 .icard h2 .gives { margin-left: auto; font-size: 11.5px; font-weight: 700; letter-spacing: .02em; color: var(--brand); background: var(--brandbg); border-radius: 999px; padding: 2px 9px; text-transform: none; }
+
+/* v0.22b: full-wording pickers (never cut short) and More info sheets */
+.pklab { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+.infolink { background: none; border: 0; padding: 2px 0; min-height: 0; color: var(--brand); font: inherit; font-size: 13px; font-weight: 700; text-decoration: underline; text-underline-offset: 2px; cursor: pointer; white-space: nowrap; }
+.pkbtn { display: flex; align-items: center; gap: 8px; width: 100%; text-align: left; min-height: 46px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--card); color: var(--ink); font: inherit; font-size: 15px; line-height: 1.35; white-space: normal; cursor: pointer; }
+.pkbtn .pktxt { flex: 1; overflow-wrap: anywhere; }
+.pkbtn .pkchev { color: var(--sub); font-size: 14px; }
+.pkbtn.autona { color: #a3a9b5; font-weight: 600; cursor: default; }
+.pklist { display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; }
+.pkopt { text-align: left; white-space: normal; line-height: 1.35; padding: 12px 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--card); color: var(--ink); font: inherit; font-size: 15px; cursor: pointer; }
+.pkopt.on { border-color: var(--brand); background: var(--brandbg); font-weight: 700; }
+.inforow { padding: 10px 0; border-bottom: 1px solid var(--line); }
+.inforow:last-child { border-bottom: 0; }
+.infoname { font-weight: 700; margin-bottom: 4px; }
+.inforow p { margin: 0 0 4px; }

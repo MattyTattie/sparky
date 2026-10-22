@@ -23,7 +23,18 @@ test('v0.22 blank or 1 circuit = not grouped; old saved values keep their row', 
   assert.equal(sc({ grouped: '', grouping: 'tray' }).factors.cg, 1);
   assert.equal(sc({ grouped: '4', grouping: 'ladder' }).factors.cg, 0.8);
 });
-test('v0.22 T&E methods 100–103 are in the list with plain labels', () => {
-  for (const m of ['100', '101', '102', '103']) assert.match(CABLES.te.methods[m].label, new RegExp(`\\(${m}\\)$`));
-  assert.match(CABLES.te.methods[100].label, /joist/);
+test('v0.22 T&E methods 100–103 use the Table 4D5 wording', () => {
+  for (const m of ['100', '101', '102', '103']) assert.match(CABLES.te.methods[m].label, new RegExp(`^Installation Method ${m}: `));
+  assert.match(CABLES.te.methods[100].label, /wooden joist.*not exceeding 100 mm/);
+  assert.match(CABLES.te.methods.C.label, /^Reference Method C: clipped direct/);
+});
+test('v0.22b regs wording for Grouped how, and More info for every option and method', async () => {
+  const { GROUP_INFO, METHOD_INFO, JOIST_HINT } = await import('../js/cables.js');
+  assert.equal(GROUPINGS[0][1].split(' (')[0], 'Bunched in air, on a surface, embedded or enclosed');
+  assert.match(GROUPINGS[1][1], /^Single layer on wall, floor or unperforated cable tray/);
+  assert.match(GROUPINGS[3][1], /^Single layer multicore on a perforated horizontal or vertical cable tray system/);
+  assert.match(GROUPINGS[4][1], /^Single layer multicore on cable ladder system or cleats etc\./);
+  for (const [k] of GROUPINGS) assert.equal(GROUP_INFO[k].length, 2, k);
+  for (const c of Object.values(CABLES)) for (const k of Object.keys(c.methods)) assert.ok(METHOD_INFO[k], `More info for method ${k} (${c.label})`);
+  assert.match(JOIST_HINT, /joist holes/);
 });
