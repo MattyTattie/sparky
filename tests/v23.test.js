@@ -30,3 +30,8 @@ test('v0.23 Check a circuit rows carry what izLine needs', () => {
   const t = izLine({ size: row.size, it: row.it, iz: row.iz, needIz: row.needIz, f: s.factors, ring: row.needIz === 20, inA: 32 });
   assert.equal(row.iz, 18.9); assert.equal(t.pass, false); assert.match(t.detail, /Cg 0\.7/); assert.match(t.text, /too small ✗$/);
 });
+
+test('v0.23b Size a cable summary Current line uses CCC wording', async () => {
+  const src = (await import('node:fs')).readFileSync(new URL('../js/calcsize.js', import.meta.url), 'utf8');
+  assert.doesNotMatch(src, /Current: carries/); assert.match(src, /'Current: ' \+ r\.izInfo\.text/);
+});

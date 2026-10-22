@@ -94,7 +94,7 @@ route(/^\/calc\/size$/, async () => {
       detailCard('size-how', 'How it worked it out', [
         h('ol', { class: 'steps' }, r.steps.map((t) => h('li', {}, t, r.izInfo && t === r.izInfo.text && r.izInfo.detail ? h('details', { class: 'izmore' }, h('summary', {}, 'More info'), h('div', { class: 'izdetail' }, r.izInfo.detail)) : null))),
         p ? [
-          line(p.cur.pass, `Current: carries ${p.cur.iz} A after factors, needs ${p.cur.needIz} A`, `Tabulated ${p.cur.it} A × factors ${r.factors.total}.`),
+          line(p.cur.pass, r.izInfo ? 'Current: ' + r.izInfo.text.replace(/ [✓✗]$/, '') : `Current: ${p.size} mm² can carry ${p.cur.iz} A after factors, needs at least ${p.cur.needIz} A current-carrying capacity (CCC)`, `Tabulated ${p.cur.it} A × factors ${r.factors.total}.`),
           line(p.vd.pass, `Volt drop: ${p.vd.volts} V (${p.vd.pct}% of ${r.vref} V), limit ${p.vd.limit}%`, `${p.vd.mvam} mV/A/m × ${r.ib} A × ${v.length} m ÷ 1000${p.vd.div > 1 ? ' ÷ ' + p.vd.div + ' (ring)' : ''}.`),
           line(p.z.pass, `Zs${r.phase === 3 ? ' (phase–earth)' : ''}: ${p.z.zs} Ω, max ${p.z.max ?? '?'} Ω`, `Ze ${v.ze} + (R1+R2) ${p.z.r20} Ω × hot = ${p.z.rHot} Ω.`),
           p.adi.ok ? line(p.adi.pass, `Adiabatic: CPC needs ${p.adi.smin} mm², ${p.adi.armour ? 'armour is' : 'has'} ${p.adi.area} mm²`, `Fault ${Math.round(p.adi.ifault)} A. ${p.adi.how} k ${r.k.k}.`) : line(null, 'Adiabatic: ' + (p.adi.error || 'not worked out')),
