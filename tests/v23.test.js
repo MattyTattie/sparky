@@ -47,3 +47,8 @@ test('v0.23b fail explanation box is styled red', async () => {
   assert.match(fs.readFileSync(new URL('../js/calcsize.js', import.meta.url), 'utf8'), /'ans-why' \+ \(\/can only carry/);
   assert.match(fs.readFileSync(new URL('../styles.css', import.meta.url), 'utf8'), /\.ans-why\.bad \{[^}]*--redbg/);
 });
+
+test('v0.23b answer card: CCC box comes before the fail box', async () => {
+  const src = (await import('node:fs')).readFileSync(new URL('../js/calcsize.js', import.meta.url), 'utf8');
+  assert.ok(src.indexOf('ccc(r.izInfo), why ?') > 0);
+});
