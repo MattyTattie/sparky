@@ -106,8 +106,8 @@ export function groupSel(F, v, set) {
 export const groupWords = (v) => (isGrouped(v) ? `${Math.floor(Number(v.grouped))} grouped, ${((GROUPINGS.find(([k]) => k === v.grouping) || GROUPINGS[0])[1]).split(/[,(:]/)[0].trim().toLowerCase()}` : 'not grouped');
 
 // v0.23b: the CCC line with its workings folded under 'More info'.
-export function ccc(info) {
+export function ccc(info, brk = '') {
   if (!info) return null;
-  return h('div', { class: 'ans-iz ' + (info.pass ? 'ok' : 'bad'), 'data-iz': '1' }, h('div', {}, info.text),
+  return h('div', { class: 'ans-iz ' + (info.pass ? 'ok' : 'bad'), 'data-iz': '1' }, h('div', {}, info.text), brk ? h('div', { class: 'izbrk' }, brk) : null,
     info.detail ? h('details', { class: 'izmore' }, h('summary', {}, 'More info'), h('div', { class: 'izdetail' }, info.detail)) : null);
 }

@@ -82,11 +82,13 @@ route(/^\/calc\/size$/, async () => {
     const cpcText = (row) => row.cpc === 'armour' ? ' + armour as CPC' : row.cpc != null ? ` / ${row.cpc} mm² CPC` : '';
     const line = resline;
     const chips = p ? [pchip(p.cur.pass, 'Current'), pchip(p.vd.pass, `Volt drop ${p.vd.pct}%`), pchip(p.z.pass, `Zs ${p.z.zs} / ${p.z.max ?? '?'} Ω`), p.adi.ok ? pchip(p.adi.pass ? true : 'warn', 'Earth size (adiabatic)') : pchip(null, 'Earth size')] : [];
-    const why = r.steps.length ? r.steps[r.steps.length - 1] : '';
+    const lastR = r.reasons && r.reasons.length ? r.reasons[r.reasons.length - 1] : null;
+    const why = lastR && lastR.why.length ? lastR.why.join('. ') + '.' : '';
+    const brkName = p ? (r.adjLabel ? r.adjLabel : devName(d, r.curve, r.inA)) + (r.phase === 3 ? ' (TP)' : '') : '';
     fill(top, answerCard({ kicker: p ? 'Use' : 'No cable passes', good: p ? (p.adi.ok && !p.adi.pass ? 'warn' : true) : false,
       big: p ? [r.adjLabel ? `${r.adjLabel}${r.phase === 3 ? ' (TP)' : ''}` : `${devName(d, r.curve, r.inA)}${r.phase === 3 ? ' (TP)' : ''}`, `${p.size} mm²${cpcText(p)}`] : 'Try another cable or method',
       sub: p ? `${CABLES[v.cable].label.split(',')[0]} · Ib ${r.ib} A · ${v.length} m` : 'Nothing in this table passes current, volt drop and Zs.', chips,
-      extra: p ? [ccc(r.izInfo), why ? h('div', { class: 'ans-why' + (/can only carry|fails|isn\u2019t rated/.test(why) ? ' bad' : '') }, why) : null, h('div', { class: 'ans-test' }, icon('clipboard', { size: 16 }), `When you test: expect R1+R2 about ${p.z.r20} Ω at 20 °C${r.ring ? ' (ring, (r1 + r2) ÷ 4)' : ''}.`),
+      extra: p ? [ccc(r.izInfo, 'Recommended breaker: ' + brkName), why ? h('div', { class: 'ans-why bad' }, why) : null, h('div', { class: 'ans-test' }, icon('clipboard', { size: 16 }), `When you test: expect R1+R2 about ${p.z.r20} Ω at 20 °C${r.ring ? ' (ring, (r1 + r2) ÷ 4)' : ''}.`),
         h('button', { class: 'btn primary', style: 'margin-top:10px;width:100%', 'data-use': '1', onclick: () => useOnCircuit({ cable: v.cable, size: p.size, cpc: p.cpc, device: r.device, curve: r.curve, rating: r.inA, three: r.phase === 3, cpcMode: v.cpcMode, im: r.imag }) }, icon('clipboard', { size: 16 }), 'Use on a circuit')] : null }),
       (r.advice || []).map((a) => banner(a.text, '', a.level === 'warn' ? 'amber' : 'info')),
       p && p.adi.ok && !p.adi.pass ? banner(`The earth (CPC) may be too small: it needs ${p.adi.smin} mm², it has ${p.adi.area} mm².`, 'This assumes the worst-case 0.1 s let-through. Check the breaker maker\u2019s I²t figure, or go up a cable size.') : null);
@@ -94,7 +96,7 @@ route(/^\/calc\/size$/, async () => {
       detailCard('size-how', 'How it worked it out', [
         h('ol', { class: 'steps' }, r.steps.map((t) => h('li', {}, t, r.izInfo && t === r.izInfo.text && r.izInfo.detail ? h('details', { class: 'izmore' }, h('summary', {}, 'More info'), h('div', { class: 'izdetail' }, r.izInfo.detail)) : null))),
         p ? [
-          line(p.cur.pass, r.izInfo ? 'Current: ' + r.izInfo.text.replace(/ [✓✗]$/, '') : `Current: ${p.size} mm² can carry ${p.cur.iz} A after factors, needs at least ${p.cur.needIz} A current-carrying capacity (CCC)`, `Tabulated ${p.cur.it} A × factors ${r.factors.total}.`),
+          line(p.cur.pass, 'Current: ' + (r.izInfo ? r.izInfo.text : `${p.size} mm² CCC after factors: ${p.cur.iz} A`), `Tabulated ${p.cur.it} A × factors ${r.factors.total}.`),
           line(p.vd.pass, `Volt drop: ${p.vd.volts} V (${p.vd.pct}% of ${r.vref} V), limit ${p.vd.limit}%`, `${p.vd.mvam} mV/A/m × ${r.ib} A × ${v.length} m ÷ 1000${p.vd.div > 1 ? ' ÷ ' + p.vd.div + ' (ring)' : ''}.`),
           line(p.z.pass, `Zs${r.phase === 3 ? ' (phase–earth)' : ''}: ${p.z.zs} Ω, max ${p.z.max ?? '?'} Ω`, `Ze ${v.ze} + (R1+R2) ${p.z.r20} Ω × hot = ${p.z.rHot} Ω.`),
           p.adi.ok ? line(p.adi.pass, `Adiabatic: CPC needs ${p.adi.smin} mm², ${p.adi.armour ? 'armour is' : 'has'} ${p.adi.area} mm²`, `Fault ${Math.round(p.adi.ifault)} A. ${p.adi.how} k ${r.k.k}.`) : line(null, 'Adiabatic: ' + (p.adi.error || 'not worked out')),

@@ -23,13 +23,15 @@ export function openSym(el) {
 
 // Wrap symbols in on-screen text (labels, notes, result lines). Skips inputs, buttons, links and the PDF view.
 const SKIP = 'input,textarea,select,option,button,script,style,svg,.sym,.sympop,.pdfview,.pdfpages,[contenteditable],code,a,.nosym';
+// keep "(CCC)" together: bracket + chip + bracket in one non-breaking box
+function h_nw(chip) { const w = document.createElement('span'); w.className = 'symnw'; w.append('(', chip, ')'); return w; }
 export function wrapSymbols(root) {
   if (!root || !root.querySelectorAll) return;
   const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, { acceptNode: (n) => (!n.nodeValue || !/[A-Z]/.test(n.nodeValue) || (n.parentElement && n.parentElement.closest(SKIP)) ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT) });
   const todo = []; let n; while ((n = walker.nextNode())) { SYM_RE.lastIndex = 0; if (SYM_RE.test(n.nodeValue)) todo.push(n); }
   for (const t of todo) {
     const txt = t.nodeValue; const frag = document.createElement('span'); frag.className = 'symwrap'; /* one inline box, so flex parents keep the sentence together */ let last = 0; SYM_RE.lastIndex = 0; let m;
-    while ((m = SYM_RE.exec(txt))) { const s = m[0]; if (!SYM[s]) continue; frag.append(txt.slice(last, m.index), symChip(s)); last = m.index + s.length; }
+    while ((m = SYM_RE.exec(txt))) { const s = m[0]; if (!SYM[s]) continue; const pre = txt.slice(last, m.index); if (pre.endsWith('(') && txt[m.index + s.length] === ')') { frag.append(pre.slice(0, -1), h_nw(symChip(s))); last = m.index + s.length + 1; } else { frag.append(pre, symChip(s)); last = m.index + s.length; } }
     frag.append(txt.slice(last)); t.replaceWith(frag);
   }
 }

@@ -249,7 +249,7 @@ export function sizeCircuit(o) {
   // plain-words reasons for every size that was too small
   const why = (r) => {
     const out = [];
-    if (!r.cur.pass) out.push(r.cur.it == null ? `${r.size} mm² isn\u2019t rated for this method` : `${r.size} mm² can only carry ${r.cur.iz} A after factors, but needs at least ${r.cur.needIz} A current-carrying capacity (CCC)`);
+    if (!r.cur.pass) out.push(r.cur.it == null ? `${r.size} mm² isn\u2019t rated for this method` : `${r.size} mm² CCC after factors: ${r.cur.iz} A, too small`);
     if (!r.vd.pass) out.push(`${r.size} mm² fails on volt drop at ${L} m (${r.vd.pct}%, limit ${limit}%)`);
     if (r.z.pass === false) out.push(`${r.size} mm² fails on Zs (${r.z.zs} Ω, max ${r.z.max} Ω)`);
     if (r.adi.pass === false) out.push(`${r.size} mm² fails the adiabatic check (CPC needs ${r.adi.smin} mm², ${r.adi.armour ? 'armour is ' : 'it has '}${r.adi.area} mm²)`);

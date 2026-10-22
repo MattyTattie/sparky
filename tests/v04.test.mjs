@@ -48,7 +48,7 @@ test('sizer: 20 A at 32 m on T&E: 2.5 fails volt drop, so 4 mm²', () => {
 test('sizer: 9.5 kW shower → 50 A, 10 mm² (6 mm² fails on current)', () => {
   const r = sizeCircuit({ load: 9.5, unit: 'kW', length: 12, cable: 'te', method: 'C', loadType: 'heating' });
   assert.equal(r.ib, 41.3); assert.equal(r.inA, 50); assert.equal(r.pick.size, 10);
-  assert.match(r.steps.join(' '), /6 mm² can only carry [\d.]+ A after factors, but needs at least 50 A current-carrying capacity \(CCC\)/); // v0.19: "mm²" wording
+  assert.match(r.steps.join(' '), /6 mm² CCC after factors: [\d.]+ A, too small/); // v0.19: "mm²" wording
 });
 test('sizer: motor suggests Type C', () => {
   const r = sizeCircuit({ load: 2.2, unit: 'kW', pf: 0.8, length: 15, loadType: 'motor' });

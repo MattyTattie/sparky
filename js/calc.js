@@ -103,11 +103,9 @@ export function izLine({ size, it, iz, needIz, f = {}, ring = false, inA = null 
   if (f.cf != null && Number(f.cf) !== 1) parts.push(`Cf ${f.cf} (BS 3036 rewirable fuse)`);
   const pass = Number(iz) >= Number(needIz) - 1e-9;
   const brk = inA != null ? `${inA} A` : `${needIz} A`;
-  const verdict = pass ? 'so it passes ✓' : 'so it\u2019s too small ✗';
-  const text = ring
-    ? `${size} mm² can carry ${iz} A after factors. A ring on a ${brk} breaker needs at least ${needIz} A current-carrying capacity (CCC), ${verdict}`
-    : `${size} mm² can carry ${iz} A after factors. A ${brk} breaker needs at least ${needIz} A current-carrying capacity (CCC), ${verdict}`;
-  const detail = `CCC (Iz) = ${parts.join(' × ')} = ${iz} A. ` + (ring
+  const text = pass ? `${size} mm² CCC after factors: ${iz} A` : `${size} mm² CCC after factors: ${iz} A, too small`;
+  const need = ring ? `A ring on a ${brk} breaker needs a CCC of at least ${needIz} A. ` : `A ${brk} breaker needs a CCC of at least ${needIz} A. `;
+  const detail = need + `CCC (Iz) = ${parts.join(' × ')} = ${iz} A. ` + (ring
     ? `Ring final circuit, Regulation 433.1.204: on a 30 or 32 A device with 2.5 mm² or bigger, Iz must be at least 20 A (a radial on ${brk} would need Iz ≥ In = ${brk}).`
     : `Needs Iz ≥ In (Regulation 433.1.1): ${iz} A against ${needIz} A.`);
   return { pass, text, detail };

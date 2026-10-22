@@ -114,7 +114,7 @@ route(/^\/calc\/check$/, async () => {
     ];
     fill(top, answerCard({ kicker: allOk ? 'This circuit passes' : 'This circuit needs a look', big: [size == null ? cableName : `${size} mm²${cpc === 'armour' ? ' + armour CPC' : cpc ? ` / ${cpc} mm² CPC` : ''}`, devName(d, v.type, v.rating, three, imag)], good: allOk ? (adi && adi.ok && !adi.pass ? 'warn' : true) : false,
       sub: `${three ? '3-phase 400 V · ' : ''}${CABLES[v.cable].label.split(',')[0]} · ${v.shape === 'radial' ? 'radial' : 'ring'} ${v.length} m · ${v.ib} A ${three ? 'per phase' : 'load'}${v.lighting ? ' · lighting' : ''}`, chips,
-      extra: [row ? ccc(izInfo(row)) : null, size != null && Number(v.length) ? h('div', { class: 'ans-test' }, icon('clipboard', { size: 16 }), `When you test: expect R1+R2 about ${r1r2At20({ live: size, cpc, length: +v.length, cores: CABLES[v.cable].cores, ring, rTable: CABLES[v.cable].rTable || null })} Ω at 20 °C${ring ? ' (ring, end-to-end ÷ 4)' : ''}.`) : null] }),
+      extra: [row ? ccc(izInfo(row), 'Breaker: ' + devName(d, v.type, v.rating, three, imag)) : null, size != null && Number(v.length) ? h('div', { class: 'ans-test' }, icon('clipboard', { size: 16 }), `When you test: expect R1+R2 about ${r1r2At20({ live: size, cpc, length: +v.length, cores: CABLES[v.cable].cores, ring, rTable: CABLES[v.cable].rTable || null })} Ω at 20 °C${ring ? ' (ring, end-to-end ÷ 4)' : ''}.`) : null] }),
       adi && adi.ok && !adi.pass ? banner(`The earth (CPC) may be too small for the fault: it needs ${adi.smin} mm², it\u2019s ${adiArea} mm².`, 'This assumes the worst-case 0.1 s let-through. Check the breaker maker\u2019s I²t figure, or go up a cable size.') : null);
     fill(work,
       detailCard('chk-how', 'How it worked it out', [

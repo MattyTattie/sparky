@@ -4,7 +4,7 @@ export const SYMBOLS = [
   ['Ib', 'Design current', 'The current the circuit is meant to carry in normal use (the load).', 'Currents'],
   ['In', 'Nominal current of the device', 'The rating of the breaker or fuse, e.g. 32 A.', 'Currents'],
   ['Iz', 'Current-carrying capacity', 'What the cable can carry where it\u2019s installed, after correction factors.', 'Currents'],
-  ['CCC', 'Current-carrying capacity', 'Same as Iz: what the cable can carry where it\u2019s installed, after correction factors.', 'Currents'],
+  ['CCC', 'Current-carrying capacity (Iz)', 'Same as Iz: what the cable can carry where it\u2019s installed, after correction factors.', 'Currents'],
   ['It', 'Tabulated current rating', 'The cable\u2019s rating straight from the Appendix 4 table, before factors.', 'Currents'],
   ['I2', 'Effective operating current', 'Current that makes the device trip within the conventional time (1.45 × In for MCBs).', 'Currents'],
   ['IΔn', 'Rated residual operating current', 'The RCD\u2019s trip rating, e.g. 30 mA.', 'Currents'],
