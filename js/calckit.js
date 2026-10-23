@@ -67,6 +67,8 @@ export function answerCard({ kicker = 'Answer', big, sub = null, chips = [], goo
 export const banner = (text, todo = '', kind = 'amber') => h('div', { class: 'banner ' + kind, role: 'note' }, icon('alert', { size: 20 }), h('div', {}, h('div', { class: 'bt' }, text), todo ? h('div', { class: 'bd' }, todo) : null));
 // One check line (✓/✗) used inside the folded details.
 export const resline = (ok, text, sub) => h('div', { class: 'resline ' + (ok === true ? 'ok' : ok === false ? 'bad' : 'na') }, h('b', {}, ok === true ? '✓' : ok === false ? '✗' : '–'), h('div', {}, h('div', {}, text), sub ? h('div', { class: 'note' }, sub) : null));
+// v0.25: a result line with the workings folded under "More info".
+export const moreline = (ok, text, detail) => h('div', { class: 'resline ' + (ok === true ? 'ok' : ok === false ? 'bad' : 'na') }, h('b', {}, ok === true ? '✓' : ok === false ? '✗' : '–'), h('div', {}, h('div', {}, text), detail ? h('details', { class: 'izmore' }, h('summary', {}, 'More info'), h('div', { class: 'izdetail' }, detail)) : null));
 // "Every size" etc. folded into a card.
 export const detailCard = (id, title, kids, opts = {}) => h('div', { class: 'card foldcard' }, fold(id, title, kids, opts));
 

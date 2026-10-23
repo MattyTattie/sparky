@@ -13,14 +13,17 @@ const r3 = (n) => Math.round(n * 1000) / 1000;
 export const RING_DIVISOR = { point: 4, spread: 8 };
 
 // Volt drop: mV/A/m × Ib × L / 1000 (Appendix 4 section 6.1); ring: ÷ 4 or ÷ 8 of the loop length.
-export function voltDrop({ cable = 'te', size, ib, length, lighting = false, uo = UO, ring = false }) {
+// v0.25: spread = load spread evenly along a radial (e.g. lighting points): worked out at half the length.
+// Never on a ring (rings have their own ÷ 4 / ÷ 8 shape).
+export const SPREAD_DIVISOR = 2;
+export function voltDrop({ cable = 'te', size, ib, length, lighting = false, uo = UO, ring = false, spread = false }) {
   const c = CABLES[cable]; if (!c) throw new Error('Unknown cable');
   const mv = c.mvam[size]; if (mv == null) return { ok: false, error: 'No volt drop figure for that size' };
-  const div = ring ? RING_DIVISOR[ring] || 4 : 1;
+  const div = ring ? RING_DIVISOR[ring] || 4 : spread ? SPREAD_DIVISOR : 1;
   const v = (mv * Number(ib) * Number(length)) / 1000 / div;
   const pct = (v / uo) * 100;
   const limitPct = lighting ? VOLT_DROP.lightingPct : VOLT_DROP.otherPct;
-  return { ok: true, mvam: mv, divisor: div, volts: r2(v), pct: r2(pct), limitPct, limitV: r2((uo * limitPct) / 100), pass: pct <= limitPct };
+  return { ok: true, mvam: mv, divisor: div, spread: !ring && !!spread, volts: r2(v), pct: r2(pct), limitPct, limitV: r2((uo * limitPct) / 100), pass: pct <= limitPct };
 }
 
 export function ambientFactor(cable, ambient) {
@@ -32,7 +35,7 @@ export function ambientFactor(cable, ambient) {
 // then volt drop. Ring finals (433.1.204): 2.5 mm² on a 30/32 A device only
 // needs Iz ≥ 20 A; anything else is treated like a radial.
 // v0.9: uo = 400 (line voltage) for a three-phase cable: volt drop % of 400 V.
-export function sizeCable({ cable = 'te', method = 'C', ib, inA, length, ambient = 30, grouped = 1, grouping = 'bunched', insulationCi = 1, bs3036 = false, lighting = false, ring = false, uo = UO }) {
+export function sizeCable({ cable = 'te', method = 'C', ib, inA, length, ambient = 30, grouped = 1, grouping = 'bunched', insulationCi = 1, bs3036 = false, lighting = false, ring = false, uo = UO, spread = false }) {
   const c = CABLES[cable]; const m = c && c.methods[method];
   if (!m) return { ok: false, error: 'Pick a cable and installation method' };
   if (!(Number(inA) >= Number(ib))) return { ok: false, error: 'The device rating (In) must be at least the design current (Ib).' };
@@ -47,7 +50,7 @@ export function sizeCable({ cable = 'te', method = 'C', ib, inA, length, ambient
   const needFor = (s) => (ringRule(s) ? 20 : Number(inA));
   const rows = c.sizes.map((s) => {
     const it = m.amps[s];
-    const vd = length ? voltDrop({ cable, size: s, ib, length, lighting, ring, uo }) : null;
+    const vd = length ? voltDrop({ cable, size: s, ib, length, lighting, ring, uo, spread }) : null;
     return { size: s, it, iz: it == null ? null : r2(it * factor), needIz: needFor(s), needIt: r2(needFor(s) / factor), currentOk: it != null && it >= needFor(s) / factor, vd };
   });
   const needIz = ring && [30, 32].includes(Number(inA)) ? 20 : Number(inA);

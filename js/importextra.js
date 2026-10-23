@@ -13,7 +13,7 @@ export async function startExtra(certId = null) {
   await flush();
   const [f] = await pickFile({ accept: '.json,application/json' }); if (!f) return;
   try { pending = { file: readImportFile(await f.text()), name: f.name, certId, back: certId ? `#/cert/${certId}` : '#/settings' }; go('#/import-extra'); }
-  catch (e) { toast(e instanceof SyntaxError ? 'That file isn\u2019t a Sparky file (not JSON).' : e.message, 4000); }
+  catch (e) { toast(e instanceof SyntaxError ? 'That file isn\u2019t a Zs Pro file (not JSON).' : e.message, 4000); }
 }
 
 const show = (v) => (v === true ? '✓' : v == null || v === '' ? '–' : typeof v === 'object' ? (Array.isArray(v) ? `${v.length} item(s)` : '…') : String(v));

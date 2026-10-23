@@ -118,3 +118,7 @@
 - [built v0.12] Schedule table rows: add a bin/delete-circuit button (with confirm "Delete circuit N?", offer renumber if sequential) next to edit/copy/spare icons; also on circuit page. (19 Oct)
 - v0.14.1: ring hint on the R1+R2 step of Test across circuits.
 - [built v0.15] Test across circuits R1+R2 step counts a circuit as done when R2 is N/A but R1+R2 is blank. Should need a real value in one of them (N/A in both = not done unless spare).
+
+## v0.25
+- Parts used counts one RCD per different RCD found on MCB circuits; two identical RCCBs on a split board show as one. Check before ordering.
+- 3183Y PVC flex: no 3-phase table data in the app, so it switches to H07RN-F with a note.

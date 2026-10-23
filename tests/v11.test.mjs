@@ -23,7 +23,7 @@ test('applyPreset fills only device boxes, never cable or readings', () => {
 });
 test('shown: most used first; merge keeps newest edit and highest uses', () => {
   const a = [{ id: 'a', name: 'X', fields: P.presetFrom(rcbo()), uses: 2, updatedAt: '2026-10-19T10:00:00Z' }, { id: 'b', name: 'Y', fields: P.presetFrom(rcbo({ rating: '6' })), uses: 9, updatedAt: '2026-10-19T10:00:00Z' }];
-  assert.deepEqual(P.shown(a).map((p) => p.id), ['b', 'a']);
+  assert.deepEqual(P.shown(a).map((p) => p.id), ['a', 'b']); // v0.25: no usedAt, so by name (X, Y)
   const other = [{ id: 'z', name: 'Renamed', fields: P.presetFrom(rcbo()), uses: 5, updatedAt: '2026-10-19T11:00:00Z' }, { id: 'q', name: 'Gone', fields: P.presetFrom(rcbo({ rating: '6' })), deleted: true, uses: 1, updatedAt: '2026-10-19T12:00:00Z' }];
   const m = P.mergePresets(a, other);
   assert.equal(m.length, 2); const x = m.find((p) => p.id === 'a'); assert.equal(x.name, 'Renamed'); assert.equal(x.uses, 5);

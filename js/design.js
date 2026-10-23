@@ -44,14 +44,16 @@ export function cpcAreaFor(cable, size, cpcMode = 'core') {
 // Returns { t, i2t, how, trips } for an earth fault current (A).
 // iTrip is the current that must flow to trip in time = Uo × Cmin / Zs; the
 // energy uses Uo / Zs (the usual GN6 / OSG method).
-export function clearance({ device, type, rating, zs, uo = UO, rcd = false, rcdS = false, bka = 6, time = 0.4, imag = null }) {
+export function clearance({ device, type, rating, zs, uo = UO, rcd = false, rcdS = false, bka = 6, time = 0.4, imag = null, ig = null, tg = null }) {
   const Z = Number(zs); const In = Number(rating);
   if (!(Z > 0)) return { ok: false, error: 'Need Zs' };
   const ifault = uo / Z; const imin = (uo * CMIN) / Z;
   // v0.19: MPCB / MCCB: instant once the fault current reaches the magnetic setting (worst case 0.1 s).
   if (Number(imag) > 0) {
     if (imin >= Number(imag) - 1e-9) return { ok: true, ifault: r2(ifault), t: MCB_INSTANT_T, i2t: ifault * ifault * MCB_INSTANT_T, how: `Trips on its magnetic setting (${Math.round(imag)} A); the app uses ${MCB_INSTANT_T} s as the worst case.` };
-    return { ok: false, ifault: r2(ifault), error: `Fault current ${Math.round(imin)} A (with Cmin) is below the magnetic setting of ${Math.round(imag)} A. Zs is over the limit.` };
+    // v0.25: below Im but at or above the earth fault setting Ig: clears after tg (0.1 s at least).
+    if (Number(ig) > 0 && imin >= Number(ig) - 1e-9) { const t = Math.max(Number(tg) > 0 ? Number(tg) : MCB_INSTANT_T, MCB_INSTANT_T); return { ok: true, ifault: r2(ifault), t, i2t: ifault * ifault * t, how: `Trips on its earth fault setting (Ig ${Math.round(ig)} A) after ${Number(tg) > 0 ? 'tg ' + t + ' s' : MCB_INSTANT_T + ' s (no tg put in)'}.`, byIg: true }; }
+    return { ok: false, ifault: r2(ifault), error: `Fault current ${Math.round(imin)} A (with Cmin) is below the ${Number(ig) > 0 ? 'earth fault setting of ' + Math.round(ig) + ' A and the ' : ''}magnetic setting of ${Math.round(imag)} A. Zs is over the limit.` };
   }
   const d = deviceById(device); const tbl = d && d.table && MAX_ZS[d.table];
   const row = tbl && tbl[type] && tbl[type][In];
@@ -85,8 +87,8 @@ export function clearance({ device, type, rating, zs, uo = UO, rcd = false, rcdS
 }
 
 // S = √(I²t) / k  (543.1.3)
-export function adiabatic({ zs, device, type, rating, k = 115, cpcCsa, rcd = false, rcdS = false, bka = 6, time = 0.4, uo = UO, imag = null }) {
-  const cl = clearance({ device, type, rating, zs, uo, rcd, rcdS, bka, time, imag });
+export function adiabatic({ zs, device, type, rating, k = 115, cpcCsa, rcd = false, rcdS = false, bka = 6, time = 0.4, uo = UO, imag = null, ig = null, tg = null }) {
+  const cl = clearance({ device, type, rating, zs, uo, rcd, rcdS, bka, time, imag, ig, tg });
   if (!cl.ok) return { ok: false, ...cl };
   const smin = Math.sqrt(cl.i2t) / Number(k);
   const have = Number(cpcCsa);
@@ -183,7 +185,7 @@ export function sizeCircuit(o) {
   const {
     load, unit = 'kW', pf = 1, loadType = 'general', length, cable = 'te', cpcMode = 'core', method = 'C',
     ambient = 30, grouped = 1, grouping = 'bunched', ci = 1, ze = 0.35, device = 'rcbo', type = 'auto', time = 0.4,
-    vdPct = null, ringLoad = 'spread', bka = 6, separateCpc = false, uo = UO, phase = 1, ul = UL, minIn = 0, start = 'dol', eff = 1, cutout = 100, adj = null,
+    vdPct = null, ringLoad = 'spread', bka = 6, separateCpc = false, uo = UO, phase = 1, ul = UL, minIn = 0, start = 'dol', eff = 1, cutout = 100, adj = null, spread = false,
   } = o;
   const three = Number(phase) === 3;
   if (three && !(CABLES[cable] && CABLES[cable].phase === 3)) return { ok: false, error: 'Pick a three-phase cable (4-core SWA or singles).' };
@@ -226,10 +228,11 @@ export function sizeCircuit(o) {
   const factor = ca * cg * (Number(ci) || 1) * cf;
   const ringRule = (s) => ring && [30, 32].includes(inA) && s >= 2.5;
   const needIz = (s) => (ringRule(s) ? 20 : inA);
-  const max = adj ? maxZsForTrip(adj.imag, uo) : maxZs({ device: d.id, type: curve, rating: inA, time });
+  const max = adj ? maxZsForTrip(adj.zsTrip || adj.imag, uo) : maxZs({ device: d.id, type: curve, rating: inA, time });
   const temp = CABLE_TEMP[cable] || 70; const mult = TEMP_MULT[temp] || 1.2;
   const k = kFor({ cable, cpcMode, separate: separateCpc });
-  const div = ring ? RING_DIVISOR[ring] || 4 : 1;
+  const spreadOn = !ring && !!spread; // v0.25: load spread evenly along a radial: half the length
+  const div = ring ? RING_DIVISOR[ring] || 4 : spreadOn ? 2 : 1;
   const rows = cab.sizes.filter((s) => !ring || s >= 2.5).map((s) => {
     const it = m.amps[s]; const needIt = needIz(s) / factor;
     const cur = { pass: it != null && it >= needIt - 1e-9, it: it ?? null, iz: it == null ? null : r2(it * factor), needIz: needIz(s), needIt: r2(needIt) };
@@ -240,7 +243,7 @@ export function sizeCircuit(o) {
     const zs = r20 == null ? null : r2(Number(ze) + r20 * mult);
     const z = { pass: zs != null && max != null ? zs <= max + 1e-9 : null, zs, max, r20, rHot: r20 == null ? null : r3(r20 * mult) };
     const area = cp ? (cp.cpc === 'armour' ? cp.area : cp.cpc) : null;
-    const ad = zs ? adiabatic({ zs, device: d.id, type: curve, rating: inA, k: k.k, cpcCsa: area, rcd: !!d.rcd, bka, time, imag: adj ? adj.imag : null }) : { ok: false };
+    const ad = zs ? adiabatic({ zs, device: d.id, type: curve, rating: inA, k: k.k, cpcCsa: area, rcd: !!d.rcd, bka, time, imag: adj ? adj.imag : null, ig: adj ? adj.ig : null, tg: adj ? adj.tg : null }) : { ok: false };
     const adi = { pass: ad.ok ? ad.pass : null, ...ad, area, armour: cp && cp.cpc === 'armour' };
     const ok = cur.pass && vd.pass && z.pass !== false && adi.pass !== false;
     return { size: s, cpc: cp ? cp.cpc : null, cur, vd, z, adi, ok };
@@ -269,6 +272,7 @@ export function sizeCircuit(o) {
     three ? `Three-phase ${ul} V, balanced load, copper cables. Ib = P ÷ (√3 × ${ul} V × pf). Volt drop uses the three-phase mV/A/m and is a % of ${ul} V. Zs and the adiabatic check are phase to earth at Uo ${uo} V, using one phase conductor and the CPC${cab.cores === 4 && /swa/.test(cable) ? ' (the armour)' : ''}. Neutral current taken as nil (balanced, no harmonics).` : 'Single-phase 230 V, copper cables, BS 7671 Appendix 4 tables. Check against your own copy.',
     `Current: In ≥ Ib, then tabulated It ≥ In ÷ (Ca ${ca} × Cg ${cg} × Ci ${Number(ci) || 1}${cf !== 1 ? ' × 0.725 BS 3036' : ''}) = ÷ ${r2(factor)}.${caNote ? ' ' + caNote : ''}`,
     ring ? `Ring: Iz ≥ 20 A on 2.5 mm² or bigger (433.1.204); volt drop and R1+R2 use the ring\u2019s loop length ÷ ${div === 8 ? '8 (load spread round the ring)' : '4 (load at the far point)'} for volt drop and ÷ 4 for R1+R2.` : null,
+    spreadOn ? 'Load spread evenly along the run: volt drop worked out at half the length (the whole load at the far end would give twice the drop). Use this only when the load really is spread out, like lighting points.' : null,
     `Volt drop at Ib against ${limit}% of ${vref} V from the board. If it\u2019s a sub-board, add the sub-main\u2019s drop.`,
     `Zs = Ze ${ze} Ω + (R1+R2) at 20 °C × ${mult} for a hot cable (${TEMP_MULT.source}).`,
     `Adiabatic (543.1.3): S = √(I²t) ÷ k, k = ${k.k} (${k.label}). I = ${uo} V ÷ Zs at the end of the run.`,
@@ -291,7 +295,7 @@ export function sizeCircuit(o) {
       pick.adi.ok ? `Adiabatic: CPC needs ${pick.adi.smin} mm², ${pick.adi.armour ? 'armour is' : 'it has'} ${pick.adi.area} mm².` : null].filter(Boolean) : [];
     steps.length = 0; steps.push(ibS, ...dev, ...chk, last); }
   const izInfo = pick ? izLine({ size: pick.size, it: pick.cur.it, iz: pick.cur.iz, needIz: pick.cur.needIz, f: { ca, cg, ci: Number(ci) || 1, cf }, ring: ringRule(pick.size), inA }) : null;
-  return { ok: true, izInfo, adj: adj || null, cable, advice, phase: three ? 3 : 1, vref, ib, inA, curve, device: d.id, limit, factors: { ca, cg, ci: Number(ci) || 1, cf, total: r2(factor) }, rows, pick, reasons, steps, notes, max, k, ring };
+  return { ok: true, spread: spreadOn, izInfo, adj: adj || null, cable, advice, phase: three ? 3 : 1, vref, ib, inA, curve, device: d.id, limit, factors: { ca, cg, ci: Number(ci) || 1, cf, total: r2(factor) }, rows, pick, reasons, steps, notes, max, k, ring };
 }
 
 // ---------- v0.19: MPCB and MCCB (adjustable devices) ----------
@@ -320,10 +324,13 @@ export function adjSettings(o, dv) {
   // Schneider NSX TM-D differs (e.g. 160 A fixed Ii 1250 A ≈ 7.8 ×; 200–250 A adjustable 5–10 ×,
   // https://www.se.com/eg/en/faqs/FA174342/). Put in the breaker's own Im.
   const im = Number(o.im) > 0 ? Number(o.im) : 10 * ir;
-  steps.push(`MCCB thermal setting Ir ${ir} A (Ir ≥ Ib ${ib} A), magnetic setting Im ${im} A${Number(o.im) > 0 ? '' : ' (10 × Ir, typical: put in your setting)'}. Max Zs = ${UO} V × ${CMIN} ÷ ${im} A.`);
+  // v0.25: LSIG earth fault setting. When Ig is set, an earth fault trips on Ig (after tg), so Zs is checked against Ig.
+  const ig = Number(o.ig) > 0 ? Number(o.ig) : null; const tg = Number(o.tg) > 0 ? Number(o.tg) : null;
+  steps.push(`MCCB thermal setting Ir ${ir} A (Ir ≥ Ib ${ib} A), magnetic setting Im ${im} A${Number(o.im) > 0 ? '' : ' (10 × Ir, typical: put in your setting)'}. ` + (ig ? `Earth fault setting Ig ${ig} A${tg ? ', tg ' + tg + ' s' : ''}: Zs is checked against Ig, so max Zs = ${UO} V × ${CMIN} ÷ ${ig} A.` : `Max Zs = ${UO} V × ${CMIN} ÷ ${im} A.`));
+  if (ig && tg && tg > Number(o.time || 0.4) + 1e-9) advice.push({ level: 'warn', text: `tg ${tg} s is longer than the ${o.time || 0.4} s disconnection time. Set tg shorter, or check Chapter 41 allows it.` });
   if (sI) advice.push(sI < im ? { level: 'info', text: `Starting current ≈ ${r2(sI)} A, below the ${im} A magnetic setting. ✓` } : { level: 'warn', text: `Starting current ≈ ${r2(sI)} A could reach the ${im} A magnetic setting. Turn Im up (then re-check Zs) or check the maker.` });
   advice.push({ level: 'info', text: 'MCCB settings are what you dial in on the breaker. Check the maker’s trip curve and its tolerance (often ±20% on Im).' });
-  return { ok: true, ib, inA: ir, imag: im, steps, advice, kind: 'mccb', label: `MCCB Ir ${ir} A, Im ${im} A` };
+  return { ok: true, ib, inA: ir, imag: im, ig, tg, zsTrip: ig || null, steps, advice, kind: 'mccb', label: `MCCB Ir ${ir} A, Im ${im} A${ig ? ', Ig ' + ig + ' A' : ''}` };
 }
 function sizeAdj(o, dv) {
   const a = adjSettings(o, dv); if (!a.ok) return a;

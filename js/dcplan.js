@@ -317,7 +317,7 @@ export const SAFETY = [
 // Plain-text version (to share or paste into a quote).
 export function planText(p, title = 'DC system plan') {
   const L = [];
-  L.push(title.toUpperCase(), `${p.V} V ${p.battery.label} system. Made with Sparky.`, '');
+  L.push(title.toUpperCase(), `${p.V} V ${p.battery.label} system. Made with Zs Pro.`, '');
   L.push(`Daily use: ${p.daily.wh} Wh (${p.daily.ah} Ah at ${p.V} V)`, `Battery: ${p.battery.why}`);
   if (p.inverter) L.push(`Inverter: ${p.inverter.w} W, ${p.inverter.current} A DC at full output`);
   if (p.solar) L.push(`Solar: ${p.solar.w} W → MPPT ${p.solar.mpptV} V / ${p.solar.mppt} A`);

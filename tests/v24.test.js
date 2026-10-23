@@ -7,7 +7,7 @@ import { sizeCircuit } from '../js/design.js';
 import { APP_VERSION } from '../js/config.js';
 const sc = (o) => sizeCircuit({ load: '28', unit: 'A', loadType: 'general', length: '20', cable: 'te', method: 'C', ambient: 30, grouped: 1, grouping: 'bunched', ci: 1, ze: 0.35, device: 'mcb', type: 'auto', time: 0.4, phase: 1, ...o });
 const src = (f) => fs.readFileSync(new URL('../js/' + f, import.meta.url), 'utf8');
-test('v0.24 version', () => assert.match(APP_VERSION, /^0\.24\./));
+test('v0.24 version', () => assert.match(APP_VERSION, /^0\.2[4-9]\./));
 test('v0.24 izLine short text; rule + workings in detail', () => {
   const a = izLine({ size: 4, it: 37, iz: 24.05, needIz: 32, f: { ca: 1, cg: 0.65, ci: 1, cf: 1 }, inA: 32 });
   assert.equal(a.pass, false);

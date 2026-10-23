@@ -189,3 +189,20 @@ Open points
 - **PDF**: Connections section after the summary, then the wiring diagram (own page if there isn't room at ≥ 0.33 scale), then the parts list etc. `tests/pdf_overlap.py` → 0.
 - Assumptions shown on the connections (not new sums): the negative battery → shunt → − busbar cable is the main cable size and length; chassis bond 0.5 m; PV cable 4 mm² when the panel figures aren't filled in (as the v0.6 parts list).
 - Cache `sparky-v0.7.0`, APP_VERSION `0.7.0 beta`. `node --test tests/` → 98 pass (94 old + 4 new in tests/v07.test.mjs). Screens: `python3 tests/screens_v07.py [outdir] [after|before] [baseurl]` (`VIEW=1280x800` for Mac width).
+
+## v0.25 (Zs Pro)
+- Renamed to **Zs Pro** (APP_NAME, manifest, title, PDFs). Repo, URL, DB name, `sparky.*`
+  keys, APP_SLUG, DRIVE_ROOT ('Sparky jobs') and the backup format are unchanged.
+  The Android TWA name lives outside the repo (sparky-android/project/twa-manifest.json):
+  not changed; needs an APK rebuild.
+- New navy "Zs / PRO" icon: `python3 make_icons.py` (Inter paths via fontTools, rounded to whole units).
+- Google token renews quietly on a sync-button tap when it has under 10 min left (as Hearth).
+- "Load spread evenly along the run" (radial only): volt drop on half the length.
+- MCCB LSIG: optional Ig/tg on circuits, calculators and presets. Max Zs uses Ig when set
+  (Uo × 0.95 ÷ Ig); adiabatic uses tg. Settings print in the schedule Remarks.
+- Presets: no "used N×", most recent first then name; Im/Ig/tg saved (old keys unchanged);
+  MCCB/MPCB presets never carry RCD fields.
+- Parts used per job (js/parts.js, js/partspdf.js, #/job/<id>/parts): from the EICs (or
+  EICRs if no EIC); spares with no device left out; Share text or PDF (job name + cert no. only).
+- "Setting up a new phone? Restore from Google Drive" on an empty jobs page and in Settings › Sync.
+- 3-phase flex in Check a circuit: H07RN-F, tri-rated, SY/CY. 3183Y has no 3-phase figures: a note says so.

@@ -38,12 +38,14 @@ export const SYMBOLS = [
   ['I²t', 'Let-through energy', 'Fault current squared times time: the energy the cable must survive.', 'Adiabatic check'],
   ['CPC', 'Circuit protective conductor', 'The earth wire of the circuit.', 'Adiabatic check'],
   ['mV/A/m', 'Volt drop per amp per metre', 'From the cable table: used to work out volt drop.', 'Cables'],
-  ['Ir', 'Long-time (thermal) setting', 'MCCB overload setting, often a fraction of In.', 'MCCB / MPCB settings'],
+  ['Ir', 'Long-time (thermal) setting', 'MCCB overload setting, set as 0.4 to 1 × In. For example 0.8 × 250 A = 200 A. Some MCCBs have a dial in amps instead.', 'MCCB / MPCB settings'],
   ['tr', 'Long-time delay', 'How long the MCCB waits on an overload before tripping.', 'MCCB / MPCB settings'],
   ['Isd', 'Short-time pick-up', 'MCCB delayed short-circuit setting, a multiple of Ir.', 'MCCB / MPCB settings'],
   ['tsd', 'Short-time delay', 'Delay before the short-time trip acts, for discrimination.', 'MCCB / MPCB settings'],
   ['Ii', 'Instantaneous trip', 'Current that trips the breaker straight away (same idea as Im).', 'MCCB / MPCB settings'],
   ['Im', 'Magnetic trip current', 'Current that trips it straight away. Max Zs = Uo × 0.95 ÷ Im.', 'MCCB / MPCB settings'],
+  ['Ig', 'Earth fault pick-up setting', 'LSIG MCCBs only: the earth fault current that trips it (the G setting). When it\u2019s set, max Zs = Uo × 0.95 ÷ Ig.', 'MCCB / MPCB settings'],
+  ['tg', 'Earth fault time delay', 'How long an LSIG MCCB waits on an earth fault before tripping, e.g. 0.1 s.', 'MCCB / MPCB settings'],
   ['Icu', 'Ultimate breaking capacity', 'Biggest fault the breaker can clear once (it may need replacing after).', 'MCCB / MPCB settings'],
   ['Ics', 'Service breaking capacity', 'Fault it can clear and still be fit to use, often a % of Icu.', 'MCCB / MPCB settings'],
   ['Icw', 'Short-time withstand current', 'Current it can carry for a set time (e.g. 1 s) without tripping.', 'MCCB / MPCB settings'],
@@ -62,8 +64,8 @@ export const SYMBOLS = [
 export const SYM = Object.fromEntries(SYMBOLS.map(([s, n, d, g]) => [s, { s, name: n, desc: d, group: g }]));
 
 // Words that are also ordinary English only count in a symbol context.
-const SAFE = ['CCC', 'R1+R2', 'mV/A/m', 'PSCC', 'PEFC', 'PFC', 'Ipf', 'IΔn', 'Icu', 'Ics', 'Icw', 'Icn', 'Isd', 'tsd', 'Uimp', 'Cmin', 'Zdb', 'Ib', 'Iz', 'Ze', 'Zs', 'Ca', 'Cg', 'Ci', 'Cc', 'Cf', 'R1', 'R2', 'Rn', 'Uo', 'U0', 'I²t', 'Ir', 'Ii', 'Im', 'AC-1', 'AC-3', 'AC-4', 'AC-15', 'AC-5a', 'AC-5b', 'AC-7a'];
+const SAFE = ['CCC', 'R1+R2', 'mV/A/m', 'PSCC', 'PEFC', 'PFC', 'Ipf', 'IΔn', 'Icu', 'Ics', 'Icw', 'Icn', 'Isd', 'tsd', 'tg', 'Uimp', 'Cmin', 'Zdb', 'Ib', 'Iz', 'Ze', 'Zs', 'Ca', 'Cg', 'Ci', 'Cc', 'Cf', 'R1', 'R2', 'Rn', 'Uo', 'U0', 'I²t', 'Ir', 'Ii', 'Im', 'Ig', 'AC-1', 'AC-3', 'AC-4', 'AC-15', 'AC-5a', 'AC-5b', 'AC-7a'];
 const esc = (x) => x.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&');
 // In / It only in brackets "(In)" or next to a maths sign ("In ≥ Ib").
-export const SYM_RE = new RegExp(`(?<![\\w/+])(${SAFE.map(esc).join('|')})(?![\\w+²])|(?<=\\()(In|It)(?=\\))|(?<=[≥≤×÷=] )(In|It)\\b|\\b(In|It)(?= [≥≤×÷=])`, 'g');
+export const SYM_RE = new RegExp(`(?<![\\w/+])(${SAFE.map(esc).join('|')})(?![\\w+²])(?! Pro\\b)|(?<=\\()(In|It)(?=\\))|(?<=[≥≤×÷=] )(In|It)\\b|\\b(In|It)(?= [≥≤×÷=])`, 'g');
 

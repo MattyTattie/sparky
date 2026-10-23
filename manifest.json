@@ -1,6 +1,6 @@
 {
-  "name": "Sparky (beta)",
-  "short_name": "Sparky",
+  "name": "Zs Pro (beta)",
+  "short_name": "Zs Pro",
   "description": "Electrical certificates on your phone: EIC, Minor Works and EICR to BS 7671:2018+A4:2026. Kept on your phone and in your own Google Drive.",
   "id": "./",
   "start_url": "./index.html#/",

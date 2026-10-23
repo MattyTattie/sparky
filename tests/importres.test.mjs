@@ -18,7 +18,7 @@ test('descriptions: shorthand and partial scan labels match, different ones don\
 });
 test('file checks', () => {
   assert.throws(() => checkResultsFile({ app: 'sparky', format: 1, jobs: [] }), /results file/);
-  assert.throws(() => checkResultsFile({ app: 'other', kind: 'results' }), /Sparky/);
+  assert.throws(() => checkResultsFile({ app: 'other', kind: 'results' }), /Zs Pro|Sparky/);
   assert.throws(() => checkResultsFile({ app: 'sparky', kind: 'results', format: 9, board: { circuits: [] } }), /newer/);
 });
 test('merge: fills blanks, keeps yours, adds missing, removes nothing, photos untouched', () => {

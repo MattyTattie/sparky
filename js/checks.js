@@ -27,6 +27,8 @@ export function limitZs(c, ctx = {}) {
   const own = num(c.maxZsOverride);
   if (own != null) return { value: own, source: 'Entered by you (state source in Remarks)' };
   // v0.20: MPCB / MCCB: max Zs from the magnetic trip setting (optional field c.im, amps).
+  // v0.25: MCCB earth fault setting Ig (LSIG), when put in, is what trips on an earth fault.
+  if ((deviceById(c.device) || {}).adj === 'mccb' && num(c.ig) > 0) return { value: maxZsForTrip(num(c.ig)), source: `Uo × Cmin ÷ earth fault setting Ig ${num(c.ig)} A (maker\u2019s setting)`, byIg: true };
   if ((deviceById(c.device) || {}).adj && num(c.im) > 0) return { value: maxZsForTrip(num(c.im)), source: `Uo × Cmin ÷ magnetic trip ${num(c.im)} A (maker\u2019s setting)` };
   if (ctx.earthing === 'TT' && (c.rcdIdn || (deviceById(c.device) || {}).rcd)) {
     const idn = Number(c.rcdIdn) || 30;
@@ -150,7 +152,7 @@ export function circuitAdiabatic(c, ctx = {}) {
   if (area == null) return null;
   const k = kFor({ cable: pick ? c.cable : t, cpcMode: isArmour ? 'armour' : 'core' });
   const rcd = !!(c.rcdIdn && num(c.rcdIdn)) || !!(deviceById(c.device) || {}).rcd;
-  const r = adiabatic({ zs, device: c.device, type: c.type, rating: In, k: k.k, cpcCsa: area, rcd, rcdS: !!c.rcdS, bka: num(c.bka) || 6, time: c.time || 0.4, imag: (deviceById(c.device) || {}).adj && num(c.im) > 0 ? num(c.im) : null });
+  const r = adiabatic({ zs, device: c.device, type: c.type, rating: In, k: k.k, cpcCsa: area, rcd, rcdS: !!c.rcdS, bka: num(c.bka) || 6, time: c.time || 0.4, imag: (deviceById(c.device) || {}).adj && num(c.im) > 0 ? num(c.im) : null, ig: (deviceById(c.device) || {}).adj === 'mccb' && num(c.ig) > 0 ? num(c.ig) : null, tg: num(c.tg) });
   return { ...r, cpc: area, kLabel: k.label, armourNote };
 }
 

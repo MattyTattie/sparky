@@ -9,7 +9,7 @@ import { GUIDANCE } from './guidance.js';
 import { limitZs, isSpare } from './checks.js';
 import { FIELDS, autoNA } from './templates.js';
 const AUTO_GREY = [170, 170, 170]; // v0.10: automatic N/A on spare ways
-import { STANDARD } from './limits.js';
+import { STANDARD, deviceById } from './limits.js';
 import { noticeFor, withNotices } from './dangermodel.js';
 
 const yes = (v) => v === true || v === 'yes' || v === '✓';
@@ -319,6 +319,16 @@ function testResultsPage(k, cert, b, certNo, rows, part = 1, parts = 1) {
   k.y += 7;
   ['¶ Not all SPDs have visible functionality indication.', '# An \u2018X\u2019, denoting incorrect polarity, cannot be entered on to this schedule when issued with an Electrical Installation Certificate.', '** RCD effectiveness is verified using an alternating current test at rated residual operating current (IΔn).', '‡‡ Where this schedule forms part of an Electrical Installation Certificate, insulation resistance testing should be performed at the test voltage stated in Table 64.', '†† Not all AFDDs have a test button.'].forEach((t) => { k.t(t, k.x0, k.y + 2, { size: 5.8 }); k.y += 2.5; });
 }
+// v0.25: adjustable breakers: the settings go in the circuit's Remarks (col 31), e.g. "MCCB Ir 200 A, Im 2000 A".
+// That's also where the form asks for the source of a max Zs that isn't from the Chapter 41 tables.
+export function adjRemark(c) {
+  const d = deviceById(c && c.device); if (!d || !d.adj || isSpare(c)) return '';
+  const n = (v) => String(v ?? '').trim(); const ok = (v) => n(v) && !/^n\/?a$/i.test(n(v));
+  const parts = [ok(c.rating) ? `${d.adj === 'mpcb' ? 'set' : 'Ir'} ${n(c.rating)} A` : '', ok(c.im) ? `Im ${n(c.im)} A` : '',
+    d.adj === 'mccb' && ok(c.ig) ? `Ig ${n(c.ig)} A` : '', d.adj === 'mccb' && ok(c.ig) && ok(c.tg) ? `tg ${n(c.tg)} s` : ''].filter(Boolean);
+  if (!ok(c.im) && !(d.adj === 'mccb' && ok(c.ig))) return '';
+  return `${d.adj === 'mpcb' ? 'MPCB' : 'MCCB'} ${parts.join(', ')}`;
+}
 export function scheduleRows(cert, b, flags = false) {
   const ctx = { earthing: cert.supply && cert.supply.earthing, zdb: b.zdb };
   return b.circuits.map((c) => {
@@ -328,6 +338,7 @@ export function scheduleRows(cert, b, flags = false) {
     // v0.10: spare way: empty boxes print an automatic N/A in light grey (typed values as typed).
     // v0.18.4: also the ring boxes (r1, rn, r2) of a circuit that isn't a ring final.
     for (const f of FIELDS) if (autoNA(c, f.k)) r[f.k] = { v: 'N/A', auto: true };
+    { const ar = adjRemark(c); if (ar && !String(c.remarks || '').includes(ar)) r.remarks = [String(c.remarks || '').trim().replace(/\.$/, ''), ar].filter(Boolean).join('. '); }
     if (r.type === 'adj') r.type = ''; // v0.20: MPCB/MCCB 'adj' is an app code, not a form Type
     if (flags && !spare) {
       const zs = parseFloat(c.zs);

@@ -32,7 +32,7 @@ export function page(title, content, { back = null, sub = '', actions = [], wide
   const main = h('main', { class: (wide ? 'wide ' : '') + (tab ? 'hasnav' : '') }, content);
   fill(app, 
     h('header', { class: 'top' },
-      back ? h('button', { class: 'iconbtn', 'aria-label': 'Back', onclick: () => go(back) }, icon('arrowLeft', { size: 22 })) : h('span', { class: 'brandmark', 'aria-hidden': 'true' }, icon('zap', { size: 20 })),
+      back ? h('button', { class: 'iconbtn', 'aria-label': 'Back', onclick: () => go(back) }, icon('arrowLeft', { size: 22 })) : h('span', { class: 'brandmark', 'aria-hidden': 'true' }, h('img', { src: 'icons/icon.svg', alt: '', width: 36, height: 36 })),
       h('h1', {}, title, title === APP_NAME ? h('span', { class: 'beta' }, 'BETA') : null, sub ? h('span', { class: 'sub' }, sub) : null),
       syncChip(), actions),
     main,
@@ -100,6 +100,7 @@ route(/^\/$/, async () => {
   draw();
   const profile = await getProfile();
   page(APP_NAME, [
+    !jobs.length ? h('a', { class: 'notice info newphone-link', href: '#/settings', onclick: () => { try { sessionStorage.setItem('sparky.goRestore', '1'); } catch {} } }, h('b', {}, 'Setting up a new phone?'), ' Restore from Google\u00a0Drive\u00a0›') : null,
     !profile.name ? h('a', { class: 'notice info', href: '#/settings', style: 'display:block;text-decoration:none' }, 'First, add your details, logo and test instruments in Settings. They fill in every certificate for you.') : null,
     warns.map((w) => h('a', { class: 'notice ' + w.level, href: '#/settings', style: 'display:block;text-decoration:none' }, w.text)),
     jobs.length ? statsStrip(jobs, certs) : null,
@@ -189,7 +190,7 @@ route(/^\/newjob(?:\/(.+))?$/, async (custId) => {
 
 const fmtDateTime = (iso) => { const d = new Date(iso); return isNaN(d) ? '' : d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) + ', ' + d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }); };
 // ---------- Job page ----------
-route(/^\/job\/([^/]+)(?:\/(photos|details|next|pdfs|backup|dc))?$/, async (id, sub) => {
+route(/^\/job\/([^/]+)(?:\/(photos|details|next|pdfs|backup|dc|parts))?$/, async (id, sub) => {
   const job = await db.get('jobs', id); if (!job) return go('#/');
   const cust = job.customerId ? await db.get('customers', job.customerId) : null;
   const certs = (await db.byJob('certs', id)).sort((a, b) => (a.createdAt || '').localeCompare(b.createdAt || ''));
@@ -250,6 +251,26 @@ route(/^\/job\/([^/]+)(?:\/(photos|details|next|pdfs|backup|dc))?$/, async (id, 
   if (sub === 'backup') return page('Backup', [h('div', { class: 'card' },
       h('p', { class: 'note' }, job.backedUpAt ? `In Google Drive (folder “${backup.jobFolderName(job, cust)}”), last saved ${new Date(job.backedUpAt).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' })}${(job.version || 0) > (job.backedUpVersion || 0) ? ' — changed since.' : '.'}` : 'Saved on this device. Not in Google Drive yet.'),
       h('div', { class: 'btns full' }, G.isConfigured() ? h('button', { class: 'btn', onclick: (e) => doBackup(e.currentTarget) }, 'Back up to Drive') : null, h('button', { class: 'btn', onclick: copyJob }, 'Copy job')))], { back, sub: job.title });
+  if (sub === 'parts') { // v0.25: parts used, from the schedules
+    const { partsForJob, partsText } = await import('./parts.js');
+    const res = partsForJob(certs); const name = job.title || 'Job';
+    const ref = res.from.length ? `${name} (${res.from.join(', ')})` : name;
+    const text = partsText(res, ref);
+    const share = async () => {
+      if (navigator.share) { try { await navigator.share({ title: 'Parts used: ' + name, text }); return; } catch (e) { if (e && e.name === 'AbortError') return; } }
+      try { await navigator.clipboard.writeText(text); toast('Copied: paste it into a message or note'); } catch { toast('Couldn\u2019t share or copy on this device'); }
+    };
+    const pdf = async (btn) => { btn.disabled = true; try { const { partsPdf } = await import('./partspdf.js'); const blob = await partsPdf(res, { title: ref, profile: await getProfile() }); await shareOrDownload(blob, `parts-${(name).replace(/[^\w-]+/g, '-').replace(/^-|-$/g, '').slice(0, 40) || 'job'}.pdf`); } catch (e) { toast(e.message || 'PDF failed'); } finally { btn.disabled = false; } };
+    const qrow = (it) => h('div', { class: 'partrow' }, h('span', { class: 'pq' }, it.qty + ' \u00d7'), h('div', { class: 'pn' }, h('div', {}, it.name), it.circuits && it.circuits.length ? h('div', { class: 's' }, (it.rcd ? 'Covers circuits ' : 'Circuits ') + it.circuits.join(', ')) : null));
+    return page('Parts used', [
+      !res.boards.length ? emptyState('clipboard', 'No boards yet. Fill in a schedule on a certificate and the parts show here.') : [
+        h('p', { class: 'note' }, `From the schedules on ${res.from.join(', ')}. Spare ways with no device fitted are left out.`),
+        res.boards.map((b) => h('div', { class: 'card parts' }, h('h2', {}, b.ref + (b.location ? ' \u00b7 ' + b.location : '')), h('div', { class: 'note' }, `${b.ways} way(s)${b.spares ? `, ${b.spares} spare` : ''}${res.from.length > 1 ? ' \u00b7 ' + b.cert : ''}`),
+          b.items.length ? h('div', { class: 'plist' }, b.items.map(qrow)) : h('p', { class: 'note' }, 'No devices filled in on this board.'))),
+        res.boards.length > 1 ? h('div', { class: 'card parts' }, h('h2', {}, 'Total for the job'), h('div', { class: 'plist' }, res.totals.map(qrow))) : null,
+        h('div', { class: 'btns full' }, h('button', { class: 'btn primary', onclick: share }, withIcon('share', 'Share')), h('button', { class: 'btn', onclick: (e) => pdf(e.currentTarget) }, withIcon('fileText', 'PDF')))],
+    ], { back, sub: job.title });
+  }
   if (sub === 'dc') return page('DC system plans', [dcPlansCard(job, save, render) || emptyState('zap', 'No DC system plans on this job.')], { back, sub: job.title });
 
   const ns = nextStep(certs);
@@ -279,6 +300,7 @@ route(/^\/job\/([^/]+)(?:\/(photos|details|next|pdfs|backup|dc))?$/, async (id, 
       frow(back + '/details', 'Job details & notes', cust ? cust.name : '', 'clipboard'),
       frow(back + '/next', 'Next inspection', nx ? new Date(nx.date).toLocaleDateString('en-GB', { month: 'short', year: 'numeric' }) : 'Not set', 'calendar'),
       frow(back + '/pdfs', 'Saved PDFs', String(pdfs.length), 'fileText'),
+      certs.some((c) => (c.boards || []).some((b) => (b.circuits || []).length)) ? frow(back + '/parts', 'Parts used', '', 'clipboard') : null,
       job.dcPlans && job.dcPlans.length ? frow(back + '/dc', 'DC system plans', String(job.dcPlans.length), 'zap') : null,
       frow(back + '/backup', 'Backup', job.backedUpAt ? (backedState[0] === 'Backed up' ? 'In Drive' : 'Changed') : 'This device', 'cloudUp')),
     h('h2', { class: 'sec' }, 'More'),
@@ -376,7 +398,14 @@ route(/^\/settings$/, async () => {
     const who = G.accountHint(); const signed = G.hasToken() || who;
     const toggle = h('label', { class: 'switchrow' }, h('span', {}, h('b', {}, 'Sync'), h('span', { class: 'note' }, c.enabled ? ' On' : ' Off')),
       h('input', { type: 'checkbox', role: 'switch', class: 'switch', checked: !!c.enabled, onchange: async (e) => { const on = e.target.checked; e.target.disabled = true; if (on) { try { await sync.connect(); } catch (err) { say('Couldn\u2019t switch sync on. ' + (err.message || err), 'red'); } } else await sync.disconnect(); drawSync(); } }));
+    const nJobs = (await db.all('jobs')).length;
+    // v0.25: a plain route for a new phone (uses the same restore as "More › Restore from Drive").
+    const newPhone = !c.enabled || !nJobs ? h('div', { class: 'newphone', id: 'newphone' },
+      h('div', { class: 'np-ic' }, icon('cloudDown', { size: 22 })),
+      h('div', { class: 'np-t' }, h('b', {}, 'Setting up a new phone?'), h('div', { class: 'note' }, 'Bring your jobs, photos and certificates back from your Google Drive. Nothing in your Drive is changed.'),
+        h('button', { class: 'btn primary', id: 'restore-new', onclick: restoreFromDrive }, 'Restore from Google Drive'))) : null;
     fill(syncBox,
+      newPhone,
       h('p', { class: 'note' }, 'Your jobs, photos and PDFs are kept in your Google Drive (\u201c' + DRIVE_ROOT + '\u201d) and kept the same on all your devices. Changes go up within about 20 seconds; another device picks them up when you open it. If a job is changed on two devices before they catch up, the newest is kept and the other is saved as a \u201cconflict copy\u201d. The app can only see files it made itself.'),
       toggle,
       h('div', { class: 'syncline' }, c.enabled ? h('span', { class: 'syncchip ' + col }, h('i', {}), h('span', {}, t)) : h('span', { class: 'syncchip' }, h('i', {}), h('span', {}, 'Sync off')),
@@ -466,10 +495,12 @@ route(/^\/settings$/, async () => {
         h('button', { class: 'btn', onclick: async () => { const [f] = await pickFile({ accept: '.json,application/json' }); if (!f) return; try { const n = await backup.importAll(await f.text()); toast(`Restored ${n} item(s)`); } catch (e) { toast(e.message); } } }, 'Restore from file'),
         h('button', { class: 'btn', onclick: async () => (await import('./importextra.js')).startExtra() }, 'Import extra details'),
         h('button', { class: 'btn', onclick: pickResultsCert }, 'Import results file')),
-      h('p', { class: 'note', style: 'margin-top:8px' }, 'Import extra details: adds certificates\u2019 boards, circuits and sources from a Sparky job.json or backup. Import results file: fills test results on one certificate you choose.')),
+      h('p', { class: 'note', style: 'margin-top:8px' }, 'Import extra details: adds certificates\u2019 boards, circuits and sources from a Zs Pro (Sparky) job.json or backup. Import results file: fills test results on one certificate you choose.')),
     h('div', { class: 'notice amber' }, CHECK_NOTE),
     h('p', { class: 'note' }, `${APP_NAME} ${APP_VERSION}. Forms follow the IET model forms for BS 7671:2018+A4:2026. Not affiliated with the IET.`),
   ], { back: '#/' });
+  // v0.25: from "Setting up a new phone?" on the jobs page: straight to the restore box.
+  try { if (sessionStorage.getItem('sparky.goRestore')) { sessionStorage.removeItem('sparky.goRestore'); setTimeout(() => { const el = document.getElementById('newphone') || document.getElementById('drive'); if (el) { el.scrollIntoView({ block: 'center' }); el.classList.add('flash'); } }, 350); } } catch {}
 });
 
 // v0.11: device presets — rename / delete.
@@ -480,13 +511,14 @@ route(/^\/settings\/presets$/, async () => {
   const draw = () => {
     const list = presets.shown(all);
     fill(box, list.length ? h('div', { class: 'card' }, list.map((p) => h('div', { class: 'prow' },
-      h('input', { value: p.name, 'aria-label': 'Preset name', onchange: async (e) => { p.name = e.target.value.trim() || presets.nameFor(p.fields); p.updatedAt = new Date().toISOString(); await saveAll(); toast('Renamed'); } }),
-      h('div', { class: 'note' }, `${[p.fields.bs && 'BS EN ' + p.fields.bs, (p.fields.type || '') + p.fields.rating + ' A', p.fields.bka && p.fields.bka + ' kA', p.fields.rcdIdn && `RCD ${p.fields.rcdType || ''} ${p.fields.rcdIdn} mA${p.fields.rcdRating ? ' ' + p.fields.rcdRating + ' A' : ''}`].filter(Boolean).join(' · ')} · used ${p.uses || 0}\u00d7`),
+      h('textarea', { class: 'pname', rows: 1, value: p.name, 'aria-label': 'Preset name', oninput: (e) => { e.target.style.height = 'auto'; e.target.style.height = e.target.scrollHeight + 'px'; }, onkeydown: (e) => { if (e.key === 'Enter') { e.preventDefault(); e.target.blur(); } }, onchange: async (e) => { p.name = e.target.value.trim() || presets.nameFor(p.fields); p.updatedAt = new Date().toISOString(); await saveAll(); toast('Renamed'); } }),
+      h('div', { class: 'note' }, `${[p.fields.bs && 'BS EN ' + p.fields.bs, (/^[BCD123]$/.test(p.fields.type || '') ? p.fields.type : '') + p.fields.rating + ' A', p.fields.im && 'Im ' + p.fields.im + ' A', p.fields.ig && 'Ig ' + p.fields.ig + ' A' + (p.fields.tg ? ', tg ' + p.fields.tg + ' s' : ''), p.fields.bka && p.fields.bka + ' kA', p.fields.rcdIdn && `RCD ${p.fields.rcdType || ''} ${p.fields.rcdIdn} mA${p.fields.rcdRating ? ' ' + p.fields.rcdRating + ' A' : ''}`].filter(Boolean).join(' · ')}`),
       h('button', { class: 'btn small warn', onclick: async () => { if (!(await confirmBox('Delete preset?', p.name, 'Delete', 'warn'))) return; p.deleted = true; p.updatedAt = new Date().toISOString(); await saveAll(); draw(); } }, 'Delete'))))
       : h('div', { class: 'empty' }, 'No presets yet. Fill in a protective device on a circuit and it\u2019s remembered here.'));
+    for (const ms of [0, 400]) setTimeout(() => box.querySelectorAll('textarea.pname').forEach((t) => { t.style.height = 'auto'; t.style.height = t.scrollHeight + 'px'; }), ms);
   };
   draw();
-  page('Device presets', [h('p', { class: 'note' }, 'Most used first. Tapping one on a circuit fills only the protective device boxes (BS EN, type, rating, kA and RCD); cable sizes and readings are never touched. Saved on this device and in your backup; synced with your jobs.'), box], { back: '#/settings' });
+  page('Device presets', [h('p', { class: 'note' }, 'Most recently used first. Tapping one on a circuit fills only the protective device boxes (BS EN, type, rating, kA, RCD, and the MCCB settings); cable sizes and readings are never touched. Saved on this device and in your backup; synced with your jobs.'), box], { back: '#/settings' });
 });
 
 // Auto-backup when leaving a job or certificate (only if switched on and signed in).

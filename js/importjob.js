@@ -27,7 +27,7 @@ const same = (a, b) => norm(a) === norm(b);
 // Accepts: a job.json ({app, job, certs}), a whole backup ({app, jobs, certs}), {cert} or a bare certificate.
 export function readImportFile(d) {
   if (typeof d === 'string') d = JSON.parse(d);
-  if (!d || typeof d !== 'object') throw new Error('That file isn\u2019t a Sparky file.');
+  if (!d || typeof d !== 'object') throw new Error('That file isn\u2019t a Zs Pro file.');
   let certs = null;
   if (Array.isArray(d.certs)) certs = d.certs;
   else if (isObj(d.cert)) certs = [d.cert];

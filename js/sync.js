@@ -44,9 +44,33 @@ export async function init() {
     document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') schedule(1500); else if (timer && pendingPush) syncNow(); });
     addEventListener('focus', () => schedule(1500));
     db.onPut.add(noteChange);
+    // v0.25 (as Hearth): quiet Google token refresh on your next tap.
+    document.addEventListener('click', refreshOnTap, true);
   }
   schedule(800);
   if (navigator.onLine) G.warmUp();
+}
+// v0.25: Google only gives about an hour's access at a time. When the token
+// has run out (or will within 10 minutes) and we know your account, the next
+// ordinary tap fetches a new one quietly, then sync carries on. If that
+// doesn't work, the usual gentle "Sign in to Google" prompt stays.
+export const REFRESH_EARLY = 10 * 60_000;
+const SYNC_BUTTONS = '#syncchip, #sync-signin, #sync-now, #sync-connect';
+let lastTapRefresh = 0;
+export function wantsQuietRefresh({ online = true, tokenLeft = 0, hint = '', enabled = false, configured = true, sinceLast = Infinity } = {}) {
+  return Boolean(online && enabled && configured && hint && tokenLeft <= REFRESH_EARLY && sinceLast >= 2 * 60_000);
+}
+async function refreshOnTap(ev) {
+  if (ev.target && ev.target.closest && ev.target.closest(SYNC_BUTTONS)) return;
+  if (G.tokenLeft() > REFRESH_EARLY) return;
+  const c = await getConfig().catch(() => ({}));
+  const hint = G.accountHint() || (c.account && c.account.email) || '';
+  if (!wantsQuietRefresh({ online: navigator.onLine, tokenLeft: G.tokenLeft(), hint, enabled: c.enabled, configured: G.isConfigured(), sinceLast: Date.now() - lastTapRefresh })) return;
+  lastTapRefresh = Date.now();
+  try {
+    await G.refreshSilently(hint);
+    if (status.state === 'signin' || status.state === 'error') { setStatus({ state: 'syncing', message: '' }); schedule(300); }
+  } catch (err) { console.info('sync: quiet sign-in did not work', err && err.message); }
 }
 let pendingPush = false;
 // Any saved job / certificate / photo: send it up after a pause.

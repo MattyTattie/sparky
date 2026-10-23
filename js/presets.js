@@ -12,9 +12,24 @@ import * as db from './db.js';
 import { deviceById, deviceFromBs } from './limits.js';
 import { isSpareCircuit as isSpare } from './templates.js';
 
-export const PRESET_KEYS = ['device', 'bs', 'type', 'rating', 'bka', 'rcdBs', 'rcdType', 'rcdIdn', 'rcdRating', 'rcdS'];
+export const BASE_KEYS = ['device', 'bs', 'type', 'rating', 'bka', 'rcdBs', 'rcdType', 'rcdIdn', 'rcdRating', 'rcdS'];
+// v0.25: MCCB/MPCB settings (Im, and Ig/tg on LSIG MCCBs) added at the end. Additive only:
+// a preset without them has the same key as before, so old and new presets still merge.
+export const EXTRA_KEYS = ['im', 'ig', 'tg'];
+export const PRESET_KEYS = [...BASE_KEYS, ...EXTRA_KEYS];
+export const RCD_KEYS = ['rcdBs', 'rcdType', 'rcdIdn', 'rcdRating', 'rcdS'];
+// v0.25: MCCBs/MPCBs have no RCD of their own: their presets never keep RCD boxes
+// (before v0.25 a board's RCD details could leak into an MCCB preset).
+const isAdj = (f) => !!(deviceById(f && f.device) || {}).adj;
+export function clean(f = {}) {
+  const out = { ...f };
+  if (isAdj(out)) { for (const k of RCD_KEYS) if (k in out) out[k] = k === 'rcdS' ? false : ''; }
+  else for (const k of EXTRA_KEYS) if (k in out) out[k] = '';
+  if ((deviceById(out.device) || {}).adj !== 'mccb') { if ('ig' in out) out.ig = ''; if ('tg' in out) out.tg = ''; }
+  return out;
+}
 const val = (v) => (v == null ? '' : typeof v === 'boolean' ? v : String(v).trim());
-const real = (v) => v !== '' && v !== false && !/^n\/?a$/i.test(String(v));
+const real = (v) => v != null && v !== '' && v !== false && !/^n\/?a$/i.test(String(v));
 
 // The device boxes of a circuit, or null if there isn't enough to be worth keeping
 // (needs a rating and a BS number or device; N/A boxes don't count).
@@ -23,35 +38,44 @@ export function presetFrom(c) {
   const f = {}; for (const k of PRESET_KEYS) f[k] = val(c[k]);
   if (!real(f.rating) || !(real(f.bs) || f.device)) return null;
   for (const k of PRESET_KEYS) if (typeof f[k] === 'string' && /^n\/?a$/i.test(f[k])) f[k] = '';
-  return f;
+  return clean(f);
 }
-export const keyOf = (f) => PRESET_KEYS.map((k) => (k === 'rcdS' ? (f[k] ? 'S' : '') : String(f[k] ?? '').toUpperCase())).join('|');
+export const keyOf = (f0) => { const f = clean(f0 || {});
+  const base = BASE_KEYS.map((k) => (k === 'rcdS' ? (f[k] ? 'S' : '') : String(f[k] ?? '').toUpperCase())).join('|');
+  const extra = EXTRA_KEYS.map((k) => String(f[k] ?? '').trim());
+  return extra.some(Boolean) ? base + '|' + extra.join('|') : base; };
 // e.g. "B32 RCBO · 30 mA Type A · 6 kA"
 export function nameFor(f) {
   const d = deviceById(f.device); const kind = d ? d.label.split(' (')[0] : f.bs ? 'BS EN ' + f.bs : 'Device';
   const rcd = real(f.rcdIdn) ? `${f.rcdIdn} mA${real(f.rcdType) ? ' Type ' + f.rcdType : ''}${f.rcdS ? ' S' : ''}` : '';
   const tp = /^[BCD123]$/.test(String(f.type || '')) ? f.type : ''; // v0.20: no 'adj32 MCCB' / 'plug13'
-  return [tp ? `${tp}${f.rating} ${kind}` : `${f.rating} A ${kind}`, rcd, real(f.bka) ? f.bka + ' kA' : ''].filter(Boolean).join(' · ');
+  const adj = d && d.adj ? [real(f.im) ? `Im ${f.im} A` : '', real(f.ig) ? `Ig ${f.ig} A${real(f.tg) ? ', tg ' + f.tg + ' s' : ''}` : ''].filter(Boolean).join(', ') : '';
+  return [tp ? `${tp}${f.rating} ${kind}` : `${f.rating} A ${kind}`, d && d.adj ? '' : rcd, adj, real(f.bka) ? f.bka + ' kA' : ''].filter(Boolean).join(' · ');
 }
 // Fill a circuit's device boxes from a preset. Returns the keys changed.
 export function applyPreset(c, p) {
   const out = [];
-  for (const k of PRESET_KEYS) { const v = k === 'rcdS' ? !!p.fields[k] : p.fields[k] ?? ''; if ((c[k] ?? (k === 'rcdS' ? false : '')) !== v) { c[k] = v; out.push(k); } }
+  const f = clean(p.fields || {}); const adj = isAdj(f);
+  for (const k of PRESET_KEYS) {
+    if (adj && RCD_KEYS.includes(k)) continue; // v0.25: an MCCB preset leaves the RCD boxes alone
+    if (EXTRA_KEYS.includes(k) && !(k in f)) continue; // older presets: don't blank Im/Ig/tg
+    const v = k === 'rcdS' ? !!f[k] : f[k] ?? ''; if ((c[k] ?? (k === 'rcdS' ? false : '')) !== v) { c[k] = v; out.push(k); } }
   return out;
 }
 // Which device boxes would change (and already hold something) — for "are you sure".
 export function wouldOverwrite(c, fields) {
   return Object.keys(fields).filter((k) => { const cur = c[k]; const nv = fields[k]; const has = typeof cur === 'boolean' ? cur : String(cur ?? '').trim() !== ''; return has && String(cur) !== String(nv); });
 }
-export const shown = (list) => (list || []).filter((p) => !p.deleted).sort((a, b) => (b.uses || 0) - (a.uses || 0) || String(b.usedAt || '').localeCompare(String(a.usedAt || '')) || a.name.localeCompare(b.name));
+// v0.25: most recently used first, then by name (the "used N×" count isn't shown any more).
+export const shown = (list) => (list || []).filter((p) => !p.deleted).sort((a, b) => String(b.usedAt || '').localeCompare(String(a.usedAt || '')) || String(a.name || '').localeCompare(String(b.name || '')));
 // Two lists → one: same combination = one preset; newest edit wins (name, deleted), uses = the higher.
 export function mergePresets(a = [], b = []) {
   const m = new Map();
   for (const p of [...a, ...b]) {
     const k = keyOf(p.fields || {}); const cur = m.get(k);
-    if (!cur) { m.set(k, { ...p }); continue; }
+    if (!cur) { m.set(k, { ...p, fields: clean(p.fields || {}) }); continue; }
     const newer = String(p.updatedAt || '') > String(cur.updatedAt || '') ? p : cur;
-    m.set(k, { ...newer, id: cur.id, uses: Math.max(cur.uses || 0, p.uses || 0), usedAt: [cur.usedAt, p.usedAt].filter(Boolean).sort().pop() || null });
+    m.set(k, { ...newer, fields: clean(newer.fields || {}), id: cur.id, uses: Math.max(cur.uses || 0, p.uses || 0), usedAt: [cur.usedAt, p.usedAt].filter(Boolean).sort().pop() || null });
   }
   return [...m.values()];
 }
@@ -66,7 +90,7 @@ export function remember(list, c, { now = new Date().toISOString(), newId = () =
 
 // ---------- stored on this device ----------
 export const KEY = 'devicePresets';
-export const load = async () => ((await db.getMeta(KEY)) || { list: [] }).list || [];
+export const load = async () => (((await db.getMeta(KEY)) || { list: [] }).list || []).map((p) => (p && p.fields ? { ...p, fields: clean(p.fields), name: p.fields && isAdj(p.fields) && /mA/.test(p.name || '') ? nameFor(clean(p.fields)) : p.name } : p));
 export const save = (list) => db.setMeta(KEY, { list, updatedAt: new Date().toISOString() });
 export async function mergeIn(list) { if (!Array.isArray(list) || !list.length) return; await save(mergePresets(await load(), list)); }
 export async function used(id) { const l = await load(); const p = l.find((x) => x.id === id); if (p) { p.uses = (p.uses || 0) + 1; p.usedAt = new Date().toISOString(); await save(l); } }

@@ -72,7 +72,7 @@ route(/^\/calc\/dc\/plan(?:\/(\w+))?$/, async (stepArg) => {
         F.num('days', 'Days with no charging', { unit: 'days', hint: 'How long it has to last with no sun, no driving and no hook-up.' }),
         more('dc-sys', [
           F.num('dod', 'Usable part of the battery (depth of discharge)', { unit: '%', ph: String(Math.round((CHEMS[v.chem] || CHEMS.lifepo4).dod * 100)), hint: `Blank = ${Math.round((CHEMS[v.chem] || CHEMS.lifepo4).dod * 100)}% for ${(CHEMS[v.chem] || CHEMS.lifepo4).label}.` }),
-          F.num('bmsA', 'Battery BMS max continuous current', { unit: 'A', ph: 'data sheet', hint: 'BMS = the battery\u2019s own protection board. Optional: lets Sparky check it can feed everything at once.' })],
+          F.num('bmsA', 'Battery BMS max continuous current', { unit: 'A', ph: 'data sheet', hint: 'BMS = the battery\u2019s own protection board. Optional: lets Zs Pro check it can feed everything at once.' })],
           `${v.dod || Math.round((CHEMS[v.chem] || CHEMS.lifepo4).dod * 100)}% usable${v.bmsA ? `, BMS ${v.bmsA} A` : ''}`)], { step: 1 }),
       h('div', { class: 'btns full' }, h('button', { class: 'btn', onclick: () => { Object.assign(v, clone(VAN_EXAMPLE)); delete v._off; delete v._have; save(); toast('Camper van example loaded'); } }, 'Load camper van example'),
         h('button', { class: 'btn', onclick: () => { Object.keys(v).forEach((k) => delete v[k]); Object.assign(v, clone(PLAN_DEFAULTS)); v.loads = []; save(); } }, 'Start again'))],

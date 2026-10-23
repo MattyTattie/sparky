@@ -12,8 +12,8 @@ export function pickFor(cable, cpcMode = 'core') {
   return m[cable] || '';
 }
 // The fields "Use on a circuit" may change. Everything else on the circuit is left alone.
-export const USE_FIELDS = ['cable', 'cableSize', 'live', 'cpc', 'wiring', 'device', 'bs', 'type', 'rating', 'im'];
-export const FIELD_NAMES = { cable: 'Cable type', cableSize: 'Cable size', live: 'Live mm² (col 7)', cpc: 'CPC mm² (col 8)', wiring: 'Type of wiring (col 3)', device: 'Protective device', bs: 'BS (EN) (col 8)', type: 'Type / curve (col 9)', rating: 'Rating A (col 10)', im: 'Magnetic trip Im (A)' };
+export const USE_FIELDS = ['cable', 'cableSize', 'live', 'cpc', 'wiring', 'device', 'bs', 'type', 'rating', 'im', 'ig', 'tg'];
+export const FIELD_NAMES = { cable: 'Cable type', cableSize: 'Cable size', live: 'Live mm² (col 7)', cpc: 'CPC mm² (col 8)', wiring: 'Type of wiring (col 3)', device: 'Protective device', bs: 'BS (EN) (col 8)', type: 'Type / curve (col 9)', rating: 'Rating A (col 10)', im: 'Magnetic trip Im (A)', ig: 'Earth fault setting Ig (A)', tg: 'Earth fault time tg (s)' };
 // res = { cable, size, cpc, device, curve, rating, cpcMode } from the calculator answer.
 export function newValues(res, circuit = {}) {
   const key = pickFor(res.cable, res.cpcMode); const p = CABLE_PICKS[key];
@@ -29,6 +29,7 @@ export function newValues(res, circuit = {}) {
   const d = deviceById(res.device);
   if (d) Object.assign(out, { device: d.id, bs: d.bs, type: d.adj ? '' : String(res.curve || ''), rating: String(res.rating) });
   if (d && d.adj && Number(res.im) > 0) out.im = String(res.im); // v0.20: MPCB/MCCB magnetic trip
+  if (d && d.adj === 'mccb' && Number(res.ig) > 0) { out.ig = String(res.ig); if (Number(res.tg) > 0) out.tg = String(res.tg); } // v0.25
   return out;
 }
 // What would change: [{ k, name, from, to }] (only boxes whose value actually changes).

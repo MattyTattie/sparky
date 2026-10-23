@@ -6,7 +6,7 @@ import { connections, wiringModel } from './dcwire.js';
 
 export async function dcPlanPdf(p, { title = 'DC system plan', profile = {}, base, inputs = {} } = {}) {
   const { jsPDF } = await loadJsPDF(base);
-  const k = new Kit(jsPDF, { orientation: 'p', footer: 'DC system plan made with Sparky. A guide only: follow the makers\u2019 instructions.' });
+  const k = new Kit(jsPDF, { orientation: 'p', footer: 'DC system plan made with Zs Pro. A guide only: follow the makers\u2019 instructions.' });
   const room = (h) => { if (k.y + h > k.H - k.M - 10) { k.addPage(); } };
   const para = (text, { size = 8, bold = false, color = INK, indent = 0 } = {}) => {
     const ls = k.wrap(text, k.cw - indent, size, bold); const step = k.lh(size);

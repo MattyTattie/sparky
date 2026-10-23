@@ -52,7 +52,7 @@ export function compareDesc(a, b) {
 
 export function checkResultsFile(d) {
   if (!d || typeof d !== 'object') throw new Error('That file isn\u2019t a results file.');
-  if (d.app !== 'sparky' || d.kind !== RESULTS_KIND) throw new Error('That isn\u2019t a Sparky results file. (A whole backup file goes in Settings → Restore from file.)');
+  if (d.app !== 'sparky' || d.kind !== RESULTS_KIND) throw new Error('That isn\u2019t a Zs Pro results file. (A whole backup file goes in Settings → Restore from file.)');
   if (Number(d.format) > 1) throw new Error('This results file is from a newer version of the app. Update the app first.');
   if (!d.board || !Array.isArray(d.board.circuits)) throw new Error('The results file has no circuits.');
   return d;

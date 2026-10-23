@@ -55,7 +55,7 @@ const fold = (line) => { const out = []; let s = line; while (s.length > 74) { o
 export function icsFor({ uid, date, title, location = '', notes = '', now = new Date() }) {
   const d = date.replace(/-/g, ''); const next = new Date(date + 'T12:00:00Z'); next.setUTCDate(next.getUTCDate() + 1);
   const stamp = now.toISOString().replace(/[-:]/g, '').replace(/\.\d+Z$/, 'Z');
-  return ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Sparky//Inspection reminder//EN', 'CALSCALE:GREGORIAN', 'BEGIN:VEVENT',
+  return ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Zs Pro//Inspection reminder//EN', 'CALSCALE:GREGORIAN', 'BEGIN:VEVENT',
     `UID:${uid}@sparky`, `DTSTAMP:${stamp}`, `DTSTART;VALUE=DATE:${d}`, `DTEND;VALUE=DATE:${iso(next).replace(/-/g, '')}`,
     `SUMMARY:${esc(title)}`, location ? `LOCATION:${esc(location)}` : null, notes ? `DESCRIPTION:${esc(notes)}` : null,
     'BEGIN:VALARM', 'ACTION:DISPLAY', `DESCRIPTION:${esc(title)}`, 'TRIGGER:-P30D', 'END:VALARM', 'END:VEVENT', 'END:VCALENDAR']
