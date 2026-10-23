@@ -74,6 +74,7 @@ route(/^\/calc\/check$/, async () => {
         more('chk-dev', [F.seg('time', 'Disconnection time', [[0.4, '0.4 s'], [5, '5 s']], '0.4 s for final circuits up to 63 A; 5 s for distribution circuits and over 63 A.', 'small')], `${v.time} s`)], { step: 2, gives: 'In', key: 'breaker' }),
       icard('The cable and how it\u2019s installed', [
         longPick(v, set, 'cable', 'Cable', (three ? THREE_PHASE_CABLES : CABLE_ORDER).map((k) => [k, CABLES[k].label])),
+        F.sel('size', 'Size', [['auto', 'Smallest that passes'], ...cab.sizes.map((s) => [String(s), s + ' mm²' + (() => { const cp = cpcFor(v.cable, s, v.cpcMode); return cp === 'armour' || cp == null || Number(cp) === Number(s) ? '' : ` / ${cp} CPC`; })()])], 'Pick the size you\u2019re fitting.'),
         more('chk-cable', [
           methodPick(v, set, cab),
           h('div', { class: 'grid2' }, F.sel('ambient', 'Hottest air round it', AMBIENTS.map((t) => [t, t + ' °C'])), F.num('grouped', 'Circuits grouped', { ph: '1', hint: 'Including this one. Blank = 1' })),
