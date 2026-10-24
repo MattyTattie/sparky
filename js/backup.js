@@ -36,7 +36,7 @@ export async function importAll(json) {
 
 // ---------- One Drive folder per job ----------
 // Sparky jobs / <job folder> / job.json + photos + certificate PDFs
-async function rootFolder() {
+export async function rootFolder() {
   let id = await db.getMeta('drive.root');
   if (id) { try { const m = await G.getMeta(id); if (!m.trashed) return id; } catch (e) { if (!(e instanceof G.NotFoundError)) throw e; } }
   const found = await G.list(`name = '${DRIVE_ROOT}' and mimeType = 'application/vnd.google-apps.folder' and trashed = false`);

@@ -691,6 +691,8 @@ function inspectionSchedule(k, cert, no) {
 }
 
 // ---------- Minor works ----------
+// v0.26: Minor Works prints one line of instruments (each different one once).
+export function mwInstruments(cert) { return [...new Set(Object.values((cert && cert.instruments) || {}).map((v) => String(v || '').trim()).filter(Boolean))].join('; '); }
 function mw(k, cert, profile) {
   const no = cert.number; const M = cert.mw; const c = M.circuit; const S = cert.sigs || {}; const P = cert.people.inspector || {};
   brandStrip(k, profile, 'MINOR ELECTRICAL INSTALLATION WORKS CERTIFICATE', no, '(See the guidance for recipients included with this certificate)\nTo be used only for minor electrical work which does not include the provision of a new circuit');
@@ -735,6 +737,7 @@ function mw(k, cert, profile) {
     const y2 = k.y; row(k, x, L + R * 0.35, [['RCD disconnection time at rated residual operating current (IΔn)', c.rcdMs, 1, { unit: 'ms' }]]); k.y = y2; checks(k, x + L + R * 0.45, [['Satisfactory test button operation:', /✓/.test(c.rcdBtn) ? true : /✗/.test(c.rcdBtn) ? 'x' : false]]);
     const y3 = k.y; checks(k, x, [['AFDD satisfactory test button operation:', /✓/.test(c.afddBtn) ? true : false]]); k.y = y3; k.t('NOTE: Not all AFDDs have a test button', x + L, k.y + 3.4, { size: 7 }); k.y += 4.6;
     const y4 = k.y; checks(k, x, [['SPD functionality confirmed:', /✓/.test(M.spdOk) ? true : false]]); k.y = y4; k.t('NOTE: Not all SPDs have visible functionality indication', x + L, k.y + 3.4, { size: 7 }); k.y += 4.6;
+    row(k, x, w, [['Test instruments used (serial and/or asset numbers):', mwInstruments(cert), 1]]); // v0.26
     if (lim.value != null) { k.t(`Maximum permitted Zs for this device: ${lim.value.toFixed(2)} Ω (${lim.source}).`, x, k.y + 2.6, { size: 6.4, color: GREY }); k.y += 3.2; }
   });
   k.section('SECTION E: Declaration', (k, x, w) => {

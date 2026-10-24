@@ -46,17 +46,15 @@ export async function openCert(id) {
 
 // ---------- Your details and instruments ----------
 export const getProfile = async () => (await db.getMeta('profile')) || {};
-export const getInstruments = async () => (await db.getMeta('instruments')) || [];
-export const INSTRUMENT_KINDS = [
-  ['multi', 'Multifunction tester'], ['continuity', 'Continuity'], ['ir', 'Insulation resistance'],
-  ['efli', 'Earth fault loop impedance'], ['rcd', 'RCD tester'], ['electrode', 'Earth electrode resistance'],
-];
-export const instrumentText = (i) => [i.make, i.model, i.serial ? 's/n ' + i.serial : ''].filter(Boolean).join(' ');
+export const getInstruments = async () => normInstruments(await db.getMeta('instruments'));
+export { INSTRUMENT_KINDS, instrumentText } from './instruments.js';
+import { instrumentText } from './instruments.js';
+export { INSTRUMENT_TAGS, normInstruments, instrumentsFor, pickDefaults } from './instruments.js';
+import { normInstruments, pickDefaults } from './instruments.js';
 // The instruments box on certificates, from your default kit.
+export const defaultInstrumentIds = async () => pickDefaults(await getInstruments()).ids;
 export async function defaultInstruments() {
-  const out = {};
-  for (const i of await getInstruments()) if (i.inUse !== false) for (const k of i.kinds || []) if (!out[k]) out[k] = instrumentText(i);
-  return out;
+  return pickDefaults(await getInstruments()).text;
 }
 export async function calibrationWarnings() {
   const list = [];
@@ -67,4 +65,13 @@ export async function calibrationWarnings() {
     else if (st === 'soon') list.push({ level: 'amber', text: `${instrumentText(i) || 'Test instrument'}: calibration due ${i.calDue.split('-').reverse().join('/')} (within a month).` });
   }
   return list;
+}
+
+// v0.26: save your details / signature / instruments and stamp the time, so sync
+// can tell which device changed them last (see settingsync.js).
+export async function saveSetting(key, value) {
+  await db.setMeta(key, value);
+  const st = (await db.getMeta('sync.settingsStamps')) || {}; st[key] = new Date().toISOString();
+  await db.setMeta('sync.settingsStamps', st);
+  try { dispatchEvent(new CustomEvent('sparky:settingschange', { detail: { key } })); } catch {}
 }

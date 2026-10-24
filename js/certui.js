@@ -6,7 +6,7 @@ import { findOldPdf } from './filerules.js';
 import * as db from './db.js';
 import { h, fill, toast, modal, confirmBox, fmtDate, shareOrDownload, blobToDataUrl, emptyState, icon, withIcon } from './ui.js';
 import { route, page, go, render } from './app.js';
-import { S, openCert, changed, flush, getProfile, defaultInstruments, calibrationWarnings, INSTRUMENT_KINDS } from './state.js';
+import { S, openCert, changed, flush, getProfile, defaultInstruments, defaultInstrumentIds, getInstruments, instrumentsFor, instrumentText, calibrationWarnings, INSTRUMENT_KINDS, saveSetting } from './state.js';
 import { TYPES, newCert, sectionsFor, sectionDone, missingFields, visible, get, set, eicrOverall, blankBond, BOND_LOCATIONS, BOND_PARTS, SOURCE_TYPES, blankSource, sourcesMissing } from './certmodel.js';
 import { EIC_ITEMS, EIC_OUTCOMES, EICR_ITEMS, EICR_OUTCOMES, CODE_TEXT, OBSERVATIONS, OBS_CATS, EIC_HELP, EICR_HELP } from './inspections.js';
 import { checkCircuit, isSpare } from './checks.js';
@@ -18,6 +18,7 @@ export async function createCert(type, job, cust) {
   const number = (profile.certPrefix || '') + await db.nextNumber(TYPES[type].prefix);
   const c = newCert(type, { job, customer: cust || {}, profile, instruments: await defaultInstruments(), number });
   if (type === 'EICR') c.eicr.overall = '';
+  c.instrumentIds = await defaultInstrumentIds(); // v0.26, optional
   await db.put('certs', c); return c;
 }
 
@@ -193,11 +194,37 @@ function syncPeople(cert) {
   const d = cert.people.designer; cert.people.constructor = { ...d }; cert.people.inspector = { ...d }; changed();
 }
 
+// v0.26: pick a saved instrument for each box (or type it in). Prints the make,
+// model and serial in the form's instrument boxes. Calibration dates aren't printed.
 function instrumentsSection(cert) {
   cert.instruments = cert.instruments || {};
-  return h('div', { class: 'card' }, h('p', { class: 'note' }, 'Serial and/or asset numbers, as printed on the schedule of test results. Change your default kit in Settings.'),
-    INSTRUMENT_KINDS.map(([k, label]) => field(cert, { k: 'instruments.' + k, label, type: 'text' })),
-    h('button', { class: 'btn small', onclick: async () => { cert.instruments = await defaultInstruments(); changed(); render(); } }, 'Reset to my default instruments'));
+  const box = h('div');
+  getInstruments().then((list) => {
+    cert.instrumentIds = cert.instrumentIds || {};
+    const typed = (k) => !cert.instrumentIds[k] && cert.instruments[k] && !list.some((i) => instrumentText(i) === cert.instruments[k]);
+    const rowFor = ([k, label]) => {
+      const opts = instrumentsFor(k, list);
+      const cur = cert.instrumentIds[k] && opts.some((i) => i.id === cert.instrumentIds[k]) ? cert.instrumentIds[k] : (opts.find((i) => instrumentText(i) === cert.instruments[k]) || {}).id || (typed(k) ? '__typed' : '');
+      const text = h('div');
+      const drawText = (v) => fill(text, v === '__typed' ? field(cert, { k: 'instruments.' + k, label: 'Serial / asset no. (typed)', type: 'text' }) : null);
+      const sel = h('select', { 'aria-label': label, onchange: (e) => {
+        const v = e.target.value; const i = list.find((x) => x.id === v);
+        if (v === '__typed') { cert.instrumentIds[k] = ''; } else { cert.instrumentIds[k] = v || ''; cert.instruments[k] = i ? instrumentText(i) : ''; }
+        changed(); drawText(v);
+      } },
+        h('option', { value: '' }, 'Not used'),
+        opts.map((i) => h('option', { value: i.id, selected: i.id === cur }, (instrumentText(i) || 'Unnamed instrument') + ((i.kinds || []).includes(k) ? '' : ' (not tagged for this)'))),
+        h('option', { value: '__typed', selected: cur === '__typed' }, 'Type it in\u2026'));
+      drawText(cur);
+      return h('label', { class: 'f' }, h('span', {}, label), sel, text);
+    };
+    fill(box, list.length ? null : h('div', { class: 'notice info' }, 'No saved instruments yet. Add them in Settings and pick them here, or type them in.'),
+      INSTRUMENT_KINDS.map((kl) => list.length ? rowFor(kl) : field(cert, { k: 'instruments.' + kl[0], label: kl[1], type: 'text' })));
+  });
+  return h('div', { class: 'card' }, h('p', { class: 'note' }, 'Pick the instrument for each test. It prints the make, model and serial on the schedule of test results.'),
+    box,
+    h('button', { class: 'btn small', onclick: async () => { cert.instruments = await defaultInstruments(); cert.instrumentIds = await defaultInstrumentIds(); changed(); render(); } }, 'Reset to my default instruments'),
+    h('details', { class: 'more' }, h('summary', {}, 'More info'), h('p', { class: 'note' }, 'Each list shows the instruments you\u2019ve tagged for that test first. Tag them in Settings \u2192 Test instruments. A multifunction tester counts for continuity, insulation, loop and RCD. Calibration dates stay in the app and aren\u2019t printed.')));
 }
 
 // ---------- Schedule of inspections ----------
@@ -391,7 +418,7 @@ export async function sigPad() {
           btn('Use this', 'primary', async () => {
             if (!hasInk()) { toast('Draw your signature first'); return; }
             const img = trimCanvas(cv);
-            if (keep.checked) { try { await db.setMeta('mysig', img); } catch (e) { toast('Signed, but couldn\u2019t save it for next time'); } }
+            if (keep.checked) { try { await saveSetting('mysig', img); } catch (e) { toast('Signed, but couldn\u2019t save it for next time'); } }
             close(img);
           }))));
     document.body.append(bg);

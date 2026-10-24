@@ -47,3 +47,24 @@ export const deviceLabel = (ua = (globalThis.navigator && navigator.userAgent) |
 
 // Newest modifiedTime seen, so the next pull only asks Drive for newer job.json files.
 export const newestTime = (files, prev = '') => files.reduce((m, f) => (f.modifiedTime && f.modifiedTime > m ? f.modifiedTime : m), prev);
+
+// v0.26: a job whose Drive folder / job.json has gone to the bin (or is missing).
+//   remote: 'trashed' | 'missing' | 'ok' | 'error' (an error or no signal is never a delete)
+//   'delete'          deleted on another device; nothing new here, so remove it here too
+//   'keep-unsynced'   gone from Drive, but this device has changes not sent yet: keep it
+//   'keep'            nothing to do
+export function planGone(local, remote) {
+  if (!local || !local.driveFolderId || !local.driveJsonId) return 'keep';
+  if (remote !== 'trashed' && remote !== 'missing') return 'keep';
+  return needsPush(local) ? 'keep-unsynced' : 'delete';
+}
+// How often to ask Drive whether jobs have been binned (it's one small request per job).
+export const GONE_CHECK_EVERY = 15 * 60_000;
+
+// v0.25/v0.26: when to renew Google's sign-in quietly (on a tap, on open, on coming back).
+export const REFRESH_EARLY = 10 * 60_000;
+export function wantsQuietRefresh({ online = true, tokenLeft = 0, hint = '', enabled = false, configured = true, sinceLast = Infinity } = {}) {
+  return Boolean(online && enabled && configured && hint && tokenLeft <= REFRESH_EARLY && sinceLast >= 2 * 60_000);
+}
+// v0.26: check in this often while the app is on screen.
+export const POLL_EVERY = 5 * 60_000;

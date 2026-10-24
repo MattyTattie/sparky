@@ -70,3 +70,60 @@ export const EXAMPLE = [
   { k: 'immersion', qty: 2, value: 3 }, { k: 'heater', qty: 6, value: 2, name: 'Radiators' },
   { k: 'ring', qty: 2, value: 32 }, { k: 'lighting', qty: 2, value: 400 },
 ];
+
+// ---------- v0.26: each line's share after diversity, with short working ----------
+const fmt = (n) => String(r1(n));
+const sumOf = (xs) => xs.reduce((s, x) => s + x, 0);
+// The working for a whole group, in figures (e.g. "32 A + 40% of 32 A").
+export function groupWork(g, amps) {
+  const s = [...amps].sort((a, b) => b - a); const t = sumOf(s); const rest = sumOf(s.slice(1));
+  switch (g) {
+    case 'sockets': return rest ? `${fmt(s[0])} A + 40% of ${fmt(rest)} A` : `${fmt(s[0] || 0)} A in full`;
+    case 'shower': { const r = sumOf(s.slice(2)); return s.length <= 1 ? `${fmt(t)} A in full` : `${fmt(s[0])} A + ${fmt(s[1])} A` + (r ? ` + 25% of ${fmt(r)} A` : ''); }
+    case 'cooking': return t <= 10 ? `${fmt(t)} A in full (under 10 A)` : `10 A + 30% of ${fmt(t - 10)} A`;
+    case 'heating': return t <= 10 ? `${fmt(t)} A in full (under 10 A)` : `10 A + 50% of ${fmt(t - 10)} A`;
+    case 'lighting': return `66% of ${fmt(t)} A`;
+    case 'cookerSocket': return `${s.length} × 5 A`;
+    default: return 'no diversity';
+  }
+}
+// Per item share within a group, in the same order as amps.
+function itemShares(g, amps) {
+  const n = amps.length; const order = amps.map((a, i) => i).sort((i, j) => amps[j] - amps[i] || i - j);
+  const out = Array(n).fill(0); const t = sumOf(amps);
+  if (g === 'sockets') order.forEach((i, rank) => (out[i] = amps[i] * (rank === 0 ? 1 : 0.4)));
+  else if (g === 'shower') order.forEach((i, rank) => (out[i] = amps[i] * (rank < 2 ? 1 : 0.25)));
+  else if (g === 'lighting') amps.forEach((a, i) => (out[i] = a * 0.66));
+  else if (g === 'cooking' || g === 'heating') { const d = t <= 10 ? t : 10 + (g === 'cooking' ? 0.3 : 0.5) * (t - 10); amps.forEach((a, i) => (out[i] = t ? (a * d) / t : 0)); }
+  else amps.forEach((a, i) => (out[i] = a));
+  return out;
+}
+const groupOf = (l) => { const d = kind(l.k); return d ? (d.unit === 'each' ? 'cookerSocket' : d.group) : null; };
+// loads → { lines: [{ connected, share, text, work, group, combined }], groups: [{ g, label, lines, connected, demand, work }] }
+// Line shares add up to the group's figure (cooking and heating are shared out pro rata).
+export function maxDemandLines(loads, { u = U } = {}) {
+  const items = {}; // group → [{ line, a }]
+  (loads || []).forEach((l, li) => {
+    const g = groupOf(l); if (!g) return;
+    const n = Math.max(0, Math.round(Number(l.qty) || 0)); const a = g === 'cookerSocket' ? 5 : ampsEach(l, u);
+    for (let i = 0; i < n; i++) (items[g] ||= []).push({ line: li, a });
+  });
+  const shares = (loads || []).map(() => 0); const conn = (loads || []).map(() => 0);
+  const linesIn = {}; (loads || []).forEach((l, li) => { const g = groupOf(l); if (g) (linesIn[g] ||= []).push(li); });
+  const groups = [];
+  for (const g of Object.keys(GROUP_LABEL)) {
+    const its = items[g] || []; const amps = its.map((x) => x.a); const sh = itemShares(g, amps);
+    its.forEach((x, i) => { shares[x.line] += sh[i]; conn[x.line] += x.a; });
+    const lines = (linesIn[g] || []).length;
+    if (lines) groups.push({ g, label: GROUP_LABEL[g], lines, items: its.length, connected: r1(sumOf(amps)), demand: r1(sumOf(sh)), work: its.length ? groupWork(g, amps) : '' });
+  }
+  const lines = (loads || []).map((l, li) => {
+    const d = kind(l.k); const g = groupOf(l); if (!d) return null;
+    const grp = groups.find((x) => x.g === g); const combined = Boolean(grp && grp.lines > 1);
+    const qty = Math.max(0, Math.round(Number(l.qty) || 0));
+    const text = d.unit === 'each' ? `${qty} × 5 A = ${fmt(conn[li])} A` : `${qty} × ${Number(l.value) || 0} ${d.unit} = ${fmt(conn[li])} A`;
+    const work = !qty ? '' : combined ? `share of ${grp.label.toLowerCase()}, ${grp.lines} lines combined` : grp ? grp.work : '';
+    return { group: g, combined, connected: r1(conn[li]), share: r1(shares[li]), text, work, full: qty ? `${text} · after diversity ${fmt(shares[li])} A` + (work ? ` (${work})` : '') : `${text} · nothing counted` };
+  });
+  return { lines, groups };
+}

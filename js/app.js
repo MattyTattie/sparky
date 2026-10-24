@@ -6,7 +6,7 @@ import { pdfRows, madeAt } from './pdflist.js';
 import { nextStep } from './jobnext.js';
 import * as db from './db.js';
 import { h, fill, toast, modal, confirmBox, fmtDate, pickFile, shrinkImage, blobToDataUrl, shareOrDownload, icon, emptyState, skeleton, withIcon } from './ui.js';
-import { S, flush, getProfile, getInstruments, calibrationWarnings, INSTRUMENT_KINDS, instrumentText, touchJob } from './state.js';
+import { S, flush, getProfile, getInstruments, calibrationWarnings, INSTRUMENT_KINDS, INSTRUMENT_TAGS, instrumentText, touchJob, saveSetting } from './state.js';
 import { APP_NAME, APP_VERSION, APP_SLUG, DRIVE_ROOT } from './config.js';
 import { TYPES, copyCertForJob } from './certmodel.js';
 import { calibrationState } from './checks.js';
@@ -224,8 +224,9 @@ route(/^\/job\/([^/]+)(?:\/(photos|details|next|pdfs|backup|dc|parts))?$/, async
     catch (e) { toast(e.message || 'Backup failed'); btn.disabled = false; btn.textContent = 'Back up to Drive'; }
   };
   const delJob = async () => {
-    if (!(await confirmBox('Delete this job?', `Deletes the job, its ${certs.length} certificate(s) and ${photos.length} photo(s) from this device. Anything already in Google Drive stays there (sync won\u2019t bring it back).`, 'Delete', 'warn'))) return;
-    for (const c of certs) await db.del('certs', c.id); for (const f of files) await db.del('files', f.id); await db.del('jobs', id); await sync.recordDelete(id); go('#/');
+    const onDrive = Boolean(job.driveFolderId);
+    if (!(await confirmBox('Delete this job?', `Deletes the job, its ${certs.length} certificate(s) and ${photos.length} photo(s).` + (onDrive ? ' Its Google Drive folder goes to Drive\u2019s bin (you can get it back from there for 30 days), and it comes off your other devices next time they sync.' : ''), 'Delete', 'warn'))) return;
+    const { deleteJob } = await import('./jobdelete.js'); await deleteJob(job); go('#/');
   };
   const { dcPlansCard } = await import('./calcdcplan.js'); // v0.6: optional job.dcPlans
   const status = (c) => c.status === 'issued' ? h('span', { class: 'pill green' }, 'Issued') : h('span', { class: 'pill' }, 'Draft');
@@ -364,15 +365,15 @@ function appearanceCard() {
 route(/^\/settings$/, async () => {
   const p = await getProfile();
   const ins = await getInstruments();
-  const saveP = () => db.setMeta('profile', p);
-  const saveI = () => db.setMeta('instruments', ins);
+  const saveP = () => saveSetting('profile', p); // v0.26: stamped, syncs to your other devices
+  const saveI = () => saveSetting('instruments', ins);
   const txt = (k, label, type = 'text', ph = '') => h('label', { class: 'f' }, h('span', {}, label), h('input', { type, value: p[k] || '', placeholder: ph, oninput: (e) => { p[k] = e.target.value; saveP(); } }));
   const logoBox = h('div');
   const drawLogo = () => fill(logoBox, p.logo ? h('img', { class: 'logoprev', src: p.logo, style: 'max-height:70px;max-width:220px;display:block;margin-bottom:8px;padding:4px' }) : h('p', { class: 'note' }, 'No logo yet.'),
     h('div', { class: 'btns' }, h('button', { class: 'btn small', onclick: async () => { const [f] = await pickFile({ accept: 'image/*' }); if (!f) return; const b = await shrinkImage(f, 600, 0.9, 'image/png'); p.logo = await blobToDataUrl(b); await saveP(); drawLogo(); } }, p.logo ? 'Change logo' : 'Add logo'), p.logo ? h('button', { class: 'btn small warn', onclick: async () => { delete p.logo; await saveP(); drawLogo(); } }, 'Remove') : null));
   drawLogo();
   const sigBox = h('div');
-  const drawSig = async () => { const s = await db.getMeta('mysig'); fill(sigBox, s ? h('img', { class: 'sigimg', src: s }) : h('p', { class: 'note' }, 'No saved signature. You can save one the first time you sign a certificate.'), s ? h('div', { class: 'btns' }, h('button', { class: 'btn small warn', onclick: async () => { await db.setMeta('mysig', null); drawSig(); } }, 'Remove saved signature')) : null); };
+  const drawSig = async () => { const s = await db.getMeta('mysig'); fill(sigBox, s ? h('img', { class: 'sigimg', src: s }) : h('p', { class: 'note' }, 'No saved signature. You can save one the first time you sign a certificate.'), s ? h('div', { class: 'btns' }, h('button', { class: 'btn small warn', onclick: async () => { await saveSetting('mysig', null); drawSig(); } }, 'Remove saved signature')) : null); };
   drawSig();
   const insBox = h('div');
   const drawIns = () => fill(insBox, ...ins.map((i, n) => {
@@ -382,7 +383,7 @@ route(/^\/settings$/, async () => {
       st === 'out' ? h('div', { class: 'notice red' }, 'Calibration out of date.') : st === 'soon' ? h('div', { class: 'notice amber' }, 'Calibration due within a month.') : null,
       h('div', { class: 'grid2' }, f('make', 'Make'), f('model', 'Model')), h('div', { class: 'grid2' }, f('serial', 'Serial / asset no.'), f('calDue', 'Calibration due', 'date')),
       h('div', { class: 'note', style: 'margin-bottom:6px' }, 'Used for:'),
-      h('div', { class: 'chips' }, INSTRUMENT_KINDS.map(([k, label]) => h('button', { class: 'chip' + ((i.kinds || []).includes(k) ? ' on' : ''), onclick: () => { i.kinds = (i.kinds || []).includes(k) ? i.kinds.filter((x) => x !== k) : [...(i.kinds || []), k]; saveI(); drawIns(); } }, label))),
+      h('div', { class: 'chips' }, INSTRUMENT_TAGS.map(([k, label]) => h('button', { class: 'chip' + ((i.kinds || []).includes(k) ? ' on' : ''), onclick: () => { i.kinds = (i.kinds || []).includes(k) ? i.kinds.filter((x) => x !== k) : [...(i.kinds || []), k]; saveI(); drawIns(); } }, label))),
       h('label', { class: 'check' }, h('input', { type: 'checkbox', checked: i.inUse !== false, onchange: (e) => { i.inUse = e.target.checked; saveI(); } }), 'Fill this in on new certificates'),
       h('button', { class: 'btn small warn', onclick: async () => { if (await confirmBox('Remove instrument?', instrumentText(i) || 'This instrument', 'Remove', 'warn')) { ins.splice(n, 1); saveI(); drawIns(); } } }, 'Remove'));
   }), h('button', { class: 'btn', onclick: () => { ins.push({ id: db.newId(), make: '', model: '', serial: '', calDue: '', kinds: ins.length ? [] : ['multi', 'continuity', 'ir', 'efli', 'rcd'], inUse: true }); saveI(); drawIns(); } }, '+ Add test instrument'));
@@ -486,7 +487,7 @@ route(/^\/settings$/, async () => {
     appearanceCard(),
     h('div', { class: 'card' }, h('h2', {}, 'Signature'), sigBox),
     h('a', { class: 'card linkcard', href: '#/settings/presets' }, h('h2', {}, 'Device presets'), h('p', { class: 'note' }, 'Breakers and RCBOs you\u2019ve used, ready to tap on any circuit. Rename or delete them here.')),
-    h('h2', { class: 'sec' }, 'Test instruments'), h('p', { class: 'note' }, 'Fills the instruments box on every new certificate. You\u2019ll get a warning a month before calibration is due, and when it\u2019s out of date.'), insBox,
+    h('h2', { class: 'sec' }, 'Test instruments'), h('p', { class: 'note' }, 'Add each tester and tag what it\u2019s used for. On a certificate you pick one for each test, and it prints the serial. You\u2019ll get a warning a month before calibration is due.'), insBox,
     h('div', { class: 'card', id: 'drive' }, h('h2', {}, 'Sync'), G.isConfigured() ? driveBox : h('p', { class: 'note' }, 'Not set up in this build.')),
     h('div', { class: 'card', id: 'files' }, h('h2', {}, 'Files'),
       h('p', { class: 'note' }, 'Backups and imports from a file you keep anywhere. Restoring adds to what\u2019s here; imports show you every change first and never overwrite or remove anything.'),

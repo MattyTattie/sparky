@@ -206,3 +206,11 @@ Open points
   EICRs if no EIC); spares with no device left out; Share text or PDF (job name + cert no. only).
 - "Setting up a new phone? Restore from Google Drive" on an empty jobs page and in Settings › Sync.
 - 3-phase flex in Check a circuit: H07RN-F, tri-rated, SY/CY. 3183Y has no 3-phase figures: a note says so.
+
+## v0.26.0 beta (branch v0.26-equipment-sync, not merged)
+- **Test equipment**: Settings → Test instruments, each with tags (the 6 IET boxes + PFC/Other, tag only). Certs (EIC/EICR/MW) pick one per test (`cert.instrumentIds`, optional); text still in `cert.instruments`. MW Section D prints a "Test instruments used" line (`mwInstruments`). No calibration dates printed. Pure code in `js/instruments.js`.
+- **Quiet renewal**: `quietRefresh` on open/visible/focus, stops after a blocked popup; sync every 5 min while visible (`POLL_EVERY`). Known account shows "Tap to sync" instead of "Sign in".
+- **Settings sync**: `settings.json` in the Sparky root folder; profile/logo, mysig, instruments; per-key last-write-wins with `sync.settingsStamps`; an empty side never wins (`js/settingsync.js`). Saves go through `saveSetting()`.
+- **Job delete**: `js/jobdelete.js` bins the Drive folder (queued offline) and writes a tombstone. Other devices remove a job whose Drive copy is trashed/missing (`planGone`, checked every 15 min); a job with unsynced edits is kept and re-uploaded (updatedAt bumped so it beats the tombstone). Errors other than not-found never delete.
+- **Max demand**: per-line working, group totals when lines combine, optional names, − / + steppers updating in place (scroll held).
+- Tests: `node --test tests/` (250), `tests/sync_v26.py`, `tests/screens_v26.py`.

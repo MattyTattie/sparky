@@ -122,3 +122,11 @@
 ## v0.25
 - Parts used counts one RCD per different RCD found on MCB circuits; two identical RCCBs on a split board show as one. Check before ordering.
 - 3183Y PVC flex: no 3-phase table data in the app, so it switches to H07RN-F with a note.
+
+## v0.26 notes
+- Browsers usually block silent renewal without a tap; then "Tap to sync" shows.
+- Removing a signature/logo on purpose won't sync to other devices (empty never wins).
+- Binning a job folder by hand in Drive deletes that job on devices where it's unchanged.
+- Two devices creating settings.json at once could leave a duplicate; the first found is used.
+- Each sync reads settings.json (~2 extra requests per 5 min); each linked job gets a metadata check every 15 min.
+- Max demand: taking a line to 0 near the page bottom can shift the scroll a little (page gets shorter).
