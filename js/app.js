@@ -7,6 +7,8 @@ import { nextStep } from './jobnext.js';
 import * as db from './db.js';
 import { h, fill, toast, modal, confirmBox, fmtDate, pickFile, shrinkImage, blobToDataUrl, shareOrDownload, icon, emptyState, skeleton, withIcon } from './ui.js';
 import { S, flush, getProfile, getInstruments, calibrationWarnings, INSTRUMENT_KINDS, INSTRUMENT_TAGS, instrumentText, touchJob, saveSetting } from './state.js';
+import { looksLikeCalDate, CAL_DATE_WARN } from './instruments.js';
+import { labelInputs } from './a11y.js';
 import { APP_NAME, APP_VERSION, APP_SLUG, DRIVE_ROOT } from './config.js';
 import { TYPES, copyCertForJob } from './certmodel.js';
 import { JOB_COLS, jobRows, sortRows } from './jobtable.js';
@@ -95,6 +97,7 @@ export function decorate(root) {
     const label = m[1] === 'plus' ? t.replace(/^\+ ?/, '') : t;
     b.replaceChildren(icon(m[1], { size: 18 }), h('span', {}, label));
   });
+  labelInputs(root);
 }
 // Screens that fill parts in after page() (and pop-up sheets) get the icons too.
 let decoT = 0;
@@ -426,10 +429,12 @@ route(/^\/settings$/, async () => {
   const insBox = h('div');
   const drawIns = () => fill(insBox, ...ins.map((i, n) => {
     const st = calibrationState(i.calDue);
-    const f = (k, label, type = 'text') => h('label', { class: 'f' }, h('span', {}, label), h('input', { type, value: i[k] || '', oninput: (e) => { i[k] = e.target.value; saveI(); if (k === 'calDue') drawIns(); } }));
+    const calWarn = h('div', { class: 'notice amber calwarn', role: 'status' }); const showCal = () => { const bad = ['make', 'model', 'serial'].some((x) => looksLikeCalDate(i[x])); calWarn.textContent = bad ? CAL_DATE_WARN.replace(' in Settings', '') : ''; calWarn.hidden = !bad; }; showCal();
+    const f = (k, label, type = 'text') => h('label', { class: 'f' }, h('span', {}, label), h('input', { type, value: i[k] || '', oninput: (e) => { i[k] = e.target.value; saveI(); if (k === 'calDue') drawIns(); else showCal(); } }));
     return h('div', { class: 'card' },
       st === 'out' ? h('div', { class: 'notice red' }, 'Calibration out of date.') : st === 'soon' ? h('div', { class: 'notice amber' }, 'Calibration due within a month.') : null,
       h('div', { class: 'grid2' }, f('make', 'Make'), f('model', 'Model')), h('div', { class: 'grid2' }, f('serial', 'Serial / asset no.'), f('calDue', 'Calibration due', 'date')),
+      calWarn,
       h('div', { class: 'note', style: 'margin-bottom:6px' }, 'Used for:'),
       h('div', { class: 'chips' }, INSTRUMENT_TAGS.map(([k, label]) => h('button', { class: 'chip' + ((i.kinds || []).includes(k) ? ' on' : ''), onclick: () => { i.kinds = (i.kinds || []).includes(k) ? i.kinds.filter((x) => x !== k) : [...(i.kinds || []), k]; saveI(); drawIns(); } }, label))),
       h('label', { class: 'check' }, h('input', { type: 'checkbox', checked: i.inUse !== false, onchange: (e) => { i.inUse = e.target.checked; saveI(); } }), 'Fill this in on new certificates'),

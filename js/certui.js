@@ -7,6 +7,7 @@ import * as db from './db.js';
 import { h, fill, toast, modal, confirmBox, fmtDate, shareOrDownload, blobToDataUrl, emptyState, icon, withIcon } from './ui.js';
 import { route, page, go, render } from './app.js';
 import { S, openCert, changed, flush, getProfile, defaultInstruments, defaultInstrumentIds, getInstruments, instrumentsFor, instrumentText, calibrationWarnings, INSTRUMENT_KINDS, saveSetting } from './state.js';
+import { calDateFields, CAL_DATE_WARN } from './instruments.js';
 import { TYPES, newCert, sectionsFor, sectionDone, missingFields, visible, get, set, eicrOverall, blankBond, BOND_LOCATIONS, BOND_PARTS, SOURCE_TYPES, blankSource, sourcesMissing } from './certmodel.js';
 import { EIC_ITEMS, EIC_OUTCOMES, EICR_ITEMS, EICR_OUTCOMES, CODE_TEXT, OBSERVATIONS, OBS_CATS, EIC_HELP, EICR_HELP } from './inspections.js';
 import { checkCircuit, isSpare } from './checks.js';
@@ -140,6 +141,8 @@ route(/^\/cert\/([^/]+)\/s\/([^/]+)$/, async (id, sid) => {
   const i = secs.findIndex((s) => s.id === sid);
   const s = sid === 'instruments' ? { id: 'instruments', title: 'Test instruments', form: '' } : secs[i];
   if (!s) return go('#/cert/' + id);
+  // v0.29: the circuits section has its own page; an old or typed link goes there instead of crashing.
+  if (s.special === 'boards') return go(`#/cert/${id}/boards`);
   const box = h('div');
   const href = (n) => (n.special === 'boards' ? `#/cert/${id}/boards` : `#/cert/${id}/s/${n.id}`);
   // v0.8: Back and Next side by side (no Back on the first section).
@@ -221,8 +224,12 @@ function instrumentsSection(cert) {
     fill(box, list.length ? null : h('div', { class: 'notice info' }, 'No saved instruments yet. Add them in Settings and pick them here, or type them in.'),
       INSTRUMENT_KINDS.map((kl) => list.length ? rowFor(kl) : field(cert, { k: 'instruments.' + kl[0], label: kl[1], type: 'text' })));
   });
+  // v0.29: gentle warning if a calibration date looks typed in (it would print on the cert).
+  const calWarn = h('div', { class: 'notice amber calwarn', role: 'status' });
+  const showCal = () => { const bad = calDateFields(cert.instruments).length > 0; calWarn.textContent = bad ? CAL_DATE_WARN : ''; calWarn.hidden = !bad; };
+  showCal(); box.addEventListener('input', showCal); box.addEventListener('change', showCal);
   return h('div', { class: 'card' }, h('p', { class: 'note' }, 'Pick the instrument for each test. It prints the make, model and serial on the schedule of test results.'),
-    box,
+    box, calWarn,
     h('button', { class: 'btn small', onclick: async () => { cert.instruments = await defaultInstruments(); cert.instrumentIds = await defaultInstrumentIds(); changed(); render(); } }, 'Reset to my default instruments'),
     h('details', { class: 'more' }, h('summary', {}, 'More info'), h('p', { class: 'note' }, 'Each list shows the instruments you\u2019ve tagged for that test first. Tag them in Settings \u2192 Test instruments. A multifunction tester counts for continuity, insulation, loop and RCD. Calibration dates stay in the app and aren\u2019t printed.')));
 }

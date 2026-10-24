@@ -24,3 +24,11 @@ export function pickDefaults(list) {
   for (const i of normInstruments(list)) if (i.inUse !== false) for (const k of i.kinds) if (!ids[k] && INSTRUMENT_KINDS.some(([x]) => x === k)) { ids[k] = i.id; text[k] = instrumentText(i); }
   return { ids, text };
 }
+// v0.29: certs never print calibration dates. If one looks typed into an instrument's text
+// (make / model / serial, or a typed box on a cert), warn gently: it would print on the cert.
+const MONTHS = 'jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec|january|february|march|april|june|july|august|september|october|november|december';
+const DATE_RES = [/\bcal(?:ibrat\w*|\.|'d|d)?\b/i, /\b\d{1,2}[\/.-]\d{1,2}[\/.-](?:\d{2}|\d{4})\b/, /\b(?:19|20)\d{2}[\/.-]\d{1,2}[\/.-]\d{1,2}\b/,
+  new RegExp(`\\b(?:\\d{1,2}(?:st|nd|rd|th)?\\s+)?(?:${MONTHS})\\.?\\s+(?:19|20)?\\d{2}\\b`, 'i'), /\b(?:due|exp(?:ires|iry)?|valid)\b.*\b(?:19|20)\d{2}\b/i];
+export const looksLikeCalDate = (text) => { const s = String(text || ''); return !!s.trim() && DATE_RES.some((re) => re.test(s)); };
+export const CAL_DATE_WARN = 'That looks like a calibration date. It would print on the certificate, and certs don\u2019t show calibration dates. Put it in \u201cCalibration due\u201d in Settings instead.';
+export const calDateFields = (obj) => Object.entries(obj || {}).filter(([, v]) => looksLikeCalDate(v)).map(([k]) => k);

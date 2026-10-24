@@ -17,7 +17,7 @@ export const CABLES = {
       101: { label: 'Clipped to a joist or on the plasterboard, above a ceiling with insulation over 100 mm (101)', amps: { 1: 10.5, 1.5: 13, 2.5: 17, 4: 22, 6: 27, 10: 36, 16: 46 } },
       102: { label: 'In a stud wall with insulation, touching the inner skin (102)', amps: { 1: 13, 1.5: 16, 2.5: 21, 4: 27, 6: 35, 10: 47, 16: 63 } },
       103: { label: 'In a stud wall with insulation, not touching the inner skin (103)', amps: { 1: 8, 1.5: 10, 2.5: 13.5, 4: 17.5, 6: 23.5, 10: 32, 16: 42.5 } },
-      A: { label: 'In conduit in an insulated wall (A)', amps: { 1: 11.5, 1.5: 14.5, 2.5: 20, 4: 26, 6: 32, 10: 44, 16: 57 } },
+      A: { label: 'In conduit in an insulated wall (A)', amps: { 1: 11.5, 1.5: 14.5, 2.5: 18.5, 4: 26, 6: 32, 10: 44, 16: 57 } },
       B: { label: 'In conduit or trunking on a wall (B)', amps: { 1: 13, 1.5: 16.5, 2.5: 23, 4: 30, 6: 38, 10: 52, 16: 69 } },
     },
   },
@@ -156,7 +156,7 @@ export const REF_METHODS = [
   ['C', 'Clipped direct (or in plaster / masonry, no insulation)'],
   ['D1', 'In a duct in the ground'],
   ['D2', 'Direct in the ground'],
-  ['E', 'Multicore in free air / on perforated tray'],
+  ['E', 'Multicore in free air / on a perforated tray'],
   ['F', 'Single-core in free air, touching'],
   ['G', 'Single-core in free air, spaced'],
   ['100', 'T&E above a plasterboard ceiling, insulation up to 100 mm'],
@@ -192,7 +192,7 @@ CABLES.singles = {
   sizes: [1, 1.5, 2.5, 4, 6, 10, 16, 25, 35],
   mvam: { 1: 44, 1.5: 29, 2.5: 18, 4: 11, 6: 7.3, 10: 4.4, 16: 2.8, 25: 1.8, 35: 1.3 },
   methods: {
-    A: { label: 'In conduit in an insulated wall (A)', amps: { 1: 11, 1.5: 14.5, 2.5: 19.5, 4: 26, 6: 34, 10: 46, 16: 61, 25: 80, 35: 99 } },
+    A: { label: 'In conduit in an insulated wall (A)', amps: { 1: 11, 1.5: 14.5, 2.5: 20, 4: 26, 6: 34, 10: 46, 16: 61, 25: 80, 35: 99 } },
     B: { label: 'In conduit or trunking on a wall (B)', amps: { 1: 13.5, 1.5: 17.5, 2.5: 24, 4: 32, 6: 41, 10: 57, 16: 76, 25: 101, 35: 125 } },
     C: { label: 'Clipped direct (C)', amps: { 1: 15.5, 1.5: 20, 2.5: 27, 4: 37, 6: 47, 10: 65, 16: 87, 25: 114, 35: 141 } },
   },
@@ -458,6 +458,103 @@ THREE_PHASE_CABLES.push('h073', 'tri3', 'sycy3');
 CABLE_PICKS.singles = { label: 'Singles 6491X in conduit / trunking (separate CPC)', calc: 'singles', wiring: '', cpc: 'sep', sizes: { ...SINGLES_CPC } };
 CABLE_PICKS.singles3 = { label: 'Singles 6491X, 3-phase (separate CPC)', calc: 'singles3', wiring: '', cpc: 'sep', sizes: { ...SINGLES_CPC } };
 
+
+// =====================================================================
+// v0.29: more reference methods. Sources (published copies of BS 7671:2018 tables, Eland Cables):
+//  4D4A https://www.elandcables.com/media/of4pe0xx/table-4d4a-and-4d4b.pdf
+//  4E4A https://www.elandcables.com/media/cnwh0k2l/table-4e4a-and-4e4b.pdf
+//  4D1A https://www.elandcables.com/media/vyrp3kxq/table-4d1a-and-4d1b.pdf
+//  4E1A https://www.elandcables.com/media/ehkk3rg2/table-4e1a-and-4e1b.pdf
+// Mineral insulated (4G1A / 4G2A) and FP200 are TYPICAL figures (shown with "typical, check your books").
+// The old key D stays as D1 (in a duct) so saved calcs and certs keep working; D2 = direct in the ground.
+// =====================================================================
+const only = (cab, amps) => Object.fromEntries(Object.entries(amps).filter(([sz]) => cab.sizes.map(String).includes(String(sz))));
+const addM = (key, m, label, amps, extra = {}) => { const cab = CABLES[key]; cab.methods[m] = { label, amps: only(cab, amps), ...extra }; };
+const LBL = {
+  D1: 'Reference Method D1: in a duct in the ground',
+  D2: 'Reference Method D2: direct in the ground (no duct)',
+  E: 'Reference Method E: multicore in free air or on a perforated tray',
+  F: 'Reference Method F: single-core cables touching, in free air or on a perforated tray',
+  G: 'Reference Method G: single-core cables spaced by one diameter, in free air',
+};
+// 4D4A (70 °C SWA): col 4 / 5 = E, col 8 / 9 = D2.
+const D4A_E1 = { 1.5: 22, 2.5: 31, 4: 41, 6: 53, 10: 72, 16: 97, 25: 128, 35: 157, 50: 190, 70: 241, 95: 291 };
+const D4A_E3 = { 1.5: 19, 2.5: 26, 4: 35, 6: 45, 10: 62, 16: 83, 25: 110, 35: 135, 50: 163, 70: 207, 95: 251 };
+const D4A_D21 = { 1.5: 22, 2.5: 28, 4: 38, 6: 48, 10: 64, 16: 83, 25: 110, 35: 132, 50: 156, 70: 192, 95: 230 };
+const D4A_D23 = { 1.5: 19, 2.5: 24, 4: 33, 6: 41, 10: 54, 16: 70, 25: 92, 35: 110, 50: 130, 70: 162, 95: 193 };
+// 4E4A (90 °C XLPE SWA): col 4 / 5 = E, col 8 / 9 = D2.
+const E4A_E1 = { 1.5: 29, 2.5: 39, 4: 52, 6: 66, 10: 90, 16: 115, 25: 152, 35: 188, 50: 228, 70: 291, 95: 354 };
+const E4A_E3 = { 1.5: 25, 2.5: 33, 4: 44, 6: 56, 10: 78, 16: 99, 25: 131, 35: 162, 50: 197, 70: 251, 95: 304 };
+const E4A_D21 = { 1.5: 27, 2.5: 35, 4: 46, 6: 58, 10: 77, 16: 100, 25: 129, 35: 155, 50: 183, 70: 225, 95: 270 };
+const E4A_D23 = { 1.5: 23, 2.5: 30, 4: 39, 6: 49, 10: 65, 16: 84, 25: 107, 35: 129, 50: 153, 70: 188, 95: 226 };
+for (const k of ['swa', 'swa3']) { addM(k, 'E', LBL.E, D4A_E1); addM(k, 'D2', LBL.D2, D4A_D21); }
+for (const k of ['swaX', 'swa3X']) { addM(k, 'E', LBL.E, E4A_E1); addM(k, 'D2', LBL.D2, E4A_D21); }
+addM('swa4', 'E', LBL.E, D4A_E3); addM('swa4', 'D2', LBL.D2, D4A_D23);
+addM('swa4X', 'E', LBL.E, E4A_E3); addM('swa4X', 'D2', LBL.D2, E4A_D23);
+for (const k of ['swa', 'swa3', 'swaX', 'swa3X', 'swa4', 'swa4X']) if (CABLES[k].methods.D) CABLES[k].methods.D.label = LBL.D1;
+// 4D1A (70 °C singles, incl. 6181Y tails): F = col 8 (2 cables 1-phase, touching) / col 9 (3 cables flat, 3-phase);
+// G = col 11 (spaced, horizontal). BS 7671 only tabulates F and G from 25 mm².
+addM('singles', 'F', LBL.F, { 25: 131, 35: 162, 50: 196, 70: 251, 95: 304 }); addM('singles', 'G', LBL.G, { 25: 146, 35: 181, 50: 219, 70: 281, 95: 341 });
+addM('tails', 'F', LBL.F, { 25: 131, 35: 162 }); addM('tails', 'G', LBL.G, { 25: 146, 35: 181 });
+if (CABLES.singles3) { addM('singles3', 'F', LBL.F, { 25: 114, 35: 143, 50: 174, 70: 225, 95: 275 }); addM('singles3', 'G', LBL.G, { 25: 146, 35: 181, 50: 219, 70: 281, 95: 341 }); }
+// 4E1A (90 °C XLPE singles, e.g. 6491B / tri-rated in conduit). 2 cables, single-phase.
+CABLES.singlesX = {
+  label: 'Singles 90 °C XLPE (e.g. 6491B) in conduit / trunking', cores: 2,
+  source: 'Table 4E1A (current, 2 cables 1-phase) and 4E1B (volt drop)',
+  note: 'XLPE singles: Table 4E1A (90 °C). Only use the 90 °C ratings where the breakers and accessories are rated for it (Reg 512.1.5); most are 70 °C, so use the 70 °C singles figures instead.',
+  sizes: [1, 1.5, 2.5, 4, 6, 10, 16, 25, 35],
+  mvam: { 1: 46, 1.5: 31, 2.5: 19, 4: 12, 6: 7.9, 10: 4.7, 16: 2.9, 25: 1.9, 35: 1.35 },
+  methods: {
+    A: { label: 'Reference Method A: enclosed in conduit in a thermally insulating wall', amps: { 1: 14, 1.5: 19, 2.5: 26, 4: 35, 6: 45, 10: 61, 16: 81, 25: 106, 35: 131 } },
+    B: { label: 'Reference Method B: enclosed in conduit on a wall or in trunking', amps: { 1: 17, 1.5: 23, 2.5: 31, 4: 42, 6: 54, 10: 75, 16: 100, 25: 133, 35: 164 } },
+    C: { label: 'Reference Method C: clipped direct', amps: { 1: 19, 1.5: 25, 2.5: 34, 4: 46, 6: 59, 10: 81, 16: 109, 25: 143, 35: 176 } },
+    F: { label: LBL.F, amps: { 25: 161, 35: 200 } },
+    G: { label: LBL.G, amps: { 25: 182, 35: 226 } },
+  },
+};
+CABLE_TEMP.singlesX = 90;
+// Mineral insulated, 70 °C sheath (PVC/LSF covered, or bare and exposed to touch). TYPICAL, check your book.
+CABLES.micL = {
+  label: 'Mineral insulated, light duty 500 V (2 cores or twin, covered)', cores: 2, typical: true,
+  source: 'Table 4G1A / 4G1B, light duty 500 V, 70 °C sheath (typical figures)',
+  note: 'Mineral insulated: typical Table 4G1A figures (70 \u00b0C sheath, covered or bare and exposed to touch). Check your book. The copper sheath is usually the CPC.',
+  sizes: [1, 1.5, 2.5, 4],
+  mvam: { 1: 42, 1.5: 28, 2.5: 17, 4: 10 },
+  methods: { C: { label: 'Reference Method C: clipped direct', amps: { 1: 18.5, 1.5: 23, 2.5: 31, 4: 40 } } },
+};
+CABLES.micH = {
+  label: 'Mineral insulated, heavy duty 750 V (2 cores or twin, covered)', cores: 2, typical: true,
+  source: 'Table 4G2A / 4G2B, heavy duty 750 V, 70 °C sheath (typical figures)',
+  note: CABLES.micL.note.replace('4G1A', '4G2A'),
+  sizes: [1, 1.5, 2.5, 4, 6, 10, 16, 25],
+  mvam: { 1: 42, 1.5: 28, 2.5: 17, 4: 10, 6: 7, 10: 4.2, 16: 2.6, 25: 1.65 },
+  methods: { C: { label: 'Reference Method C: clipped direct', amps: { 1: 19.5, 1.5: 25, 2.5: 34, 4: 45, 6: 57, 10: 77, 16: 102, 25: 133 } } },
+};
+CABLE_TEMP.micL = 70; CABLE_TEMP.micH = 70;
+// FP200 Gold style fire-resistant cable: maker's data, TYPICAL (not a BS 7671 table).
+CABLES.fp200 = {
+  label: 'Fire-resistant FP200 type (2-core & CPC), maker\u2019s data', cores: 2, typical: true,
+  source: 'Maker\u2019s data (FP200 Gold type), typical figures, not BS 7671',
+  note: 'FP200 type cable: typical maker\u2019s figures, not a BS 7671 table. Check the data sheet of the cable you\u2019re using.',
+  sizes: [1, 1.5, 2.5, 4],
+  mvam: { 1: 44, 1.5: 29, 2.5: 18, 4: 11 },
+  methods: { C: { label: 'Reference Method C: clipped direct', amps: { 1: 17, 1.5: 22, 2.5: 30, 4: 40 } } },
+};
+CABLE_TEMP.fp200 = 70;
+CABLE_PICKS.singlesX = { label: 'Singles 90 \u00b0C XLPE in conduit / trunking (separate CPC)', calc: 'singlesX', wiring: '', cpc: 'sep', sizes: { ...SINGLES_CPC } };
+CABLE_PICKS.micL3 = { label: 'Mineral insulated light duty, 3-core (core as CPC)', calc: 'micL', wiring: 'H', cpc: 'core', sizes: { 1: 1, 1.5: 1.5, 2.5: 2.5, 4: 4 } };
+CABLE_PICKS.micH3 = { label: 'Mineral insulated heavy duty, 3-core (core as CPC)', calc: 'micH', wiring: 'H', cpc: 'core', sizes: { 1: 1, 1.5: 1.5, 2.5: 2.5, 4: 4, 6: 6, 10: 10, 16: 16, 25: 25 } };
+CABLE_PICKS.fp200 = { label: 'FP200 type fire-resistant, 2-core & CPC', calc: 'fp200', wiring: 'O', cpc: 'core', sizes: { 1: 1, 1.5: 1.5, 2.5: 2.5, 4: 4 } };
+
+// Which reference methods (cert column 4) suit a picked cable. No pick = the full list.
+export const METHODS_FOR_PICK = (pickKey) => {
+  const p = CABLE_PICKS[pickKey]; const cab = p && CABLES[p.calc];
+  if (!cab) return null;
+  const keys = new Set(Object.keys(cab.methods).map((k) => (k === 'D' ? 'D1' : k)));
+  // Singles in conduit are A/B; clipped is C. Methods in the data, plus their cert codes.
+  return REF_METHODS.filter(([k]) => keys.has(k));
+};
+
 // v0.22b: installation method wording as BS 7671 Table 4A2 / 4D5 / 4F1A (labels only, ratings unchanged).
 const METHOD_WORDING = {
   'Clipped direct (C)': 'Reference Method C: clipped direct',
@@ -483,7 +580,11 @@ export const METHOD_INFO = {
   A: ['In conduit buried in, or behind, an insulated wall. Insulation on one side traps the heat.', 'Example: singles in conduit in a timber-frame wall full of insulation.'],
   B: ['In conduit or trunking fixed to the surface of a wall, or in trunking. Not in insulation.', 'Example: T&E in mini-trunking along a skirting, or singles in steel conduit on a garage wall.'],
   C: ['Clipped straight to a wall or ceiling, or buried in plaster or masonry with no insulation round it. The best-cooled everyday method.', 'Example: T&E clipped along a garage wall, or chased into a brick wall and plastered over.'],
-  D: ['Buried in the ground, either straight in the trench or pulled through a duct. The app uses the duct figures where the table gives both.', 'Example: SWA to a garden office, in a duct under the lawn.'],
+  D: ['In a duct in the ground (D1).', 'Example: SWA to a garden office, pulled through a duct under the lawn.'],
+  D1: ['In a duct in the ground. Ducts trap heat, so this is lower than direct in the ground.', 'Example: SWA to a garden office, pulled through a duct under the lawn.'],
+  D2: ['Laid straight in the trench and backfilled, no duct.', 'Example: SWA buried direct across a field to a stable block.'],
+  F: ['Single-core cables touching each other, in free air or on a perforated tray.', 'Example: meter tails or singles run together on open tray.'],
+  G: ['Single-core cables spaced apart by at least one cable diameter, in free air.', 'Example: big singles on cleats with a gap between them.'],
   E: ['Multicore cable in free air, or on perforated tray, with air round it.', 'Example: a rubber flex run across open tray, or hanging free.'],
   100: ['T&E in a loft or ceiling void, fixed to a joist or lying on the plasterboard, with loft insulation over it up to 100 mm deep.', 'Example: a lighting circuit clipped to the joists with 100 mm of quilt laid on top.'],
   101: ['As 100, but with loft insulation deeper than 100 mm over it (most modern lofts: 250–300 mm).', 'Example: a shower cable across the loft under 270 mm of insulation.'],

@@ -11,8 +11,8 @@ test('v0.21 card order per calculator', () => {
   assert.deepEqual(keys('calcui.js', "route(/^\\/calc\\/check", 'const draw = ()'), ['supply', 'breaker', 'cable', 'earth']);
   assert.deepEqual(keys('calcui.js', "route(/^\\/calc\\/ring", 'route(/^\\/calc\\/symbols'), ['cable', 'ends', 'cross']);
   assert.deepEqual(keys('calcmore.js', "screen('xfmr'", "screen('contactor'"), ['supply', 'xfmr']);
-  assert.deepEqual(keys('calcmore.js', "screen('contactor'", "screen('fault'"), ['load', 'category', 'coil']);
-  assert.deepEqual(keys('calcmore.js', "screen('fault'"), ['origin', 'run', 'device']);
+  assert.deepEqual(keys('calcmore.js', "screen('contactor'", "Fault level at a sub-board ----"), ['load', 'category', 'coil']);
+  assert.deepEqual(keys('calcmore.js', "route(/^\\/calc\\/fault"), ['origin', 'run', 'device']);
   assert.deepEqual(keys('calcdc.js', "route(/^\\/calc\\/dc\\/pv"), ['panels', 'run', 'battery']);
   const plan = fs.readFileSync(new URL('../js/calcdcplan.js', import.meta.url), 'utf8');
   assert.ok(plan.indexOf("icard('Battery'") > plan.indexOf('loads: (p) =>') && plan.indexOf("icard('Battery'") < plan.indexOf('charging: (p) =>'), 'battery card sits after the loads');

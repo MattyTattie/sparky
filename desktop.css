@@ -55,6 +55,10 @@
   /* Wide schedule of test results: more room, no squeeze */
   main.wide .tablewrap { max-height: calc(100vh - 150px); }
   table.sched th { font-size: 12px; }
+  /* v0.29: the schedule fills the width; No. and Description stay put when scrolling across */
+  main.wide .tablewrap { width: 100%; }
+  main.wide table.sched { width: 100%; }
+  table.sched td.desc { min-width: 200px !important; }
 }
 @media (min-width: 900px) and (max-width: 1150px) {
   :root { --side-w: 200px; --list-w: 280px; }

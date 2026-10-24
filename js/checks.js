@@ -52,8 +52,10 @@ export function cableTable(c) {
 export function cableCheck(c) {
   const live = num(c.live), In = num(c.rating); const t = cableTable(c);
   if (live == null || !t) return null;
-  const ref = String(c.ref || '').toUpperCase().replace(/^D[12]$/, 'D');
-  const tbl = CABLES[t]; const m = tbl && tbl.methods[ref];
+  // v0.29: D1 = the old D (in a duct); D2 = direct in the ground (its own figures where the app has them).
+  const R = String(c.ref || '').toUpperCase(); const tbl = CABLES[t];
+  const ref = R === 'D1' ? 'D' : R === 'D2' && !(tbl && tbl.methods.D2) ? 'D' : R;
+  const m = tbl && tbl.methods[ref];
   if (!m) return ref ? { level: null, msg: `No current rating in the app for ${tbl ? tbl.label.split(',')[0] : 'this cable'} with reference method ${c.ref}. Check Appendix 4.` } : null;
   const it = m.amps[live]; if (it == null) return null;
   const src = `${tbl.source.split(' (')[0].split(' and')[0]}, method ${c.ref}`;

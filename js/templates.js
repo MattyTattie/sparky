@@ -60,7 +60,7 @@ export const TEMPLATES = [
   T('Smoke / heat alarms', { desc: 'Smoke alarms', wiring: 'A', ref: 'C', live: '1.5', cpc: '1.0', device: 'rcbo', bs: '61009', type: 'B', rating: '6', bka: '6', rcdBs: '61009', rcdType: 'A', rcdIdn: '30', rcdRating: '6' }),
   T('Boiler / heating controls', { desc: 'Boiler', wiring: 'A', ref: 'C', live: '1.5', cpc: '1.0', device: 'rcbo', bs: '61009', type: 'B', rating: '6', bka: '6', points: '1', rcdBs: '61009', rcdType: 'A', rcdIdn: '30', rcdRating: '6' }),
   T('EV charger (32 A)', { desc: 'EV charger', wiring: 'F', ref: 'C', live: '6', cpc: '6', device: 'rcbo', bs: '61009', type: 'B', rating: '32', bka: '6', points: '1', rcdBs: '61009', rcdType: 'A', rcdIdn: '30', rcdRating: '32' }),
-  T('Sub-main / outbuilding (SWA)', { desc: 'Sub-main to garage', wiring: 'F', ref: 'D', live: '6', cpc: '6', device: 'mcb', bs: '60898', type: 'C', rating: '32', bka: '6', time: 5, points: '1' }),
+  T('Sub-main / outbuilding (SWA)', { desc: 'Sub-main to garage', wiring: 'F', ref: 'D1', live: '6', cpc: '6', device: 'mcb', bs: '60898', type: 'C', rating: '32', bka: '6', time: 5, points: '1' }),
   T('Battery / inverter AC', { desc: 'Inverter AC', wiring: 'F', ref: 'C', live: '6', cpc: '6', device: 'mcb', bs: '60898', type: 'B', rating: '32', bka: '6', points: '1' }),
 ];
 export function applyTemplate(c, t) {

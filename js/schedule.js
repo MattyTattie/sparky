@@ -17,7 +17,15 @@ import { FIELDS, FIELD, TEMPLATES, blankCircuit, applyTemplate, copyCircuit, cop
 import { checkCircuit, limitZs, isSpare } from './checks.js';
 import { DEVICES, deviceById, deviceFromBs, ratingsFor, CHECK_NOTE } from './limits.js';
 import { voiceSupported, listen } from './voice.js';
-import { CABLES, CABLE_PICKS, WIRING_TYPES, REF_METHODS } from './cables.js';
+import { CABLES, CABLE_PICKS, WIRING_TYPES, REF_METHODS, METHODS_FOR_PICK } from './cables.js';
+// v0.29: only the reference methods that suit the picked cable (full list if none picked).
+// A value already on the cert always stays in the list, so old certs keep theirs.
+export function refMethodsFor(c) {
+  const fit = c && c.cable ? METHODS_FOR_PICK(c.cable) : null;
+  if (!fit || !fit.length) return REF_METHODS;
+  const cur = String((c && c.ref) || '');
+  return REF_METHODS.filter(([k]) => fit.some(([f]) => f === k) || k === cur);
+}
 import { lengthFromR1R2 } from './calc.js';
 import { cableCheck, isRingLike, applyCable, ringCheck, circuitAdiabatic } from './checks.js';
 
@@ -96,6 +104,7 @@ function boardDetails(cert, b) {
       F('suppliedFrom', 'Supplied from'),
       h('div', { class: 'grid3' }, F('ocpdBs', 'Supplying device BS (EN)'), F('ocpdType', 'Type'), F('ocpdRating', 'Rating (A)', 'num')),
       h('div', { class: 'grid2' }, F('zdb', 'Zdb (Ω)', 'num'), F('ipf', 'Ipf (kA)', 'num')),
+      h('a', { class: 'btn small', href: `#/calc/fault/${cert.id}/${cert.boards.indexOf(b)}` }, 'Work out Ipf for a sub-board'),
       F('spdDevice', 'SPD protective device (e.g. B32 MCB)'),
       h('div', { class: 'note' }, 'SPD type'), h('div', { class: 'grid2' }, F('spdT1', 'T1', 'check'), F('spdT2', 'T2', 'check'), F('spdT3', 'T3', 'check'), F('spdNA', 'N/A', 'check')),
       h('div', { class: 'grid2' }, F('polOk', 'Correct polarity confirmed', 'check'), F('phaseSeq', 'Phase sequence confirmed', 'check'), F('spdOk', 'SPD operational status confirmed', 'check'), F('spdStatusNA', 'SPD status N/A', 'check')),
@@ -330,7 +339,7 @@ function circuitEditor({ cert, c, ctx, back, title, prev, next, extra = [], mw =
           h('option', { value: '' }, '— size —'), Object.entries(pick.sizes).map(([sz, cp]) => h('option', { value: sz, selected: size === sz ? true : null }, `${sz} mm²` + (cp === 'armour' ? ' + armour' : cp === 'none' ? ' (no CPC)' : ` / ${cp} mm² CPC`))))) : h('span')),
       h('div', { class: 'grid2' }, inp('live'), inp('cpc')),
       h('label', { class: 'check' }, h('input', { type: 'checkbox', checked: isRingLike(c), onchange: (e) => { c.ring = e.target.checked; changed(); drawCable(); refresh(); } }), 'Ring final circuit', h('span', { class: 'note' }, ' (shows the ring tests)')),
-      codeSel('wiring', WIRING_TYPES, 'Type of wiring', 3), codeSel('ref', REF_METHODS, 'Reference method', 4),
+      codeSel('wiring', WIRING_TYPES, 'Type of wiring', 3), codeSel('ref', refMethodsFor(c), 'Reference method', 4),
       hintBox);
   };
   // Ring final: r1 / rn / r2 boxes and the end-to-end check, only when ticked.
@@ -399,16 +408,16 @@ function scheduleTable(cert, b, bi) {
     };
     const cell = (f) => {
       const i = h('input', { value: c[f.k] ?? '', inputmode: f.num ? 'decimal' : null, 'aria-label': `Circuit ${c.num} ${f.label}`, oninput: (e) => { const was = isSpare(c); c[f.k] = e.target.value; if (f.k === 'desc') descChanged(c, was); if (f.k === 'bs') { const d = deviceFromBs(c.bs); if (d) c.device = d.id; } changed(); upd(); }, ondblclick: isTick(f.k) ? (e) => { c[f.k] = c[f.k] === '✓' ? '' : '✓'; e.target.value = c[f.k]; changed(); upd(); } : null });
-      const td = h('td', { class: f.k === 'desc' ? 'desc sl2' : f.k === 'num' ? 'sl' : '', style: f.k === 'desc' ? 'min-width:150px' : f.k === 'remarks' ? 'min-width:160px' : 'min-width:' + (f.tick ? 40 : 52) + 'px' }, i);
+      const td = h('td', { class: f.k === 'desc' ? 'desc sl2' : f.k === 'num' ? 'sl' : '', style: f.k === 'desc' ? 'min-width:150px' : f.k === 'remarks' ? 'min-width:160px' : 'min-width:' + (f.tick ? 40 : /^(bs|rcdBs)$/.test(f.k) ? 66 : 52) + 'px', 'data-k': f.k }, i);
       cells[f.k] = td; return td;
     };
-    maxCell = h('td', { class: 'calc', title: 'From the BS 7671 tables. Type your own figure to override.' }, h('input', { value: c.maxZsOverride || '', inputmode: 'decimal', style: 'color:var(--brand);font-weight:600', oninput: (e) => { c.maxZsOverride = e.target.value; changed(); upd(); } }));
+    maxCell = h('td', { class: 'calc', title: 'From the BS 7671 tables. Type your own figure to override.' }, h('input', { value: c.maxZsOverride || '', inputmode: 'decimal', 'aria-label': `Circuit ${c.num} maximum Zs (Ω)`, style: 'color:var(--brand);font-weight:600', oninput: (e) => { c.maxZsOverride = e.target.value; changed(); upd(); } }));
     body.append(td0 = h('tr', { class: isSpare(c) ? 'spare' : '' }, cols.map((f) => [cell(f), f.k === 'bka' ? maxCell : null]),
       h('td', { class: 'act' }, h('button', { title: 'Open', onclick: () => go(`#/cert/${cert.id}/b/${bi}/c/${ci}`) }, '✎'), h('button', { title: 'Copy row', onclick: () => { b.circuits.splice(ci + 1, 0, copyCircuit(c, b.circuits.length + 1)); renumberIfSequential(b); changed(); render(); } }, '⧉'), h('button', { title: 'Spare', onclick: () => { { const was = isSpare(c); Object.assign(c, makeSpare(c)); descChanged(c, was); } changed(); render(); } }, '∅'), h('button', { title: 'Delete circuit', class: 'del', onclick: async () => { if (await askDelete(b, ci)) render(); } }, icon('trash', { size: 16 })))));
     upd();
   });
   return h('div', {}, h('div', { class: 'tablewrap' }, h('table', { class: 'sched' }, h('thead', {}, head), body)),
-    h('p', { class: 'note' }, `Zdb ${b.zdb || '–'} Ω · Ipf ${b.ipf || '–'} kA · Earthing ${cert.supply.earthing}. Red = over the limit, amber = worth a look (hold a finger on a cell to see why). Double-tap a tick column for ✓. `, CHECK_NOTE));
+    h('p', { class: 'note' }, `Zdb ${b.zdb || '–'} Ω · Ipf ${b.ipf || '–'} kA · Earthing ${cert.supply.earthing}. Red = over the limit, amber = worth a look ${mouseHelp()} `, CHECK_NOTE));
 }
 
 // ---------- Scan the consumer unit (one or more photos) ----------
@@ -604,3 +613,6 @@ route(/^\/cert\/([^/]+)\/b\/(\d+)\/scan$/, async (id, bi) => {
   drawStart();
   page('Scan consumer unit', box, { back: `#/cert/${id}/b/${bi}`, sub: b.ref });
 });
+// v0.29: say it the mouse way on a computer, the touch way on a phone.
+export const scheduleHelp = (mouse) => mouse ? '(hover over a cell to see why). Double-click a tick column for ✓.' : '(hold a finger on a cell to see why). Double-tap a tick column for ✓.';
+function mouseHelp() { return scheduleHelp(typeof matchMedia === 'function' && matchMedia('(hover: hover) and (pointer: fine)').matches); }

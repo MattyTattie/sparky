@@ -5,7 +5,7 @@
 html, body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.4 Inter, system-ui, sans-serif; -webkit-tap-highlight-color: transparent; }
 button, input, select, textarea { font: inherit; color: inherit; }
 header.top { position: sticky; top: 0; z-index: 20; display: flex; align-items: center; gap: 8px; padding: 10px 12px; background: var(--navy); color: #fff; min-height: 56px; }
-header.top h1 { font-size: 18px; margin: 0; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+header.top h1 { font-size: 18px; margin: 0; flex: 1; min-width: 0; white-space: normal; overflow-wrap: anywhere; line-height: 1.25; }
 header.top .sub { font-size: 12px; opacity: .8; font-weight: 400; display: block; }
 header.top button { background: none; border: 0; color: #fff; font-size: 22px; min-width: 40px; height: 40px; border-radius: 8px; }
 header.top button:active { background: rgba(255,255,255,.15); }
@@ -18,8 +18,8 @@ main.wide { max-width: none; padding: 6px; }
 .row { display: flex; align-items: center; gap: 10px; padding: 12px 14px; border-bottom: 1px solid var(--line); min-height: 56px; text-decoration: none; color: inherit; background: none; width: 100%; text-align: left; border-left: 0; border-right: 0; border-top: 0; }
 .row:last-child { border-bottom: 0; }
 .row .main { flex: 1; min-width: 0; }
-.row .t { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.row .s { font-size: 13px; color: var(--sub); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.row .t { font-weight: 600; white-space: normal; overflow-wrap: anywhere; }
+.row .s { font-size: 13px; color: var(--sub); white-space: normal; overflow-wrap: anywhere; }
 .row .go { color: var(--sub); font-size: 20px; }
 .btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 46px; padding: 0 16px; border-radius: 10px; border: 1px solid var(--line); background: #fff; font-weight: 600; text-decoration: none; color: var(--ink); }
 .btn.primary { background: var(--navy); border-color: var(--navy); color: #fff; }
@@ -230,7 +230,7 @@ ol.steps { margin: 4px 0 10px; padding-left: 20px; font-size: 14.5px; } ol.steps
 body.noscroll { overflow: hidden; }
 .pdfview { position: fixed; inset: 0; z-index: 50; background: #3a3f4b; display: flex; flex-direction: column; }
 .pdfbar { display: flex; align-items: center; gap: 8px; padding: 8px 10px; padding-top: max(8px, env(safe-area-inset-top)); background: linear-gradient(120deg, var(--brand), var(--brand2)); color: #fff; }
-.pdfname { flex: 1; font-weight: 700; font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pdfname { flex: 1; min-width: 0; font-weight: 700; font-size: 14px; white-space: normal; overflow-wrap: anywhere; }
 .pdfcount { font-weight: 500; opacity: .85; }
 .pdfbtn { border: 0; background: rgba(255,255,255,.18); color: #fff; border-radius: 12px; min-width: 42px; height: 42px; font-size: 18px; font-weight: 700; }
 .pdfbtn.wide { padding: 0 14px; font-size: 15px; background: #fff; color: var(--brand); }
@@ -465,8 +465,8 @@ label.f > span.withunit { display: block; position: relative; font-size: inherit
 .card .sub { margin-left: 18px; padding-left: 12px; border-left: 3px solid var(--brandbg, #e6ebff); }
 .note.fhint { font-size: 12.5px; margin-top: 4px; }
 .secnav { display: flex; gap: 8px; width: 100%; }
-.secnav .btn { flex: 1 1 auto; min-width: 0; white-space: nowrap; }
-.secnav .btn .lbl { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.secnav .btn { flex: 1 1 auto; min-width: 0; white-space: normal; height: auto; min-height: 44px; }
+.secnav .btn .lbl { min-width: 0; white-space: normal; overflow-wrap: anywhere; text-align: left; }
 .secnav .btn.back { flex: 0 0 auto; }
 .ins .help { font-size: 12.5px; line-height: 1.35; color: var(--muted, #6b7280); margin-top: 3px; font-weight: 400; }
 .ins .help .reg { font-weight: 600; color: var(--sub, #4b5563); white-space: nowrap; }
@@ -699,7 +699,7 @@ main > h3.fhead { margin: var(--s5) var(--s1) var(--s3); padding-top: 0; border-
 .row.addrow .t { color: var(--brand); font-weight: 650; }
 .row.frow { min-height: 54px; }
 .row.frow .fic { color: var(--muted); display: inline-flex; width: 22px; justify-content: center; }
-.row.frow .rv { font-size: 13.5px; color: var(--muted); max-width: 45%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.row.frow .rv { font-size: 13.5px; color: var(--muted); max-width: 45%; white-space: normal; overflow-wrap: anywhere; text-align: right; }
 .row.frow.danger .t, .row.frow.danger .fic { color: var(--red); }
 .row.inrow { padding: 6px 0; min-height: 0; border: 0; }
 button.row { font: inherit; cursor: pointer; }
@@ -841,3 +841,8 @@ a.newphone-link { display: block; text-decoration: none; }
 /* v0.28.1: cooker control unit socket tick box in the Cooking box */
 .mdkind .mdccu { display: flex; align-items: flex-start; gap: 10px; margin-top: 10px; font-size: 14px; white-space: normal; overflow-wrap: anywhere; cursor: pointer; }
 .mdkind .mdccu input { width: 20px; height: 20px; flex: 0 0 auto; margin: 1px 0 0; }
+/* v0.29: bigger tap area (44px+) round the "what it means" term links on touch screens; looks the same */
+@media (pointer: coarse), (max-width: 899px) {
+  .sym { position: relative; }
+  .sym::after { content: ''; position: absolute; top: 50%; left: 50%; width: max(44px, calc(100% + 16px)); height: 44px; transform: translate(-50%, -50%); }
+}

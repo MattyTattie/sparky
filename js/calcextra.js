@@ -87,6 +87,9 @@ export function faultLevel({ pfc, ze = null, pefc = null, phase = 1, cable = 'sw
   const ka = Number(deviceKa) || 6;
   return { ok: true, pscc: r2((three ? pscc3 : pscc1) / 1000), pscc1: r2(pscc1 / 1000), pefc: pefc2 == null ? null : r2(pefc2 / 1000), worst: r2(worst / 1000), ka, pass: worst / 1000 <= ka + 1e-9,
     origin3: ik3o ? r2(ik3o / 1000) : null, big: S > 35,
+    // v0.29: the working in Ω, the way it's done on site.
+    zsrc: r3(zsrc), r1rn: r3((2 * rL * L) / 1000), r1r2: rC != null ? r3(((rL + rC) * L) / 1000) : null, ze: zE != null ? r3(zE) : null,
+    zeSub: zE != null && rC != null ? r3(zE + ((rL + rC) * L) / 1000) : null, which: pefc2 != null && pefc2 > (three ? pscc3 : pscc1) ? 'PEFC' : 'PSCC',
     steps: [`Source impedance (L–N) = ${uo} V ÷ ${Number(pfc)} kA = ${r3(zsrc)} Ω.`,
       three ? `Three-phase fault at the origin ≈ 2 × ${Number(pfc)} kA = ${r2(ik3o / 1000)} kA (rule of thumb). At the far end: ${uo} V ÷ (${r3(uo / ik3o)} Ω + ${rL} mΩ/m × ${L} m) = ${r2(pscc3 / 1000)} kA.`
         : `At the far end (L–N): ${uo} V ÷ (${r3(zsrc)} Ω + 2 × ${rL} mΩ/m × ${L} m) = ${r2(pscc1 / 1000)} kA.`,
