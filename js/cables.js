@@ -465,7 +465,7 @@ CABLE_PICKS.singles3 = { label: 'Singles 6491X, 3-phase (separate CPC)', calc: '
 //  4E4A https://www.elandcables.com/media/cnwh0k2l/table-4e4a-and-4e4b.pdf
 //  4D1A https://www.elandcables.com/media/vyrp3kxq/table-4d1a-and-4d1b.pdf
 //  4E1A https://www.elandcables.com/media/ehkk3rg2/table-4e1a-and-4e1b.pdf
-// Mineral insulated (4G1A / 4G2A) and FP200 are TYPICAL figures (shown with "typical, check your books").
+// v0.30: FP200 and mineral insulated removed (not used). Old saved ids load as plain text, no rating check.
 // The old key D stays as D1 (in a duct) so saved calcs and certs keep working; D2 = direct in the ground.
 // =====================================================================
 const only = (cab, amps) => Object.fromEntries(Object.entries(amps).filter(([sz]) => cab.sizes.map(String).includes(String(sz))));
@@ -513,38 +513,7 @@ CABLES.singlesX = {
   },
 };
 CABLE_TEMP.singlesX = 90;
-// Mineral insulated, 70 °C sheath (PVC/LSF covered, or bare and exposed to touch). TYPICAL, check your book.
-CABLES.micL = {
-  label: 'Mineral insulated, light duty 500 V (2 cores or twin, covered)', cores: 2, typical: true,
-  source: 'Table 4G1A / 4G1B, light duty 500 V, 70 °C sheath (typical figures)',
-  note: 'Mineral insulated: typical Table 4G1A figures (70 \u00b0C sheath, covered or bare and exposed to touch). Check your book. The copper sheath is usually the CPC.',
-  sizes: [1, 1.5, 2.5, 4],
-  mvam: { 1: 42, 1.5: 28, 2.5: 17, 4: 10 },
-  methods: { C: { label: 'Reference Method C: clipped direct', amps: { 1: 18.5, 1.5: 23, 2.5: 31, 4: 40 } } },
-};
-CABLES.micH = {
-  label: 'Mineral insulated, heavy duty 750 V (2 cores or twin, covered)', cores: 2, typical: true,
-  source: 'Table 4G2A / 4G2B, heavy duty 750 V, 70 °C sheath (typical figures)',
-  note: CABLES.micL.note.replace('4G1A', '4G2A'),
-  sizes: [1, 1.5, 2.5, 4, 6, 10, 16, 25],
-  mvam: { 1: 42, 1.5: 28, 2.5: 17, 4: 10, 6: 7, 10: 4.2, 16: 2.6, 25: 1.65 },
-  methods: { C: { label: 'Reference Method C: clipped direct', amps: { 1: 19.5, 1.5: 25, 2.5: 34, 4: 45, 6: 57, 10: 77, 16: 102, 25: 133 } } },
-};
-CABLE_TEMP.micL = 70; CABLE_TEMP.micH = 70;
-// FP200 Gold style fire-resistant cable: maker's data, TYPICAL (not a BS 7671 table).
-CABLES.fp200 = {
-  label: 'Fire-resistant FP200 type (2-core & CPC), maker\u2019s data', cores: 2, typical: true,
-  source: 'Maker\u2019s data (FP200 Gold type), typical figures, not BS 7671',
-  note: 'FP200 type cable: typical maker\u2019s figures, not a BS 7671 table. Check the data sheet of the cable you\u2019re using.',
-  sizes: [1, 1.5, 2.5, 4],
-  mvam: { 1: 44, 1.5: 29, 2.5: 18, 4: 11 },
-  methods: { C: { label: 'Reference Method C: clipped direct', amps: { 1: 17, 1.5: 22, 2.5: 30, 4: 40 } } },
-};
-CABLE_TEMP.fp200 = 70;
 CABLE_PICKS.singlesX = { label: 'Singles 90 \u00b0C XLPE in conduit / trunking (separate CPC)', calc: 'singlesX', wiring: '', cpc: 'sep', sizes: { ...SINGLES_CPC } };
-CABLE_PICKS.micL3 = { label: 'Mineral insulated light duty, 3-core (core as CPC)', calc: 'micL', wiring: 'H', cpc: 'core', sizes: { 1: 1, 1.5: 1.5, 2.5: 2.5, 4: 4 } };
-CABLE_PICKS.micH3 = { label: 'Mineral insulated heavy duty, 3-core (core as CPC)', calc: 'micH', wiring: 'H', cpc: 'core', sizes: { 1: 1, 1.5: 1.5, 2.5: 2.5, 4: 4, 6: 6, 10: 10, 16: 16, 25: 25 } };
-CABLE_PICKS.fp200 = { label: 'FP200 type fire-resistant, 2-core & CPC', calc: 'fp200', wiring: 'O', cpc: 'core', sizes: { 1: 1, 1.5: 1.5, 2.5: 2.5, 4: 4 } };
 
 // Which reference methods (cert column 4) suit a picked cable. No pick = the full list.
 export const METHODS_FOR_PICK = (pickKey) => {

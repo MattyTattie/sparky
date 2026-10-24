@@ -39,8 +39,7 @@ test('new reference methods from Appendix 4', () => {
   assert.equal(CABLES.swa4.methods.E.amps[16], 83); assert.equal(CABLES.swa4X.methods.D2.amps[25], 107);
   assert.equal(CABLES.singles.methods.F.amps[25], 131); assert.equal(CABLES.singles.methods.G.amps[35], 181); assert.equal(CABLES.tails.methods.F.amps[25], 131);
   assert.equal(CABLES.singlesX.methods.C.amps[1.5], 25); assert.equal(CABLES.singles.methods.A.amps[2.5], 20);
-  for (const k of ['micL', 'micH', 'fp200']) { assert.equal(CABLES[k].typical, true); assert.ok(CABLE_PICKS[Object.keys(CABLE_PICKS).find((p) => CABLE_PICKS[p].calc === k)]); }
-  for (const c of ['swa', 'swaX', 'swa4', 'swa4X', 'singles', 'singlesX', 'tails', 'micL', 'micH', 'fp200'].map((k) => CABLES[k])) for (const m of Object.values(c.methods)) for (const s of Object.keys(m.amps)) assert.ok(c.sizes.map(String).includes(s));
+  for (const c of ['swa', 'swaX', 'swa4', 'swa4X', 'singles', 'singlesX', 'tails'].map((k) => CABLES[k])) for (const m of Object.values(c.methods)) for (const s of Object.keys(m.amps)) assert.ok(c.sizes.map(String).includes(s));
 });
 test('cert schedule lists only methods that suit the cable', () => {
   assert.deepEqual(METHODS_FOR_PICK('swa2').map(([k]) => k), ['C', 'D1', 'D2', 'E']);

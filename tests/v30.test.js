@@ -58,3 +58,20 @@ test('version 0.30.0 and reference files are cached offline', () => {
   const sw = readFileSync('sw.js', 'utf8'); assert.match(sw, /sparky-v0\.30\.0/); assert.match(sw, /refui\.js/); assert.match(sw, /refdata\.js/);
   assert.match(readFileSync('js/main.js', 'utf8'), /refui\.js/);
 });
+
+import { CABLE_PICKS, METHODS_FOR_PICK } from '../js/cables.js';
+import { cableCheck, cableTable } from '../js/checks.js';
+import { kFor } from '../js/design.js';
+test('FP200 and mineral insulated are gone from data, pickers and method mapping', () => {
+  for (const k of ['micL', 'micH', 'fp200']) assert.equal(CABLES[k], undefined);
+  for (const k of ['micL3', 'micH3', 'fp200']) { assert.equal(CABLE_PICKS[k], undefined); assert.equal(METHODS_FOR_PICK(k), null); }
+  assert.ok(!Object.values(CABLE_PICKS).some((p) => /FP200|[Mm]ineral/.test(p.label)));
+  assert.ok(!/FP200|[Mm]ineral/.test(JSON.stringify(REF)));
+});
+test('old circuits with those cable ids still load: no rating check, no throw', () => {
+  for (const [cable, wiring] of [['micL3', 'H'], ['micH3', 'H'], ['fp200', 'O']]) {
+    const c = { cable, wiring, cableSize: '1.5', live: '1.5', cpc: '1.5', ref: 'C', rating: '10', type: 'B' };
+    assert.equal(cableTable(c), null); assert.equal(cableCheck(c), null);
+    assert.doesNotThrow(() => kFor({ cable }));
+  }
+});
