@@ -806,3 +806,17 @@ a.newphone-link { display: block; text-decoration: none; }
 .stepbtn { min-width: 40px; min-height: 40px; border: 1px solid var(--line); background: var(--card, #fff); color: var(--ink, inherit); font-size: 20px; font-weight: 700; line-height: 1; cursor: pointer; touch-action: manipulation; }
 .stepbtn:first-child { border-radius: 10px 0 0 10px; } .stepbtn:last-child { border-radius: 0 10px 10px 0; }
 .stepbtn:active { background: var(--line); }
+/* v0.26: line up How many / value / × along the bottom, same height */
+.mdin { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 8px 12px; }
+.mdin .mini { gap: 4px; line-height: 1.2; }
+.mdin .mini > span { min-height: 14px; }
+.mdin .mini input, .mdin .stepper input, .mdin .stepbtn { height: 44px; min-height: 44px; box-sizing: border-box; margin: 0; }
+.mdin .stepper { height: 44px; }
+.mdin .iconbtn.small { width: 44px; height: 44px; margin: 0; align-self: flex-end; flex: 0 0 auto; }
+.mdin > .mini { margin: 0; padding: 0; }
+.mdin .mini > span { display: block; margin: 0; white-space: nowrap; }
+.mdin .stepper { margin: 0; }
+.mdin { gap: 8px; }
+.mdin .stepper input { width: 46px !important; }
+.mdin .stepbtn { min-width: 40px; width: 40px; padding: 0; }
+.mdin .mini input:not([aria-label="How many"]) { width: 66px; }
