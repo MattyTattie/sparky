@@ -43,6 +43,13 @@ export function mergeSettings(local, remote) {
     else if (b > a) { v = rv[k]; s = b; }
     else if (a > b) { v = lv[k]; s = a; }
     else { v = combine(k, lv[k], rv[k]); s = a; }
+    // Fix: the logo lives inside "profile", so typing your details on the Mac
+    // (no logo there yet) used to win and drop the phone's logo everywhere.
+    // A newer profile without a logo now keeps the other side's logo.
+    if (k === 'profile' && v && typeof v === 'object' && !filled(v.logo)) {
+      const other = v === lv[k] ? rv[k] : lv[k];
+      if (other && filled(other.logo)) v = { ...v, logo: other.logo };
+    }
     values[k] = v; stamps[k] = s;
     if (!same(v, lv[k])) take[k] = v;
     if (!same(v, rv[k]) || (s || '') !== (rs[k] || '')) push = true;
