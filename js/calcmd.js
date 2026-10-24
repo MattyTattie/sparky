@@ -47,7 +47,7 @@ route(/^\/calc\/md(?:\/([^/]+))?$/, async (certId) => {
         // keep the tick box where it was on screen after the rebuild
         const before = e.target.getBoundingClientRect().top; v.loads = setCcuSocket(v.loads, e.target.checked); save();
         const now = list.querySelector('.mdccu input'); if (now) { const diff = now.getBoundingClientRect().top - before; if (Math.abs(diff) > 0.5) scrollBy(0, diff); now.focus({ preventScroll: true }); } } }),
-        h('span', {}, 'CCU has a socket (+5 A)')) : null,
+        h('span', {}, 'CCU with 13 A socket (+5 A)')) : null,
       h('button', { class: 'btn small mdaddsize', type: 'button', onclick: () => addLine(d) }, d.unit === 'each' ? '+ Add another' : '+ Add another size'));
   };
   const lineNotes = () => { const L = maxDemandLines(v.loads).lines; L.forEach((x, i) => { if (notes[i] && x) notes[i].textContent = !Number(v.loads[i].qty) ? `${x.text} · nothing counted` : `${x.text} \u2192 ${x.share} A after diversity`; }); for (const b of kindBoxes(v.loads)) if (kworks[b.k]) kworks[b.k].textContent = b.work; };

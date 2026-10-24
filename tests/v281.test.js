@@ -24,6 +24,6 @@ test('old data with separate socket lines migrates, same total, no separate box'
   assert.deepEqual(migrateCcu(C), C); assert.deepEqual(migrateCcu(undefined), []);
 });
 test('no separate add chip; tick box text in full', () => {
-  const s = read('js/calcmd.js'); assert.match(s, /d\.k !== 'cookerSocket'/); assert.match(s, /CCU has a socket \(\+5 A\)/);
+  const s = read('js/calcmd.js'); assert.match(s, /d\.k !== 'cookerSocket'/); assert.match(s, /CCU with 13 A socket \(\+5 A\)/);
   assert.ok(!/text-overflow:\s*ellipsis/.test(read('styles.css').split('v0.28.1')[1]));
 });
