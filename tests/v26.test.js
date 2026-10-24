@@ -8,7 +8,7 @@ import { planGone, needsPush } from '../js/syncmerge.js';
 import { normInstruments, pickDefaults, instrumentsFor, INSTRUMENT_TAGS } from '../js/instruments.js';
 import { mwInstruments } from '../js/pdf.js';
 
-test('v0.26 version', () => assert.match(APP_VERSION, /^0\.2[6-9]\./));
+test('v0.26 version', () => assert.match(APP_VERSION, /^0\.(2[6-9]|[3-9]\d)\.\d+/));
 
 test('max demand: two rings show the working', () => {
   const r = maxDemandLines([{ k: 'ring', qty: 2, value: 32 }]);

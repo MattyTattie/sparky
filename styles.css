@@ -820,3 +820,9 @@ a.newphone-link { display: block; text-decoration: none; }
 .mdin .stepper input { width: 46px !important; }
 .mdin .stepbtn { min-width: 40px; width: 40px; padding: 0; }
 .mdin .mini input:not([aria-label="How many"]) { width: 66px; }
+/* v0.26.1: each max demand line in its own card */
+.mdcards .mdhead { margin: 4px 2px 8px; }
+.mdcards .mdhead h2 { margin: 0; }
+.mdrow.mdcard { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 14px; border: 1px solid var(--line); border-radius: var(--r); margin-bottom: 12px; }
+.mdrow.mdcard:last-child { border-bottom: 1px solid var(--line); }
+.mdcards .mdhead h2 { font-size: 17px; }

@@ -25,7 +25,7 @@ route(/^\/calc\/md(?:\/([^/]+))?$/, async (certId) => {
     const note = h('span', { class: 'note mdwork' }); notes[i] = note;
     const qty = h('input', { inputmode: 'numeric', value: l.qty, 'aria-label': 'How many', onchange: (e) => { l.qty = String(Math.max(0, Math.round(Number(e.target.value) || 0))); e.target.value = l.qty; store(); refresh(e.target); } });
     const step = (by) => (e) => { e.preventDefault(); l.qty = String(Math.max(0, (Math.round(Number(l.qty) || 0)) + by)); qty.value = l.qty; store(); refresh(e.currentTarget); };
-    return h('div', { class: 'mdrow' },
+    return h('div', { class: 'card mdrow mdcard' },
       h('div', { class: 'mdname' }, h('b', {}, d.label), note),
       h('label', { class: 'mini mdlabel' }, h('span', {}, 'Name (optional)'), h('input', { value: l.name || '', placeholder: NAME_PH[l.k] || 'e.g. what it is', maxlength: 40, oninput: (e) => { l.name = e.target.value.trim() ? e.target.value : undefined; store(); } })),
       h('div', { class: 'mdin' },
@@ -53,7 +53,7 @@ route(/^\/calc\/md(?:\/([^/]+))?$/, async (certId) => {
   };
   const draw = () => {
     drawTop(); notes.length = 0;
-    fill(list, v.loads.length ? icard('Your loads', v.loads.map(row), { step: 1 }) : null); lineNotes();
+    fill(list, v.loads.length ? h('div', { class: 'mdcards' }, h('div', { class: 'icard mdhead' }, h('h2', {}, h('span', { class: 'stepno' }, '1'), 'Your loads')), v.loads.map(row)) : null); lineNotes();
     fill(add, icard(v.loads.length ? 'Add another' : 'Add the loads', [
       h('div', { class: 'chips mdadd' }, KINDS.map((d) => h('button', { class: 'chip', type: 'button', onclick: () => { v.loads.push({ k: d.k, qty: 1, value: d.dflt }); save(); } }, '+ ' + d.label))),
       h('div', { class: 'btns' }, h('button', { class: 'btn small', onclick: () => { v.loads = EXAMPLE.map((x) => ({ ...x })); save(); } }, 'Load the example house'), v.loads.length ? h('button', { class: 'btn small', onclick: () => { v.loads = []; save(); } }, 'Clear') : null),
