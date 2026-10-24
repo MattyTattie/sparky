@@ -75,3 +75,27 @@ test('old circuits with those cable ids still load: no rating check, no throw', 
     assert.doesNotThrow(() => kFor({ cable }));
   }
 });
+
+import { OBSERVATIONS } from '../js/inspections.js';
+import { maxDemand, kindBoxes, kind } from '../js/maxdemand.js';
+test('BPG4: no RCD on ordinary sockets is C3; outdoor sockets stay C2', () => {
+  const o = OBSERVATIONS.filter((x) => x.reg === '411.3.3' && x.cat === 'RCD protection');
+  assert.ok(o.some((x) => x.code === 'C3' && /up to 32 A/.test(x.text)));
+  assert.ok(o.some((x) => x.code === 'C2' && /outdoors/.test(x.text) && !/unlikely/.test(x.text)));
+  assert.ok(!o.some((x) => x.code === 'C2' && /up to 32 A/.test(x.text)));
+});
+test('storage heaters and heat pumps are 100%, space heaters still 10 A + 50%', () => {
+  const amps = (kw) => (kw * 1000) / 230;
+  const st = maxDemand([{ k: 'storage', qty: 3, value: 3.4 }]); const hp = maxDemand([{ k: 'heatpump', qty: 1, value: 5 }]);
+  const sp = maxDemand([{ k: 'heater', qty: 3, value: 3.4 }]);
+  const tot = (r) => r.groups.reduce((s, g) => s + g.demand, 0);
+  assert.ok(Math.abs(tot(st) - 3 * amps(3.4)) < 0.2); assert.ok(Math.abs(tot(hp) - amps(5)) < 0.2);
+  assert.ok(tot(sp) < 3 * amps(3.4) - 5);
+  assert.equal(kind('storage').group, 'storage'); assert.equal(kind('heatpump').group, 'heatpump');
+  const b = kindBoxes([{ k: 'storage', qty: 2, value: 3.4 }, { k: 'heatpump', qty: 1, value: 5 }, { k: 'heater', qty: 1, value: 2 }]);
+  assert.equal(b.length, 3); for (const x of b) assert.ok(x.rule);
+});
+test('old saved max-demand data (heater kind) still loads the same', () => {
+  const r = maxDemand([{ k: 'heater', qty: 2, value: 3 }, { k: 'ring', qty: 2, value: 32 }]);
+  assert.ok(r.groups.some((g) => g.g === 'heating'));
+});

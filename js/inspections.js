@@ -129,7 +129,7 @@ export const OBSERVATIONS = [
   O('Test results', 'C2', '411.3.1.1; 543', 'Protective conductor (CPC) not continuous on circuit'),
   O('Earthing & bonding', 'C2', '542.1; 411.3.1.1', 'No earthing conductor / means of earthing not found'),
   O('RCD protection', 'C2', '411.3.3', 'No RCD protection for socket-outlets that may supply equipment used outdoors'),
-  O('RCD protection', 'C2', '411.3.3', 'No RCD protection for socket-outlets rated up to 32 A (used by ordinary persons)'),
+  O('RCD protection', 'C3', '411.3.3', 'No RCD protection for socket-outlets rated up to 32 A that are unlikely to supply equipment outdoors and not in a bath or shower room'),
   O('Test results', 'C2', '411.4.204; Table 41.3', 'Earth fault loop impedance above maximum for protective device'),
   O('Earthing & bonding', 'C2', '411.3.1.2; 544.1', 'Main protective bonding to water absent'),
   O('Earthing & bonding', 'C2', '411.3.1.2; 544.1', 'Main protective bonding to gas absent'),

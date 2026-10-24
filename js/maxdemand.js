@@ -12,7 +12,9 @@ export const KINDS = [
   { k: 'cooking', label: 'Cooker / hob / oven', unit: 'kW', dflt: 3, group: 'cooking', hint: 'Each appliance\u2019s rating (hob and oven separately is fine).' },
   { k: 'cookerSocket', label: 'Cooker unit with a socket', unit: 'each', dflt: 1, group: 'cookerSocket', hint: 'Adds 5 A per cooker control unit with a socket.' },
   { k: 'immersion', label: 'Immersion heater', unit: 'kW', dflt: 3, group: 'water', hint: 'Thermostatic: no diversity.' },
-  { k: 'heater', label: 'Space heater / storage / panel heater', unit: 'kW', dflt: 2, group: 'heating', hint: 'Fixed heating.' },
+  { k: 'heater', label: 'Space heater / panel heater', unit: 'kW', dflt: 2, group: 'heating', hint: 'Fixed direct heating (10 A + 50%). Storage heaters have their own box.' },
+  { k: 'storage', label: 'Storage / floor-warming heaters', unit: 'kW', dflt: 3.4, group: 'storage', hint: 'No diversity (On-Site Guide Appendix A).' },
+  { k: 'heatpump', label: 'Heat pump', unit: 'kW', dflt: 5, group: 'heatpump', hint: 'No diversity. Use the maker\u2019s maximum running current.' },
   { k: 'shower', label: 'Electric shower (instantaneous)', unit: 'kW', dflt: 9.5, group: 'shower', hint: 'Largest two 100%, rest 25%.' },
   { k: 'ring', label: 'Ring final (sockets)', unit: 'A', dflt: 32, group: 'sockets', hint: 'Breaker rating.' },
   { k: 'radial', label: 'Radial (sockets)', unit: 'A', dflt: 20, group: 'sockets', hint: 'Breaker rating.' },
@@ -33,8 +35,10 @@ export const RULES = {
   sockets: '100% of the biggest circuit + 40% of every other',
   lighting: '66% of the total',
   ev: '100% (no diversity)',
+  storage: '100% (storage and floor-warming heating: no diversity)',
+  heatpump: '100% (no diversity)',
 };
-export const GROUP_LABEL = { cooking: 'Cooking', cookerSocket: 'Cooker socket', water: 'Water heating', heating: 'Heating and power', shower: 'Showers', sockets: 'Socket circuits', lighting: 'Lighting', ev: 'EV charging' };
+export const GROUP_LABEL = { cooking: 'Cooking', cookerSocket: 'Cooker socket', water: 'Water heating', heating: 'Heating and power', storage: 'Storage / floor-warming heating', heatpump: 'Heat pumps', shower: 'Showers', sockets: 'Socket circuits', lighting: 'Lighting', ev: 'EV charging' };
 
 // The sum. loads: [{ k, qty, value }]. Returns each group's connected and
 // after-diversity current, and the total.
@@ -57,6 +61,8 @@ export function maxDemand(loads, { u = U } = {}) {
     sockets: (xs) => { const s = desc(xs); return (s[0] || 0) + 0.4 * sum(s.slice(1)); },
     lighting: (xs) => 0.66 * sum(xs),
     ev: sum,
+    storage: sum,
+    heatpump: sum,
   };
   const groups = Object.keys(GROUP_LABEL).filter((g) => each[g] && each[g].length).map((g) => ({ g, label: GROUP_LABEL[g], rule: RULES[g], items: each[g].length, connected: r1(sum(each[g])), demand: r1(div[g](each[g])) }));
   const exact = Object.keys(each).reduce((s, g) => s + div[g](each[g]), 0);
@@ -115,7 +121,7 @@ export function maxDemandLines(loads, { u = U } = {}) {
     const its = items[g] || []; const amps = its.map((x) => x.a); const sh = itemShares(g, amps);
     its.forEach((x, i) => { shares[x.line] += sh[i]; conn[x.line] += x.a; });
     const lines = (linesIn[g] || []).length;
-    if (lines) groups.push({ g, label: GROUP_LABEL[g], lines, items: its.length, connected: r1(sumOf(amps)), demand: r1(sumOf(sh)), work: its.length ? groupWork(g, amps) : '' });
+    if (lines) groups.push({ g, label: GROUP_LABEL[g], rule: RULES[g], lines, items: its.length, connected: r1(sumOf(amps)), demand: r1(sumOf(sh)), work: its.length ? groupWork(g, amps) : '' });
   }
   const lines = (loads || []).map((l, li) => {
     const d = kind(l.k); const g = groupOf(l); if (!d) return null;
