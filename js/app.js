@@ -32,9 +32,13 @@ const navFor = (hash) => { const p = hash.replace(/^#/, '') || '/'; if (p === '/
 const DESK = window.matchMedia('(min-width: 900px)');
 DESK.addEventListener('change', () => render());
 const deskTabFor = (hash) => /^#\/(job|cert|newjob)/.test(hash) ? '#/' : /^#\/customer/.test(hash) ? '#/customers' : /^#\/settings/.test(hash) ? '#/settings' : null;
+// v0.31: the job list can be hidden; remembered on this computer only (not synced, not in backups).
+const PANE_KEY = 'sparky.jobpane';
+function paneOpen() { try { return localStorage.getItem(PANE_KEY) !== 'closed'; } catch { return true; } }
+function setPaneOpen(on) { try { localStorage.setItem(PANE_KEY, on ? 'open' : 'closed'); } catch {} render(); }
 // v0.27: the job list beside a job or certificate on a wide screen (filled in after the page draws).
 function jobPane() {
-  const box = h('aside', { class: 'jobpane', 'aria-label': 'Jobs' }, h('div', { class: 'jobpane-h' }, h('b', {}, 'Jobs'), h('a', { href: '#/', class: 'small' }, 'All jobs')));
+  const box = h('aside', { class: 'jobpane', 'aria-label': 'Jobs' }, h('div', { class: 'jobpane-h' }, h('b', {}, 'Jobs'), h('span', { class: 'jobpane-a' }, h('a', { href: '#/', class: 'small' }, 'All jobs'), h('button', { class: 'btn small panetoggle', 'aria-expanded': 'true', title: 'Hide the job list to give the certificate more room', onclick: () => setPaneOpen(false) }, '« Hide'))));
   const m = location.hash.match(/^#\/(job|cert)\/([^/]+)/);
   (async () => {
     const [jobs, customers, certs] = await Promise.all([db.all('jobs'), db.all('customers'), db.all('certs')]);
@@ -58,7 +62,8 @@ export function page(title, content, { back = null, sub = '', actions = [], wide
   // pages get the job list beside them. Phones (below 900px) get exactly the old layout.
   const desk = DESK.matches;
   const dtab = tab || (desk ? deskTabFor(location.hash) : null);
-  const listPane = desk && !wide && /^#\/(job|cert)\//.test(location.hash);
+  const listSpot = desk && !wide && /^#\/(job|cert)\//.test(location.hash);
+  const listPane = listSpot && paneOpen(); // v0.31: Hide / Show jobs, remembered on this computer
   const calcPage = /^#\/calc\/./.test(location.hash);
   const main = h('main', { class: (wide ? 'wide ' : '') + (tab ? 'hasnav' : '') + (desk && calcPage ? ' calcpage' : '') + (listPane ? ' withlist' : '') }, content);
   document.body.classList.toggle('desk', desk); document.body.classList.toggle('withlist', listPane);
@@ -66,6 +71,7 @@ export function page(title, content, { back = null, sub = '', actions = [], wide
     h('header', { class: 'top' },
       back ? h('button', { class: 'iconbtn', 'aria-label': 'Back', onclick: () => go(back) }, icon('arrowLeft', { size: 22 })) : h('span', { class: 'brandmark', 'aria-hidden': 'true' }, h('img', { src: 'icons/icon.svg', alt: '', width: 36, height: 36 })),
       h('h1', {}, title, title === APP_NAME ? h('span', { class: 'beta' }, 'BETA') : null, sub ? h('span', { class: 'sub' }, sub) : null),
+      listSpot && !listPane ? h('button', { class: 'btn small panetoggle', 'aria-expanded': 'false', title: 'Show the job list', onclick: () => setPaneOpen(true) }, '☰ Show jobs') : null,
       syncChip(), actions),
     main,
     (tab || desk) ? h('nav', { class: 'bottomnav', 'aria-label': 'Main' }, desk ? h('a', { class: 'sidebrand', href: '#/' }, h('img', { src: 'icons/icon.svg', alt: '', width: 34, height: 34 }), h('span', {}, h('b', {}, APP_NAME), h('small', {}, APP_VERSION))) : null,

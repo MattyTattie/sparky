@@ -2,7 +2,7 @@
    Sidebar nav on the left, content in a centred column (max 1180px), the job list beside
    job and certificate pages, 2-column forms, and calculators with the answer alongside. */
 @media (min-width: 900px) {
-  :root { --side-w: 236px; --list-w: 320px; --col: 1180px; }
+  :root { --side-w: 236px; --list-w: 260px; --col: 1180px; }
   body.withlist { --lead: calc(var(--side-w) + var(--list-w)); }
   body { --lead: var(--side-w); }
 
@@ -61,7 +61,7 @@
   table.sched td.desc { min-width: 200px !important; }
 }
 @media (min-width: 900px) and (max-width: 1150px) {
-  :root { --side-w: 200px; --list-w: 280px; }
+  :root { --side-w: 200px; --list-w: 220px; }
   main.calcpage { grid-template-columns: minmax(0, 1fr) minmax(280px, .9fr); }
 }
 @media (max-width: 899px) { .sidebrand, .sidenew, .jobpane { display: none !important; } }
@@ -168,4 +168,22 @@
   /* v0.30: Reference pages read better at a comfortable width on a big screen. */
   .refcard, .refmore { max-width: 900px; }
   .reftbl { font-size: 15px; }
+}
+
+/* v0.31: Hide / Show jobs button */
+@media (min-width: 900px) {
+  .jobpane-a { display: flex; align-items: center; gap: 8px; }
+  .jobpane-h { align-items: center; }
+  .panetoggle { min-height: 28px !important; height: 28px; padding: 2px 10px !important; font-size: 13px !important; white-space: nowrap; }
+  header.top .panetoggle { margin-right: 8px; }
+}
+@media (max-width: 899px) { .panetoggle { display: none !important; } }
+/* v0.31: Cmd+P prints the page you're on, not the app frame */
+@media print {
+  .bottomnav, .jobpane, .panetoggle, .syncchip, .fab, .toast, .wiznav, .wizlive, header.top .iconbtn, main .btns { display: none !important; }
+  header.top { margin: 0 !important; position: static !important; background: none !important; color: #000 !important; box-shadow: none !important; }
+  header.top * { color: #000 !important; }
+  main, main.withlist, main.hasnav, main.haswiz { margin: 0 !important; padding: 0 !important; max-width: none !important; animation: none !important; }
+  body { background: #fff !important; }
+  .card { break-inside: avoid; box-shadow: none !important; }
 }
