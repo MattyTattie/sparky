@@ -301,8 +301,8 @@ const addSizes = (c, mv, amps) => { c.sizes = [...c.sizes, 50, 70, 95]; ext(c.mv
 //  4E4A/4E4B: https://intrelec.co.uk/2020/10/21/swa-cable-sizing-charts/ and Anixter BS 5467 sheet https://objects.eanixter.com/PD372902-AN.PDF
 //  4D1A/4D1B: https://www.elandcables.com/media/vyrp3kxq/table-4d1a-and-4d1b.pdf and https://www.ukcables.co.uk/wp-content/uploads/2025/03/6491X_UK-CABLES-DATA-SHEETS-.pdf
 //  Singles 3-phase volt drop changed 0.87/0.62 -> 0.85/0.61 (4D1B col 6 z).
-addSizes(CABLES.swa, { 50: 0.94, 70: 0.65, 95: 0.5 }, { C: { 50: 176, 70: 224, 95: 271 }, D: { 50: 140, 70: 173, 95: 206 } });
-addSizes(CABLES.swa3, { 50: 0.94, 70: 0.65, 95: 0.5 }, { C: { 50: 176, 70: 224, 95: 271 }, D: { 50: 140, 70: 173, 95: 206 } });
+addSizes(CABLES.swa, { 50: 0.94, 70: 0.65, 95: 0.5 }, { C: { 50: 175, 70: 222, 95: 269 }, D: { 50: 140, 70: 173, 95: 204 } });
+addSizes(CABLES.swa3, { 50: 0.94, 70: 0.65, 95: 0.5 }, { C: { 50: 175, 70: 222, 95: 269 }, D: { 50: 140, 70: 173, 95: 204 } });
 addSizes(CABLES.swaX, { 50: 1.0, 70: 0.71, 95: 0.53 }, { C: { 50: 219, 70: 279, 95: 338 }, D: { 50: 164, 70: 203, 95: 239 } });
 addSizes(CABLES.swa3X, { 50: 1.0, 70: 0.71, 95: 0.53 }, { C: { 50: 219, 70: 279, 95: 338 }, D: { 50: 164, 70: 203, 95: 239 } });
 addSizes(CABLES.swa4, { 50: 0.81, 70: 0.57, 95: 0.43 }, { C: { 50: 151, 70: 192, 95: 232 }, D: { 50: 116, 70: 143, 95: 169 } });

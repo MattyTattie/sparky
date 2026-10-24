@@ -53,3 +53,6 @@ test('D1 and D2 give their own ratings; old D still works', () => {
   const base = { cable: 'swa2', live: '16', rating: '63', wiring: 'F' };
   assert.match(cableCheck({ ...base, ref: 'D1' }).msg, /78 A/); assert.match(cableCheck({ ...base, ref: 'D2' }).msg, /83 A/); assert.match(cableCheck({ ...base, ref: 'D' }).msg, /78 A/);
 });
+test('70 °C SWA matches Table 4D4A at 50–95 mm²', () => {
+  for (const k of ['swa', 'swa3']) { assert.deepEqual([50, 70, 95].map((s) => CABLES[k].methods.C.amps[s]), [175, 222, 269]); assert.equal(CABLES[k].methods.D.amps[95], 204); }
+});
