@@ -6,7 +6,7 @@ import { route, page, go } from './app.js';
 import * as db from './db.js';
 import { flush } from './state.js';
 import { setLastCalc, icard, answerCard, pchip, resline, detailCard, banner } from './calckit.js';
-import { KINDS, kind, maxDemand, maxDemandLines, kindBoxes, EXAMPLE } from './maxdemand.js';
+import { KINDS, kind, maxDemand, maxDemandLines, kindBoxes, EXAMPLE, setCcuSocket, migrateCcu } from './maxdemand.js';
 import { icon } from './icons.js';
 
 const KEY = 'sparky.md1';
@@ -14,7 +14,7 @@ const load = () => { try { return JSON.parse(localStorage.getItem(KEY) || 'null'
 route(/^\/calc\/md(?:\/([^/]+))?$/, async (certId) => {
   setLastCalc('md');
   const cert = certId ? await db.get('certs', certId) : null;
-  const v = load() || { loads: [], fuse: '100' };
+  const v = load() || { loads: [], fuse: '100' }; v.loads = migrateCcu(v.loads || []);
   const top = h('div'); const list = h('div'); const add = h('div'); const work = h('div');
   const store = () => { try { localStorage.setItem(KEY, JSON.stringify(v)); } catch {} };
   const save = () => { store(); draw(); };
@@ -43,6 +43,11 @@ route(/^\/calc\/md(?:\/([^/]+))?$/, async (certId) => {
     return h('div', { class: 'card mdcard mdkind', 'data-kind': b.k },
       h('div', { class: 'mdname' }, h('b', {}, b.label), w, h('span', { class: 'note mdrule' }, 'Rule: ' + b.rule)),
       b.idx.map((i) => row(v.loads[i], i)),
+      b.k === 'cooking' ? h('label', { class: 'mdccu' }, h('input', { type: 'checkbox', checked: b.ccu > 0, onchange: (e) => {
+        // keep the tick box where it was on screen after the rebuild
+        const before = e.target.getBoundingClientRect().top; v.loads = setCcuSocket(v.loads, e.target.checked); save();
+        const now = list.querySelector('.mdccu input'); if (now) { const diff = now.getBoundingClientRect().top - before; if (Math.abs(diff) > 0.5) scrollBy(0, diff); now.focus({ preventScroll: true }); } } }),
+        h('span', {}, 'CCU has a socket (+5 A)')) : null,
       h('button', { class: 'btn small mdaddsize', type: 'button', onclick: () => addLine(d) }, d.unit === 'each' ? '+ Add another' : '+ Add another size'));
   };
   const lineNotes = () => { const L = maxDemandLines(v.loads).lines; L.forEach((x, i) => { if (notes[i] && x) notes[i].textContent = !Number(v.loads[i].qty) ? `${x.text} · nothing counted` : `${x.text} \u2192 ${x.share} A after diversity`; }); for (const b of kindBoxes(v.loads)) if (kworks[b.k]) kworks[b.k].textContent = b.work; };
@@ -65,7 +70,7 @@ route(/^\/calc\/md(?:\/([^/]+))?$/, async (certId) => {
     drawTop(); notes.length = 0; for (const k in kworks) delete kworks[k];
     fill(list, v.loads.length ? h('div', { class: 'mdcards' }, h('div', { class: 'icard mdhead' }, h('h2', {}, h('span', { class: 'stepno' }, '1'), 'Your loads')), kindBoxes(v.loads).map(kbox)) : null); lineNotes();
     fill(add, icard(v.loads.length ? 'Add another' : 'Add the loads', [
-      h('div', { class: 'chips mdadd' }, KINDS.map((d) => h('button', { class: 'chip', type: 'button', onclick: () => addLine(d) }, '+ ' + d.label))),
+      h('div', { class: 'chips mdadd' }, KINDS.filter((d) => d.k !== 'cookerSocket').map((d) => h('button', { class: 'chip', type: 'button', onclick: () => addLine(d) }, '+ ' + d.label))),
       h('div', { class: 'btns' }, h('button', { class: 'btn small', onclick: () => { v.loads = EXAMPLE.map((x) => ({ ...x })); save(); } }, 'Load the example house'), v.loads.length ? h('button', { class: 'btn small', onclick: () => { v.loads = []; save(); } }, 'Clear') : null),
       h('label', { class: 'f fld2' }, h('span', {}, 'Supply fuse (cut-out)'), h('span', { class: 'withunit' }, h('input', { inputmode: 'numeric', value: v.fuse, onchange: (e) => { v.fuse = e.target.value; save(); } }), h('span', { class: 'unit' }, 'A')), h('span', { class: 'help' }, 'Usually 60, 80 or 100 A. Leave blank to skip.'))], { step: v.loads.length ? 2 : 1 }));
     drawWork();

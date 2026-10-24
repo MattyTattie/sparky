@@ -143,5 +143,27 @@ export function kindBoxes(loads, opts) {
     b.shared = Boolean(g && boxes.some((o) => o !== b && o.group === b.group));
     b.work = `${fmt(b.connected)} A connected · after diversity ${fmt(b.share)} A` + (b.shared ? ` (share of ${b.groupLabel.toLowerCase()})` : '');
   }
+  // v0.28.1: the cooker-unit socket (+5 A) is a tick box inside the Cooking box, not a box of its own.
+  // Stored as the existing 'cookerSocket' load line, so old saved data still loads and adds up the same.
+  let cook = boxes.find((b) => b.k === 'cooking'); const sock = boxes.find((b) => b.k === 'cookerSocket');
+  if (!cook && sock) { // old data: a socket line but no cooking lines yet, so show an empty Cooking box with it ticked
+    cook = { k: 'cooking', label: kind('cooking').label, idx: [], connected: 0, share: 0, group: 'cooking', rule: RULES.cooking, groupLabel: GROUP_LABEL.cooking, shared: false, work: '0 A connected · after diversity 0 A' };
+    boxes.splice(boxes.indexOf(sock), 0, cook);
+  }
+  if (cook) {
+    const n = ccuSockets(loads); cook.ccu = n; cook.ccuIdx = sock ? sock.idx : [];
+    if (n) { const before = cook.share; cook.share = r1(before + 5 * n); cook.connected = r1(cook.connected + 5 * n);
+      cook.work += ` + ${n > 1 ? `${n} × 5 A` : '5 A'} CCU socket = ${fmt(cook.share)} A`; }
+    if (sock) boxes.splice(boxes.indexOf(sock), 1);
+  }
   return boxes;
 }
+
+// v0.28.1: how many cooker-unit sockets are counted (+5 A each), and the tick box toggle.
+export const ccuSockets = (loads) => (loads || []).filter((l) => l && l.k === 'cookerSocket').reduce((s, l) => s + Math.max(0, Math.round(Number(l.qty) || 0)), 0);
+export function setCcuSocket(loads, on) {
+  const rest = (loads || []).filter((l) => !(l && l.k === 'cookerSocket'));
+  return on ? [...rest, { k: 'cookerSocket', qty: 1 }] : rest;
+}
+// v0.28.1: old saved data with separate cooker-socket lines → one line at the end (what the tick box writes). Same total.
+export function migrateCcu(loads) { const n = ccuSockets(loads); const rest = (loads || []).filter((l) => !(l && l.k === 'cookerSocket')); return n ? [...rest, { k: 'cookerSocket', qty: n }] : rest; }

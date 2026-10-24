@@ -838,3 +838,6 @@ a.newphone-link { display: block; text-decoration: none; }
 .mdline .mdshare { display: block; margin-top: 6px; font-size: 12px; }
 .mdkind .mdaddsize { margin-top: 10px; }
 @media (min-width: 560px) { .mdline .mdin .mdlabel { flex: 1 1 160px; } }
+/* v0.28.1: cooker control unit socket tick box in the Cooking box */
+.mdkind .mdccu { display: flex; align-items: flex-start; gap: 10px; margin-top: 10px; font-size: 14px; white-space: normal; overflow-wrap: anywhere; cursor: pointer; }
+.mdkind .mdccu input { width: 20px; height: 20px; flex: 0 0 auto; margin: 1px 0 0; }
