@@ -61,3 +61,102 @@
   main.calcpage { grid-template-columns: minmax(0, 1fr) minmax(280px, .9fr); }
 }
 @media (max-width: 899px) { .sidebrand, .sidenew, .jobpane { display: none !important; } }
+
+/* ---------- v0.28: desktop polish — flatter, denser, mouse-sized (900px+ only) ---------- */
+@media (min-width: 900px) {
+  body.desk { font-size: 14px; --r: 6px; }
+  body.desk main { animation: none; }
+  /* Plain toolbar instead of the purple header */
+  body.desk header.top { background: var(--card); color: var(--ink); box-shadow: none; border-radius: 0; border-bottom: 1px solid var(--line); min-height: 52px; padding: 8px 24px; gap: 10px; }
+  body.desk header.top .brandmark { display: none; }
+  body.desk header.top h1 { font-size: 17px; font-weight: 700; color: var(--ink); letter-spacing: 0; }
+  body.desk header.top h1 .sub { color: var(--muted); font-size: 12.5px; opacity: 1; }
+  body.desk header.top h1 .beta { background: var(--brandbg); color: var(--brand); border: 0; }
+  body.desk header.top .iconbtn { width: 32px; height: 32px; min-width: 32px; min-height: 32px; border-radius: 6px; background: transparent; color: var(--ink); border: 1px solid var(--line); box-shadow: none; }
+  body.desk header.top .iconbtn:hover { background: var(--brandbg); color: var(--brand); }
+  body.desk header.top .syncchip { border-radius: 6px; background: transparent; color: var(--ink); border: 1px solid var(--line); box-shadow: none; }
+  /* Sidebar: quiet, brand colour only on the current item */
+  body.desk .bottomnav { padding: 14px 10px; gap: 2px; }
+  body.desk .sidebrand { padding: 2px 8px 14px; }
+  body.desk .sidebrand img { width: 28px; height: 28px; }
+  body.desk .navi { min-height: 34px; padding: 6px 10px; border-radius: 6px; font-size: 14px; font-weight: 500; color: var(--sub); position: relative; }
+  body.desk .navi svg { width: 18px; height: 18px; }
+  body.desk .navi.on { background: var(--brandbg); color: var(--brand); font-weight: 600; }
+  body.desk .navi.on::before { content: ''; position: absolute; left: -10px; top: 6px; bottom: 6px; width: 3px; border-radius: 0 3px 3px 0; background: var(--brand); }
+  body.desk .navi:hover:not(.on) { background: var(--bg); color: var(--ink); }
+  body.desk .sidenew { margin-top: 12px; }
+  /* Flat panels */
+  body.desk .card, body.desk .anscard, body.desk .notice, body.desk .list, body.desk .stat, body.desk .calcpick, body.desk details.foldcard, body.desk .jobpane .row { border-radius: 6px; box-shadow: none; }
+  body.desk .card { border: 1px solid var(--line); padding: 14px 16px; margin-bottom: 12px; }
+  body.desk .card h2, body.desk h2.sec { font-size: 11.5px; letter-spacing: .06em; margin: 0 0 8px; }
+  body.desk h2.sec { margin: 18px 0 8px; }
+  body.desk .icard h2 { font-size: 13.5px; letter-spacing: 0; text-transform: none; color: var(--ink); }
+  body.desk .stepno { width: 18px; height: 18px; font-size: 11px; }
+  body.desk .anscard { border-width: 1px; padding: 14px 16px; background: var(--card); }
+  body.desk .anscard .ans-big { font-size: 26px; }
+  body.desk .notice { padding: 8px 12px; font-size: 13.5px; }
+  body.desk .note, body.desk p.note { font-size: 12.5px; }
+  /* Mouse-sized controls */
+  body.desk main input:not([type=checkbox]):not([type=radio]):not(.search), body.desk main select { min-height: 32px; height: 32px; padding: 4px 8px; font-size: 14px; border-radius: 4px; }
+  body.desk main textarea { font-size: 14px; border-radius: 4px; padding: 6px 8px; }
+  body.desk label.f { margin-bottom: 10px; }
+  body.desk label.f > span { font-size: 12.5px; margin-bottom: 3px; }
+  body.desk .btn { min-height: 32px; height: auto; padding: 5px 12px; font-size: 13.5px; border-radius: 6px; box-shadow: none; width: auto; }
+  body.desk .btn.small { min-height: 28px; padding: 3px 10px; font-size: 13px; }
+  body.desk .btn.primary { background: var(--brand); }
+  body.desk .btn.primary:hover { filter: brightness(1.08); }
+  body.desk .btn:active { transform: none; }
+  body.desk main .btn[style*="width:100%"], body.desk main .btn[style*="width: 100%"] { width: auto !important; }
+  body.desk .wiznav { padding-top: 8px; padding-bottom: 8px; justify-content: flex-end; }
+  body.desk .wiznav .btn { flex: 0 0 auto; }
+  body.desk .iconbtn.small { border-radius: 6px; }
+  /* Toned-down chips and pills */
+  body.desk .chip { min-height: 28px; padding: 3px 10px; border-radius: 4px; font-size: 13px; box-shadow: none; }
+  body.desk .chip.on, body.desk .chip[aria-pressed="true"] { background: var(--brandbg); color: var(--brand); border-color: var(--brand); }
+  body.desk .pill, body.desk .pchip { border-radius: 4px; font-size: 11.5px; padding: 1px 7px; box-shadow: none; }
+  /* Dense lists */
+  body.desk .list { border: 1px solid var(--line); background: var(--card); overflow: hidden; }
+  body.desk .row { min-height: 0; padding: 8px 12px; border-radius: 0; box-shadow: none; margin: 0; gap: 10px; }
+  body.desk .row:hover { background: var(--bg); }
+  body.desk .row .t { font-size: 14px; } body.desk .row .s { font-size: 12.5px; }
+  body.desk .row .tile { width: 28px; height: 28px; min-width: 28px; border-radius: 6px; }
+  body.desk .row .tile svg { width: 16px; height: 16px; }
+  body.desk .jobpane { padding: 12px 10px; }
+  body.desk .jobpane .list { gap: 0; border: 0; background: transparent; }
+  body.desk .jobpane .row { padding: 8px 10px; border-radius: 6px; background: transparent; border: 0; }
+  body.desk .jobpane .row.on { outline: 0; background: var(--brandbg); box-shadow: inset 3px 0 0 var(--brand); }
+  /* Stats strip */
+  body.desk .stats { gap: 10px; }
+  body.desk .stat { padding: 10px 14px; border: 1px solid var(--line); background: var(--card); }
+  body.desk .stat b { font-size: 20px; }
+  body.desk .searchbox { border-radius: 6px; min-height: 34px; box-shadow: none; }
+  body.desk .calcpick { padding: 12px 14px; border: 1px solid var(--line); }
+  body.desk .calcpick:hover { border-color: var(--brand); }
+  /* Jobs table */
+  body.desk main > .list:has(> .jobtable) { border: 1px solid var(--line); }
+  .jobtable { width: 100%; border-collapse: collapse; font-size: 13.5px; background: var(--card); }
+  .jobtable th { text-align: left; padding: 0; background: var(--bg); border-bottom: 1px solid var(--line); }
+  .jobtable .sorth { all: unset; box-sizing: border-box; display: block; width: 100%; padding: 8px 12px; font-size: 12px; font-weight: 700; color: var(--sub); cursor: pointer; text-transform: uppercase; letter-spacing: .04em; }
+  .jobtable .sorth:hover, .jobtable .sorth.on { color: var(--ink); }
+  .jobtable .sorth:focus-visible { outline: 2px solid var(--brand); outline-offset: -2px; }
+  .jobtable td { padding: 8px 12px; border-bottom: 1px solid var(--line); vertical-align: top; color: var(--ink); overflow-wrap: anywhere; }
+  .jobtable tbody tr { cursor: pointer; }
+  .jobtable tbody tr:hover td { background: var(--brandbg); }
+  .jobtable tbody tr:focus-visible { outline: 2px solid var(--brand); outline-offset: -2px; }
+  .jobtable tbody tr:last-child td { border-bottom: 0; }
+  .jobtable .jt-job a { color: var(--ink); font-weight: 600; text-decoration: none; }
+  .jobtable .jt-date { white-space: nowrap; color: var(--sub); }
+  .jt-status { display: inline-block; padding: 1px 7px; border-radius: 4px; font-size: 12px; font-weight: 600; background: var(--bg); color: var(--sub); }
+  .jt-status.ok { background: var(--greenbg); color: var(--green); } .jt-status.draft { background: var(--amberbg); color: var(--amber); }
+  /* Max demand boxes */
+  body.desk .mdcard.mdkind { padding: 12px 16px; margin-bottom: 10px; }
+  body.desk .mdrow.mdline { padding: 6px 0; }
+  body.desk .mdline .mdin { gap: 8px; }
+  body.desk .mdline .mdin .mini > span { font-size: 11px; }
+  body.desk .mdline .mdin input, body.desk .mdline .mdin .stepbtn, body.desk .mdline .mdin .stepper, body.desk .mdline .iconbtn.small { height: 32px !important; min-height: 32px !important; }
+  body.desk .mdline .stepbtn { width: 32px; min-width: 32px; font-size: 16px; }
+  body.desk .mdline .iconbtn.small { width: 32px; }
+  body.desk .mdline .mdshare { margin-top: 3px; }
+}
+@media (min-width: 900px) { body.desk main input.search { min-height: 34px; font-size: 14px; } }
+@media (min-width: 900px) { body.desk main .btn { flex-grow: 0; width: auto !important; max-width: max-content; } body.desk main .btns { flex-wrap: wrap; } }

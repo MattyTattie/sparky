@@ -127,3 +127,21 @@ export function maxDemandLines(loads, { u = U } = {}) {
   });
   return { lines, groups };
 }
+
+// v0.28: lines grouped by KIND for the screen (all heaters in one box, all cooking lines in one box…).
+// Boxes come in order of each kind's first line. connected/share are the sums of that kind's lines;
+// rule is the diversity rule of the group the kind belongs to; shared = that group also has other kinds.
+export function kindBoxes(loads, opts) {
+  const { lines, groups } = maxDemandLines(loads, opts); const boxes = []; const at = {};
+  (loads || []).forEach((l, i) => { const d = kind(l.k); if (!d || !lines[i]) return;
+    let b = at[l.k]; if (!b) { b = at[l.k] = { k: l.k, label: d.label, idx: [], connected: 0, share: 0, group: lines[i].group }; boxes.push(b); }
+    b.idx.push(i); b.connected += lines[i].connected; b.share += lines[i].share; });
+  for (const b of boxes) {
+    b.connected = r1(b.connected); b.share = r1(b.share);
+    const g = groups.find((x) => x.g === b.group);
+    b.rule = RULES[b.group] || ''; b.groupLabel = g ? g.label : '';
+    b.shared = Boolean(g && boxes.some((o) => o !== b && o.group === b.group));
+    b.work = `${fmt(b.connected)} A connected · after diversity ${fmt(b.share)} A` + (b.shared ? ` (share of ${b.groupLabel.toLowerCase()})` : '');
+  }
+  return boxes;
+}

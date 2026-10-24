@@ -99,3 +99,24 @@ test('quiet sign-in renewal on open, and the 5-minute check-in', async () => {
   assert.equal(wantsQuietRefresh({ online: true, enabled: true, hint: '', tokenLeft: 0 }), false);
   assert.equal(wantsQuietRefresh({ online: true, enabled: true, hint: 'a@b', tokenLeft: 0, sinceLast: 1000 }), false);
 });
+import { kindBoxes } from '../js/maxdemand.js';
+test('v0.28 kindBoxes groups lines by kind in first-seen order', () => {
+  const b = kindBoxes([{ k: 'heater', qty: 1, value: 2 }, { k: 'cooking', qty: 1, value: 7.4 }, { k: 'heater', qty: 3, value: 1.5 }, { k: 'ring', qty: 2, value: 32 }, { k: 'radial', qty: 1, value: 20 }]);
+  assert.deepEqual(b.map((x) => [x.k, x.idx]), [['heater', [0, 2]], ['cooking', [1]], ['ring', [3]], ['radial', [4]]]);
+  assert.equal(b[0].connected, 28.3); assert.equal(b[0].shared, false);
+  assert.equal(b[2].shared, true); assert.match(b[2].work, /share of socket circuits/);
+  assert.deepEqual(kindBoxes([]), []);
+});
+import { jobRows, sortRows, JOB_COLS } from '../js/jobtable.js';
+test('v0.28 desktop jobs table rows and sorting', () => {
+  const jobs = [{ id: 'a', title: 'Zed job', customerId: 'c1', siteAddress: '1 Fake St', sitePostcode: 'ZZ1 1ZZ', updatedAt: '2026-10-01' }, { id: 'b', title: 'alpha', updatedAt: '2026-10-05' }, { id: 'c', title: 'Mid', status: 'done', updatedAt: '2026-09-01' }];
+  const certs = [{ jobId: 'a', type: 'EIC', status: 'issued' }, { jobId: 'a', type: 'MW' }];
+  const r = jobRows(jobs, certs, { c1: { name: 'A. Example' } }, { EIC: { short: 'EIC' }, MW: { short: 'Minor Works' } });
+  assert.equal(JOB_COLS.length, 6);
+  assert.deepEqual(r[0], { id: 'a', job: 'Zed job', customer: 'A. Example', address: '1 Fake St, ZZ1 1ZZ', certs: 'EIC, Minor Works', status: '1 draft, 1 issued', updated: '2026-10-01' });
+  assert.equal(r[1].status, 'No certificate yet'); assert.equal(r[2].status, 'Closed');
+  assert.deepEqual(sortRows(r).map((x) => x.id), ['b', 'a', 'c']);
+  assert.deepEqual(sortRows(r, 'job', 1).map((x) => x.id), ['b', 'c', 'a']);
+  assert.deepEqual(sortRows(r, 'customer', 1).map((x) => x.id), ['a', 'b', 'c']);
+});
+test('v0.28 version', () => assert.match(APP_VERSION, /^0\.(2[8-9]|[3-9]\d)\.\d+/));

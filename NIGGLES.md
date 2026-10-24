@@ -136,3 +136,9 @@
 - The 2-column form rule is generic (cards with 3+ fields); some checkbox rows sit in their own row, leaving the odd gap.
 - Schedule of test results still scrolls sideways at 1280px for the last columns (the IET table is very wide).
 - The top bar still shows the Zs Pro mark on the jobs page as well as the sidebar.
+
+## v0.28 notes
+- Phone diff vs main: identical apart from the version text, the "last used" calculator, and hover/time-stamp noise from the test run.
+- Desktop polish is CSS overrides of the phone styles; a few rarely used screens (scanner, DC planner steps) haven't been checked at desktop size.
+- Jobs table sorts text alphabetically (status sorts by its wording, not by urgency).
+- Max demand boxes are in order of each kind's first line, not the order of the "Add" chips.

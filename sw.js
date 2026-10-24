@@ -3,7 +3,7 @@
 // When any file changes, bump CACHE (sparky-v0.1 -> sparky-v0.2).
 // Shares the mattytattie.github.io origin with Hearth, so it only ever
 // deletes caches whose names start with "sparky-".
-const CACHE = 'sparky-v0.27.0';
+const CACHE = 'sparky-v0.28.0';
 const FILES = [
   "./",
   "./dark.css",
@@ -57,6 +57,7 @@ const FILES = [
   "./js/instruments.js",
   "./js/jobdelete.js",
   "./js/jobnext.js",
+  "./js/jobtable.js",
   "./js/limits.js",
   "./js/main.js",
   "./js/maxdemand.js",

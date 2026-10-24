@@ -9,6 +9,7 @@ import { h, fill, toast, modal, confirmBox, fmtDate, pickFile, shrinkImage, blob
 import { S, flush, getProfile, getInstruments, calibrationWarnings, INSTRUMENT_KINDS, INSTRUMENT_TAGS, instrumentText, touchJob, saveSetting } from './state.js';
 import { APP_NAME, APP_VERSION, APP_SLUG, DRIVE_ROOT } from './config.js';
 import { TYPES, copyCertForJob } from './certmodel.js';
+import { JOB_COLS, jobRows, sortRows } from './jobtable.js';
 import { calibrationState } from './checks.js';
 import { CHECK_NOTE } from './limits.js';
 import * as backup from './backup.js';
@@ -118,7 +119,7 @@ route(/^\/$/, async () => {
   const cmap = Object.fromEntries(customers.map((c) => [c.id, c]));
   jobs.sort((a, b) => (b.updatedAt || '').localeCompare(a.updatedAt || ''));
   const list = h('div', { class: 'list' });
-  const draw = (q = '') => {
+  let draw = (q = '') => {
     const qq = q.toLowerCase();
     const shown = jobs.filter((j) => !qq || [j.title, j.siteAddress, j.sitePostcode, (cmap[j.customerId] || {}).name].join(' ').toLowerCase().includes(qq));
     fill(list, ...(shown.length ? shown.map((j) => {
@@ -129,6 +130,21 @@ route(/^\/$/, async () => {
         n.length ? h('span', { class: 'pill' }, n.map((c) => (TYPES[c.type] || { short: c.type || '?' }).short).join(', ')) : null, h('span', { class: 'go' }, '›'));
     }) : [jobs.length ? emptyState('search', `No jobs match “${q}”.`) : emptyState('briefcase', 'No jobs yet. Start one, then add its certificates.', h('button', { class: 'btn primary', onclick: () => go('#/newjob') }, '+ New job'))]));
   };
+  // v0.28: on a wide screen the jobs are a sortable table instead of cards.
+  if (DESK.matches) {
+    const all = jobRows(jobs, certs, cmap, TYPES); let sk = 'updated', sd = -1, qq = '';
+    const drawT = () => {
+      const shown = sortRows(all.filter((r) => !qq || [r.job, r.customer, r.address].join(' ').toLowerCase().includes(qq)), sk, sd);
+      fill(list, shown.length ? h('table', { class: 'jobtable' },
+        h('thead', {}, h('tr', {}, JOB_COLS.map(([k, t]) => h('th', { scope: 'col', 'aria-sort': k === sk ? (sd > 0 ? 'ascending' : 'descending') : null },
+          h('button', { type: 'button', class: 'sorth' + (k === sk ? ' on' : ''), onclick: () => { if (sk === k) sd = -sd; else { sk = k; sd = k === 'updated' ? -1 : 1; } drawT(); } }, t, k === sk ? h('span', { class: 'sortarrow', 'aria-hidden': 'true' }, sd > 0 ? ' \u25B2' : ' \u25BC') : null))))),
+        h('tbody', {}, shown.map((r) => h('tr', { tabindex: 0, onclick: () => go('#/job/' + r.id), onkeydown: (e) => { if (e.key === 'Enter') go('#/job/' + r.id); } },
+          h('td', { class: 'jt-job' }, h('a', { href: '#/job/' + r.id }, r.job)), h('td', {}, r.customer || '\u2014'), h('td', {}, r.address || '\u2014'),
+          h('td', {}, r.certs || '\u2014'), h('td', {}, h('span', { class: 'jt-status ' + (r.status === 'Issued' ? 'ok' : r.status === 'Closed' ? 'na' : 'draft') }, r.status)), h('td', { class: 'jt-date' }, r.updated ? fmtDate(r.updated) : '\u2014'))))) 
+        : (jobs.length ? emptyState('search', `No jobs match \u201c${qq}\u201d.`) : emptyState('briefcase', 'No jobs yet. Start one, then add its certificates.', h('button', { class: 'btn primary', onclick: () => go('#/newjob') }, '+ New job'))));
+    };
+    draw = (q = '') => { qq = q.toLowerCase(); drawT(); };
+  }
   draw();
   const profile = await getProfile();
   page(APP_NAME, [

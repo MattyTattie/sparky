@@ -220,3 +220,9 @@ Open points
 - `page()` in js/app.js: on 900px+ (`DESK` media query, re-renders when crossing it) the nav renders on every page as a left sidebar with logo, version and "+ New job"; job/cert pages (not `wide` ones) get `aside.jobpane` with the job list, current job highlighted; `/calc/*` gets `main.calcpage` (inputs left, answer card sticky right).
 - Content column max 1180px (940px beside the job list). Cards with 3+ fields go 2 columns; textareas full width. Schedule of test results uses the existing landscape table, full width.
 - Shots: `tests/screens_v27.py` (1440x900, 1280x800, plus 412 phone check).
+
+## v0.28.0 beta — desktop polish + max demand by kind (branch v0.28-desktop-polish)
+- Desktop (900px+, `body.desk`, all in desktop.css): plain toolbar header (no gradient, no duplicate logo), 14px base, flat 1px panels with 6px radius, 32px controls, quiet chips/pills, dense lists, brand accent bar on the current sidebar item.
+- Jobs home on desktop is a sortable table (`js/jobtable.js`: `jobRows`, `sortRows`; columns job, customer, address, certificates, status, updated). Click a header to sort; rows open the job (Enter works too).
+- Max demand (all widths): one box per kind (`kindBoxes()` in maxdemand.js), with the kind's working and rule, compact rows (name, − qty +, value, ×, per-line after-diversity share) and "+ Add another size". Adding a kind that's already there adds a row to its box. Stored state unchanged (`sparky.md1` list of lines).
+- Shots: `tests/screens_v28.py OUT [BASE] [phone]` (pass the main build's URL + `phone` to diff the phone layout).

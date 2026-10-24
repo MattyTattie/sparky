@@ -6,7 +6,7 @@ import { route, page, go } from './app.js';
 import * as db from './db.js';
 import { flush } from './state.js';
 import { setLastCalc, icard, answerCard, pchip, resline, detailCard, banner } from './calckit.js';
-import { KINDS, kind, maxDemand, maxDemandLines, EXAMPLE } from './maxdemand.js';
+import { KINDS, kind, maxDemand, maxDemandLines, kindBoxes, EXAMPLE } from './maxdemand.js';
 import { icon } from './icons.js';
 
 const KEY = 'sparky.md1';
@@ -21,21 +21,31 @@ route(/^\/calc\/md(?:\/([^/]+))?$/, async (certId) => {
   // v0.26: per-line working, a name on each line, and − / + that update the numbers in place.
   const notes = []; // line i → its working element
   const NAME_PH = { cooking: 'e.g. Hob, Oven, Microwave', heater: 'e.g. Lounge panel', ring: 'e.g. Kitchen ring', radial: 'e.g. Garage', lighting: 'e.g. Upstairs lights' };
+  // v0.28: one box per kind of load (all heaters together…), each line a compact row inside it.
+  const kworks = {}; // kind → its box working element
   const row = (l, i) => { const d = kind(l.k) || KINDS[0];
-    const note = h('span', { class: 'note mdwork' }); notes[i] = note;
+    const note = h('span', { class: 'note mdwork mdshare' }); notes[i] = note;
     const qty = h('input', { inputmode: 'numeric', value: l.qty, 'aria-label': 'How many', onchange: (e) => { l.qty = String(Math.max(0, Math.round(Number(e.target.value) || 0))); e.target.value = l.qty; store(); refresh(e.target); } });
     const step = (by) => (e) => { e.preventDefault(); l.qty = String(Math.max(0, (Math.round(Number(l.qty) || 0)) + by)); qty.value = l.qty; store(); refresh(e.currentTarget); };
-    return h('div', { class: 'card mdrow mdcard' },
-      h('div', { class: 'mdname' }, h('b', {}, d.label), note),
-      h('label', { class: 'mini mdlabel' }, h('span', {}, 'Name (optional)'), h('input', { value: l.name || '', placeholder: NAME_PH[l.k] || 'e.g. what it is', maxlength: 40, oninput: (e) => { l.name = e.target.value.trim() ? e.target.value : undefined; store(); } })),
+    return h('div', { class: 'mdrow mdline' },
       h('div', { class: 'mdin' },
+        h('label', { class: 'mini mdlabel' }, h('span', {}, 'Name (optional)'), h('input', { value: l.name || '', placeholder: NAME_PH[l.k] || 'e.g. what it is', maxlength: 40, oninput: (e) => { l.name = e.target.value.trim() ? e.target.value : undefined; store(); } })),
         h('div', { class: 'mini' }, h('span', {}, 'How many'), h('div', { class: 'stepper' },
           h('button', { class: 'stepbtn', type: 'button', 'aria-label': 'One fewer', onclick: step(-1) }, '\u2212'), qty,
           h('button', { class: 'stepbtn', type: 'button', 'aria-label': 'One more', onclick: step(1) }, '+'))),
         d.unit === 'each' ? null : h('label', { class: 'mini' }, h('span', {}, d.unit === 'A' ? 'Breaker (A)' : d.unit === 'W' ? 'Watts each' : 'kW each'), h('input', { inputmode: 'decimal', value: l.value, onchange: (e) => { l.value = e.target.value; store(); refresh(e.target); } })),
-        h('button', { class: 'iconbtn small', 'aria-label': 'Remove', onclick: () => { v.loads.splice(i, 1); save(); } }, icon('x', { size: 18 }))));
+        h('button', { class: 'iconbtn small', 'aria-label': 'Remove', onclick: () => { v.loads.splice(i, 1); save(); } }, icon('x', { size: 18 }))),
+      note);
   };
-  const lineNotes = () => { const L = maxDemandLines(v.loads).lines; L.forEach((x, i) => { if (notes[i] && x) notes[i].textContent = x.full; }); };
+  const addLine = (d) => { v.loads.push({ k: d.k, qty: 1, value: d.dflt }); save(); };
+  const kbox = (b) => { const d = kind(b.k);
+    const w = h('span', { class: 'note mdwork mdkwork' }); kworks[b.k] = w;
+    return h('div', { class: 'card mdcard mdkind', 'data-kind': b.k },
+      h('div', { class: 'mdname' }, h('b', {}, b.label), w, h('span', { class: 'note mdrule' }, 'Rule: ' + b.rule)),
+      b.idx.map((i) => row(v.loads[i], i)),
+      h('button', { class: 'btn small mdaddsize', type: 'button', onclick: () => addLine(d) }, d.unit === 'each' ? '+ Add another' : '+ Add another size'));
+  };
+  const lineNotes = () => { const L = maxDemandLines(v.loads).lines; L.forEach((x, i) => { if (notes[i] && x) notes[i].textContent = !Number(v.loads[i].qty) ? `${x.text} · nothing counted` : `${x.text} \u2192 ${x.share} A after diversity`; }); for (const b of kindBoxes(v.loads)) if (kworks[b.k]) kworks[b.k].textContent = b.work; };
   // Update the figures without rebuilding the rows; keep the tapped control where it was on screen.
   const refresh = (anchor) => {
     const before = anchor && anchor.getBoundingClientRect ? anchor.getBoundingClientRect().top : null;
@@ -52,10 +62,10 @@ route(/^\/calc\/md(?:\/([^/]+))?$/, async (certId) => {
       v.loads.length && fuse && r.total > fuse ? banner(`By the book it\u2019s over the ${fuse} A supply fuse.`, 'That\u2019s common on paper: the book figure is cautious. See \u201cWhat it really draws\u201d below, and think about load management (EV, heating) or a supply upgrade if the real peak is close.') : null);
   };
   const draw = () => {
-    drawTop(); notes.length = 0;
-    fill(list, v.loads.length ? h('div', { class: 'mdcards' }, h('div', { class: 'icard mdhead' }, h('h2', {}, h('span', { class: 'stepno' }, '1'), 'Your loads')), v.loads.map(row)) : null); lineNotes();
+    drawTop(); notes.length = 0; for (const k in kworks) delete kworks[k];
+    fill(list, v.loads.length ? h('div', { class: 'mdcards' }, h('div', { class: 'icard mdhead' }, h('h2', {}, h('span', { class: 'stepno' }, '1'), 'Your loads')), kindBoxes(v.loads).map(kbox)) : null); lineNotes();
     fill(add, icard(v.loads.length ? 'Add another' : 'Add the loads', [
-      h('div', { class: 'chips mdadd' }, KINDS.map((d) => h('button', { class: 'chip', type: 'button', onclick: () => { v.loads.push({ k: d.k, qty: 1, value: d.dflt }); save(); } }, '+ ' + d.label))),
+      h('div', { class: 'chips mdadd' }, KINDS.map((d) => h('button', { class: 'chip', type: 'button', onclick: () => addLine(d) }, '+ ' + d.label))),
       h('div', { class: 'btns' }, h('button', { class: 'btn small', onclick: () => { v.loads = EXAMPLE.map((x) => ({ ...x })); save(); } }, 'Load the example house'), v.loads.length ? h('button', { class: 'btn small', onclick: () => { v.loads = []; save(); } }, 'Clear') : null),
       h('label', { class: 'f fld2' }, h('span', {}, 'Supply fuse (cut-out)'), h('span', { class: 'withunit' }, h('input', { inputmode: 'numeric', value: v.fuse, onchange: (e) => { v.fuse = e.target.value; save(); } }), h('span', { class: 'unit' }, 'A')), h('span', { class: 'help' }, 'Usually 60, 80 or 100 A. Leave blank to skip.'))], { step: v.loads.length ? 2 : 1 }));
     drawWork();
