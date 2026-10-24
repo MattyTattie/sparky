@@ -18,8 +18,8 @@ main.wide { max-width: none; padding: 6px; }
 .row { display: flex; align-items: center; gap: 10px; padding: 12px 14px; border-bottom: 1px solid var(--line); min-height: 56px; text-decoration: none; color: inherit; background: none; width: 100%; text-align: left; border-left: 0; border-right: 0; border-top: 0; }
 .row:last-child { border-bottom: 0; }
 .row .main { flex: 1; min-width: 0; }
-.row .t { font-weight: 600; white-space: normal; overflow-wrap: anywhere; }
-.row .s { font-size: 13px; color: var(--sub); white-space: normal; overflow-wrap: anywhere; }
+.row .t { font-weight: 600; white-space: normal; overflow-wrap: break-word; }
+.row .s { font-size: 13px; color: var(--sub); white-space: normal; overflow-wrap: break-word; }
 .row .go { color: var(--sub); font-size: 20px; }
 .btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 46px; padding: 0 16px; border-radius: 10px; border: 1px solid var(--line); background: #fff; font-weight: 600; text-decoration: none; color: var(--ink); }
 .btn.primary { background: var(--navy); border-color: var(--navy); color: #fff; }
@@ -230,7 +230,7 @@ ol.steps { margin: 4px 0 10px; padding-left: 20px; font-size: 14.5px; } ol.steps
 body.noscroll { overflow: hidden; }
 .pdfview { position: fixed; inset: 0; z-index: 50; background: #3a3f4b; display: flex; flex-direction: column; }
 .pdfbar { display: flex; align-items: center; gap: 8px; padding: 8px 10px; padding-top: max(8px, env(safe-area-inset-top)); background: linear-gradient(120deg, var(--brand), var(--brand2)); color: #fff; }
-.pdfname { flex: 1; min-width: 0; font-weight: 700; font-size: 14px; white-space: normal; overflow-wrap: anywhere; }
+.pdfname { flex: 1; min-width: 0; font-weight: 700; font-size: 14px; white-space: normal; overflow-wrap: break-word; }
 .pdfcount { font-weight: 500; opacity: .85; }
 .pdfbtn { border: 0; background: rgba(255,255,255,.18); color: #fff; border-radius: 12px; min-width: 42px; height: 42px; font-size: 18px; font-weight: 700; }
 .pdfbtn.wide { padding: 0 14px; font-size: 15px; background: #fff; color: var(--brand); }
@@ -798,7 +798,7 @@ a.newphone-link { display: block; text-decoration: none; }
 .partrow .pn .s { font-size: 13px; color: var(--sub); margin-top: 2px; }
 .prow textarea.pname { font-weight: 650; margin-bottom: 4px; resize: none; overflow: hidden; min-height: 0; line-height: 1.35; }
 /* v0.26: max demand names, working and − / + */
-.mdwork { white-space: normal; overflow-wrap: anywhere; }
+.mdwork { white-space: normal; overflow-wrap: break-word; }
 .mdrow .mdlabel { flex: 1 1 100%; display: flex; flex-direction: column; font-size: 11.5px; color: var(--muted); font-weight: 600; }
 .mdrow .mdlabel input { min-height: 38px; padding: 6px 8px; }
 .stepper { display: flex; align-items: stretch; gap: 0; }
@@ -846,3 +846,14 @@ a.newphone-link { display: block; text-decoration: none; }
   .sym { position: relative; }
   .sym::after { content: ''; position: absolute; top: 50%; left: 50%; width: max(44px, calc(100% + 16px)); height: 44px; transform: translate(-50%, -50%); }
 }
+/* v0.30: Reference tables. Full text wraps; wide tables scroll sideways inside their card on small phones. */
+.reftblwrap { overflow-x: auto; }
+.reftbl { width: 100%; border-collapse: collapse; font-size: 15px; }
+.reftbl th, .reftbl td { text-align: left; vertical-align: top; padding: 8px 10px; border-bottom: 1px solid var(--line, #e3e6ef); white-space: normal; overflow-wrap: break-word; }
+.reftbl thead th { font-size: 13px; color: var(--muted, #5b6478); font-weight: 700; }
+.reftbl tbody th { font-weight: 600; }
+.refcap { font-size: 15px; margin: 0 0 8px; }
+.refplain { margin: 0 0 6px; font-size: 16px; line-height: 1.45; }
+.reflist { margin: 6px 0 0; padding-left: 20px; line-height: 1.5; }
+.reflist li { margin-bottom: 6px; overflow-wrap: break-word; }
+.refmore summary { font-weight: 700; cursor: pointer; min-height: 44px; display: flex; align-items: center; }

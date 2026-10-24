@@ -164,3 +164,8 @@
 }
 @media (min-width: 900px) { body.desk main input.search { min-height: 34px; font-size: 14px; } }
 @media (min-width: 900px) { body.desk main .btn { flex-grow: 0; width: auto !important; max-width: max-content; } body.desk main .btns { flex-wrap: wrap; } }
+@media (min-width: 900px) {
+  /* v0.30: Reference pages read better at a comfortable width on a big screen. */
+  .refcard, .refmore { max-width: 900px; }
+  .reftbl { font-size: 15px; }
+}

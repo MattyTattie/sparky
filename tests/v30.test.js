@@ -1,0 +1,60 @@
+// v0.30: Reference section data, cable fixes and version.
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { REF, refById } from '../js/refdata.js';
+import { CABLES } from '../js/cables.js';
+
+const row = (id, key, ti = 0) => refById(id).tables[ti].rows.find((r) => r[0] === key);
+
+test('all eight reference topics exist with plain text and More info', () => {
+  assert.deepEqual(REF.map((r) => r.id), ['ground', 'bonding', 'ir', 'disc', 'r1r2', 'rcd', 'special', 'ip']);
+  for (const r of REF) { assert.ok(r.plain.length > 20, r.id); assert.ok(r.more.length >= 1, r.id); assert.ok(r.tables || r.cards, r.id); }
+});
+test('no ellipsis anywhere in reference text', () => {
+  assert.ok(!/\u2026|\.\.\./.test(JSON.stringify(REF)));
+});
+test('rows match their headers', () => {
+  for (const r of REF) for (const t of r.tables || []) for (const x of t.rows) assert.equal(x.length, t.head.length, r.id + ' ' + x[0]);
+});
+test('Table 4B2 ground factors', () => {
+  assert.deepEqual(row('ground', '20').slice(1), ['1.00', '1.00']);
+  assert.deepEqual(row('ground', '10').slice(1), ['1.10', '1.07']);
+  assert.deepEqual(row('ground', '60').slice(1), ['0.45', '0.65']);
+  assert.deepEqual(row('ground', '80').slice(1), ['\u2014', '0.38']);
+});
+test('Table 54.8 bonding', () => {
+  assert.equal(row('bonding', '35 mm\u00b2 or less')[1], '10 mm\u00b2');
+  assert.equal(row('bonding', 'over 35 up to 50 mm\u00b2')[1], '16 mm\u00b2');
+  assert.equal(row('bonding', 'over 50 up to 95 mm\u00b2')[1], '25 mm\u00b2');
+});
+test('insulation resistance is Table 64 with the right minimums', () => {
+  assert.match(refById('ir').table, /Table 64/);
+  assert.deepEqual(row('ir', 'SELV and PELV').slice(1), ['250 V', '0.5 M\u03a9']);
+  assert.deepEqual(row('ir', 'Above 500 V').slice(1), ['1000 V', '1.0 M\u03a9']);
+});
+test('disconnection times, 63 A sockets / 32 A fixed', () => {
+  assert.deepEqual(row('disc', 'TN (TN-S, TN-C-S)').slice(1), ['0.4 s', '5 s']);
+  assert.deepEqual(row('disc', 'TT').slice(1), ['0.2 s', '1 s']);
+  assert.match(refById('disc').tables[0].head[1], /63 A.*32 A/);
+});
+test('R1+R2 per metre and the 1.20 hot column agree', () => {
+  assert.equal(row('r1r2', '2.5 / 1.5')[1], '19.51');
+  for (const x of refById('r1r2').tables[0].rows) assert.ok(Math.abs(parseFloat(x[1]) * 1.2 - parseFloat(x[2])) < 0.011, x[0]);
+});
+test('RCD trip times and pool zone 1 is 2 m', () => {
+  assert.equal(row('rcd', '1 \u00d7 I\u0394n', 2)[1], '300 ms');
+  assert.equal(row('rcd', '5 \u00d7 I\u0394n', 2)[1], '40 ms');
+  const pool = refById('special').cards.find((c) => /pools/.test(c.t)).lines.join(' ');
+  assert.match(pool, /Zone 1: 2 m/); assert.match(pool, /IPX2 indoors/);
+  assert.match(refById('rcd').more.join(' '), /must be fitted/);
+});
+test('T&E method A 2.5 mm² is 20 A (Table 4D5); 4E1A 2.5 mm² stays 26/31/34 A', () => {
+  assert.equal(CABLES.te.methods.A.amps[2.5], 20);
+  const s = CABLES.singlesX.methods; assert.deepEqual([s.A.amps[2.5], s.B.amps[2.5], s.C.amps[2.5]], [26, 31, 34]);
+});
+test('version 0.30.0 and reference files are cached offline', () => {
+  assert.match(readFileSync('js/config.js', 'utf8'), /0\.30\.0/);
+  const sw = readFileSync('sw.js', 'utf8'); assert.match(sw, /sparky-v0\.30\.0/); assert.match(sw, /refui\.js/); assert.match(sw, /refdata\.js/);
+  assert.match(readFileSync('js/main.js', 'utf8'), /refui\.js/);
+});

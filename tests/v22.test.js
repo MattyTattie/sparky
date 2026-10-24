@@ -6,7 +6,7 @@ import { sizeCable } from '../js/calc.js';
 import { sizeCircuit } from '../js/design.js';
 import { APP_VERSION } from '../js/config.js';
 const sc = (o) => sizeCircuit({ load: '20', unit: 'A', loadType: 'general', length: '20', cable: 'te', method: 'C', ambient: 30, ci: 1, ze: 0.35, device: 'mcb', type: 'auto', time: 0.4, phase: 1, ...o });
-test('v0.22 version', () => assert.match(APP_VERSION, /^0\.2[2-9]\./));
+test('v0.22 version', () => assert.match(APP_VERSION, /^0\.(2[2-9]|3\d)\./));
 test('v0.22 Table 4C1 rows and factors', () => {
   assert.deepEqual(GROUPINGS.map(([k]) => k), ['bunched', 'clipped', 'ceiling', 'tray', 'ladder', 'spaced']);
   assert.equal(cgFor('bunched', 2), 0.8); assert.equal(cgFor('bunched', 9), 0.5); assert.equal(cgFor('bunched', 14), 0.45); assert.equal(cgFor('bunched', 25), 0.38);

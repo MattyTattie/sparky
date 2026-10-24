@@ -6,6 +6,7 @@ import './schedule.js';
 import './testacross.js';
 import './calcui.js';
 import './calcmd.js';
+import './refui.js';
 import './calcsize.js';
 import './calcmore.js';
 import './calcdc.js';

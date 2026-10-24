@@ -35,6 +35,8 @@ route(/^\/calc$/, async () => {
     h('p', { class: 'note calcintro' }, 'Pick what you want to work out. Everything stays on this device.'),
     lc ? [h('h2', { class: 'sec' }, 'Carry on'), card(lc, true), h('h2', { class: 'sec' }, 'All calculators')] : null,
     h('div', { class: 'calcpicks' }, CALCS.filter((c) => c !== lc).map((c) => card(c, false))),
+    h('h2', { class: 'sec' }, 'Reference'),
+    h('div', { class: 'calcpicks' }, card({ key: 'ref', href: '#/ref', ic: 'info', title: 'Reference tables', sub: 'Bonding sizes, insulation resistance, disconnection times, R1+R2, RCDs, IP codes and more' }, false)),
   ]);
 });
 // Kept so older links (#/calc/<tab>) still land somewhere sensible.
