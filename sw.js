@@ -3,10 +3,11 @@
 // When any file changes, bump CACHE (sparky-v0.1 -> sparky-v0.2).
 // Shares the mattytattie.github.io origin with Hearth, so it only ever
 // deletes caches whose names start with "sparky-".
-const CACHE = 'sparky-v0.26.1';
+const CACHE = 'sparky-v0.27.0';
 const FILES = [
   "./",
   "./dark.css",
+  "./desktop.css",
   "./fonts/inter-latin.woff",
   "./icons/apple-touch-icon.png",
   "./icons/favicon-32.png",

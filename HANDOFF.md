@@ -214,3 +214,9 @@ Open points
 - **Job delete**: `js/jobdelete.js` bins the Drive folder (queued offline) and writes a tombstone. Other devices remove a job whose Drive copy is trashed/missing (`planGone`, checked every 15 min); a job with unsynced edits is kept and re-uploaded (updatedAt bumped so it beats the tombstone). Errors other than not-found never delete.
 - **Max demand**: per-line working, group totals when lines combine, optional names, − / + steppers updating in place (scroll held).
 - Tests: `node --test tests/` (250), `tests/sync_v26.py`, `tests/screens_v26.py`.
+
+## v0.27.0 beta — desktop layout (branch v0.27-desktop)
+- `desktop.css` (loaded after dark.css, cached by the SW) — every rule is inside `@media (min-width: 900px)`; phones are unchanged (tests/v27.test.js checks no unscoped rules).
+- `page()` in js/app.js: on 900px+ (`DESK` media query, re-renders when crossing it) the nav renders on every page as a left sidebar with logo, version and "+ New job"; job/cert pages (not `wide` ones) get `aside.jobpane` with the job list, current job highlighted; `/calc/*` gets `main.calcpage` (inputs left, answer card sticky right).
+- Content column max 1180px (940px beside the job list). Cards with 3+ fields go 2 columns; textareas full width. Schedule of test results uses the existing landscape table, full width.
+- Shots: `tests/screens_v27.py` (1440x900, 1280x800, plus 412 phone check).

@@ -26,17 +26,49 @@ export const go = (hash) => { if (location.hash === hash) render(); else locatio
 // on buttons and list rows so every screen looks the same.
 const NAV = [['#/', 'briefcase', 'Jobs'], ['#/calc', 'calculator', 'Calculators'], ['#/customers', 'users', 'Customers'], ['#/settings', 'settings', 'Settings']];
 const navFor = (hash) => { const p = hash.replace(/^#/, '') || '/'; if (p === '/') return '#/'; if (/^\/calc/.test(p)) return '#/calc'; if (p === '/customers') return '#/customers'; if (p === '/settings') return '#/settings'; return null; };
+const DESK = window.matchMedia('(min-width: 900px)');
+DESK.addEventListener('change', () => render());
+const deskTabFor = (hash) => /^#\/(job|cert|newjob)/.test(hash) ? '#/' : /^#\/customer/.test(hash) ? '#/customers' : /^#\/settings/.test(hash) ? '#/settings' : null;
+// v0.27: the job list beside a job or certificate on a wide screen (filled in after the page draws).
+function jobPane() {
+  const box = h('aside', { class: 'jobpane', 'aria-label': 'Jobs' }, h('div', { class: 'jobpane-h' }, h('b', {}, 'Jobs'), h('a', { href: '#/', class: 'small' }, 'All jobs')));
+  const m = location.hash.match(/^#\/(job|cert)\/([^/]+)/);
+  (async () => {
+    const [jobs, customers, certs] = await Promise.all([db.all('jobs'), db.all('customers'), db.all('certs')]);
+    const cmap = Object.fromEntries(customers.map((c) => [c.id, c]));
+    const cur = m ? (m[1] === 'job' ? m[2] : (certs.find((c) => c.id === m[2]) || {}).jobId) : null;
+    jobs.sort((a, b) => (b.updatedAt || '').localeCompare(a.updatedAt || ''));
+    box.append(h('div', { class: 'list' }, jobs.map((j) => {
+      const n = certs.filter((c) => c.jobId === j.id);
+      return h('a', { class: 'row' + (j.id === cur ? ' on' : ''), href: '#/job/' + j.id, 'aria-current': j.id === cur ? 'page' : null },
+        h('div', { class: 'main' }, h('div', { class: 't' }, j.title || 'Job'), h('div', { class: 's' }, jobLine(j, cmap[j.customerId]) || 'No customer yet')),
+        n.length ? h('span', { class: 'pill' }, n.map((c) => (TYPES[c.type] || { short: c.type || '?' }).short).join(', ')) : null);
+    })));
+    const on = box.querySelector('.row.on'); if (on && on.scrollIntoView) on.scrollIntoView({ block: 'nearest' });
+  })().catch(() => {});
+  return box;
+}
 export function page(title, content, { back = null, sub = '', actions = [], wide = false } = {}) {
   const app = document.getElementById('app');
   const tab = navFor(location.hash);
-  const main = h('main', { class: (wide ? 'wide ' : '') + (tab ? 'hasnav' : '') }, content);
+  // v0.27: on a wide screen (900px+) the tabs become a sidebar on every page, and job/cert
+  // pages get the job list beside them. Phones (below 900px) get exactly the old layout.
+  const desk = DESK.matches;
+  const dtab = tab || (desk ? deskTabFor(location.hash) : null);
+  const listPane = desk && !wide && /^#\/(job|cert)\//.test(location.hash);
+  const calcPage = /^#\/calc\/./.test(location.hash);
+  const main = h('main', { class: (wide ? 'wide ' : '') + (tab ? 'hasnav' : '') + (desk && calcPage ? ' calcpage' : '') + (listPane ? ' withlist' : '') }, content);
+  document.body.classList.toggle('desk', desk); document.body.classList.toggle('withlist', listPane);
   fill(app, 
     h('header', { class: 'top' },
       back ? h('button', { class: 'iconbtn', 'aria-label': 'Back', onclick: () => go(back) }, icon('arrowLeft', { size: 22 })) : h('span', { class: 'brandmark', 'aria-hidden': 'true' }, h('img', { src: 'icons/icon.svg', alt: '', width: 36, height: 36 })),
       h('h1', {}, title, title === APP_NAME ? h('span', { class: 'beta' }, 'BETA') : null, sub ? h('span', { class: 'sub' }, sub) : null),
       syncChip(), actions),
     main,
-    tab ? h('nav', { class: 'bottomnav', 'aria-label': 'Main' }, NAV.map(([href, ic, label]) => h('a', { href, class: 'navi' + (href === tab ? ' on' : ''), 'aria-current': href === tab ? 'page' : null }, icon(ic, { size: 22 }), h('span', {}, label)))) : null);
+    (tab || desk) ? h('nav', { class: 'bottomnav', 'aria-label': 'Main' }, desk ? h('a', { class: 'sidebrand', href: '#/' }, h('img', { src: 'icons/icon.svg', alt: '', width: 34, height: 34 }), h('span', {}, h('b', {}, APP_NAME), h('small', {}, APP_VERSION))) : null,
+      NAV.map(([href, ic, label]) => h('a', { href, class: 'navi' + (href === dtab ? ' on' : ''), 'aria-current': href === tab ? 'page' : null }, icon(ic, { size: 22 }), h('span', {}, label))),
+      desk ? h('button', { class: 'btn primary sidenew', onclick: () => go('#/newjob') }, '+ New job') : null) : null,
+    listPane ? jobPane() : null);
   decorate(app);
   window.scrollTo(0, 0);
 }

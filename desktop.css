@@ -1,0 +1,63 @@
+/* desktop.css — v0.27 wide-screen layout (900px and wider). Phones never match this.
+   Sidebar nav on the left, content in a centred column (max 1180px), the job list beside
+   job and certificate pages, 2-column forms, and calculators with the answer alongside. */
+@media (min-width: 900px) {
+  :root { --side-w: 236px; --list-w: 320px; --col: 1180px; }
+  body.withlist { --lead: calc(var(--side-w) + var(--list-w)); }
+  body { --lead: var(--side-w); }
+
+  /* Sidebar */
+  html.dark .bottomnav { background: var(--card); }
+  .bottomnav { top: 0; bottom: 0; right: auto; width: var(--side-w); flex-direction: column; justify-content: flex-start; gap: 4px; padding: 18px 14px; border-top: 0; border-right: 1px solid var(--line); box-shadow: none; box-sizing: border-box; background: var(--card); }
+  .sidebrand { display: flex; align-items: center; gap: 10px; padding: 4px 8px 18px; text-decoration: none; color: var(--ink); }
+  .sidebrand span { display: flex; flex-direction: column; line-height: 1.2; }
+  .sidebrand b { font-size: 17px; } .sidebrand small { font-size: 11.5px; color: var(--muted); font-weight: 600; }
+  .navi { flex: 0 0 auto; flex-direction: row; justify-content: flex-start; gap: 12px; padding: 10px 12px; min-height: 44px; font-size: 15px; font-weight: 600; }
+  .navi .ico, .navi.on .ico { width: auto; height: auto; padding: 0; background: none !important; }
+  .navi:hover { background: var(--brandbg); color: var(--brand); }
+  .navi.on { background: var(--brandbg); color: var(--brand); }
+  .sidenew { margin-top: 16px; width: 100%; justify-content: center; }
+
+  /* Top bar and content right of the sidebar */
+  header.top { margin-left: var(--lead); border-radius: 0 0 0 22px; }
+  main, main.hasnav, main.haswiz { max-width: none; margin: 0 0 0 var(--lead); box-sizing: border-box; padding: 24px max(32px, calc((100vw - var(--lead) - var(--col)) / 2)) 64px; }
+  main.withlist { --col: 940px; }
+  main.wide { padding: 12px 20px 40px; }
+  .fab { right: max(32px, calc((100vw - var(--lead) - var(--col)) / 2)); bottom: 28px; }
+  .toast { left: calc(50% + var(--lead) / 2); bottom: 30px; }
+  .wiznav { left: var(--lead); right: 0; transform: none; max-width: none; bottom: 0; border-radius: 0; padding-left: max(32px, calc((100vw - var(--lead) - var(--col)) / 2)); padding-right: max(32px, calc((100vw - var(--lead) - var(--col)) / 2)); }
+  .wizlive { left: var(--lead); bottom: 62px; }
+  main.haswiz { padding-bottom: 140px; }
+
+  /* Job list beside a job / certificate */
+  .jobpane { position: fixed; top: 0; bottom: 0; left: var(--side-w); width: var(--list-w); overflow-y: auto; box-sizing: border-box; padding: 18px 12px 24px; border-right: 1px solid var(--line); background: var(--bg); z-index: 30; }
+  .jobpane-h { display: flex; align-items: baseline; justify-content: space-between; padding: 4px 8px 12px; }
+  .jobpane-h b { font-size: 17px; } .jobpane-h a { font-size: 13px; font-weight: 600; color: var(--brand); text-decoration: none; }
+  .jobpane .list { display: flex; flex-direction: column; gap: 6px; }
+  .jobpane .row { margin: 0; padding: 10px 12px; border-radius: 14px; }
+  .jobpane .row .t, .jobpane .row .s { white-space: normal; overflow: visible; text-overflow: clip; overflow-wrap: anywhere; }
+  .jobpane .row.on { outline: 2px solid var(--brand); outline-offset: -2px; background: var(--brandbg); }
+
+  /* Jobs home: the sidebar has + New job, so no floating button */
+  main.hasnav > .fab { display: none; }
+  .searchbox { max-width: 640px; }
+
+  /* Forms: two columns inside cards with several fields; long boxes full width */
+  main:not(.calcpage) .card:has(> label.f ~ label.f ~ label.f) { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 20px; align-items: start; }
+  main:not(.calcpage) .card:has(> label.f ~ label.f ~ label.f) > :not(label.f), main:not(.calcpage) .card > label.f:has(textarea) { grid-column: 1 / -1; }
+
+  /* Calculators: inputs on the left, the answer stays in view on the right */
+  .calcpicks { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  main.calcpage { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(320px, 1fr); column-gap: 28px; align-items: start; grid-auto-flow: row dense; }
+  main.calcpage > * { grid-column: 1; min-width: 0; }
+  main.calcpage > .anscard, main.calcpage > div:first-child:has(> .anscard) { grid-column: 2; grid-row: 1 / span 40; position: sticky; top: 88px; }
+
+  /* Wide schedule of test results: more room, no squeeze */
+  main.wide .tablewrap { max-height: calc(100vh - 150px); }
+  table.sched th { font-size: 12px; }
+}
+@media (min-width: 900px) and (max-width: 1150px) {
+  :root { --side-w: 200px; --list-w: 280px; }
+  main.calcpage { grid-template-columns: minmax(0, 1fr) minmax(280px, .9fr); }
+}
+@media (max-width: 899px) { .sidebrand, .sidenew, .jobpane { display: none !important; } }

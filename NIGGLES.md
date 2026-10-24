@@ -130,3 +130,9 @@
 - Two devices creating settings.json at once could leave a duplicate; the first found is used.
 - Each sync reads settings.json (~2 extra requests per 5 min); each linked job gets a metadata check every 15 min.
 - Max demand: taking a line to 0 near the page bottom can shift the scroll a little (page gets shorter).
+
+## v0.27 notes
+- Jobs home on desktop is a single list; the list/detail split appears once you open a job or certificate.
+- The 2-column form rule is generic (cards with 3+ fields); some checkbox rows sit in their own row, leaving the odd gap.
+- Schedule of test results still scrolls sideways at 1280px for the last columns (the IET table is very wide).
+- The top bar still shows the Zs Pro mark on the jobs page as well as the sidebar.

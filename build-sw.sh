@@ -2,7 +2,7 @@
 # build-sw.sh — refresh the list of files the service worker keeps offline.
 # Run after adding or removing files, and bump CACHE in sw.js.
 cd "$(dirname "$0")"
-LIST=$(find index.html styles.css dark.css manifest.json js fonts icons vendor -type f ! -name '*.txt' ! -name '*.md' ! -name 'LICENSE*' | sort | sed 's/^/  ".\//;s/$/",/')
+LIST=$(find index.html styles.css dark.css desktop.css manifest.json js fonts icons vendor -type f ! -name '*.txt' ! -name '*.md' ! -name 'LICENSE*' | sort | sed 's/^/  ".\//;s/$/",/')
 python3 - "$LIST" <<'PY'
 import re,sys
 s=open('sw.js').read()
