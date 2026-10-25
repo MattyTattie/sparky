@@ -176,13 +176,29 @@ function particularsSection(k, cert, letter) {
 // ---------- Schedules (landscape) ----------
 const WIRING = [['A', 'Thermoplastic insulated/ sheathed cables'], ['B', 'Thermoplastic cables in metallic conduit'], ['C', 'Thermoplastic cables in non-metallic conduit'], ['D', 'Thermoplastic cables in metallic trunking'], ['E', 'Thermoplastic cables in non-metallic trunking'], ['F', 'Thermoplastic SWA cables'], ['G', 'Thermosetting SWA cables'], ['H', 'Mineral insulated cables'], ['O', 'Other - please state']];
 
-function tableGrid(k, cols, rows, { headH = 26, rowH = 6.2, top, numbered = true, groups = [] }) {
+// v0.33.1: long text in a cell wraps in full (no '…'); the row grows to fit.
+// Lines for a left-aligned text cell, at 7.5 pt on one line if it fits, else 6.2 pt wrapped.
+const TXT_SZ = 6.2; const txtLh = (sz) => sz * 0.3528 * 1.12;
+function cellLines(k, v, w) { const t = String(v ?? ''); if (!t) return null; if (k.fitSize(t, w, 7.5, 6.2)) return null; return k.wrap(t, w, TXT_SZ); }
+export function rowHeights(k, cols, rows, rowH) {
+  return rows.map((r) => { let h = rowH; for (const c of cols) { if (!c.left) continue; const v = r[c.k]; const cell = typeof v === 'object' && v ? v : { v }; if (cell.auto) continue; const ls = cellLines(k, cell.v, c.ww - 2); if (ls) h = Math.max(h, ls.length * txtLh(TXT_SZ) + 1.6); } return h; });
+}
+function tableGrid(k, cols, rows0, { headH = 26, rowH = 6.2, top, numbered = true, groups = [], bottom = null }) {
   const x = k.x0; let y = top;
   const W = cols.reduce((a, c) => a + c.w, 0); const scale = k.cw / W;
   cols.forEach((c) => (c.ww = c.w * scale));
+  // v0.33.1: rows grow for long text; blank padding rows are dropped first if space runs out,
+  // and any real rows that still can't fit come back in 'rest' for a continuation sheet.
+  let rows = rows0.slice(); let hs = rowHeights(k, cols, rows, rowH);
+  const gh0 = groups.length ? 5 : 0; const start = top + gh0 + headH + (numbered ? 3.6 : 0);
+  const isBlank = (r) => !r || !Object.keys(r).length;
+  if (bottom != null) while (rows.length && start + hs.reduce((a, b) => a + b, 0) > bottom && isBlank(rows[rows.length - 1])) { rows.pop(); hs.pop(); }
+  let rest = [];
+  if (bottom != null) { let tot = 0, n = 0; for (; n < rows.length; n++) { if (n && start + tot + hs[n] > bottom) break; tot += hs[n]; } if (n < rows.length) { rest = rows.slice(n).filter((r) => !isBlank(r)); rows = rows.slice(0, n); hs = hs.slice(0, n); } }
+  const rowsTotal = hs.reduce((a, b) => a + b, 0); const ys = []; { let a = 0; for (const h of hs) { ys.push(a); a += h; } }
   // group headers
   const gh = groups.length ? 5 : 0;
-  k.rect(x, y, k.cw, headH + gh + (numbered ? 3.6 : 0) + rows.length * rowH, { lw: 0.35, color: INK });
+  k.rect(x, y, k.cw, headH + gh + (numbered ? 3.6 : 0) + rowsTotal, { lw: 0.35, color: INK });
   let cx = x;
   const colX = []; cols.forEach((c) => { colX.push(cx); cx += c.ww; });
   for (const g of groups) {
@@ -193,7 +209,7 @@ function tableGrid(k, cols, rows, { headH = 26, rowH = 6.2, top, numbered = true
   const hy = y + gh;
   cols.forEach((c, i) => {
     const top2 = c.sub ? hy + gh : hy;
-    k.line(colX[i], top2, colX[i], hy + headH + (numbered ? 3.6 : 0) + rows.length * rowH, { w: 0.2 });
+    k.line(colX[i], top2, colX[i], hy + headH + (numbered ? 3.6 : 0) + rowsTotal, { w: 0.2 });
     if (c.vertical) k.t(c.label, colX[i] + c.ww / 2 + 1.1, hy + headH - 1.5, { size: 6.2, angle: 90, maxW: headH - (c.sub ? gh : 0) - 3 });
     else { const ls = k.wrap(c.label, c.ww - 1, 6.4); ls.forEach((s, j) => k.t(s, colX[i] + c.ww / 2, top2 + 4 + j * 2.7, { size: 6.4, align: 'center' })); }
   });
@@ -201,26 +217,23 @@ function tableGrid(k, cols, rows, { headH = 26, rowH = 6.2, top, numbered = true
   if (numbered) { k.line(x, ry, x + k.cw, ry, { w: 0.2 }); cols.forEach((c, i) => k.t(String(c.n || ''), colX[i] + c.ww / 2, ry + 2.6, { size: 5.8, color: GREY, align: 'center' })); ry += 3.6; }
   k.line(x, ry, x + k.cw, ry, { w: 0.35, color: INK });
   rows.forEach((r, ri) => {
-    const yy = ry + ri * rowH;
+    const yy = ry + ys[ri]; const rowH = hs[ri];
     if (ri) k.line(x, yy, x + k.cw, yy, { w: 0.15 });
     cols.forEach((c, i) => {
       const v = r[c.k];
       const cell = typeof v === 'object' && v ? v : { v };
       if (cell.flag) k.rect(colX[i] + 0.3, yy + 0.3, c.ww - 0.6, rowH - 0.6, { lw: 0, color: cell.flag === 'red' ? [235, 160, 160] : [240, 205, 140], fill: cell.flag === 'red' ? [252, 225, 225] : [253, 240, 210] });
-      if (cell.auto) k.t(cell.v, c.left ? colX[i] + 1 : colX[i] + c.ww / 2, yy + rowH - 1.8, { size: 7, color: AUTO_GREY, align: c.left ? 'left' : 'center', maxW: c.ww - 1.2 });
-      else if (c.tick) k.mark(cell.v, colX[i] + c.ww / 2, yy + rowH - 1.8, { size: 7.5 });
-      else if (c.left && cell.v && !k.fitSize(String(cell.v), c.ww - 2, 7.5, 6.2)) {
-        // v0.5: long text (descriptions, remarks) wraps onto two lines inside the cell, whole words only
-        const maxL = Math.max(1, Math.floor((rowH - 0.8) / 2.3));
-        let sz = 6.2; let ls = k.wrap(String(cell.v), c.ww - 2, sz);
-        while (ls.length > maxL && sz > 5) { sz -= 0.2; ls = k.wrap(String(cell.v), c.ww - 2, sz); }
-        if (ls.length > maxL) { ls = ls.slice(0, maxL); ls[maxL - 1] = k.ellipsis(ls[maxL - 1] + '…', c.ww - 2, sz); }
-        const lh = sz * 0.3528 * 1.12; const y1 = yy + rowH / 2 - (ls.length * lh) / 2 + lh * 0.8;
+      if (cell.auto) k.t(cell.v, c.left ? colX[i] + 1 : colX[i] + c.ww / 2, yy + rowH / 2 + 0.75, { size: 7, color: AUTO_GREY, align: c.left ? 'left' : 'center', maxW: c.ww - 1.2 });
+      else if (c.tick) k.mark(cell.v, colX[i] + c.ww / 2, yy + rowH / 2 + 0.75, { size: 7.5 });
+      else if (c.left && cellLines(k, cell.v, c.ww - 2)) {
+        // v0.33.1: wraps in full, whole words only; the row has already grown to fit every line
+        const sz = TXT_SZ; const ls = cellLines(k, cell.v, c.ww - 2);
+        const lh = txtLh(sz); const y1 = yy + rowH / 2 - (ls.length * lh) / 2 + lh * 0.8;
         ls.forEach((s, j) => k.t(s, colX[i] + 1, y1 + j * lh, { size: sz, color: VALUE }));
-      } else k.t(cell.v ?? '', c.left ? colX[i] + 1 : colX[i] + c.ww / 2, yy + rowH - 1.8, { size: 7.5, color: cell.flag === 'red' ? RED : VALUE, align: c.left ? 'left' : 'center', maxW: c.ww - 1.2 });
+      } else k.t(cell.v ?? '', c.left ? colX[i] + 1 : colX[i] + c.ww / 2, yy + rowH / 2 + 0.75, { size: 7.5, color: cell.flag === 'red' ? RED : VALUE, align: c.left ? 'left' : 'center', maxW: c.ww - 1.2 });
     });
   });
-  return ry + rows.length * rowH;
+  return { end: ry + rowsTotal, rest };
 }
 
 function boardHeaderDetails(k, cert, b, certNo) {
@@ -237,9 +250,9 @@ function boardHeaderDetails(k, cert, b, certNo) {
   k.rect(k.x0, y0, k.cw, k.y - y0 + 0.5, { lw: 0.35, color: INK });
   k.y += 2;
 }
-function circuitDetailsPage(k, cert, b, certNo, rows, part = 1, parts = 1) {
+function circuitDetailsPage(k, cert, b, certNo, rows, part = 1, parts = 1, cont = false) {
   k.addPage('l');
-  contTitle(k, 'GENERIC SCHEDULE OF CIRCUIT DETAILS', certNo, sheetTag(b, part, parts), 'Certificate/Report No.');
+  contTitle(k, 'GENERIC SCHEDULE OF CIRCUIT DETAILS' + (cont ? ' (continued)' : ''), certNo, sheetTag(b, part, parts), 'Certificate/Report No.');
   boardHeaderDetails(k, cert, b, certNo);
   const cols = [
     { k: 'num', label: 'Circuit number', n: 1, w: 9, vertical: true },
@@ -265,7 +278,7 @@ function circuitDetailsPage(k, cert, b, certNo, rows, part = 1, parts = 1) {
   const below = 2 + 4 + 10.5 + measure(k, () => notes.forEach((s) => { k.y += k.para(s, k.x0, k.y + 2, k.cw, { size: 5.8, gap: 0 }); }));
   const rowH = rowFit(k, 5 + 34 + 3.6, below, rows.length);
   // second-level "csa" label
-  const end = tableGrid(k, cols, rows, { top, groups, headH: 34, rowH });
+  const { end, rest } = tableGrid(k, cols, rows, { top, groups, headH: 34, rowH, bottom: k.H - 13 - below });
   // csa sub-heading
   const W = cols.reduce((a, c) => a + c.ww, 0); let cx = k.x0; const xs = cols.map((c) => { const v = cx; cx += c.ww; return v; });
   k.rect(xs[5], top + 5, cols[5].ww + cols[6].ww, 4.5, { lw: 0.2 }); k.t('csa', xs[5] + (cols[5].ww + cols[6].ww) / 2, top + 8.4, { size: 6.5, bold: true, align: 'center' });
@@ -277,10 +290,11 @@ function circuitDetailsPage(k, cert, b, certNo, rows, part = 1, parts = 1) {
   WIRING.forEach(([c, t], i) => { if (i) k.line(k.x0 + i * cw, k.y, k.x0 + i * cw, k.y + 9); k.t(c, k.x0 + i * cw + cw / 2, k.y + 3, { size: 7, bold: true, align: 'center' }); k.wrap(t, cw - 2, 5.8).slice(0, 2).forEach((s, j) => k.t(s, k.x0 + i * cw + cw / 2, k.y + 5.6 + j * 2.4, { size: 5.8, align: 'center' })); });
   k.y += 10.5;
   notes.forEach((s) => { k.y += k.para(s, k.x0, k.y + 2, k.cw, { size: 5.8, gap: 0 }); });
+  if (rest.length) circuitDetailsPage(k, cert, b, certNo, rest, part, parts, true);
 }
-function testResultsPage(k, cert, b, certNo, rows, part = 1, parts = 1) {
+function testResultsPage(k, cert, b, certNo, rows, part = 1, parts = 1, cont = false) {
   k.addPage('l');
-  contTitle(k, 'GENERIC SCHEDULE OF TEST RESULTS', certNo, sheetTag(b, part, parts), 'Certificate/Report No.');
+  contTitle(k, 'GENERIC SCHEDULE OF TEST RESULTS' + (cont ? ' (continued)' : ''), certNo, sheetTag(b, part, parts), 'Certificate/Report No.');
   // header box: left board details, right instruments
   const y0 = k.y + 1; k.y = y0; const x = k.x0 + 2; const lw = k.cw * 0.6;
   k.t('Distribution board/Consumer unit details', x, k.y + 3.6, { size: 8, bold: true }); k.y += 4.2;
@@ -297,6 +311,7 @@ function testResultsPage(k, cert, b, certNo, rows, part = 1, parts = 1) {
   k.y += 2;
   const cols = [
     { k: 'num', label: 'Circuit number', n: 17, w: 9, vertical: true },
+    { k: 'desc', label: 'Circuit description', n: '', w: 30, left: true }, // v0.33.1: same as column 2 of the circuit details, to find your way
     { k: 'r1', label: 'r1 (line)', n: 18, w: 11, vertical: true, sub: 2 },
     { k: 'rn', label: 'rn (neutral)', n: 19, w: 11, vertical: true, sub: 2 },
     { k: 'r2', label: 'r2 (CPC)', n: 20, w: 11, vertical: true, sub: 2 },
@@ -310,15 +325,16 @@ function testResultsPage(k, cert, b, certNo, rows, part = 1, parts = 1) {
     { k: 'rcdMs', label: 'Disconnection time (ms)**', n: 28, w: 12, vertical: true, sub: 1 },
     { k: 'rcdBtn', label: 'Test button operation', n: 29, w: 10, vertical: true, sub: 1, tick: true },
     { k: 'afddBtn', label: 'Manual test button operation††', n: 30, w: 11, vertical: true, sub: 1, tick: true },
-    { k: 'remarks', label: 'Remarks — include details of circuits and/or installed equipment vulnerable to damage when testing (continue on additional page(s) if necessary)', n: 31, w: 62, left: true },
+    { k: 'remarks', label: 'Remarks — include details of circuits and/or installed equipment vulnerable to damage when testing (continue on additional page(s) if necessary)', n: 31, w: 32, left: true },
   ];
-  const groups = [{ label: 'Continuity (Ω)', from: 1, to: 5 }, { label: 'Insulation resistance', from: 6, to: 8 }, { label: 'Zs (Ω)', from: 10, to: 10 }, { label: 'RCD', from: 11, to: 12 }, { label: 'AFDD', from: 13, to: 13 }];
+  const groups = [{ label: 'Continuity (Ω)', from: 2, to: 6 }, { label: 'Insulation resistance', from: 7, to: 9 }, { label: 'Zs (Ω)', from: 11, to: 11 }, { label: 'RCD', from: 12, to: 13 }, { label: 'AFDD', from: 14, to: 14 }];
   const top = k.y;
   const rowH = rowFit(k, 5 + 30 + 3.6, 2 + 7 + 5 * 2.5 + 1, rows.length);
-  const end = tableGrid(k, cols, rows, { top, groups, headH: 30, rowH });
+  const below = 2 + 7 + 5 * 2.5 + 1;
+  const { end, rest } = tableGrid(k, cols, rows, { top, groups, headH: 30, rowH, bottom: k.H - 13 - below });
   let cx = k.x0; const xs = cols.map((c) => { const v = cx; cx += c.ww; return v; });
-  k.rect(xs[1], top + 5, cols[1].ww * 3, 4.5, { lw: 0.2 }); k.t('Ring final circuit', xs[1] + cols[1].ww * 1.5, top + 8.4, { size: 6.2, bold: true, align: 'center' });
-  k.rect(xs[4], top + 5, cols[4].ww + cols[5].ww, 4.5, { lw: 0.2 }); k.t('(R1 + R2) or R2', xs[4] + (cols[4].ww + cols[5].ww) / 2, top + 8.4, { size: 6, bold: true, align: 'center' });
+  k.rect(xs[2], top + 5, cols[2].ww * 3, 4.5, { lw: 0.2 }); k.t('Ring final circuit', xs[2] + cols[2].ww * 1.5, top + 8.4, { size: 6.2, bold: true, align: 'center' });
+  k.rect(xs[5], top + 5, cols[5].ww + cols[6].ww, 4.5, { lw: 0.2 }); k.t('(R1 + R2) or R2', xs[5] + (cols[5].ww + cols[6].ww) / 2, top + 8.4, { size: 6, bold: true, align: 'center' });
   k.y = end + 2;
   // v0.33: the EIC 'same person' case signs as the designer; use that signature and name
   const same = cert.type === 'EIC' && yes((cert.eic || {}).samePerson); const SG = cert.sigs || {};
@@ -328,6 +344,7 @@ function testResultsPage(k, cert, b, certNo, rows, part = 1, parts = 1) {
   sig(k, k.x0 + 120, k.y + 4, 80, s); k.field('Date:', fmtDate(s.date), k.x0 + 205, k.y + 4, 40);
   k.y += 7;
   ['¶ Not all SPDs have visible functionality indication.', '# An \u2018X\u2019, denoting incorrect polarity, cannot be entered on to this schedule when issued with an Electrical Installation Certificate.', '** RCD effectiveness is verified using an alternating current test at rated residual operating current (IΔn).', '‡‡ Where this schedule forms part of an Electrical Installation Certificate, insulation resistance testing should be performed at the test voltage stated in Table 64.', '†† Not all AFDDs have a test button.'].forEach((t) => { k.t(t, k.x0, k.y + 2, { size: 5.8 }); k.y += 2.5; });
+  if (rest.length) testResultsPage(k, cert, b, certNo, rest, part, parts, true); // v0.33.1: only if a row couldn't fit at all
 }
 // v0.25: adjustable breakers: the settings go in the circuit's Remarks (col 31), e.g. "MCCB Ir 200 A, Im 2000 A".
 // That's also where the form asks for the source of a max Zs that isn't from the Chapter 41 tables.

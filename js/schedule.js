@@ -15,6 +15,7 @@ import { blankBoard } from './certmodel.js';
 import * as presets from './presets.js';
 import { FIELDS, FIELD, TEMPLATES, blankCircuit, applyTemplate, copyCircuit, copyBoard, makeSpare, autoNA, descChanged, rcdGroupChanged, spdGroupChanged, SPD_HIDE, spdHidden, spdObservation, circuitFedBySource, boardFedBySource, bidiTarget, hasBidiNote, addBidiNote, spareLine, copyToNextWay, laterSequential, deleteCircuitAt } from './templates.js';
 import { checkCircuit, limitZs, isSpare } from './checks.js';
+import { autoFillOcpd, typed } from './ocpdfill.js';
 import { DEVICES, deviceById, deviceFromBs, ratingsFor, CHECK_NOTE } from './limits.js';
 import { voiceSupported, listen } from './voice.js';
 import { CABLES, CABLE_PICKS, WIRING_TYPES, REF_METHODS, METHODS_FOR_PICK } from './cables.js';
@@ -288,12 +289,13 @@ function presetPicker(c, after) {
     const match = k && list.find((p) => presets.keyOf(p.fields) === k);
     fill(box, h('div', { class: 'phd' }, h('span', {}, 'Device presets'), list.length ? h('a', { href: '#/settings/presets', class: 'note' }, 'Manage') : null),
       list.length ? h('div', { class: 'chips presets' }, list.slice(0, 12).map((p) => h('button', { class: 'chip' + (match && match.id === p.id ? ' on' : ''), type: 'button', title: 'Fill the device boxes', onclick: async () => {
-        const ch = presets.applyPreset(c, p); await presets.used(p.id); changed(); toast(ch.length ? `Filled the device from \u201c${p.name}\u201d (cable and readings left alone)` : 'Already set like that'); after(); } }, p.name)))
+        const ch = presets.applyPreset(c, p); for (const k of Object.keys(c.autoF || {})) if (k in (p.fields || {})) delete c.autoF[k]; ch.push(...autoFillOcpd(c)); await presets.used(p.id); changed(); toast(ch.length ? `Filled the device from \u201c${p.name}\u201d (cable and readings left alone)` : 'Already set like that'); after(); } }, p.name)))
         : h('p', { class: 'note' }, 'Fill in a device below and it\u2019s remembered here for next time.'),
       cur && !match ? h('button', { class: 'btn small savepreset', type: 'button', onclick: async () => { const l = await presets.load(); const r = presets.remember(l, c); if (r.deleted) { const p = l.find((x) => presets.keyOf(x.fields) === k); Object.assign(p, { deleted: false, updatedAt: new Date().toISOString(), uses: 1 }); } await presets.save(l); toast('Saved as a device preset'); draw(); } }, '+ Save as preset: ' + presets.nameFor(cur)) : null);
   };
   draw(); box.redraw = draw; return box;
 }
+const isAutoBs = (c) => !String(c.bs || '').trim() || !!(c.autoF && c.autoF.bs === c.bs) || !!deviceFromBs(c.bs); // a standard number is replaced by the new device's
 function circuitEditor({ cert, c, ctx, back, title, prev, next, extra = [], mw = false }) {
   leaving = c;
   const pBox = presetPicker(c, () => render());
@@ -309,6 +311,7 @@ function circuitEditor({ cert, c, ctx, back, title, prev, next, extra = [], mw =
     }
     const lim = limitZs(c, ctx());
     document.querySelectorAll('select[data-k]').forEach((sel) => { const o = sel.querySelector('.pick0'); if (o) o.textContent = autoNA(c, sel.dataset.k) ? 'N/A' : '— pick —'; sel.classList.toggle('autona', autoNA(c, sel.dataset.k)); });
+    for (const [k, el] of Object.entries(inputs)) if (document.activeElement !== el && String(el.value) !== String(c[k] ?? '')) el.value = c[k] ?? ''; // v0.33.1: show values filled by the device picker
     for (const [k, el] of Object.entries(inputs)) { const na = autoNA(c, k); el.placeholder = na ? 'N/A' : ''; el.classList.toggle('autona', na); }
     fill(noDevBox, isSpare(c) ? h('label', { class: 'check nodev' }, h('input', { type: 'checkbox', checked: !!c.noDevice, onchange: (e) => { c.noDevice = e.target.checked; changed(); refresh(); } }), 'No device fitted (device boxes show N/A too)') : null);
     if (pBox.redraw) pBox.redraw();
@@ -316,7 +319,7 @@ function circuitEditor({ cert, c, ctx, back, title, prev, next, extra = [], mw =
   };
   const inp = (k, opts = {}) => {
     const fd = FIELD[k] || { label: opts.label, k };
-    const input = h('input', { value: c[k] ?? '', inputmode: fd.num ? 'decimal' : null, oninput: (e) => { const was = isSpare(c); c[k] = e.target.value; if (k === 'desc' && descChanged(c, was) && inputs.irV) inputs.irV.value = c.irV ?? ''; changed(); refresh(); } });
+    const input = h('input', { value: c[k] ?? '', inputmode: fd.num ? 'decimal' : null, oninput: (e) => { const was = isSpare(c); c[k] = e.target.value; typed(c, k); if (k === 'bs') { const d = deviceFromBs(c.bs); if (d) c.device = d.id; } if (k === 'bs' || k === 'rating') autoFillOcpd(c); if (k === 'desc' && descChanged(c, was) && inputs.irV) inputs.irV.value = c.irV ?? ''; changed(); refresh(); } });
     inputs[k] = input;
     const quick = [];
     if (k === 'irLL' || k === 'irLE') quick.push('>999');
@@ -324,7 +327,7 @@ function circuitEditor({ cert, c, ctx, back, title, prev, next, extra = [], mw =
     if (fd.test || ['rcdBs', 'rcdType', 'rcdIdn', 'rcdRating', 'bka', 'points'].includes(k)) quick.push('N/A');
     const msg = h('div', { class: 'msg' });
     const wrap = h('div', { class: 'fld' }, h('div', { class: 'lab' }, h('span', {}, opts.label || fd.label), fd.col ? h('span', { class: 'col' }, 'col ' + fd.col) : null),
-      h('div', { class: 'inrow' }, input, quick.map((q) => h('button', { class: 'q', onclick: () => { c[k] = c[k] === q ? '' : q; input.value = c[k]; changed(); refresh(); } }, q))), msg);
+      h('div', { class: 'inrow' }, input, quick.map((q) => h('button', { class: 'q', onclick: () => { c[k] = c[k] === q ? '' : q; typed(c, k); input.value = c[k]; changed(); refresh(); } }, q))), msg);
     flagEls[k] = { wrap, msg }; return wrap;
   };
   // Device chooser: fills BS (EN), offers types and ratings from the tables.
@@ -334,10 +337,10 @@ function circuitEditor({ cert, c, ctx, back, title, prev, next, extra = [], mw =
     if (d && c.device !== d.id) c.device = d.id;
     const ratings = d ? ratingsFor(d.id, c.type) : [];
     fill(devBox, 
-      h('label', { class: 'f' }, h('span', {}, 'Protective device'), h('select', { onchange: (e) => { const nd = deviceById(e.target.value); c.device = nd.id; c.bs = nd.bs; c.type = nd.types[0] && nd.types.length === 1 ? nd.types[0] : (nd.types.includes(c.type) ? c.type : nd.types[0] || ''); if (nd.rcd) { c.rcdBs = '61009'; c.rcdIdn = c.rcdIdn && c.rcdIdn !== 'N/A' ? c.rcdIdn : '30'; c.rcdType = c.rcdType && c.rcdType !== 'N/A' ? c.rcdType : 'A'; c.rcdRating = c.rating; } changed(); drawDev(); refresh(); } },
+      h('label', { class: 'f' }, h('span', {}, 'Protective device'), h('select', { onchange: (e) => { const nd = deviceById(e.target.value); if (!nd) return; c.device = nd.id; if (isAutoBs(c)) c.bs = nd.bs; if (nd.types.length && !nd.types.includes(c.type)) c.type = nd.types.length === 1 ? nd.types[0] : nd.types[0]; autoFillOcpd(c); changed(); drawDev(); refresh(); } },
         h('option', { value: '' }, '— pick —'), DEVICES.map((x) => h('option', { value: x.id, selected: d && d.id === x.id ? true : null }, x.label)))),
-      d && d.types.length > 1 ? h('div', { class: 'f', style: 'margin-bottom:10px' }, h('span', { class: 'note' }, 'Type (col 9)'), h('div', { class: 'chips' }, d.types.map((t) => h('button', { class: 'chip' + (c.type === t ? ' on' : ''), onclick: () => { c.type = t; changed(); drawDev(); refresh(); } }, t)))) : null,
-      ratings.length ? h('div', { class: 'f', style: 'margin-bottom:10px' }, h('span', { class: 'note' }, 'Rating, A (col 10)'), h('div', { class: 'chips' }, ratings.map((r) => h('button', { class: 'chip' + (String(c.rating) === String(r) ? ' on' : ''), onclick: () => { c.rating = String(r); if (d.rcd) c.rcdRating = String(r); changed(); drawDev(); refresh(); } }, r)))) : inp('rating'),
+      d && d.types.length > 1 ? h('div', { class: 'f', style: 'margin-bottom:10px' }, h('span', { class: 'note' }, 'Type (col 9)'), h('div', { class: 'chips' }, d.types.map((t) => h('button', { class: 'chip' + (c.type === t ? ' on' : ''), onclick: () => { c.type = t; typed(c, 'type'); autoFillOcpd(c); changed(); drawDev(); refresh(); } }, t)))) : null,
+      ratings.length ? h('div', { class: 'f', style: 'margin-bottom:10px' }, h('span', { class: 'note' }, 'Rating, A (col 10)'), h('div', { class: 'chips' }, ratings.map((r) => h('button', { class: 'chip' + (String(c.rating) === String(r) ? ' on' : ''), onclick: () => { c.rating = String(r); autoFillOcpd(c); changed(); drawDev(); refresh(); } }, r)))) : inp('rating'),
       d && d.adj ? h('label', { class: 'f' }, h('span', {}, d.adj === 'mpcb' ? 'Magnetic trip, A (MPCB: about 13 × the top of the dial)' : 'Magnetic setting Im / Ii, A (MCCB: e.g. 10 × Ir)'), h('input', { inputmode: 'decimal', 'aria-label': 'Magnetic trip setting', value: c.im || '', oninput: (e) => { c.im = e.target.value.trim(); changed(); refresh(); } }), h('div', { class: 'note imnote' }, c.im ? `Max Zs = 230 × 0.95 ÷ ${c.im} A. Check the maker\u2019s setting.` : 'Gives the max Zs and the adiabatic check. Leave blank to type your own max Zs below.')) : null,
       // v0.25: optional MCCB earth fault settings (LSIG). When Ig is in, max Zs uses Ig.
       d && d.adj === 'mccb' ? [h('div', { class: 'grid2' },
@@ -461,7 +464,7 @@ function scheduleTable(cert, b, bi) {
       td0 && td0.classList.toggle('spare', isSpare(c));
     };
     const cell = (f) => {
-      const i = h('input', { value: c[f.k] ?? '', inputmode: f.num ? 'decimal' : null, 'aria-label': `Circuit ${c.num} ${f.label}`, oninput: (e) => { const was = isSpare(c); c[f.k] = e.target.value; if (f.k === 'desc') descChanged(c, was); if (f.k === 'bs') { const d = deviceFromBs(c.bs); if (d) c.device = d.id; } changed(); upd(); }, ondblclick: isTick(f.k) ? (e) => { c[f.k] = c[f.k] === '✓' ? '' : '✓'; e.target.value = c[f.k]; changed(); upd(); } : null });
+      const i = h('input', { value: c[f.k] ?? '', inputmode: f.num ? 'decimal' : null, 'aria-label': `Circuit ${c.num} ${f.label}`, oninput: (e) => { const was = isSpare(c); c[f.k] = e.target.value; typed(c, f.k); if (f.k === 'desc') descChanged(c, was); if (f.k === 'bs') { const d = deviceFromBs(c.bs); if (d) c.device = d.id; } if (f.k === 'bs' || f.k === 'rating' || f.k === 'type') { const ch = autoFillOcpd(c); for (const k of ch) { const el = e.target.closest('tr').querySelector(`td[data-k="${k}"] input`); if (el) el.value = c[k]; } } changed(); upd(); }, ondblclick: isTick(f.k) ? (e) => { c[f.k] = c[f.k] === '✓' ? '' : '✓'; e.target.value = c[f.k]; changed(); upd(); } : null });
       const td = h('td', { class: f.k === 'desc' ? 'desc sl2' : f.k === 'num' ? 'sl' : '', style: f.k === 'desc' ? 'min-width:150px' : f.k === 'remarks' ? 'min-width:160px' : 'min-width:' + (f.tick ? 40 : /^(bs|rcdBs)$/.test(f.k) ? 66 : 52) + 'px', 'data-k': f.k }, i);
       cells[f.k] = td; return td;
     };

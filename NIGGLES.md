@@ -1,5 +1,10 @@
 # Sparky — niggles and update lists
 
+## [BUILT v0.33.1 on branch `v0.33.1-ocpd-autofill` — NOT LIVE] OCPD boxes auto-fill + description on test results
+- Cause: the device picker never set Breaking capacity (kA); for an RCBO it set the RCD values in the data but the RCD boxes on screen (outside the device panel) weren't redrawn, so they looked blank until you left the page; it also overwrote a typed RCD BS and RCD rating, and switching away from RCBO left stale RCD values. Typing a BS number in the table only set the device.
+- Now (js/ocpdfill.js): device / type / rating (picker, chips, typed BS or rating, table, presets) fill BS, type, kA (MCB/RCBO 6, BS 88-3 16, BS 88-2 50, BS 1362 6; none for BS 3036/MCCB/MPCB/other) and for RCBO RCD BS 61009, type A, 30 mA, rating = rating. Only blank boxes or ones the app filled (c.autoF) change; typed values (incl. N/A) never. Old circuits: existing values count as typed. Max Zs stays from the table. "No device fitted" spares skipped. Copy to next way carries the auto marks.
+- PDF test results: narrow 'Circuit description' column after the circuit number (width taken from Remarks). Table cells wrap in full (no '…'); rows grow; only rows that can't fit go to a '(continued)' sheet.
+
 ## [BUILT v0.33.0 on branch `v0.33.0-a4-gaps` — NOT LIVE] A4:2026 form gaps
 - EICR 1.1 split into six intake sub-rows (service cable, service head, earthing arrangement, meter tails, metering equipment, means of isolation) with NOTE 1/2 and a Y / N/A "person ordering notified" tick (screen + PDF). Old certs: a single old 1.1 outcome is copied to all six sub-rows (blank stays blank).
 - "Report No." on all EICR pages; "Certificate/Report No." on generic schedules. EIC test results show signature + date by "Tested by".
