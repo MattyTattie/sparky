@@ -117,9 +117,10 @@ function spdGrid(b) {
   const on = (k) => { for (const x of spdGroupChanged(b, k)) { const i = els[x] && els[x].querySelector('input'); if (i) { if (i.type === 'checkbox') i.checked = !!b[x]; else i.value = b[x] ?? ''; } } hide(); };
   const S = (k, label, type = 'text') => (els[k] = field(b, { k, label, type }, on));
   const box = h('div', {},
+    h('div', { class: 'note', style: 'margin-top:12px' }, 'Board checks'), h('div', { class: 'grid2' }, F0(b, 'polOk', 'Correct polarity confirmed'), F0(b, 'phaseSeq', 'Phase sequence confirmed')),
     h('div', { class: 'note' }, 'SPD type'), h('div', { class: 'grid2' }, S('spdT1', 'T1', 'check'), S('spdT2', 'T2', 'check'), S('spdT3', 'T3', 'check'), S('spdNA', 'N/A', 'check')),
     nofit, S('spdDevice', 'SPD protective device (e.g. B32 MCB)'),
-    h('div', { class: 'grid2' }, F0(b, 'polOk', 'Correct polarity confirmed'), F0(b, 'phaseSeq', 'Phase sequence confirmed'), S('spdOk', 'SPD operational status confirmed', 'check'), S('spdStatusNA', 'SPD status N/A', 'check')));
+    h('div', { class: 'grid2' }, S('spdOk', 'SPD operational status confirmed', 'check'), S('spdStatusNA', 'SPD status N/A', 'check')));
   hide(); return box;
 }
 const F0 = (b, k, label) => field(b, { k, label, type: 'check' });

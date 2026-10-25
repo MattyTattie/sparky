@@ -165,3 +165,4 @@
 - (Matthew follow-up) Ticking SPD type "N/A" by hand = no SPD fitted: unticks T1-T3 and "status confirmed", ticks SPD status N/A, puts N/A in a blank SPD protective device, and hides those three boxes behind "No SPD fitted" (polarity / phase sequence stay, they aren't SPD boxes). Unticking it shows them again and undoes only the N/As it filled itself (kept in optional `spdAuto`). T1-T3 / status confirmed it unticked are not restored.
 - Ticking "SPD status N/A" alone still cascades (ticks type N/A) but hides nothing.
 - PDF: the IET forms have no SPD device box; the SPD type N/A and status N/A print as ticks, as before.
+- Correct polarity / Phase sequence moved out of the SPD group into their own "Board checks" group above SPD type (screen only; same fields, PDF unchanged).
