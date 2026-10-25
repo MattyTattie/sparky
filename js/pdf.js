@@ -177,9 +177,9 @@ function particularsSection(k, cert, letter) {
 const WIRING = [['A', 'Thermoplastic insulated/ sheathed cables'], ['B', 'Thermoplastic cables in metallic conduit'], ['C', 'Thermoplastic cables in non-metallic conduit'], ['D', 'Thermoplastic cables in metallic trunking'], ['E', 'Thermoplastic cables in non-metallic trunking'], ['F', 'Thermoplastic SWA cables'], ['G', 'Thermosetting SWA cables'], ['H', 'Mineral insulated cables'], ['O', 'Other - please state']];
 
 // v0.33.1: long text in a cell wraps in full (no '…'); the row grows to fit.
-// Lines for a left-aligned text cell, at 7.5 pt on one line if it fits, else 6.2 pt wrapped.
-const TXT_SZ = 6.2; const txtLh = (sz) => sz * 0.3528 * 1.12;
-function cellLines(k, v, w) { const t = String(v ?? ''); if (!t) return null; if (k.fitSize(t, w, 7.5, 6.2)) return null; return k.wrap(t, w, TXT_SZ); }
+// Lines for a left-aligned text cell: always the normal 7.5 pt (never shrunk); long text wraps and the row grows.
+const TXT_SZ = 7.5; const txtLh = (sz) => sz * 0.3528 * 1.12;
+function cellLines(k, v, w) { const t = String(v ?? ''); if (!t) return null; if (k.tw(t, TXT_SZ) <= w && !/\n/.test(t)) return null; return k.wrap(t, w, TXT_SZ); }
 export function rowHeights(k, cols, rows, rowH) {
   return rows.map((r) => { let h = rowH; for (const c of cols) { if (!c.left) continue; const v = r[c.k]; const cell = typeof v === 'object' && v ? v : { v }; if (cell.auto) continue; const ls = cellLines(k, cell.v, c.ww - 2); if (ls) h = Math.max(h, ls.length * txtLh(TXT_SZ) + 1.6); } return h; });
 }
@@ -193,6 +193,8 @@ function tableGrid(k, cols, rows0, { headH = 26, rowH = 6.2, top, numbered = tru
   const gh0 = groups.length ? 5 : 0; const start = top + gh0 + headH + (numbered ? 3.6 : 0);
   const isBlank = (r) => !r || !Object.keys(r).length;
   if (bottom != null) while (rows.length && start + hs.reduce((a, b) => a + b, 0) > bottom && isBlank(rows[rows.length - 1])) { rows.pop(); hs.pop(); }
+  // v0.33.1: before splitting, squeeze the normal (one-line) rows down to 4.6 mm so a tall remark row costs as few other rows as possible
+  if (bottom != null && start + hs.reduce((a, b) => a + b, 0) > bottom) { const over = start + hs.reduce((a, b) => a + b, 0) - bottom; const nn = hs.filter((h) => h <= rowH).length; const nh = Math.max(4.6, rowH - over / Math.max(1, nn)); hs = hs.map((h) => (h <= rowH ? nh : h)); }
   let rest = [];
   if (bottom != null) { let tot = 0, n = 0; for (; n < rows.length; n++) { if (n && start + tot + hs[n] > bottom) break; tot += hs[n]; } if (n < rows.length) { rest = rows.slice(n).filter((r) => !isBlank(r)); rows = rows.slice(0, n); hs = hs.slice(0, n); } }
   const rowsTotal = hs.reduce((a, b) => a + b, 0); const ys = []; { let a = 0; for (const h of hs) { ys.push(a); a += h; } }

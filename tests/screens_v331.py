@@ -12,7 +12,9 @@ PREP = r"""(async(LONG)=>{const db=await import('./js/db.js');
  const e=await db.get('certs','cert-eicr'); walk(e); const b=e.boards[0];
  b.circuits[0].remarks='Over 80% of max Zs, re-test hot'; b.circuits[1].remarks=LONG;
  const t=await import('./js/templates.js'); const n=t.blankCircuit(b.circuits.length+1); n.device=''; n.desc='Garage sockets (new way)'; b.circuits.push(n);
- await db.put('certs',e); return b.circuits.length-1; })"""
+ await db.put('certs',e);
+ const c2=await db.get('certs','cert-eic'); if(c2){ walk(c2); const b2=c2.boards[0]; if(b2.circuits[0]) b2.circuits[0].remarks='Over 80% of max Zs, re-test hot'; if(b2.circuits[1]) b2.circuits[1].remarks=LONG; await db.put('certs',c2); }
+ return b.circuits.length-1; })"""
 PDF = "(async(id)=>{const db=await import('./js/db.js');const p=await import('./js/pdf.js');const c=await db.get('certs',id);const b=await p.certificatePdf(c,{});const a=new Uint8Array(await b.arrayBuffer());let s='';for(const x of a)s+=String.fromCharCode(x);return btoa(s)})"
 async def main():
     os.makedirs(OUT, exist_ok=True); errs = []; info = {}
@@ -38,6 +40,8 @@ async def main():
             if not phone:
                 data = await pg.evaluate(PDF + "('cert-eicr')"); f = f'{OUT}/pdf-eicr-{WHEN}.pdf'; open(f, 'wb').write(base64.b64decode(data))
                 subprocess.run(['pdftoppm', '-r', '80', '-png', f, f'{OUT}/pdf-eicr-{WHEN}'])
+                data = await pg.evaluate(PDF + "('cert-eic')"); f = f'{OUT}/pdf-eic-{WHEN}.pdf'; open(f, 'wb').write(base64.b64decode(data))
+                subprocess.run(['pdftoppm', '-r', '80', '-png', f, f'{OUT}/pdf-eic-{WHEN}'])
             await ctx.close()
         await br.close()
     print(json.dumps(info, indent=1)); print('ERRORS', errs)
