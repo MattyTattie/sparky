@@ -1,5 +1,10 @@
 # Sparky — niggles and update lists
 
+## [BUILT v0.33.2 on branch `v0.33.2-row-open` — NOT LIVE] Tap a circuit number in the table to open it
+- Schedule table (landscape phone / Mac): the No. cell is now a blue underlined number with a › chevron (pointer + hover tint on Mac). Click/tap or Enter on it opens that way's own circuit page. Other boxes stay typeable in the table; the circuit number itself is edited on the circuit page. The ✎ row button does the same.
+- Back / All circuits returns to the table at the same scroll (page and table, saved per board, used once).
+- Phone portrait cards unchanged. Shots: /workspace/sparky-shots/v0.33.2 (tests/screens_v332.py).
+
 ## [BUILT v0.33.1 on branch `v0.33.1-ocpd-autofill` — NOT LIVE] OCPD boxes auto-fill + description on test results
 - Cause: the device picker never set Breaking capacity (kA); for an RCBO it set the RCD values in the data but the RCD boxes on screen (outside the device panel) weren't redrawn, so they looked blank until you left the page; it also overwrote a typed RCD BS and RCD rating, and switching away from RCBO left stale RCD values. Typing a BS number in the table only set the device.
 - Now (js/ocpdfill.js): device / type / rating (picker, chips, typed BS or rating, table, presets) fill BS, type, kA (MCB/RCBO 6, BS 88-3 16, BS 88-2 50, BS 1362 6; none for BS 3036/MCCB/MPCB/other) and for RCBO RCD BS 61009, type A, 30 mA, rating = rating. Only blank boxes or ones the app filled (c.autoF) change; typed values (incl. N/A) never. Old circuits: existing values count as typed. Max Zs stays from the table. "No device fitted" spares skipped. Copy to next way carries the auto marks.

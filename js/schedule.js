@@ -464,17 +464,38 @@ function scheduleTable(cert, b, bi) {
       td0 && td0.classList.toggle('spare', isSpare(c));
     };
     const cell = (f) => {
+      // v0.33.2: the circuit number opens that way's own page (Enter or click); other boxes stay typeable here.
+      if (f.k === 'num') { const td = h('td', { class: 'sl', 'data-k': 'num', style: 'min-width:38px' }, openWayButton(cert, bi, ci, c)); cells.num = td; return td; }
       const i = h('input', { value: c[f.k] ?? '', inputmode: f.num ? 'decimal' : null, 'aria-label': `Circuit ${c.num} ${f.label}`, oninput: (e) => { const was = isSpare(c); c[f.k] = e.target.value; typed(c, f.k); if (f.k === 'desc') descChanged(c, was); if (f.k === 'bs') { const d = deviceFromBs(c.bs); if (d) c.device = d.id; } if (f.k === 'bs' || f.k === 'rating' || f.k === 'type') { const ch = autoFillOcpd(c); for (const k of ch) { const el = e.target.closest('tr').querySelector(`td[data-k="${k}"] input`); if (el) el.value = c[k]; } } changed(); upd(); }, ondblclick: isTick(f.k) ? (e) => { c[f.k] = c[f.k] === '✓' ? '' : '✓'; e.target.value = c[f.k]; changed(); upd(); } : null });
       const td = h('td', { class: f.k === 'desc' ? 'desc sl2' : f.k === 'num' ? 'sl' : '', style: f.k === 'desc' ? 'min-width:150px' : f.k === 'remarks' ? 'min-width:160px' : 'min-width:' + (f.tick ? 40 : /^(bs|rcdBs)$/.test(f.k) ? 66 : 52) + 'px', 'data-k': f.k }, i);
       cells[f.k] = td; return td;
     };
     maxCell = h('td', { class: 'calc', title: 'From the BS 7671 tables. Type your own figure to override.' }, h('input', { value: c.maxZsOverride || '', inputmode: 'decimal', 'aria-label': `Circuit ${c.num} maximum Zs (Ω)`, style: 'color:var(--brand);font-weight:600', oninput: (e) => { c.maxZsOverride = e.target.value; changed(); upd(); } }));
     body.append(td0 = h('tr', { class: isSpare(c) ? 'spare' : '' }, cols.map((f) => [cell(f), f.k === 'bka' ? maxCell : null]),
-      h('td', { class: 'act' }, h('button', { title: 'Open', tabindex: -1, onclick: () => go(`#/cert/${cert.id}/b/${bi}/c/${ci}`) }, '✎'), h('button', { title: 'Copy row', tabindex: -1, onclick: () => { b.circuits.splice(ci + 1, 0, copyCircuit(c, b.circuits.length + 1)); renumberIfSequential(b); changed(); render(); } }, '⧉'), h('button', { title: 'Spare', tabindex: -1, onclick: () => { { const was = isSpare(c); Object.assign(c, makeSpare(c)); descChanged(c, was); } changed(); render(); } }, '∅'), h('button', { title: 'Delete circuit', class: 'del', tabindex: -1, onclick: async () => { if (await askDelete(b, ci)) render(); } }, icon('trash', { size: 16 })))));
+      h('td', { class: 'act' }, h('button', { title: 'Open', tabindex: -1, onclick: (e) => { saveTableScroll(`${cert.id}/${bi}`, e.currentTarget.closest('.tablewrap')); go(wayHref(cert.id, bi, ci)); } }, '✎'), h('button', { title: 'Copy row', tabindex: -1, onclick: () => { b.circuits.splice(ci + 1, 0, copyCircuit(c, b.circuits.length + 1)); renumberIfSequential(b); changed(); render(); } }, '⧉'), h('button', { title: 'Spare', tabindex: -1, onclick: () => { { const was = isSpare(c); Object.assign(c, makeSpare(c)); descChanged(c, was); } changed(); render(); } }, '∅'), h('button', { title: 'Delete circuit', class: 'del', tabindex: -1, onclick: async () => { if (await askDelete(b, ci)) render(); } }, icon('trash', { size: 16 })))));
     upd();
   });
-  return h('div', {}, h('div', { class: 'tablewrap' }, h('table', { class: 'sched' }, h('thead', {}, head), body)),
+  const wrap = h('div', { class: 'tablewrap' }, h('table', { class: 'sched' }, h('thead', {}, head), body));
+  restoreTableScroll(`${cert.id}/${bi}`, wrap);
+  return h('div', {}, wrap,
     h('p', { class: 'note' }, `Zdb ${b.zdb || '–'} Ω · Ipf ${b.ipf || '–'} kA · Earthing ${cert.supply.earthing}. Red = over the limit, amber = worth a look ${mouseHelp()} `, CHECK_NOTE));
+}
+// v0.33.2: remember where the table was scrolled so "back" from a circuit lands in the same place.
+const TABLE_SCROLL = new Map();
+export function saveTableScroll(key, wrap, win = typeof window !== 'undefined' ? window : null) {
+  TABLE_SCROLL.set(key, { y: win ? win.scrollY : 0, top: wrap ? wrap.scrollTop : 0, left: wrap ? wrap.scrollLeft : 0 });
+}
+export function takeTableScroll(key) { const v = TABLE_SCROLL.get(key) || null; TABLE_SCROLL.delete(key); return v; }
+function restoreTableScroll(key, wrap) {
+  const v = takeTableScroll(key); if (!v) return;
+  const apply = () => { wrap.scrollTop = v.top; wrap.scrollLeft = v.left; window.scrollTo(0, v.y); };
+  requestAnimationFrame(() => { apply(); requestAnimationFrame(apply); });
+}
+export function wayHref(certId, bi, ci) { return `#/cert/${certId}/b/${bi}/c/${ci}`; }
+function openWayButton(cert, bi, ci, c) {
+  return h('button', { type: 'button', class: 'wayopen', title: `Open circuit ${c.num || ci + 1}`, 'aria-label': `Open circuit ${c.num || ci + 1}${c.desc ? ' ' + c.desc : ''}`,
+    onclick: (e) => { saveTableScroll(`${cert.id}/${bi}`, e.currentTarget.closest('.tablewrap')); go(wayHref(cert.id, bi, ci)); } },
+    h('span', { class: 'wn' }, c.num || String(ci + 1)), h('span', { class: 'wc', 'aria-hidden': 'true' }, '›'));
 }
 
 // ---------- Scan the consumer unit (one or more photos) ----------

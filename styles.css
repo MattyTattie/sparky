@@ -869,3 +869,10 @@ a.newphone-link { display: block; text-decoration: none; }
 .notice.bidi{margin-top:10px}
 
 .ins.subhead{border-bottom:0;padding-bottom:0}
+/* v0.33.2: circuit number in the schedule table opens that way's own page */
+table.sched td button.wayopen { display: flex; align-items: center; justify-content: center; gap: 2px; width: 100%; min-height: 38px; border: 0; border-radius: 0; background: transparent; color: var(--brand); font: inherit; font-size: 13px; font-weight: 700; cursor: pointer; padding: 0 4px; }
+table.sched td button.wayopen .wn { text-decoration: underline; text-decoration-color: color-mix(in srgb, currentColor 45%, transparent); text-underline-offset: 3px; }
+table.sched td button.wayopen .wc { font-size: 16px; line-height: 1; opacity: .7; }
+table.sched td button.wayopen:hover { background: color-mix(in srgb, var(--brand) 10%, transparent); }
+table.sched td button.wayopen:hover .wn { text-decoration-color: currentColor; }
+table.sched td button.wayopen:focus-visible { outline: 2px solid var(--brand); outline-offset: -2px; }
