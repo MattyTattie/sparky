@@ -176,7 +176,9 @@ export const spdHidden = (o) => !!o.spdNA;
 // v0.31.3: "Not operational" adds one observation (code C2 to start, Matthew can change it);
 // unticking removes it again only if it hasn't been edited.
 export const SPD_OBS_TEXT = 'SPD status indicator shows the SPD is not operational / has operated; replacement required';
-export function spdObservation(cert, b, newId = () => 'o' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6)) {
+// v0.31.4: only on certs with an observations section (EICR). EIC/MW: the tick is hidden and nothing is added or removed.
+export function spdObservation(cert, b, newId = () => 'o' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), hasObs = true) {
+  if (!hasObs) return null;
   const list = cert.observations || (cert.observations = []);
   const mine = list.find((o) => o.id && o.id === b.spdObsId);
   if (b.spdNotOp) {

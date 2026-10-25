@@ -43,8 +43,19 @@ test('Not operational adds one C2 observation; untick removes it unless edited',
 test('PDF status N/A tick follows type N/A (old spdStatusNA still prints)', () => {
   assert.match(readFileSync(new URL('../js/pdf.js', import.meta.url), 'utf8'), /\['N\/A', !!\(b\.spdNA \|\| b\.spdStatusNA\)\]\], \{ label: 'SPD:' \}/);
 });
-test('version 0.31.3 and tick boxes do not shrink', () => {
-  assert.match(readFileSync(new URL('../js/config.js', import.meta.url), 'utf8'), /APP_VERSION = '0\.31\.3/);
-  assert.match(readFileSync(new URL('../sw.js', import.meta.url), 'utf8'), /sparky-v0\.31\.3/);
+test('version 0.31.4 and tick boxes do not shrink', () => {
+  assert.match(readFileSync(new URL('../js/config.js', import.meta.url), 'utf8'), /APP_VERSION = '0\.31\.4/);
+  assert.match(readFileSync(new URL('../sw.js', import.meta.url), 'utf8'), /sparky-v0\.31\.4/);
   assert.match(readFileSync(new URL('../styles.css', import.meta.url), 'utf8'), /\.check input \{ flex-shrink: 0; \}/);
+});
+test('v0.31.4: no auto observation on certs without an observations section', () => {
+  const cert = { type: 'EIC', observations: [{ id: 'old', text: 'kept' }] }; const b = { ...blank(), spdNotOp: true };
+  assert.equal(spdObservation(cert, b, () => 'n', false), null); assert.deepEqual(cert.observations, [{ id: 'old', text: 'kept' }]);
+  b.spdNotOp = false; assert.equal(spdObservation(cert, b, () => 'n', false), null); assert.equal(cert.observations.length, 1);
+});
+test('v0.31.4: Not operational tick only shown when the cert type has observations', async () => {
+  const { sectionsFor } = await import('../js/certmodel.js');
+  const has = (t) => sectionsFor(t).some((x) => x.special === 'observations');
+  assert.equal(has('EICR'), true); assert.equal(has('EIC'), false); assert.equal(has('MW'), false);
+  assert.match(readFileSync(new URL('../js/schedule.js', import.meta.url), 'utf8'), /hasObs \? S\('spdNotOp', 'Not operational', 'check'\) : null/);
 });

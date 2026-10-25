@@ -113,14 +113,15 @@ function boardDetails(cert, b) {
 function spdGrid(cert, b) {
   const els = {};
   const nofit = h('div', { class: 'note spdnone' }, 'No SPD fitted: SPD boxes set to N/A. Untick N/A to show them.');
+  const hasObs = sectionsFor(cert.type).some((x) => x.special === 'observations');
   const hide = () => { const off = spdHidden(b); for (const x of SPD_HIDE) if (els[x]) els[x].style.display = off ? 'none' : ''; nofit.style.display = off ? '' : 'none'; };
-  const on = (k) => { for (const x of spdGroupChanged(b, k)) { const i = els[x] && els[x].querySelector('input'); if (i) { if (i.type === 'checkbox') i.checked = !!b[x]; else i.value = b[x] ?? ''; } } const r = spdObservation(cert, b, db.newId); if (r) { changed(); toast(r === 'added' ? 'SPD not operational: added to observations (C2, change it if needed)' : 'SPD observation removed'); } hide(); };
+  const on = (k) => { for (const x of spdGroupChanged(b, k)) { const i = els[x] && els[x].querySelector('input'); if (i) { if (i.type === 'checkbox') i.checked = !!b[x]; else i.value = b[x] ?? ''; } } const r = spdObservation(cert, b, db.newId, hasObs); if (r) { changed(); toast(r === 'added' ? 'SPD not operational: added to observations (C2, change it if needed)' : 'SPD observation removed'); } hide(); };
   const S = (k, label, type = 'text') => (els[k] = field(b, { k, label, type }, on));
   const box = h('div', {},
     h('div', { class: 'note', style: 'margin-top:12px' }, 'Board checks'), h('div', { class: 'grid2' }, F0(b, 'polOk', 'Correct polarity confirmed'), F0(b, 'phaseSeq', 'Phase sequence confirmed')),
     h('div', { class: 'note' }, 'SPD type'), h('div', { class: 'grid2' }, S('spdT1', 'T1', 'check'), S('spdT2', 'T2', 'check'), S('spdT3', 'T3', 'check'), S('spdNA', 'N/A', 'check')),
     nofit, S('spdDevice', 'SPD protective device (e.g. B32 MCB)'),
-    h('div', { class: 'grid2' }, S('spdOk', 'SPD operational status confirmed', 'check'), S('spdNotOp', 'Not operational', 'check')));
+    h('div', { class: 'grid2' }, S('spdOk', 'SPD operational status confirmed', 'check'), (hasObs ? S('spdNotOp', 'Not operational', 'check') : null)));
   hide(); return box;
 }
 const F0 = (b, k, label) => field(b, { k, label, type: 'check' });

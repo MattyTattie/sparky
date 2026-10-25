@@ -172,3 +172,6 @@
 - Now SPD type N/A and T1/T2/T3 are mutually exclusive (T1+T2 etc. still fine). Old certs with both show as saved and get fixed on the next SPD change.
 - On-screen "SPD status N/A" replaced by "Not operational" (optional `spdNotOp`), exclusive with "status confirmed". Ticking it adds one observation (item 4.19, reg 651.4, location "Board DBx", code C2 to start); unticking removes it only if its text and code are unchanged. On an EIC the observation is stored but the EIC PDF has no observations section.
 - PDF "SPD: N/A" tick = type N/A (or old spdStatusNA, so old certs print as before). Not operational prints the status box unticked.
+
+## v0.31.4 notes (Matthew 25 Oct)
+- "Not operational" SPD tick and its auto observation only on cert types with an observations section (EICR). EIC and Minor Works don't show the tick at all, so nothing is added. Old EICs with spdNotOp ticked keep the data (hidden, prints the status box unticked); observations already saved on EICs are left alone.
