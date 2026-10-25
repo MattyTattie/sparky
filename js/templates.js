@@ -141,40 +141,53 @@ export function rcdGroupChanged(o, k, keys = RCD_GROUP) {
   else if (v) { for (const x of keys) if (x !== k && isNA(o[x])) { o[x] = ''; out.push(x); } }
   return out;
 }
-// v0.31.2: board SPD boxes, same idea as the main RCD. "N/A" (the SPD type N/A or
-// SPD status N/A tick, or N/A typed in the SPD protective device) ticks the other
-// N/A tick and fills a BLANK device box; a real value (T1/T2/T3, status confirmed,
-// or a real device) clears the N/As. User-ticked T1-T3 / status / typed device are never touched.
-export const SPD_GROUP = ['spdDevice', 'spdT1', 'spdT2', 'spdT3', 'spdNA', 'spdOk', 'spdStatusNA'];
-const SPD_NA = ['spdNA', 'spdStatusNA'];
+// v0.31.2/0.31.3: board SPD boxes.
+// - SPD type N/A and T1/T2/T3 are mutually exclusive (T1+T2 etc. can still combine).
+//   Type N/A = no SPD fitted: clears T1-T3, status confirmed and Not operational, fills a
+//   BLANK device box with N/A, and keeps the old spdStatusNA field in step (the PDF's
+//   status N/A tick). Unticking it undoes only the N/As it filled itself (optional spdAuto).
+// - "SPD operational status confirmed" and "Not operational" (optional spdNotOp) are
+//   mutually exclusive. Typed values are never overwritten.
+// Old certs that have both T2 and N/A show as saved; the rules apply on the next change.
+export const SPD_GROUP = ['spdDevice', 'spdT1', 'spdT2', 'spdT3', 'spdNA', 'spdOk', 'spdNotOp'];
+const TS = ['spdT1', 'spdT2', 'spdT3'];
 export function spdGroupChanged(o, k) {
-  const v = o[k]; const out = [];
-  const auto = new Set(o.spdAuto || []);
-  const mark = (x, val) => { o[x] = val; out.push(x); auto.add(x); };
-  // v0.31.2b: unticking SPD type N/A undoes only the N/As it filled itself.
-  if (k === 'spdNA' && v !== true) {
-    for (const x of auto) { if (x === 'spdStatusNA' && o.spdStatusNA === true) { o.spdStatusNA = false; out.push(x); } if (x === 'spdDevice' && isNA(o.spdDevice)) { o.spdDevice = ''; out.push(x); } }
-    delete o.spdAuto; return out;
-  }
-  const naNow = SPD_NA.includes(k) ? v === true : k === 'spdDevice' && isNA(v);
-  const realNow = SPD_NA.includes(k) ? false : k === 'spdDevice' ? !!String(v ?? '').trim() && !isNA(v) : v === true;
-  if (naNow) {
-    for (const x of SPD_NA) if (x !== k && !o[x]) mark(x, true);
-    if (k !== 'spdDevice' && !String(o.spdDevice ?? '').trim()) mark('spdDevice', 'N/A');
-    // type N/A = no SPD fitted: T1-T3 and "status confirmed" can't also be ticked
-    if (k === 'spdNA') for (const x of ['spdT1', 'spdT2', 'spdT3', 'spdOk']) if (o[x]) { o[x] = false; out.push(x); }
-  } else if (realNow) {
-    for (const x of SPD_NA) if (o[x]) { o[x] = false; out.push(x); }
-    if (k !== 'spdDevice' && isNA(o.spdDevice)) { o.spdDevice = ''; out.push('spdDevice'); }
-    auto.clear();
+  const v = o[k]; const out = []; const auto = new Set(o.spdAuto || []);
+  const set = (x, val) => { if (o[x] !== val) { o[x] = val; out.push(x); } };
+  const naOff = () => { set('spdNA', false); set('spdStatusNA', false); if (auto.has('spdDevice') && isNA(o.spdDevice)) set('spdDevice', ''); auto.clear(); };
+  const naOn = () => {
+    set('spdNA', true); set('spdStatusNA', true);
+    for (const x of [...TS, 'spdOk', 'spdNotOp']) if (o[x]) set(x, false);
+    if (!String(o.spdDevice ?? '').trim()) { set('spdDevice', 'N/A'); auto.add('spdDevice'); }
+  };
+  if (k === 'spdNA') { if (v === true) naOn(); else naOff(); }
+  else if (k === 'spdDevice') { if (isNA(v)) { auto.delete('spdDevice'); naOn(); } else if (String(v ?? '').trim()) naOff(); }
+  else if (v === true) {
+    if (o.spdNA || o.spdStatusNA) naOff();
+    if (k === 'spdOk') set('spdNotOp', false);
+    if (k === 'spdNotOp') set('spdOk', false);
   }
   if (auto.size) o.spdAuto = [...auto]; else delete o.spdAuto;
   return out;
 }
-// v0.31.2b: with SPD type N/A ticked, the SPD boxes below it are hidden ("No SPD fitted").
-export const SPD_HIDE = ['spdDevice', 'spdOk', 'spdStatusNA'];
-// Only when type N/A was ticked by hand: an N/A ticked for you by "SPD status N/A" doesn't hide anything.
-export const spdHidden = (o) => !!o.spdNA && !(o.spdAuto || []).includes('spdNA');
+// Type N/A hides the SPD boxes below it ("No SPD fitted").
+export const SPD_HIDE = ['spdDevice', 'spdOk', 'spdNotOp'];
+export const spdHidden = (o) => !!o.spdNA;
+// v0.31.3: "Not operational" adds one observation (code C2 to start, Matthew can change it);
+// unticking removes it again only if it hasn't been edited.
+export const SPD_OBS_TEXT = 'SPD status indicator shows the SPD is not operational / has operated; replacement required';
+export function spdObservation(cert, b, newId = () => 'o' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6)) {
+  const list = cert.observations || (cert.observations = []);
+  const mine = list.find((o) => o.id && o.id === b.spdObsId);
+  if (b.spdNotOp) {
+    if (mine) return null;
+    const ob = { id: newId(), item: '4.19', text: SPD_OBS_TEXT, code: 'C2', reg: '651.4', location: b.ref ? 'Board ' + b.ref : '' };
+    list.push(ob); b.spdObsId = ob.id; return 'added';
+  }
+  if (mine && mine.text === SPD_OBS_TEXT && mine.code === 'C2') { list.splice(list.indexOf(mine), 1); delete b.spdObsId; return 'removed'; }
+  if (b.spdObsId) delete b.spdObsId;
+  return null;
+}
 // v0.31: spare way line on the circuit card: the full device if one is picked, else just "Spare way".
 export function spareLine(c, deviceLabel = '') {
   if (c.noDevice) return 'Spare way \u00b7 no device fitted';

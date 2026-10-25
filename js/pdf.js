@@ -278,7 +278,7 @@ function testResultsPage(k, cert, b, certNo, rows, part = 1, parts = 1) {
   k.t('Distribution board/Consumer unit details', x, k.y + 3.6, { size: 8, bold: true }); k.y += 4.2;
   row(k, x, lw - 4, [['DB/CU reference:', b.ref, 0.34], ['Zdb', b.zdb, 0.33, { unit: 'Ω' }], ['Ipf', b.ipf, 0.33, { unit: 'kA' }]]);
   checks(k, x, [['Correct polarity', b.polOk], ['Phase sequence', b.phaseSeq]], { label: 'Confirmed:' });
-  checks(k, x, [['Operational status confirmed¶', b.spdOk], ['N/A', b.spdStatusNA]], { label: 'SPD:' });
+  checks(k, x, [['Operational status confirmed¶', b.spdOk], ['N/A', !!(b.spdNA || b.spdStatusNA)]], { label: 'SPD:' });
   const yL = k.y; k.y = y0;
   const ix = k.x0 + lw + 2, iw = k.cw - lw - 4; const ins = cert.instruments || {};
   k.t('Details of test instruments used (serial and/or asset numbers)', ix, k.y + 3.6, { size: 7.5, bold: true }); k.y += 4;

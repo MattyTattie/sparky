@@ -166,3 +166,9 @@
 - Ticking "SPD status N/A" alone still cascades (ticks type N/A) but hides nothing.
 - PDF: the IET forms have no SPD device box; the SPD type N/A and status N/A print as ticks, as before.
 - Correct polarity / Phase sequence moved out of the SPD group into their own "Board checks" group above SPD type (screen only; same fields, PDF unchanged).
+
+## v0.31.3 notes (SPD ticks, Matthew 25 Oct)
+- Bug: T2 + SPD type N/A + SPD status N/A all ticked. Cause: in 0.31.2 ticking "SPD status N/A" also ticked type N/A for you without clearing T1-T3 (and, being auto, didn't hide the boxes); certs saved before 0.31.2 could also have both.
+- Now SPD type N/A and T1/T2/T3 are mutually exclusive (T1+T2 etc. still fine). Old certs with both show as saved and get fixed on the next SPD change.
+- On-screen "SPD status N/A" replaced by "Not operational" (optional `spdNotOp`), exclusive with "status confirmed". Ticking it adds one observation (item 4.19, reg 651.4, location "Board DBx", code C2 to start); unticking removes it only if its text and code are unchanged. On an EIC the observation is stored but the EIC PDF has no observations section.
+- PDF "SPD: N/A" tick = type N/A (or old spdStatusNA, so old certs print as before). Not operational prints the status box unticked.
