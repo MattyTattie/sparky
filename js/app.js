@@ -318,7 +318,7 @@ route(/^\/job\/([^/]+)(?:\/(photos|details|next|pdfs|backup|dc|parts))?$/, async
       if (navigator.share) { try { await navigator.share({ title: 'Parts used: ' + name, text }); return; } catch (e) { if (e && e.name === 'AbortError') return; } }
       try { await navigator.clipboard.writeText(text); toast('Copied: paste it into a message or note'); } catch { toast('Couldn\u2019t share or copy on this device'); }
     };
-    const pdf = async (btn) => { btn.disabled = true; try { const { partsPdf } = await import('./partspdf.js'); const blob = await partsPdf(res, { title: ref, profile: await getProfile() }); await shareOrDownload(blob, `parts-${(name).replace(/[^\w-]+/g, '-').replace(/^-|-$/g, '').slice(0, 40) || 'job'}.pdf`); } catch (e) { toast(e.message || 'PDF failed'); } finally { btn.disabled = false; } };
+    const pdf = async (btn) => { btn.disabled = true; try { const { partsPdf } = await import('./partspdf.js'); const blob = await partsPdf(res, { title: ref, profile: await getProfile() }); const fn = `parts-${(name).replace(/[^\w-]+/g, '-').replace(/^-|-$/g, '').slice(0, 40) || 'job'}.pdf`; const r = await modal('Parts list PDF', h('p', {}, 'View it here, or share / save it.'), [{ label: 'Close', value: null }, { label: 'View', value: 'view' }, { label: 'Share', value: 'share', cls: 'primary' }]); if (r === 'view') (await import('./pdfview.js')).viewPdf(blob, fn, { shareText: 'Parts used: ' + name }); else if (r === 'share') await shareOrDownload(blob, fn); } catch (e) { toast(e.message || 'PDF failed'); } finally { btn.disabled = false; } };
     const qrow = (it) => h('div', { class: 'partrow' }, h('span', { class: 'pq' }, it.qty + ' \u00d7'), h('div', { class: 'pn' }, h('div', {}, it.name), it.circuits && it.circuits.length ? h('div', { class: 's' }, (it.rcd ? 'Covers circuits ' : 'Circuits ') + it.circuits.join(', ')) : null));
     return page('Parts used', [
       !res.boards.length ? emptyState('clipboard', 'No boards yet. Fill in a schedule on a certificate and the parts show here.') : [
@@ -537,6 +537,7 @@ route(/^\/settings$/, async () => {
   };
   drawDrive();
   page('Settings', [
+    h('p', { class: 'note setver' }, `Version ${APP_VERSION}`),
     h('div', { class: 'card' }, h('h2', {}, 'You'), h('p', { class: 'note' }, 'Shown on your certificates. Kept on this device (and in your Drive backup), never in the app\u2019s code.'),
       txt('name', 'Your name'), txt('business', 'Business name'), txt('position', 'Position', 'text', 'e.g. Proprietor'),
       txt('address1', 'Address line 1'), txt('address2', 'Address line 2'), h('div', { class: 'grid2' }, txt('town', 'Town'), txt('postcode', 'Postcode')),

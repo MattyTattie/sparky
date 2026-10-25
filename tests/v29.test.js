@@ -10,7 +10,7 @@ import { faultLevel } from '../js/calcextra.js';
 import { cableCheck } from '../js/checks.js';
 const read = (f) => readFileSync(new URL('../' + f, import.meta.url), 'utf8');
 
-test('version 0.29.0', () => { assert.match(APP_VERSION, /^0\.(29|30)\./); assert.match(read('sw.js'), /sparky-v0\.(29|30)\./); assert.match(read('sw.js'), /"\.\/js\/a11y\.js"/); });
+test('version 0.29.0', () => { assert.match(APP_VERSION, /^0\.(29|3\d)\./); assert.match(read('sw.js'), /sparky-v0\.(29|3\d)\./); assert.match(read('sw.js'), /"\.\/js\/a11y\.js"/); });
 test('calibration date typed into instrument text is spotted', () => {
   for (const t of ['MFT1741 cal. 2026-03-01', 'cal due 03/26', '12/03/2026', 'Mar 2026', 'calibrated Jan 26']) assert.equal(looksLikeCalDate(t), true, t);
   for (const t of ['', 'Megger MFT1741+', 'Kewtech tester', 's/n 101/2345', 'Fluke 1664FC s/n AB1234', 'Model 2021']) assert.equal(looksLikeCalDate(t), false, t);

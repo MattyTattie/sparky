@@ -118,7 +118,9 @@ async function makeChart(cert, btn) {
   try {
     const { boardChartPdf, pdfName } = await import('./pdf.js');
     const { viewPdf } = await import('./pdfview.js');
-    for (const b of [...cert.boards].reverse()) { const blob = await boardChartPdf(cert, b, await getProfile()); const name = pdfName(cert, '-chart-' + (b.ref || 'DB')); await savePdf(cert, blob, name, 'chart'); viewPdf(blob, name); }
+    const how = await modal('Circuit chart PDF', h('p', {}, 'View it here, or share / save it.'), [{ label: 'Close', value: null }, { label: 'View', value: 'view' }, { label: 'Share', value: 'share', cls: 'primary' }]); // v0.31
+    if (!how) { btn.disabled = false; return; }
+    for (const b of [...cert.boards].reverse()) { const blob = await boardChartPdf(cert, b, await getProfile()); const name = pdfName(cert, '-chart-' + (b.ref || 'DB')); await savePdf(cert, blob, name, 'chart'); if (how === 'view') viewPdf(blob, name); else await shareOrDownload(blob, name, `Circuit chart ${cert.number}`); }
   } catch (e) { toast('Couldn\u2019t make the chart: ' + e.message); }
   btn.disabled = false;
 }

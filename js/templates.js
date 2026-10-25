@@ -130,3 +130,31 @@ export function deleteCircuitAt(b, ci) {
   if (k) b.circuits.slice(ci).forEach((x) => (x.num = String(+x.num - 1)));
   return { removed, renumbered: k };
 }
+
+// v0.31: board main RCD boxes. N/A in one fills the other BLANK ones with N/A;
+// a real value typed later clears the N/As (typed values are never touched).
+export const RCD_GROUP = ['rcdBs', 'rcdType', 'rcdIdn', 'rcdRating'];
+const isNA = (v) => /^\s*n\/?a\s*$/i.test(String(v ?? ''));
+export function rcdGroupChanged(o, k, keys = RCD_GROUP) {
+  const v = String(o[k] ?? '').trim(); const out = [];
+  if (isNA(v)) { for (const x of keys) if (x !== k && !String(o[x] ?? '').trim()) { o[x] = 'N/A'; out.push(x); } }
+  else if (v) { for (const x of keys) if (x !== k && isNA(o[x])) { o[x] = ''; out.push(x); } }
+  return out;
+}
+// v0.31: spare way line on the circuit card: the full device if one is picked, else just "Spare way".
+export function spareLine(c, deviceLabel = '') {
+  if (c.noDevice) return 'Spare way \u00b7 no device fitted';
+  const r = String(c.rating ?? '').trim();
+  if (!r || isNA(r)) return 'Spare way';
+  return 'Spare way \u00b7 ' + `${c.type || ''}${r} A${deviceLabel ? ' ' + deviceLabel : ''}`;
+}
+// v0.31: "Copy to next way": the circuit details (device, cable, method...), not
+// the number, description or any test result. Fills the next way, or makes one.
+export const COPY_SKIP = ['id', 'num', 'desc', 'spare', 'noDevice'];
+export function copyToNextWay(circuits, ci) {
+  const c = circuits[ci]; if (!c) return null;
+  let n = circuits[ci + 1];
+  if (!n) { n = blankCircuit((parseInt(c.num, 10) || ci + 1) + 1); circuits.splice(ci + 1, 0, n); }
+  for (const [k, v] of Object.entries(c)) if (!COPY_SKIP.includes(k) && !RESULT_KEYS.includes(k)) n[k] = JSON.parse(JSON.stringify(v ?? null));
+  return ci + 1;
+}

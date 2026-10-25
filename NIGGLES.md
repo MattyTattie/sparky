@@ -142,3 +142,11 @@
 - Desktop polish is CSS overrides of the phone styles; a few rarely used screens (scanner, DC planner steps) haven't been checked at desktop size.
 - Jobs table sorts text alphabetically (status sorts by its wording, not by urgency).
 - Max demand boxes are in order of each kind's first line, not the order of the "Add" chips.
+
+- [NEXT UPDATE] Spare ways (Matthew 25 Oct): spare circuit card shows "Spare way · B16 A" and drops the device type even when he picked RCBO. Show the full device like live ways ("Spare way · B16 A RCBO"); if no device picked, show just "Spare way" (no default B16).
+
+- [NEXT UPDATE] Board main RCD (Matthew 25 Oct): setting any one of RCD BS (EN) / RCD type / IΔn / Rating to N/A fills all four with N/A (only blanks; typing a real value later clears the N/As).
+
+- [NEXT UPDATE] Parts list PDF (Matthew 25 Oct): PDF button currently goes straight to share/download; give it the same View / Share choice as the DC plan PDF (pdfview.js viewPdf).
+
+- [NEXT UPDATE] (Matthew 25 Oct) Version shown in Settings. "Copy to next way" for a circuit (breaker, cable, etc; not test results). Mark several ways spare at once. Cert PDFs get View / Share choice. Mac: Tab/Enter move quickly through test boxes.

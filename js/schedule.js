@@ -13,7 +13,7 @@ import { sectionsFor } from './certmodel.js';
 const boardsLine = (cert) => { const sec = sectionsFor(cert.type).find((x) => x.special === 'boards'); if (!sec) return null; const [c, t] = stateLine(cert, sec); return h('div', { class: 'notice ' + c + ' secstate' }, t); };
 import { blankBoard } from './certmodel.js';
 import * as presets from './presets.js';
-import { FIELDS, FIELD, TEMPLATES, blankCircuit, applyTemplate, copyCircuit, copyBoard, makeSpare, autoNA, descChanged, laterSequential, deleteCircuitAt } from './templates.js';
+import { FIELDS, FIELD, TEMPLATES, blankCircuit, applyTemplate, copyCircuit, copyBoard, makeSpare, autoNA, descChanged, rcdGroupChanged, spareLine, copyToNextWay, laterSequential, deleteCircuitAt } from './templates.js';
 import { checkCircuit, limitZs, isSpare } from './checks.js';
 import { DEVICES, deviceById, deviceFromBs, ratingsFor, CHECK_NOTE } from './limits.js';
 import { voiceSupported, listen } from './voice.js';
@@ -83,7 +83,7 @@ route(/^\/cert\/([^/]+)\/b\/(\d+)$/, async (id, bi) => {
   const b = cert.boards[+bi]; if (!b) return go('#/cert/' + id);
   const back = cert.boards.length > 1 ? `#/cert/${id}/boards` : '#/cert/' + id;
   const tools = boardTools(cert, b, +bi);
-  if (LAND.matches) return page(`${b.ref || 'Board'} · schedule of test results`, [tools, scheduleTable(cert, b, +bi)], { back, wide: true, sub: cert.number });
+  if (LAND.matches) return page(`${b.ref || 'Board'} · schedule of test results`, [boardDetails(cert, b), tools, scheduleTable(cert, b, +bi)], { back, wide: true, sub: cert.number });
   page(b.ref || 'Board', [
     boardsLine(cert),
     boardDetails(cert, b),
@@ -108,9 +108,16 @@ function boardDetails(cert, b) {
       F('spdDevice', 'SPD protective device (e.g. B32 MCB)'),
       h('div', { class: 'note' }, 'SPD type'), h('div', { class: 'grid2' }, F('spdT1', 'T1', 'check'), F('spdT2', 'T2', 'check'), F('spdT3', 'T3', 'check'), F('spdNA', 'N/A', 'check')),
       h('div', { class: 'grid2' }, F('polOk', 'Correct polarity confirmed', 'check'), F('phaseSeq', 'Phase sequence confirmed', 'check'), F('spdOk', 'SPD operational status confirmed', 'check'), F('spdStatusNA', 'SPD status N/A', 'check')),
-      h('div', { class: 'note' }, 'Main RCD of the board (if any)'), h('div', { class: 'grid2' }, F('rcdBs', 'RCD BS (EN)'), F('rcdType', 'RCD type'), F('rcdIdn', 'IΔn (mA)', 'num'), F('rcdRating', 'Rating (A)', 'num'))));
+      h('div', { class: 'note' }, 'Main RCD of the board (if any)'), rcdGrid(b)));
 }
 
+// v0.31: N/A in one main RCD box fills the blank others; a real value clears them.
+function rcdGrid(b) {
+  const els = {};
+  const on = (k) => { for (const x of rcdGroupChanged(b, k)) { const i = els[x] && els[x].querySelector('input'); if (i) i.value = b[x] ?? ''; } };
+  const R = (k, label, type = 'text') => (els[k] = field(b, { k, label, type }, on));
+  return h('div', { class: 'grid2' }, R('rcdBs', 'RCD BS (EN)'), R('rcdType', 'RCD type'), R('rcdIdn', 'IΔn (mA)', 'num'), R('rcdRating', 'Rating (A)', 'num'));
+}
 function boardTools(cert, b, bi) {
   const bulk = (k, v, label) => h('button', { class: 'btn small', onclick: () => { let n = 0; for (const c of b.circuits) if (!isSpare(c) && !c[k]) { c[k] = v; n++; } changed(); toast(`${label}: filled ${n}`); render(); } }, label);
   return h('div', {},
@@ -118,9 +125,19 @@ function boardTools(cert, b, bi) {
     h('div', { class: 'btns' },
       h('button', { class: 'btn primary small', onclick: () => addCircuit(cert, b, bi) }, '+ Circuit'),
       h('a', { class: 'btn small', href: `#/cert/${cert.id}/b/${bi}/scan` }, 'Scan board'),
+      b.circuits.length ? h('button', { class: 'btn small', onclick: () => markSpareDialog(b) }, 'Mark ways spare…') : null,
       bulk('irLL', '>999', 'IR L-L >999'), bulk('irLE', '>999', 'IR L-E >999'), bulk('pol', '✓', 'Polarity ✓'), bulk('rcdBtn', '✓', 'RCD button ✓'), bulk('afddBtn', 'N/A', 'AFDD N/A'), bulk('irV', '500', 'Test V 500')));
 }
 
+// v0.31: tick several ways and mark them all spare in one go.
+async function markSpareDialog(b) {
+  const pick = new Set();
+  const body = h('div', { class: 'list sparepick' }, b.circuits.map((c) => isSpare(c) ? null : h('label', { class: 'row check' }, h('input', { type: 'checkbox', onchange: (e) => { if (e.target.checked) pick.add(c.id); else pick.delete(c.id); } }), h('span', {}, `${c.num}  ${c.desc || 'No description'}`))));
+  const ok = await modal('Mark ways spare', h('div', {}, h('p', { class: 'note' }, 'Tick the ways to mark spare. Nothing you’ve typed is wiped; the empty boxes show N/A.'), body), [{ label: 'Cancel', value: false }, { label: 'Mark spare', value: true, cls: 'primary' }]);
+  if (!ok || !pick.size) return;
+  let k = 0; for (const c of b.circuits) if (pick.has(c.id)) { const was = isSpare(c); Object.assign(c, makeSpare(c)); descChanged(c, was); k++; }
+  changed(); toast(`Marked ${k} way${k === 1 ? '' : 's'} spare`); render();
+}
 async function addCircuit(cert, b, bi, open = true) {
   const n = b.circuits.length + 1;
   const r = await modal('Add a circuit', h('div', {}, h('p', { class: 'note' }, 'Pick a template to fill the circuit details (you can change anything), or start blank.'),
@@ -172,6 +189,7 @@ function selectBar(cert, b) {
     h('span', { class: 'seln' }, `${n} ticked`),
     h('button', { class: 'btn small', onclick: () => { b.circuits.forEach((c) => { if (!presets.skipByDefault(c)) SEL.ids.add(c.id); }); render(); } }, 'Select all'),
     n ? h('button', { class: 'btn small', onclick: () => { SEL.ids.clear(); render(); } }, 'Clear') : null,
+    n ? h('button', { class: 'btn small', onclick: () => { let k = 0; for (const c of b.circuits) if (SEL.ids.has(c.id) && !isSpare(c)) { const was = isSpare(c); Object.assign(c, makeSpare(c)); descChanged(c, was); k++; } changed(); SEL.ids.clear(); SEL.board = null; toast(`Marked ${k} way${k === 1 ? '' : 's'} spare`); render(); } }, 'Mark spare') : null,
     h('button', { class: 'btn small primary', disabled: n ? null : true, onclick: () => applyDialog(cert, b) }, 'Apply…'),
     h('button', { class: 'btn small', onclick: () => { SEL.board = null; SEL.ids.clear(); render(); } }, 'Done'));
 }
@@ -183,7 +201,7 @@ function circuitCards(cert, b, bi) {
   return h('div', {}, selecting ? selectBar(cert, b) : h('div', { class: 'btns' }, h('button', { class: 'btn small', onclick: () => { SEL.board = b.id; SEL.ids.clear(); render(); } }, 'Select circuits to change together')), b.circuits.map((c, ci) => {
     const res = checkCircuit(c, ctxFor(cert, b));
     const cls = isSpare(c) ? 'spare' : res.worst || (c.zs ? 'ok' : '');
-    const dev = isSpare(c) ? (c.noDevice ? 'Spare way · no device fitted' : 'Spare way' + (c.rating && !/n\/?a/i.test(c.rating) ? ` · ${c.type || ''}${c.rating} A` : '')) : `${c.type}${c.rating}${c.rating ? ' A' : ''} ${(deviceById(c.device) || {}).label ? deviceById(c.device).label.split(' ')[0] : c.bs} · ${c.live || '–'}/${c.cpc || '–'} mm²${res.maxZs != null ? ` · max Zs ${res.maxZs}` : ''}`;
+    const dev = isSpare(c) ? spareLine(c, (deviceById(c.device) || {}).label ? deviceById(c.device).label.split(' ')[0] : (c.bs || '')) : `${c.type}${c.rating}${c.rating ? ' A' : ''} ${(deviceById(c.device) || {}).label ? deviceById(c.device).label.split(' ')[0] : c.bs} · ${c.live || '–'}/${c.cpc || '–'} mm²${res.maxZs != null ? ` · max Zs ${res.maxZs}` : ''}`;
     const tick = selecting ? h('input', { type: 'checkbox', class: 'seltick', checked: SEL.ids.has(c.id) ? true : null, 'aria-label': 'Tick circuit ' + c.num, onclick: (e) => e.stopPropagation(), onchange: (e) => { if (e.target.checked) SEL.ids.add(c.id); else SEL.ids.delete(c.id); render(); } }) : null;
     return h(selecting ? 'label' : 'a', { class: 'ccard ' + cls + (selecting ? ' selecting' + (SEL.ids.has(c.id) ? ' ticked' : '') : ''), href: selecting ? null : `#/cert/${cert.id}/b/${bi}/c/${ci}` },
       h('div', { class: 'hd' }, tick, h('span', { class: 'no' }, c.num), h('span', { class: 'ds' }, c.desc || 'No description'), res.worst ? h('span', { class: 'pill ' + res.worst }, res.worst === 'red' ? 'Check' : 'Look') : null),
@@ -201,6 +219,7 @@ route(/^\/cert\/([^/]+)\/b\/(\d+)\/c\/(\d+)$/, async (id, bi, ci) => {
     prev: +ci > 0 ? `${base}/c/${+ci - 1}` : null, next: +ci < b.circuits.length - 1 ? `${base}/c/${+ci + 1}` : null,
     extra: [
       h('button', { class: 'btn small', onclick: () => copyCircuitDialog(cert, b, +bi, +ci, base) }, 'Copy circuit'),
+      h('button', { class: 'btn small', title: 'Device, cable and method go to the next way (not the description or test results)', onclick: () => { const ni = copyToNextWay(b.circuits, +ci); changed(); toast('Copied to way ' + b.circuits[ni].num); go(`${base}/c/${ni}`); } }, 'Copy to next way'),
       h('button', { class: 'btn small', onclick: async () => { const t = await pickTemplate(); if (t) { Object.assign(c, applyTemplate(c, t)); changed(); render(); } } }, 'Template'),
       h('button', { class: 'btn small', onclick: () => { { const was = isSpare(c); Object.assign(c, makeSpare(c)); descChanged(c, was); } changed(); render(); } }, 'SPARE / N/A'),
       h('button', { class: 'btn small warn', onclick: async () => { if (await askDelete(b, +ci)) go(base); } }, withIcon('trash', 'Delete')),
@@ -413,7 +432,7 @@ function scheduleTable(cert, b, bi) {
     };
     maxCell = h('td', { class: 'calc', title: 'From the BS 7671 tables. Type your own figure to override.' }, h('input', { value: c.maxZsOverride || '', inputmode: 'decimal', 'aria-label': `Circuit ${c.num} maximum Zs (Ω)`, style: 'color:var(--brand);font-weight:600', oninput: (e) => { c.maxZsOverride = e.target.value; changed(); upd(); } }));
     body.append(td0 = h('tr', { class: isSpare(c) ? 'spare' : '' }, cols.map((f) => [cell(f), f.k === 'bka' ? maxCell : null]),
-      h('td', { class: 'act' }, h('button', { title: 'Open', onclick: () => go(`#/cert/${cert.id}/b/${bi}/c/${ci}`) }, '✎'), h('button', { title: 'Copy row', onclick: () => { b.circuits.splice(ci + 1, 0, copyCircuit(c, b.circuits.length + 1)); renumberIfSequential(b); changed(); render(); } }, '⧉'), h('button', { title: 'Spare', onclick: () => { { const was = isSpare(c); Object.assign(c, makeSpare(c)); descChanged(c, was); } changed(); render(); } }, '∅'), h('button', { title: 'Delete circuit', class: 'del', onclick: async () => { if (await askDelete(b, ci)) render(); } }, icon('trash', { size: 16 })))));
+      h('td', { class: 'act' }, h('button', { title: 'Open', tabindex: -1, onclick: () => go(`#/cert/${cert.id}/b/${bi}/c/${ci}`) }, '✎'), h('button', { title: 'Copy row', tabindex: -1, onclick: () => { b.circuits.splice(ci + 1, 0, copyCircuit(c, b.circuits.length + 1)); renumberIfSequential(b); changed(); render(); } }, '⧉'), h('button', { title: 'Spare', tabindex: -1, onclick: () => { { const was = isSpare(c); Object.assign(c, makeSpare(c)); descChanged(c, was); } changed(); render(); } }, '∅'), h('button', { title: 'Delete circuit', class: 'del', tabindex: -1, onclick: async () => { if (await askDelete(b, ci)) render(); } }, icon('trash', { size: 16 })))));
     upd();
   });
   return h('div', {}, h('div', { class: 'tablewrap' }, h('table', { class: 'sched' }, h('thead', {}, head), body)),
@@ -616,3 +635,23 @@ route(/^\/cert\/([^/]+)\/b\/(\d+)\/scan$/, async (id, bi) => {
 // v0.29: say it the mouse way on a computer, the touch way on a phone.
 export const scheduleHelp = (mouse) => mouse ? '(hover over a cell to see why). Double-click a tick column for ✓.' : '(hold a finger on a cell to see why). Double-tap a tick column for ✓.';
 function mouseHelp() { return scheduleHelp(typeof matchMedia === 'function' && matchMedia('(hover: hover) and (pointer: fine)').matches); }
+
+// v0.31 (Mac): Enter moves to the next box like Tab (Shift+Enter goes back) in the
+// schedule table and the circuit page; the row buttons are skipped by Tab; a box you
+// move into has its text selected so you can just type over it.
+export function nextBox(from, back = false) {
+  const scope = from.closest('main'); if (!scope) return null;
+  const all = [...scope.querySelectorAll('input:not([type=checkbox]):not([type=radio]):not([disabled]):not([readonly]), select')].filter((e) => e.offsetParent !== null);
+  return all[all.indexOf(from) + (back ? -1 : 1)] || null;
+}
+if (typeof document !== 'undefined') {
+  document.addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter' || e.isComposing || e.metaKey || e.ctrlKey || e.altKey) return;
+    const t = e.target; if (!t || !(t.tagName === 'INPUT' || t.tagName === 'SELECT') || /checkbox|radio|button|submit/.test(t.type)) return;
+    if (!t.closest('table.sched, .ceditor, main.circuit') && !/\/c\/\d+$|\/mwc$/.test(location.hash)) return;
+    if (t.closest('.modal-bg')) return;
+    const nx = nextBox(t, e.shiftKey); if (!nx) return;
+    e.preventDefault(); nx.focus(); if (nx.select) try { nx.select(); } catch {}
+  });
+  document.addEventListener('focusin', (e) => { const t = e.target; if (t && t.tagName === 'INPUT' && t.closest('table.sched') && t.select) try { t.select(); } catch {} });
+}
