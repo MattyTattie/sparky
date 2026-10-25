@@ -862,3 +862,4 @@ a.newphone-link { display: block; text-decoration: none; }
 /* v0.31.2: boxes in a row line up: labels sit at the top, inputs pinned to the bottom of the row. */
 .grid2 > label.f, .grid3 > label.f { display: flex; flex-direction: column; }
 .grid2 > label.f > span:first-child, .grid3 > label.f > span:first-child { flex: 1 0 auto; }
+.spdnone { margin: 4px 0 12px; }

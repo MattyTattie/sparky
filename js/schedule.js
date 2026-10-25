@@ -13,7 +13,7 @@ import { sectionsFor } from './certmodel.js';
 const boardsLine = (cert) => { const sec = sectionsFor(cert.type).find((x) => x.special === 'boards'); if (!sec) return null; const [c, t] = stateLine(cert, sec); return h('div', { class: 'notice ' + c + ' secstate' }, t); };
 import { blankBoard } from './certmodel.js';
 import * as presets from './presets.js';
-import { FIELDS, FIELD, TEMPLATES, blankCircuit, applyTemplate, copyCircuit, copyBoard, makeSpare, autoNA, descChanged, rcdGroupChanged, spdGroupChanged, spareLine, copyToNextWay, laterSequential, deleteCircuitAt } from './templates.js';
+import { FIELDS, FIELD, TEMPLATES, blankCircuit, applyTemplate, copyCircuit, copyBoard, makeSpare, autoNA, descChanged, rcdGroupChanged, spdGroupChanged, SPD_HIDE, spdHidden, spareLine, copyToNextWay, laterSequential, deleteCircuitAt } from './templates.js';
 import { checkCircuit, limitZs, isSpare } from './checks.js';
 import { DEVICES, deviceById, deviceFromBs, ratingsFor, CHECK_NOTE } from './limits.js';
 import { voiceSupported, listen } from './voice.js';
@@ -112,11 +112,15 @@ function boardDetails(cert, b) {
 // v0.31.2: SPD boxes: N/A fills/ticks the blank others; a real value clears them.
 function spdGrid(b) {
   const els = {};
-  const on = (k) => { for (const x of spdGroupChanged(b, k)) { const i = els[x] && els[x].querySelector('input'); if (i) { if (i.type === 'checkbox') i.checked = !!b[x]; else i.value = b[x] ?? ''; } } };
+  const nofit = h('div', { class: 'note spdnone' }, 'No SPD fitted: SPD boxes set to N/A. Untick N/A to show them.');
+  const hide = () => { const off = spdHidden(b); for (const x of SPD_HIDE) if (els[x]) els[x].style.display = off ? 'none' : ''; nofit.style.display = off ? '' : 'none'; };
+  const on = (k) => { for (const x of spdGroupChanged(b, k)) { const i = els[x] && els[x].querySelector('input'); if (i) { if (i.type === 'checkbox') i.checked = !!b[x]; else i.value = b[x] ?? ''; } } hide(); };
   const S = (k, label, type = 'text') => (els[k] = field(b, { k, label, type }, on));
-  return h('div', {}, S('spdDevice', 'SPD protective device (e.g. B32 MCB)'),
+  const box = h('div', {},
     h('div', { class: 'note' }, 'SPD type'), h('div', { class: 'grid2' }, S('spdT1', 'T1', 'check'), S('spdT2', 'T2', 'check'), S('spdT3', 'T3', 'check'), S('spdNA', 'N/A', 'check')),
+    nofit, S('spdDevice', 'SPD protective device (e.g. B32 MCB)'),
     h('div', { class: 'grid2' }, F0(b, 'polOk', 'Correct polarity confirmed'), F0(b, 'phaseSeq', 'Phase sequence confirmed'), S('spdOk', 'SPD operational status confirmed', 'check'), S('spdStatusNA', 'SPD status N/A', 'check')));
+  hide(); return box;
 }
 const F0 = (b, k, label) => field(b, { k, label, type: 'check' });
 // v0.31: N/A in one main RCD box fills the blank others; a real value clears them.

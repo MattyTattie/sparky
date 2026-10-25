@@ -162,3 +162,6 @@
 - Tick boxes were squashed (flex-shrink) when their label wrapped on narrow screens, so short-label ones like "SPD status N/A" looked bigger. Now all stay 24x24. PDF ticks were already one size.
 - Boxes in a 2/3-column row line up (labels at the top, inputs at the bottom), e.g. Supplying device / Type / Rating when "Supplying device BS (EN)" wraps.
 - DB reference and Location are each on their own full-width row.
+- (Matthew follow-up) Ticking SPD type "N/A" by hand = no SPD fitted: unticks T1-T3 and "status confirmed", ticks SPD status N/A, puts N/A in a blank SPD protective device, and hides those three boxes behind "No SPD fitted" (polarity / phase sequence stay, they aren't SPD boxes). Unticking it shows them again and undoes only the N/As it filled itself (kept in optional `spdAuto`). T1-T3 / status confirmed it unticked are not restored.
+- Ticking "SPD status N/A" alone still cascades (ticks type N/A) but hides nothing.
+- PDF: the IET forms have no SPD device box; the SPD type N/A and status N/A print as ticks, as before.

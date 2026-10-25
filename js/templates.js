@@ -149,17 +149,32 @@ export const SPD_GROUP = ['spdDevice', 'spdT1', 'spdT2', 'spdT3', 'spdNA', 'spdO
 const SPD_NA = ['spdNA', 'spdStatusNA'];
 export function spdGroupChanged(o, k) {
   const v = o[k]; const out = [];
+  const auto = new Set(o.spdAuto || []);
+  const mark = (x, val) => { o[x] = val; out.push(x); auto.add(x); };
+  // v0.31.2b: unticking SPD type N/A undoes only the N/As it filled itself.
+  if (k === 'spdNA' && v !== true) {
+    for (const x of auto) { if (x === 'spdStatusNA' && o.spdStatusNA === true) { o.spdStatusNA = false; out.push(x); } if (x === 'spdDevice' && isNA(o.spdDevice)) { o.spdDevice = ''; out.push(x); } }
+    delete o.spdAuto; return out;
+  }
   const naNow = SPD_NA.includes(k) ? v === true : k === 'spdDevice' && isNA(v);
   const realNow = SPD_NA.includes(k) ? false : k === 'spdDevice' ? !!String(v ?? '').trim() && !isNA(v) : v === true;
   if (naNow) {
-    for (const x of SPD_NA) if (x !== k && !o[x]) { o[x] = true; out.push(x); }
-    if (k !== 'spdDevice' && !String(o.spdDevice ?? '').trim()) { o.spdDevice = 'N/A'; out.push('spdDevice'); }
+    for (const x of SPD_NA) if (x !== k && !o[x]) mark(x, true);
+    if (k !== 'spdDevice' && !String(o.spdDevice ?? '').trim()) mark('spdDevice', 'N/A');
+    // type N/A = no SPD fitted: T1-T3 and "status confirmed" can't also be ticked
+    if (k === 'spdNA') for (const x of ['spdT1', 'spdT2', 'spdT3', 'spdOk']) if (o[x]) { o[x] = false; out.push(x); }
   } else if (realNow) {
     for (const x of SPD_NA) if (o[x]) { o[x] = false; out.push(x); }
     if (k !== 'spdDevice' && isNA(o.spdDevice)) { o.spdDevice = ''; out.push('spdDevice'); }
+    auto.clear();
   }
+  if (auto.size) o.spdAuto = [...auto]; else delete o.spdAuto;
   return out;
 }
+// v0.31.2b: with SPD type N/A ticked, the SPD boxes below it are hidden ("No SPD fitted").
+export const SPD_HIDE = ['spdDevice', 'spdOk', 'spdStatusNA'];
+// Only when type N/A was ticked by hand: an N/A ticked for you by "SPD status N/A" doesn't hide anything.
+export const spdHidden = (o) => !!o.spdNA && !(o.spdAuto || []).includes('spdNA');
 // v0.31: spare way line on the circuit card: the full device if one is picked, else just "Spare way".
 export function spareLine(c, deviceLabel = '') {
   if (c.noDevice) return 'Spare way \u00b7 no device fitted';
