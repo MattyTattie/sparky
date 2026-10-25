@@ -4,7 +4,7 @@
 // =====================================================================
 import { Kit, loadJsPDF, VALUE, GREY, INK, RED } from './pdfkit.js';
 import { TYPES, get, eicrOverall, isElectrode, msIsRcd, msIsOcpd, BOND_SERVICES, bondTicked, bondCsaFor, bondNone, sourceRows } from './certmodel.js';
-import { EIC_ITEMS, EICR_ITEMS, CODE_TEXT } from './inspections.js';
+import { EIC_ITEMS, EICR_ITEMS, CODE_TEXT, INTAKE_NOTE_10, INTAKE_NOTES, INTAKE_NOTIFIED, migrateIntake } from './inspections.js';
 import { GUIDANCE } from './guidance.js';
 import { limitZs, isSpare } from './checks.js';
 import { FIELDS, autoNA } from './templates.js';
@@ -32,9 +32,10 @@ export function brandStrip(k, profile, title, certNo, sub = '') {
   k.line(k.x0, k.y - 1.5, k.x1, k.y - 1.5, { w: 0.4, color: INK });
   formTitle(k, title, certNo, sub);
 }
-function formTitle(k, title, certNo, sub = '') {
+// v0.33: 'Report No.' on the EICR, 'Certificate/Report No.' on the generic schedules (k.noLabel).
+function formTitle(k, title, certNo, sub = '', label = k.noLabel || 'Certificate No.') {
   k.t(title, k.x0, k.y + 4, { size: 12, bold: true });
-  k.t('Certificate No.: ', k.x1 - k.tw(certNo || '', 9, true) - 1, k.y + 4, { size: 8, align: 'right' });
+  k.t(label + ': ', k.x1 - k.tw(certNo || '', 9, true) - 1, k.y + 4, { size: 8, align: 'right' });
   k.t(certNo || '', k.x1, k.y + 4, { size: 9, bold: true, color: VALUE, align: 'right' });
   k.y += 6;
   if (sub) { k.y += k.para(sub, k.x0, k.y + 1, k.cw, { size: 7.2 }); }
@@ -42,8 +43,8 @@ function formTitle(k, title, certNo, sub = '') {
 }
 // v0.5: continuation/schedule pages carry a tag under the title, e.g.
 // "DB/CU: DB1  ·  Sheet 2 of 3" (page X of Y is in the footer).
-export function contTitle(k, title, certNo, tag = '') {
-  formTitle(k, title, certNo);
+export function contTitle(k, title, certNo, tag = '', label) {
+  formTitle(k, title, certNo, '', label);
   if (tag) { k.t(tag, k.x0, k.y + 1.2, { size: 8, bold: true, color: VALUE, maxW: k.cw * 0.7 }); k.y += 3.6; }
 }
 const sheetTag = (b, part, parts) => `DB/CU: ${(b && b.ref) || 'DB1'}${b && b.location ? '  (' + b.location + ')' : ''}${parts > 1 ? `   ·   Sheet ${part} of ${parts}${part > 1 ? ' (continuation)' : ''}` : ''}`;
@@ -97,7 +98,8 @@ function supplySection(k, cert, letter) {
     let y = k.y + 7.6;
     ['TN-C', 'TN-S', 'TN-C-S (PME)', 'TN-C-S (PNB)', 'TT', 'IT'].forEach((e, i) => k.cb(x, y + i * 4.4, s.earthing === e, e));
     const lc = ['1-phase, 2-wire', '2-phase, 3-wire', '3-phase, 3-wire', '3-phase, 4-wire'];
-    k.t('AC', x + c1, y, { size: 7, bold: true }); k.t('DC', x + c1 + c2 * 0.62, y, { size: 7, bold: true });
+    const dc = /^DC/.test(s.conductors || '') || s.acdc === 'DC'; const ac = !dc && Boolean(s.conductors || s.acdc); // v0.33: AC / DC header ticks
+    k.cb(x + c1, y, ac, 'AC', { size: 7 }); k.cb(x + c1 + c2 * 0.62, y, dc, 'DC', { size: 7 });
     lc.forEach((e, i) => k.cb(x + c1, y + (i + 1) * 4.4, s.conductors === e, e));
     ['DC 2-wire', 'DC 3-wire', 'Other'].forEach((e, i) => k.cb(x + c1 + c2 * 0.62, y + (i + 1) * 4.4, s.conductors === e, e.replace('DC ', '')));
     k.cb(x + c1, y + 5 * 4.4 + 1, yes(s.polarity), 'Confirmation of supply polarity');
@@ -132,11 +134,13 @@ function particularsSection(k, cert, letter) {
     let y = k.y + 7.6;
     k.cb(x, y, /Distributor/.test(p.means), 'Distributor\u2019s facility');
     k.cb(x, y + 4.4, el, 'Installation earth electrode');
-    k.field('Maximum demand (load)', p.maxDemand, x + c, y, w - c - 2, { unit: p.mdUnit === 'kVA' ? 'kVA' : 'A' });
+    { const fw = w - c - 2, un = 'kVA / A (Delete as appropriate)'; k.field('Maximum demand (load)', p.maxDemand, x + c, y, fw, { unit: un });
+      // v0.33: the A4 unit "kVA / A": strike through the one not used (only when a value is filled in)
+      if (String(p.maxDemand ?? '').trim()) { const ux = x + c + fw - (k.tw(un, 7.5) + 1.5) + 1; const kva = p.mdUnit === 'kVA'; const sx = kva ? ux + k.tw('kVA / ', 7.5) : ux; k.line(sx - 0.3, y - 0.9, sx + k.tw(kva ? 'A' : 'kVA', 7.5) + 0.3, y - 0.9, { w: 0.25, color: INK }); } }
     k.t('Details of Installation Earth Electrode (where applicable)', x + c, y + 4.6, { size: 7, bold: true });
     k.field('Type (rod(s), tape etc)', el ? p.elType : NA, x + c, y + 9.2, w - c - 2);
     k.field('Location', el ? p.elLocation : NA, x + c, y + 13.8, w - c - 2);
-    k.field('Electrode resistance RA', el ? p.elRa : NA, x + c, y + 18.4, w - c - 2, { unit: 'Ω' });
+    k.field('Electrode resistance/impedance, RA/ZA', el ? p.elRa : NA, x + c, y + 18.4, w - c - 2, { unit: 'Ω' });
     k.y = y + 21;
     k.t('Main Protective Conductors', x, k.y + 3.2, { size: 7, bold: true }); k.y += 3.6;
     row(k, x, w, [['Earthing conductor   Material', p.ecMat, 0.45], ['csa', p.ecCsa, 0.25, { unit: 'mm²' }]]);
@@ -163,7 +167,9 @@ function particularsSection(k, cert, letter) {
     k.t('If RCD main switch', x + 2 * a, y, { size: 7, bold: true });
     k.field('RCD Type AC / A / F / B / other', rcd ? p.rcdType : NA, x + 2 * a, y + 4.6, a); k.field('Rated residual operating current (IΔn)', rcd ? p.rcdIdn : NA, x + 2 * a, y + 9.2, a, { unit: 'mA' });
     k.field('Rated time delay', rcd ? p.rcdDelay : NA, x + 2 * a, y + 13.8, a, { unit: 'ms' }); k.field('Measured operating time', rcd ? p.rcdMs : NA, x + 2 * a, y + 18.4, a, { unit: 'ms' });
-    k.y = y + 20;
+    k.field('Breaking capacity', rcd ? (p.rcdKa || '') : NA, x + 2 * a, y + 23, a, { unit: 'kA' }); // v0.33
+    k.para('Attach protective device settings where applicable on separate continuation sheet(s).', x + a, y + 19.2, a - 4, { size: 6.6 });
+    k.y = y + 24.6;
   });
 }
 
@@ -233,7 +239,7 @@ function boardHeaderDetails(k, cert, b, certNo) {
 }
 function circuitDetailsPage(k, cert, b, certNo, rows, part = 1, parts = 1) {
   k.addPage('l');
-  contTitle(k, 'GENERIC SCHEDULE OF CIRCUIT DETAILS', certNo, sheetTag(b, part, parts));
+  contTitle(k, 'GENERIC SCHEDULE OF CIRCUIT DETAILS', certNo, sheetTag(b, part, parts), 'Certificate/Report No.');
   boardHeaderDetails(k, cert, b, certNo);
   const cols = [
     { k: 'num', label: 'Circuit number', n: 1, w: 9, vertical: true },
@@ -274,7 +280,7 @@ function circuitDetailsPage(k, cert, b, certNo, rows, part = 1, parts = 1) {
 }
 function testResultsPage(k, cert, b, certNo, rows, part = 1, parts = 1) {
   k.addPage('l');
-  contTitle(k, 'GENERIC SCHEDULE OF TEST RESULTS', certNo, sheetTag(b, part, parts));
+  contTitle(k, 'GENERIC SCHEDULE OF TEST RESULTS', certNo, sheetTag(b, part, parts), 'Certificate/Report No.');
   // header box: left board details, right instruments
   const y0 = k.y + 1; k.y = y0; const x = k.x0 + 2; const lw = k.cw * 0.6;
   k.t('Distribution board/Consumer unit details', x, k.y + 3.6, { size: 8, bold: true }); k.y += 4.2;
@@ -304,7 +310,7 @@ function testResultsPage(k, cert, b, certNo, rows, part = 1, parts = 1) {
     { k: 'rcdMs', label: 'Disconnection time (ms)**', n: 28, w: 12, vertical: true, sub: 1 },
     { k: 'rcdBtn', label: 'Test button operation', n: 29, w: 10, vertical: true, sub: 1, tick: true },
     { k: 'afddBtn', label: 'Manual test button operation††', n: 30, w: 11, vertical: true, sub: 1, tick: true },
-    { k: 'remarks', label: 'Remarks — include details of circuits and/or installed equipment vulnerable to damage when testing', n: 31, w: 62, left: true },
+    { k: 'remarks', label: 'Remarks — include details of circuits and/or installed equipment vulnerable to damage when testing (continue on additional page(s) if necessary)', n: 31, w: 62, left: true },
   ];
   const groups = [{ label: 'Continuity (Ω)', from: 1, to: 5 }, { label: 'Insulation resistance', from: 6, to: 8 }, { label: 'Zs (Ω)', from: 10, to: 10 }, { label: 'RCD', from: 11, to: 12 }, { label: 'AFDD', from: 13, to: 13 }];
   const top = k.y;
@@ -314,8 +320,10 @@ function testResultsPage(k, cert, b, certNo, rows, part = 1, parts = 1) {
   k.rect(xs[1], top + 5, cols[1].ww * 3, 4.5, { lw: 0.2 }); k.t('Ring final circuit', xs[1] + cols[1].ww * 1.5, top + 8.4, { size: 6.2, bold: true, align: 'center' });
   k.rect(xs[4], top + 5, cols[4].ww + cols[5].ww, 4.5, { lw: 0.2 }); k.t('(R1 + R2) or R2', xs[4] + (cols[4].ww + cols[5].ww) / 2, top + 8.4, { size: 6, bold: true, align: 'center' });
   k.y = end + 2;
-  const s = (cert.sigs || {}).inspector || (cert.sigs || {}).mw || {};
-  const tb = (cert.people && cert.people.inspector && cert.people.inspector.name) || '';
+  // v0.33: the EIC 'same person' case signs as the designer; use that signature and name
+  const same = cert.type === 'EIC' && yes((cert.eic || {}).samePerson); const SG = cert.sigs || {};
+  const s = (same ? SG.designer : SG.inspector) || SG.inspector || SG.designer || SG.mw || {};
+  const PP = cert.people || {}; const tb = ((same ? PP.designer : PP.inspector) || PP.inspector || {}).name || '';
   k.field('Tested by name (Capitals):', tb.toUpperCase(), k.x0, k.y + 4, 110);
   sig(k, k.x0 + 120, k.y + 4, 80, s); k.field('Date:', fmtDate(s.date), k.x0 + 205, k.y + 4, 40);
   k.y += 7;
@@ -467,12 +475,19 @@ function sourcesSheet(k, cert, certNo) {
 const contSheets = (cert) => (cert.extraSheets || 0) + (bondRows(cert).length ? Math.ceil(bondRows(cert).length / 25) : 0) + sourceSheetCount(cert);
 const contWhat = (cert) => { const w = [bondRows(cert).length ? 'supplementary bonding' : '', sourceRows(cert).length ? 'other sources of supply' : ''].filter(Boolean); return w.length ? ` (incl. ${w.join(' and ')})` : ''; };
 
+// v0.33: a paragraph with **bold** parts, wrapped word by word. Returns its height.
+function richPara(k, text, x, y, w, size) {
+  const words = []; text.split('**').forEach((part, i) => part.split(/\s+/).filter(Boolean).forEach((t) => words.push([t, i % 2 === 1])));
+  const step = k.lh(size); const sp = k.tw(' ', size); let cx = x, line = 0;
+  for (const [t, b] of words) { const tw = k.tw(t, size, b); if (cx > x && cx + tw > x + w) { line++; cx = x; } k.t(t, cx, y + line * step, { size, bold: b }); cx += tw + sp; }
+  return (line + 1) * step;
+}
 function guidancePage(k, kind) {
   const g = GUIDANCE[kind];
   k.addPage('p');
   k.t(g.title, k.x0, k.y + 5, { size: 12, bold: true }); k.y += 9;
   k.t(g.heading, k.x0, k.y + 3, { size: 9, bold: true }); k.y += 6;
-  for (const p of g.paras) { k.y += k.para(p, k.x0, k.y + 2, k.cw, { size: 8.4, gap: 1.6 }); if (k.y > k.H - 20) { k.addPage('p'); } }
+  for (const p of g.paras) { k.y += (p.includes('**') ? richPara(k, p, k.x0, k.y + 2, k.cw, 8.4) + 1.6 : k.para(p, k.x0, k.y + 2, k.cw, { size: 8.4, gap: 1.6 })); if (k.y > k.H - 20) { k.addPage('p'); } }
 }
 function photosPages(k, photos, certNo) {
   if (!photos || !photos.length) return;
@@ -500,7 +515,8 @@ function eic(k, cert, profile) {
     textBlock(k, x, tw, 'Description of installation:', cert.install.description);
     textBlock(k, x, tw, 'Extent of installation covered by this Certificate:', cert.install.extent, { minLines: 2 });
     const ye = k.y; let yy = yb + 4;
-    for (const t of ['New installation', 'Addition to an existing installation', 'Alteration to an existing installation']) { k.cb(x + w * 0.77, yy, cert.install.extentType === t, t, { size: 7 }); yy += 5; }
+    // v0.33: A4 wording 'Adding to…' (the saved value stays 'Addition to…' so old certs match)
+    for (const [t, lab] of [['New installation', 'New installation'], ['Addition to an existing installation', 'Adding to an existing installation'], ['Alteration to an existing installation', 'Alteration to an existing installation']]) { k.cb(x + w * 0.77, yy, cert.install.extentType === t, lab, { size: 7 }); yy += 5; }
     k.y = Math.max(ye, yy);
     k.t('(Use continuation sheet if necessary)   See continuation sheet No.: ' + (E.contSheet || '……'), x, k.y + 2.5, { size: 6.5, color: GREY }); k.y += 3.5;
   });
@@ -509,6 +525,8 @@ function eic(k, cert, profile) {
     const signLine = (s, name, role) => {
       const y = k.y + 7.5; sig(k, x, y, w * 0.30, s); k.field('Date:', fmtDate(s && s.date), x + w * 0.32, y, w * 0.14); k.field('Name (IN BLOCK CAPITALS):', (name || '').toUpperCase(), x + w * 0.48, y, w * 0.405); k.t(role, x + w, y, { size: 7, bold: true, align: 'right' }); k.y += 9;
     };
+    // v0.33: the liability line and 'For … of the installation:' under each signatory, as on the A4 form
+    const liab = (what) => { k.t('The extent of liability of the signatory or signatories is limited to the work described above as the subject of this Certificate.', x, k.y + 2.5, { size: 6.5 }); k.y += 3; k.t(`For ${what} of the installation:`, x, k.y + 2.8, { size: 7 }); k.y += 1; };
     k.t('FOR DESIGN', x, k.y + 3.2, { size: 7.5, bold: true }); k.y += 3.6;
     k.y += k.para(decl('design', 'design'), x, k.y + 2.5, w, { size: 6.8 });
     textBlock(k, x, w, 'Details of departures from BS 7671 (Regulations 120.3, 133.1.2, 133.1.3 and 133.5):', E.designDepartures);
@@ -522,10 +540,12 @@ function eic(k, cert, profile) {
     k.t('FOR CONSTRUCTION', x, k.y + 3.2, { size: 7.5, bold: true }); k.y += 3.6;
     k.y += k.para(decl('construction', 'construction'), x, k.y + 2.5, w, { size: 6.8 });
     textBlock(k, x, w, 'Details of departures from BS 7671 (Regulations 120.3, 133.1.2, 133.1.3 and 133.5):', E.constructionDepartures);
+    liab('CONSTRUCTION');
     signLine(same ? S.designer : S.constructor, same ? P.designer.name : P.constructor.name, 'Constructor');
     k.t('FOR INSPECTION AND TESTING', x, k.y + 3.2, { size: 7.5, bold: true }); k.y += 3.6;
     k.y += k.para(decl('inspection', 'inspection & testing'), x, k.y + 2.5, w, { size: 6.8 });
     textBlock(k, x, w, 'Details of departures from BS 7671 (Regulations 120.3, 133.1.2, 133.1.3 and 133.5):', E.inspectionDepartures);
+    liab('INSPECTION AND TESTING');
     signLine(same ? S.designer : S.inspector, same ? P.designer.name : P.inspector.name, 'Inspector');
   });
   k.section('SECTION D: NEXT INSPECTION', (k, x, w) => { k.y += k.para(`I/We, the designer(s), recommend that this installation is further inspected and tested after an interval of not more than  ${E.nextInterval || '……'}  (years/months).`, x, k.y + 3, w, { size: 7.5 }); });
@@ -551,18 +571,18 @@ function eic(k, cert, profile) {
     const half = Math.ceil(EIC_ITEMS.length / 2); const cw = w / 2;
     const y0 = k.y + 1;
     EIC_ITEMS.forEach(([n, t], i) => {
-      const col = i < half ? 0 : 1; const yy = y0 + (i % half) * 4.6 + 3.2; const xx = x + col * cw;
+      const col = i < half ? 0 : 1; const yy = y0 + (i % half) * 4.3 + 3.2; const xx = x + col * cw;
       k.t(n, xx, yy, { size: 7 }); k.t(t, xx + 9, yy, { size: 7, maxW: cw - 24 });
       k.rect(xx + cw - 13, yy - 3.1, 10, 4, { lw: 0.2 }); k.mark(cert.inspections[n], xx + cw - 8, yy, { size: 7.5 });
     });
-    k.y = y0 + half * 4.6 + 1;
+    k.y = y0 + half * 4.3 + 1;
   });
   k.section('SECTION I: COMMENTS ON EXISTING INSTALLATION (in the case of an addition or alteration see Regulation 644.1.2):', (k, x, w) => textBlock(k, x, w, '', withNotices(cert, cert.comments), { minLines: 2 }));
   const nb = (cert.boards || []).length;
   k.section('SECTION J: SCHEDULES', (k, x, w) => {
     k.y += k.para(`${contSheets(cert)}  Continuation sheet(s)${contWhat(cert)}    1  Schedule(s) of Inspection    ${nb}  Schedule(s) of Circuit Details and Schedule(s) of Test Results`, x, k.y + 3, w, { size: 7.5 }) + 1;
     k.y += k.para('The schedule(s) and continuation sheet(s) listed are part of this document and this certificate is valid only when they are attached to it.', x, k.y + 3, w, { size: 7 });
-  });
+  }, { minGap: -6 }); // v0.33: let Section J use the space above the footer so it stays on page 2, as on the A4 form
   schedules(k, cert, no);
 }
 
@@ -584,8 +604,12 @@ function eicr(k, cert, profile) {
     textBlock(k, x, w, 'Details of those parts of the installation that have been inspected and tested', R.extent, { minLines: 2 });
     textBlock(k, x, w, 'Agreed limitations including the reasons', R.agreedLimits, { minLines: 1 });
     row(k, x, w, [['Agreed with:', R.agreedWith, 1]]);
-    k.y += k.para('Unless specifically agreed between the client and inspector prior to the inspection: • Cables concealed within trunking and conduits, under floors, in roof spaces, and generally within the fabric of the building or underground, have not been inspected. • No checks for safety alerts, corrective actions or product recalls for electrical equipment forming part of the installation have been made. An inspection should be made of other electrical equipment housed within an accessible roof space.', x, k.y + 2.5, w, { size: 6.6 });
-    textBlock(k, x, w, 'Operational limitations including the reasons', R.operationalLimits);
+    // v0.33: the two standard limitations as a bulleted list, as on the A4 form
+    k.y += k.para('Unless specifically agreed between the client and inspector prior to the inspection:', x, k.y + 2.5, w, { size: 6.6 });
+    for (const b of ['Cables concealed within trunking and conduits, under floors, in roof spaces, and generally within the fabric of the building or underground, have not been inspected.', 'No checks for safety alerts, corrective actions or product recalls for electrical equipment forming part of the installation have been made.']) { k.t('\u2022', x + 2, k.y + 2.5, { size: 6.6 }); k.y += k.para(b, x + 5, k.y + 2.5, w - 5, { size: 6.6 }); }
+    k.y += k.para('An inspection should be made of other electrical equipment housed within an accessible roof space.', x, k.y + 2.5, w, { size: 6.6 });
+    textBlock(k, x, w, 'Operational limitations including the reasons (see page no. ' + (R.opLimitsPage || '..........') + ')', R.operationalLimits);
+    k.t('(Use continuation sheet(s) if necessary)', x, k.y + 2.2, { size: 6.5, color: GREY }); k.y += 3;
     k.y += k.para(`The inspection and testing detailed in this report and accompanying schedules have been carried out in accordance with BS 7671:2018 as amended to ${cert.amendedTo} (date)`, x, k.y + 2.5, w, { size: 7 });
   });
   const overall = R.overall || eicrOverall(cert);
@@ -675,16 +699,30 @@ function inspectionSchedule(k, cert, no) {
   k.y += k.para('NOTE: This form is suitable for many types of smaller installation, not exclusively residential. Outcomes: tick = Acceptable condition · C1 or C2 Unacceptable condition · C3 Improvement recommended · FI Further investigation · N/V Not verified · LIM Limitation · N/A Not applicable. C1, C2, C3 and FI coded items to be recorded in Section K of the Condition Report.', k.x0, k.y + 1, k.cw, { size: 6.6 });
   const head = () => { const y = k.y; k.rect(k.x0, y, k.cw, 5.5, { lw: 0.35, color: INK, fill: [238, 238, 238] }); k.t('Item No.', k.x0 + 1.5, y + 3.8, { size: 7, bold: true }); k.t('Description', k.x0 + 16, y + 3.8, { size: 7, bold: true }); k.t('Outcome', k.x1 - 9, y + 3.8, { size: 7, bold: true, align: 'center' }); k.y += 5.5; };
   head();
-  for (const [n, t, h] of EICR_ITEMS) {
-    const ls = k.wrap(t, k.cw - 40, h ? 7.4 : 7.2, !!h); const rh = Math.max(5, ls.length * 3.1 + 1.8);
+  // v0.33: old single 1.1 outcome → the six sub-rows (on a copy; the saved cert isn't touched here)
+  const tmp = { type: 'EICR', inspections: { ...(cert.inspections || {}) } }; migrateIntake(tmp); const ins = tmp.inspections;
+  const R = cert.eicr || {};
+  for (const [n0, t0, h0, o4] of EICR_ITEMS) {
+    const sub = h0 === 'sub'; const h = h0 && !sub; const n = o4 && 'label' in o4 ? o4.label : n0;
+    const t = n0 === '1.0' ? t0 + '\n' + INTAKE_NOTE_10 : t0;
+    const ls = t.split('\n').flatMap((p, i) => k.wrap(p, k.cw - 40, h && i === 0 ? 7.4 : 7.2, !!(h && i === 0) || sub)); const rh = Math.max(5, ls.length * 3.1 + 1.8);
     if (k.y + rh > k.H - 16) { k.addPage('p'); contTitle(k, 'CONDITION REPORT SCHEDULE OF INSPECTION (continued)', no); head(); }
     k.rect(k.x0, k.y, k.cw, rh, { lw: 0.15, fill: h ? [247, 247, 247] : null });
     k.line(k.x0 + 14, k.y, k.x0 + 14, k.y + rh, { w: 0.15 }); k.line(k.x1 - 18, k.y, k.x1 - 18, k.y + rh, { w: 0.15 });
     k.t(n, k.x0 + 1.5, k.y + 3.6, { size: 7.2, bold: !!h });
-    ls.forEach((s, i) => k.t(s, k.x0 + 16, k.y + 3.6 + i * 3.1, { size: h ? 7.4 : 7.2, bold: !!h }));
-    const v = cert.inspections[n];
+    ls.forEach((s, i) => k.t(s, k.x0 + 16, k.y + 3.6 + i * 3.1, { size: h && i === 0 ? 7.4 : 7.2, bold: (!!h && (n0 !== '1.0' || i === 0)) || sub }));
+    const v = h0 ? '' : ins[n0];
     if (v) { if (/^(C1|C2)$/.test(v)) k.t(v, k.x1 - 9, k.y + 3.7, { size: 8, bold: true, color: RED, align: 'center' }); else k.mark(v, k.x1 - 9, k.y + 3.7, { size: 7.5 }); }
     k.y += rh;
+    if (n0 === '1.1f') { // v0.33: intake NOTE 1 / NOTE 2 and the "person ordering notified" Y / N/A tick
+      const nl = INTAKE_NOTES.flatMap((p) => k.wrap(p, k.cw - 40, 6.4)); const ml = k.wrap(INTAKE_NOTIFIED, k.cw - 62, 7.2);
+      const nh = nl.length * 2.7 + ml.length * 3.1 + 3.5;
+      k.rect(k.x0, k.y, k.cw, nh, { lw: 0.15 }); k.line(k.x0 + 14, k.y, k.x0 + 14, k.y + nh, { w: 0.15 }); k.line(k.x1 - 18, k.y, k.x1 - 18, k.y + nh, { w: 0.15 });
+      nl.forEach((s, i) => k.t(s, k.x0 + 16, k.y + 3 + i * 2.7, { size: 6.4 }));
+      const my = k.y + 3.4 + nl.length * 2.7; ml.forEach((s, i) => k.t(s, k.x0 + 16, my + i * 3.1, { size: 7.2 }));
+      const by = my + (ml.length - 1) * 3.1; let bx = k.x1 - 44; bx = k.cb(bx, by, R.intakeNotified === 'Y', 'Y', { size: 7 }); k.cb(bx + 2, by, R.intakeNotified === 'N/A', 'N/A', { size: 7 });
+      k.y += nh;
+    }
   }
   k.y += 3;
   const s = (cert.sigs || {}).inspector || {};
@@ -715,7 +753,7 @@ function mw(k, cert, profile) {
     k.t('3. Presence of adequate main protective conductors:', x, k.y + 3.2, { size: 7.5 }); k.y += 3.6;
     checks(k, x + 3, [['Earthing conductor', yes(M.earthingCond)]]);
     checks(k, x + 3, [['Water', M.bondWater], ['Gas', M.bondGas], ['Oil', M.bondOil], ['Structural steel', M.bondSteel]], { label: 'Main protective bonding conductor(s) to:' });
-    if (M.bondOther) row(k, x + 3, w - 3, [['Other (Specify)', M.bondOther, 1]]);
+    { const yo = k.y; row(k, x + 3, w - 9, [['Other (Specify)', M.bondOther || '', 1]]); k.cb(x + w - 4.5, yo + 3.4, Boolean(String(M.bondOther || '').trim()), '', { size: 7 }); } // v0.33: always shown
   });
   k.section('SECTION C: Circuit details', (k, x, w) => {
     row(k, x, w, [['DB Reference No.:', M.dbRef, 0.4], ['DB Location and type:', M.dbLocation, 0.6]]);
@@ -790,7 +828,7 @@ export async function certificatePdf(cert, { profile = {}, photos = [] } = {}) {
   const { jsPDF } = await loadJsPDF();
   const k = new Kit(jsPDF, { orientation: 'p', footer: FOOT + (profile.business ? '  Issued by ' + profile.business + '.' : '') });
   if (cert.type === 'EIC') { eic(k, cert, profile); guidancePage(k, 'EIC'); }
-  else if (cert.type === 'EICR') { eicr(k, cert, profile); guidancePage(k, 'EICR'); }
+  else if (cert.type === 'EICR') { k.noLabel = 'Report No.'; eicr(k, cert, profile); guidancePage(k, 'EICR'); }
   else { mw(k, cert, profile); guidancePage(k, 'MW'); }
   photosPages(k, photos, cert.number);
   k.footers(cert.number);

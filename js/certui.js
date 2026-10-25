@@ -9,7 +9,7 @@ import { route, page, go, render } from './app.js';
 import { S, openCert, changed, flush, getProfile, defaultInstruments, defaultInstrumentIds, getInstruments, instrumentsFor, instrumentText, calibrationWarnings, INSTRUMENT_KINDS, saveSetting } from './state.js';
 import { calDateFields, CAL_DATE_WARN } from './instruments.js';
 import { TYPES, newCert, sectionsFor, sectionDone, missingFields, visible, get, set, eicrOverall, blankBond, BOND_LOCATIONS, BOND_PARTS, SOURCE_TYPES, blankSource, sourcesMissing } from './certmodel.js';
-import { EIC_ITEMS, EIC_OUTCOMES, EICR_ITEMS, EICR_OUTCOMES, CODE_TEXT, OBSERVATIONS, OBS_CATS, EIC_HELP, EICR_HELP } from './inspections.js';
+import { INTAKE_NOTE_10, INTAKE_NOTES, INTAKE_NOTIFIED, migrateIntake, EIC_ITEMS, EIC_OUTCOMES, EICR_ITEMS, EICR_OUTCOMES, CODE_TEXT, OBSERVATIONS, OBS_CATS, EIC_HELP, EICR_HELP } from './inspections.js';
 import { checkCircuit, isSpare } from './checks.js';
 import { CHECK_NOTE } from './limits.js';
 import { dangerCodes, noticeForObs, noticesOf, noticeMissing, noticeNo } from './dangermodel.js';
@@ -241,15 +241,18 @@ function inspectionsSection(cert) {
   const items = cert.type === 'EIC' ? EIC_ITEMS : EICR_ITEMS;
   const outs = cert.type === 'EIC' ? EIC_OUTCOMES : EICR_OUTCOMES;
   const list = h('div', { class: 'card' });
+  migrateIntake(cert); // v0.33: old single 1.1 outcome → the six sub-rows (saved with the next change)
+  const R = cert.eicr || (cert.eicr = {});
+  const notified = () => h('div', { class: 'ins' }, h('span', { class: 'num' }, ''), h('div', { class: 'txt' }, INTAKE_NOTIFIED, h('div', { class: 'chips', style: 'margin-top:6px' }, ['Y', 'N/A'].map((o) => h('button', { class: 'chip ' + (o === 'N/A' ? 'na' : '') + (R.intakeNotified === o ? ' on' : ''), onclick: () => { R.intakeNotified = R.intakeNotified === o ? '' : o; changed(); draw(); } }, o)))));
   const draw = () => fill(list, 
     h('p', { class: 'note' }, cert.type === 'EIC' ? 'Tick or N/A each item. A ✓ means inspected and satisfactory.' : 'Outcome for each item: ✓ acceptable, C1/C2/C3 (code), FI further investigation, N/V not verified, LIM limitation, N/A not applicable. Codes C1, C2, C3 or FI need an observation too.'),
     h('div', { class: 'btns' }, h('button', { class: 'btn small', onclick: () => { for (const k of Object.keys(cert.inspections)) if (!cert.inspections[k]) cert.inspections[k] = '✓'; changed(); draw(); } }, 'Tick all the blanks'), h('button', { class: 'btn small', onclick: () => { for (const k of Object.keys(cert.inspections)) cert.inspections[k] = ''; changed(); draw(); } }, 'Clear all')),
-    ...items.map(([n, text, head]) => head ? h('div', { class: 'ins head' }, n + '  ' + text) : h('div', { class: 'ins' }, h('span', { class: 'num' }, n), h('div', { class: 'txt' }, text, helpLine(cert, n), h('div', { class: 'chips', style: 'margin-top:6px' }, outs.map((o) => h('button', { class: 'chip ' + o.toLowerCase().replace('/', '') + (cert.inspections[n] === o ? ' on' : ''), onclick: async () => {
+    ...items.map(([n, text, head, o4]) => head === 'sub' ? h('div', { class: 'ins subhead' }, h('span', { class: 'num' }, n), h('div', { class: 'txt' }, h('b', {}, text))) : head ? h('div', { class: 'ins head' }, n + '  ' + text, n === '1.0' && cert.type === 'EICR' ? h('div', { class: 'help', style: 'font-weight:400' }, INTAKE_NOTE_10) : null) : [h('div', { class: 'ins' }, h('span', { class: 'num' }, o4 && 'label' in o4 ? o4.label : n), h('div', { class: 'txt' }, text, helpLine(cert, n), h('div', { class: 'chips', style: 'margin-top:6px' }, outs.map((o) => h('button', { class: 'chip ' + o.toLowerCase().replace('/', '') + (cert.inspections[n] === o ? ' on' : ''), onclick: async () => {
       cert.inspections[n] = cert.inspections[n] === o ? '' : o; changed(); draw();
-      if (cert.type === 'EICR' && /^(C1|C2|C3|FI)$/.test(o) && cert.inspections[n] === o && !cert.observations.some((x) => x.item === n)) {
-        if (await confirmBox('Add an observation?', `Item ${n} is ${o}. Add it to the observations list now?`, 'Add observation')) { cert.observations.push({ id: db.newId(), item: n, text: text.replace(/\s*\([^)]*\)\s*$/, ''), code: o, reg: (/\(([^)]*)\)\s*$/.exec(text) || [])[1] || '', location: '' }); changed(); toast('Added to observations'); }
+      if (cert.type === 'EICR' && /^(C1|C2|C3|FI)$/.test(o) && cert.inspections[n] === o && !cert.observations.some((x) => x.item === n.replace(/[a-f]$/, ''))) {
+        if (await confirmBox('Add an observation?', `Item ${n.replace(/[a-f]$/, '')} is ${o}. Add it to the observations list now?`, 'Add observation')) { cert.observations.push({ id: db.newId(), item: n.replace(/[a-f]$/, ''), text: (/^1\.1[a-f]$/.test(n) ? 'Distributor/supplier intake equipment: ' + text.replace(/^\u2013 /, '') : text).replace(/\s*\([^)]*\)\s*$/, ''), code: o, reg: (/\(([^)]*)\)\s*$/.exec(text) || [])[1] || '', location: '' }); changed(); toast('Added to observations'); }
       }
-    } }, o)))))));
+    } }, o))))), n === '1.1f' ? [h('div', { class: 'help', style: 'margin:4px 0 8px 34px' }, INTAKE_NOTES.join(' ')), notified()] : null]));
   draw(); return list;
 }
 

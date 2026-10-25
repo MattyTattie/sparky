@@ -177,7 +177,7 @@ export class Kit {
     return h;
   }
   // A boxed form section with a bold heading.
-  section(title, fn, { pad = 1.8, note = '' } = {}) {
+  section(title, fn, { pad = 1.8, note = '', minGap = 0 } = {}) {
     return this.block((k) => {
       const y0 = k.y; k.y += 4.4;
       k.t(title, k.x0 + pad, y0 + 3.6, { size: 8.5, bold: true });
@@ -186,7 +186,7 @@ export class Kit {
       k.y += 1.2;
       k.rect(k.x0, y0, k.cw, k.y - y0, { lw: 0.35, color: INK });
       k.y += 1.6;
-    });
+    }, { minGap });
   }
   // v0.18: fit an image inside w x h keeping its shape (left aligned, centred vertically).
   // Returns the size drawn, so text can follow straight after it.

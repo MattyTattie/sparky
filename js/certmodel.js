@@ -99,7 +99,7 @@ const anyOf = (c, ks) => ks.some((k) => String(get(c, 'parts.' + k) ?? '').trim(
 export const msIsRcd = (c) => { const v = get(c, 'parts.msIsRcd'); return v == null ? anyOf(c, ['rcdType', 'rcdIdn', 'rcdDelay', 'rcdMs']) : Boolean(v); };
 export const msIsOcpd = (c) => { const v = get(c, 'parts.msIsOcpd'); return v == null ? anyOf(c, ['msType', 'msRating', 'msKa']) : Boolean(v); };
 // Bonded services, each with its own optional csa (v0.8, blank = same as the main bonding csa).
-export const BOND_SERVICES = [['Water', 'water installation pipes'], ['Gas', 'gas installation pipes'], ['Oil', 'oil installation pipes'], ['Steel', 'structural steel'], ['Lightning', 'lightning protection']];
+export const BOND_SERVICES = [['Water', 'water installation pipes'], ['Gas', 'gas installation pipes'], ['Oil', 'oil installation pipes'], ['Steel', 'structural steel'], ['Lightning', 'lightning protection system']];
 export const bondTicked = (c, svc) => (svc === 'Other' ? Boolean(String(get(c, 'parts.bondOther') || '').trim()) : Boolean(get(c, 'parts.bond' + svc)));
 export const bondCsaFor = (c, svc) => String(get(c, `parts.bond${svc}Csa`) ?? '').trim() || String(get(c, 'parts.bondCsa') ?? '').trim();
 export const bondNone = (c) => Boolean(get(c, 'parts.bondNone'));
@@ -125,7 +125,7 @@ const PARTS = { id: 'parts', title: 'Earthing, bonding and main switch', form: '
   f('parts.msIsOcpd', 'Main switch is a breaker or fuse (OCPD)', 'check', { dflt: msIsOcpd, redraw: true }),
   f('parts.msType', 'Device type (MCCB / ACB / fuse…)', 'text', { showIf: msIsOcpd, indent: true }), f('parts.msRating', 'Device rating/setting (A)', 'num', { showIf: msIsOcpd, indent: true }), f('parts.msKa', 'Breaking capacity (kA)', 'num', { showIf: msIsOcpd, indent: true }),
   f('parts.msIsRcd', 'Main switch is an RCD', 'check', { dflt: msIsRcd, redraw: true }),
-  f('parts.rcdType', 'RCD type (AC/A/F/B)', 'text', { showIf: msIsRcd, indent: true }), f('parts.rcdIdn', 'IΔn (mA)', 'num', { showIf: msIsRcd, indent: true }), f('parts.rcdDelay', 'Rated time delay (ms)', 'num', { showIf: msIsRcd, indent: true, hint: '0 if not time-delayed.' }), f('parts.rcdMs', 'Measured operating time (ms)', 'num', { showIf: msIsRcd, indent: true }),
+  f('parts.rcdType', 'RCD type (AC/A/F/B)', 'text', { showIf: msIsRcd, indent: true }), f('parts.rcdIdn', 'IΔn (mA)', 'num', { showIf: msIsRcd, indent: true }), f('parts.rcdDelay', 'Rated time delay (ms)', 'num', { showIf: msIsRcd, indent: true, hint: '0 if not time-delayed.' }), f('parts.rcdMs', 'Measured operating time (ms)', 'num', { showIf: msIsRcd, indent: true }), f('parts.rcdKa', 'Breaking capacity (kA)', 'num', { showIf: msIsRcd, indent: true, opt: true }),
 ], doneIf: (c) => bondNone(c) || BOND_SERVICES.some(([s]) => bondTicked(c, s)) || bondTicked(c, 'Other') };
 
 export function sectionsFor(type) {

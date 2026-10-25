@@ -1,5 +1,13 @@
 # Sparky — niggles and update lists
 
+## [BUILT v0.33.0 on branch `v0.33.0-a4-gaps` — NOT LIVE] A4:2026 form gaps
+- EICR 1.1 split into six intake sub-rows (service cable, service head, earthing arrangement, meter tails, metering equipment, means of isolation) with NOTE 1/2 and a Y / N/A "person ordering notified" tick (screen + PDF). Old certs: a single old 1.1 outcome is copied to all six sub-rows (blank stays blank).
+- "Report No." on all EICR pages; "Certificate/Report No." on generic schedules. EIC test results show signature + date by "Tested by".
+- EIC Section C liability + "For CONSTRUCTION / INSPECTION AND TESTING" lines; Section J now fits on page 2 (EIC is 5 pages).
+- Section G: kVA / A (delete as appropriate), RA/ZA, lightning protection system, optional RCD main switch kA, protective device settings note; Section F AC/DC ticks.
+- EICR wording: 1.0 caveat, 7.1/8.1 "and attach to the report", Section D bullets, continuation hints; MW bold safety sentences, MW "Other (Specify)" bonding always shown; "Adding to an existing installation"; Remarks continuation hint.
+- Not done (optional item 9 extras).
+
 ## [BUILT v0.32.0 on branch `v0.32.0-a4-forms`, 25 Oct 2026 — NOT LIVE] screenshots in /workspace/sparky-shots/v0.32.0, publish only on his OK
 - [built] EICR observations on screen split into "C1 and C2" and "C3 and FI" like the A4 form (PDF was already split).
 - [built] Optional AFDD BS (EN) / type / rating on circuits (and in presets; old presets keep their key). Printed on Minor Works Section C, the only A4 form with AFDD boxes. MW circuit editor also gets SPD BS (EN) / type (the PDF printed them but there were no inputs).

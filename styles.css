@@ -867,3 +867,5 @@ a.newphone-link { display: block; text-decoration: none; }
 /* v0.32 */
 .obsgrp-h{font-weight:700;margin:14px 0 6px;font-size:14px}
 .notice.bidi{margin-top:10px}
+
+.ins.subhead{border-bottom:0;padding-bottom:0}

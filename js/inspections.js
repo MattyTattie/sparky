@@ -24,11 +24,25 @@ export const EIC_ITEMS = [
 ];
 export const EIC_OUTCOMES = ['✓', 'N/A'];
 
+export const INTAKE_SUBS = [['1.1a', '\u2013 Service cable'], ['1.1b', '\u2013 Service head'], ['1.1c', '\u2013 Earthing arrangement'], ['1.1d', '\u2013 Meter tails'], ['1.1e', '\u2013 Metering equipment'], ['1.1f', '\u2013 Means of isolation (where present)']];
+export const INTAKE_NOTE_10 = 'An outcome against an item in this section, other than access to live parts, should not be used to determine the overall outcome.';
+export const INTAKE_NOTES = ['NOTE 1: For this section only, where inadequacies are found, an \u2018X\u2019 should be put against the appropriate item and a comment made in Section K.', 'NOTE 2: Where an inadequacy in the intake equipment is encountered, and where this might result in a dangerous or potentially dangerous situation, the person ordering the inspection and testing and/or duty holder must be informed. It is strongly recommended that the person ordering the work informs the appropriate authority.'];
+export const INTAKE_NOTIFIED = 'The person ordering the inspection and testing notified of any dangerous or potentially dangerous situations. (Tick as appropriate.)';
+// v0.33: old EICRs kept one outcome for the whole of 1.1. When there is a 1.1 value
+// and none of the sub-rows exist yet, the old value is copied to all six sub-rows
+// (it applied to all of them) and the old key removed. Nothing else changes.
+export function migrateIntake(cert) {
+  const ins = cert && cert.inspections; if (!ins || cert.type !== 'EICR') return false;
+  if (!('1.1' in ins) || INTAKE_SUBS.some(([k]) => k in ins)) return false;
+  const v = ins['1.1'] || ''; for (const [k] of INTAKE_SUBS) ins[k] = v; delete ins['1.1']; return true;
+}
 // EICR: Condition Report Schedule of Inspection for residential and
 // similar premises with up to 100 A supply. [number, text, isHeading]
 export const EICR_ITEMS = [
   ['1.0', 'INTAKE EQUIPMENT (VISUAL INSPECTION ONLY)', true],
-  ['1.1', 'Distributor/supplier intake equipment: service cable, service head, earthing arrangement, meter tails, metering equipment, means of isolation (where present)'],
+  // v0.33: 1.1 is split into its six A4 sub-rows, each with its own outcome (keys 1.1a–1.1f).
+  ['1.1', 'Distributor/supplier intake equipment', 'sub'],
+  ...INTAKE_SUBS.map(([k, t]) => [k, t, false, { label: '' }]),
   ['1.2', 'Consumer\u2019s means of isolation (where present)'],
   ['1.3', 'Consumer\u2019s meter tails'],
   ['2.0', 'PRESENCE OF ADEQUATE ARRANGEMENTS FOR OTHER SOURCES SUCH AS MICROGENERATORS (551.6; 551.7)', false],
@@ -97,9 +111,9 @@ export const EICR_ITEMS = [
   ['6.7', 'Suitability of accessories and controlgear etc. for a particular zone (701.512.3)'],
   ['6.8', 'Suitability of current-using equipment for particular position within the location (701.55)'],
   ['7.0', 'OTHER PART 7 SPECIAL INSTALLATIONS OR LOCATIONS', true],
-  ['7.1', 'List all other special installations or locations present (record separately the results of particular inspections carried out)'],
+  ['7.1', 'List all other special installations or locations present (record separately the results of particular inspections carried out and attach to the report.)'],
   ['8.0', 'PROSUMER\u2019S LOW VOLTAGE ELECTRICAL INSTALLATION(S)', true],
-  ['8.1', 'List all inspection items relating to Chapter 82 (record separately the results of the particular inspections carried out)'],
+  ['8.1', 'List all inspection items relating to Chapter 82 (record separately the results of the particular inspections carried out and attach to the report.)'],
 ];
 export const EICR_OUTCOMES = ['✓', 'C1', 'C2', 'C3', 'FI', 'N/V', 'LIM', 'N/A'];
 export const CODE_TEXT = {
@@ -198,6 +212,7 @@ export const EIC_HELP = {
 };
 export const EICR_HELP = {
   '1.1': 'Service head, cut-out, earth, tails and meter: look for damage, scorching or broken seals. Look only, don\u2019t open.',
+  '1.1a': 'Incoming cable: look for damage or exposed conductors. Look only.', '1.1b': 'Cut-out / service head: cracks, scorching, missing or broken seals.', '1.1c': 'Supplier\u2019s earth terminal present and in good condition.', '1.1d': 'Tails between cut-out and meter: damage, sheath intact, secure.', '1.1e': 'Meter: secure, undamaged, no signs of heat.', '1.1f': 'Supplier isolator (if fitted): undamaged and secure.',
   '1.2': 'An isolator between the meter and consumer unit, if there is one: fixed, labelled, in good order.',
   '1.3': 'Tails sized for the supply, sheathed, supported, protected and not strained at the terminals.',
   '2.0': 'If there\u2019s PV, a battery or a generator: it can be isolated, and can\u2019t feed back into a dead mains.',

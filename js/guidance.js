@@ -5,6 +5,9 @@ const AFDD = 'Where the installation includes an arc fault detection device (AFD
 const SPD = 'Where the installation includes a surge protective device (SPD) the status indicator should be checked to confirm it is in operational condition in accordance with manufacturer\u2019s information. If the indication shows that the device is not operational, seek expert advice. For safety reasons it is important that this instruction is followed.';
 const ALT = 'Where the installation includes alternative or additional sources of supply, warning notices should be found at the origin or meter position or, if remote from the origin, at the consumer unit or distribution board and at all points of isolation of all sources of supply.';
 
+// v0.33: the Minor Works form prints this sentence in bold (**…** = bold on the PDF).
+const SAFE = 'For safety reasons it is important that this instruction is followed.';
+const bold = (p) => p.replace(SAFE, '**' + SAFE + '**');
 export const GUIDANCE = {
   EIC: { title: 'ELECTRICAL INSTALLATION CERTIFICATE', heading: 'GUIDANCE FOR RECIPIENTS (to be appended to the Certificate)', paras: [
     'This Certificate has been issued to confirm that the electrical installation work to which it relates has been designed, constructed, inspected and tested in accordance with BS 7671.',
@@ -20,7 +23,7 @@ export const GUIDANCE = {
     'The signature on this Certificate is that of the person authorized by the company executing the work of design, construction and inspection and testing.',
     'The Certificate should be retained in a safe place and be shown to any person inspecting or undertaking further work on the electrical installation in the future. If you later vacate the property, this Certificate will demonstrate to the new owner that the minor electrical installation work carried out complied with the requirements of BS 7671 at the time the Certificate was issued.',
     'For safety reasons, the electrical installation will need to be inspected at appropriate intervals by a skilled person or persons, competent in such work.',
-    RCD, AFDD, SPD, ALT] },
+    bold(RCD), AFDD, bold(SPD), ALT] },
   EICR: { title: 'CONDITION REPORT', heading: 'GUIDANCE FOR RECIPIENTS (to be appended to the Report)', paras: [
     'This Report is an important and valuable document which should be retained for future reference.',
     '1. The purpose of this Report is to confirm, so far as reasonably practicable, whether or not the electrical installation is in a satisfactory condition for continued service at the date of inspection and testing (see Section E). The Report should identify any damage, deterioration, defects, dangerous conditions and/or non-compliances with the requirements of BS 7671, which might give rise to danger (see Section K).',
