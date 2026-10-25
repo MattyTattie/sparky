@@ -226,6 +226,8 @@ function boardHeaderDetails(k, cert, b, certNo) {
   row(k, x, w, [['Distribution circuit OCPD: BS (EN):', b.ocpdBs, 0.45], ['Type:', b.ocpdType, 0.2], ['Rating/Setting:', b.ocpdRating, 0.35, { unit: 'A' }]]);
   checks(k, x, [['T1', b.spdT1], ['T2', b.spdT2], ['T3†', b.spdT3], ['N/A', b.spdNA]], { label: 'SPD Details: Type(s)*:' });
   row(k, x, w, [['RCD:  BS (EN)', b.rcdBs, 0.3], ['Type', b.rcdType, 0.15], ['Rating', b.rcdRating, 0.18, { unit: 'A' }], ['Rated residual operating current (IΔn):', b.rcdIdn, 0.37, { unit: 'mA' }]]);
+  // v0.32: optional per-board maximum demand (only printed when filled in).
+  if (String(b.maxDemand ?? '').trim()) row(k, x, w, [['Maximum demand (this board):', b.maxDemand, 0.4, { unit: 'A' }]]);
   k.rect(k.x0, y0, k.cw, k.y - y0 + 0.5, { lw: 0.35, color: INK });
   k.y += 2;
 }

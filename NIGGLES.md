@@ -1,5 +1,12 @@
 # Sparky — niggles and update lists
 
+## [BUILT v0.32.0 on branch `v0.32.0-a4-forms`, 25 Oct 2026 — NOT LIVE] screenshots in /workspace/sparky-shots/v0.32.0, publish only on his OK
+- [built] EICR observations on screen split into "C1 and C2" and "C3 and FI" like the A4 form (PDF was already split).
+- [built] Optional AFDD BS (EN) / type / rating on circuits (and in presets; old presets keep their key). Printed on Minor Works Section C, the only A4 form with AFDD boxes. MW circuit editor also gets SPD BS (EN) / type (the PDF printed them but there were no inputs).
+- [built] Optional board "Max demand (A)"; prints under the board details on the circuit details sheet only when filled.
+- [built] Bidirectional devices (Reg 530.3.201): board tick "Fed by battery / PV / generator" (or a circuit described as battery/inverter/PV/solar/generator) shows a reminder with an "Add note" button. The note goes into the comments (EIC comments, EICR general condition, MW Section A comments) only when tapped, never twice.
+- A4 gaps left: no AFDD columns or per-board max demand on the IET EIC/EICR circuit details sheet (we print max demand as an extra line); no AFDD details on EIC/EICR PDFs.
+
 ## [BUILT v0.16 on branch `v0.16`, 20 Oct 2026 — NOT LIVE] screenshots in /workspace/sparky-shots/v0.16, publish only on his OK
 - [built] Settings tidy: one Sync card (status, on/off, connected as, Disconnect; backup-all / restore from Drive under "More"), then one Files card (Save backup, Restore from file, Import extra details, Import results file → pick the certificate). (Matthew 20 Oct)
 - [built] Certificate page: Earlier results card gone (both imports are in Settings → Files). (Matthew 20 Oct)

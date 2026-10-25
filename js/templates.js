@@ -207,3 +207,13 @@ export function copyToNextWay(circuits, ci) {
   for (const [k, v] of Object.entries(c)) if (!COPY_SKIP.includes(k) && !RESULT_KEYS.includes(k)) n[k] = JSON.parse(JSON.stringify(v ?? null));
   return ci + 1;
 }
+
+// v0.32: bidirectional devices (BS 7671 A4: 530.3.201). A board or circuit fed by a
+// battery, PV or generator gets a reminder; the note is only added when tapped.
+export const BIDI_NOTE = 'Protective devices on circuits fed by a battery, PV or generator confirmed suitable for bidirectional operation (Regulation 530.3.201).';
+const SRC_RE = /\b(battery|batteries|inverter|pv|solar|generator|gen board|v2g)\b/i;
+export const circuitFedBySource = (c) => !!c && (c.fedBySource === true || SRC_RE.test(String(c.desc || '')));
+export const boardFedBySource = (b) => !!b && (b.fedBySource === true || (b.circuits || []).some(circuitFedBySource));
+export function bidiTarget(cert) { return cert.type === 'MW' ? 'mw.comments' : cert.type === 'EICR' ? 'eicr.general' : 'comments'; }
+export function hasBidiNote(text) { return /530\.3\.201|bidirectional/i.test(String(text || '')); }
+export function addBidiNote(text) { const t = String(text || '').trim(); return hasBidiNote(t) ? t : (t ? t + '\n' : '') + BIDI_NOTE; }

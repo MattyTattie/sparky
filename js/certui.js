@@ -344,7 +344,8 @@ function observationsSection(cert, redraw) {
   const counts = ['C1', 'C2', 'C3', 'FI'].map((c) => `${c}: ${obs.filter((o) => o.code === c).length}`).join('  ·  ');
   return h('div', {},
     h('div', { class: 'notice ' + (eicrOverall(cert) === 'SATISFACTORY' ? 'green' : 'red') }, `${counts}. Overall: ${eicrOverall(cert)}.`),
-    obs.length ? obs.map(card) : emptyState('clipboard', 'No observations. If there are none, the PDF says so.'),
+    // v0.32: split like the A4 form: C1 and C2 first, then C3 and FI.
+    obs.length ? [[['C1', 'C2'], 'C1 and C2 observations'], [['C3', 'FI'], 'C3 and FI observations']].map(([codes, t]) => { const l = obs.map((o, i) => [o, i]).filter(([o]) => codes.includes(o.code) || (codes[0] === 'C3' && !['C1', 'C2'].includes(o.code))); return l.length ? [h('div', { class: 'obsgrp-h' }, t), l.map(([o, i]) => card(o, i))] : null; }) : emptyState('clipboard', 'No observations. If there are none, the PDF says so.'),
     h('div', { class: 'btns full' }, h('button', { class: 'btn primary', onclick: () => pick() }, '+ Add from library'), h('button', { class: 'btn', onclick: () => add({ text: '', code: 'C3', reg: '' }) }, '+ Write my own')),
     h('details', { class: 'card' }, h('summary', {}, 'What the codes mean'), Object.entries(CODE_TEXT).map(([k, v]) => h('p', {}, h('b', {}, k + ': '), v))));
 }

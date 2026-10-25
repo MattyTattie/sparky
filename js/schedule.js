@@ -9,11 +9,11 @@ import { orderRows, mainSide, mainRow, settleSpdMcb } from './cuscan.js';
 import { route, page, go, render } from './app.js';
 import { openCert, changed, flush } from './state.js';
 import { field, stateLine } from './certui.js';
-import { sectionsFor } from './certmodel.js';
+import { sectionsFor, get, set } from './certmodel.js';
 const boardsLine = (cert) => { const sec = sectionsFor(cert.type).find((x) => x.special === 'boards'); if (!sec) return null; const [c, t] = stateLine(cert, sec); return h('div', { class: 'notice ' + c + ' secstate' }, t); };
 import { blankBoard } from './certmodel.js';
 import * as presets from './presets.js';
-import { FIELDS, FIELD, TEMPLATES, blankCircuit, applyTemplate, copyCircuit, copyBoard, makeSpare, autoNA, descChanged, rcdGroupChanged, spdGroupChanged, SPD_HIDE, spdHidden, spdObservation, spareLine, copyToNextWay, laterSequential, deleteCircuitAt } from './templates.js';
+import { FIELDS, FIELD, TEMPLATES, blankCircuit, applyTemplate, copyCircuit, copyBoard, makeSpare, autoNA, descChanged, rcdGroupChanged, spdGroupChanged, SPD_HIDE, spdHidden, spdObservation, circuitFedBySource, boardFedBySource, bidiTarget, hasBidiNote, addBidiNote, spareLine, copyToNextWay, laterSequential, deleteCircuitAt } from './templates.js';
 import { checkCircuit, limitZs, isSpare } from './checks.js';
 import { DEVICES, deviceById, deviceFromBs, ratingsFor, CHECK_NOTE } from './limits.js';
 import { voiceSupported, listen } from './voice.js';
@@ -103,12 +103,27 @@ function boardDetails(cert, b) {
       F('ref', 'DB reference'), F('location', 'Location'),
       F('suppliedFrom', 'Supplied from'),
       h('div', { class: 'grid3' }, F('ocpdBs', 'Supplying device BS (EN)'), F('ocpdType', 'Type'), F('ocpdRating', 'Rating (A)', 'num')),
-      h('div', { class: 'grid2' }, F('zdb', 'Zdb (Ω)', 'num'), F('ipf', 'Ipf (kA)', 'num')),
+      h('div', { class: 'grid3' }, F('zdb', 'Zdb (Ω)', 'num'), F('ipf', 'Ipf (kA)', 'num'), F('maxDemand', 'Max demand (A)', 'num')),
       h('a', { class: 'btn small', href: `#/calc/fault/${cert.id}/${cert.boards.indexOf(b)}` }, 'Work out Ipf for a sub-board'),
+      h('div', { class: 'note', style: 'margin-top:12px' }, 'Other sources'), bidiTick(cert, b),
       spdGrid(cert, b),
       h('div', { class: 'note' }, 'Main RCD of the board (if any)'), rcdGrid(b)));
 }
 
+// v0.32: "Fed by battery / PV / generator" on the board, and the bidirectional reminder.
+function bidiTick(cert, b) {
+  const box = h('div'); const draw = () => fill(box, bidiBox(cert, () => boardFedBySource(b)));
+  const t = h('label', { class: 'check' }, h('input', { type: 'checkbox', checked: !!b.fedBySource, onchange: (e) => { b.fedBySource = e.target.checked; changed(); draw(); } }), 'Fed by battery / PV / generator');
+  draw(); return h('div', {}, t, box);
+}
+function bidiBox(cert, fed) {
+  if (!fed()) return null;
+  const k = bidiTarget(cert); const done = hasBidiNote(get(cert, k));
+  const box = h('div', { class: 'notice amber bidi' },
+    h('div', {}, h('b', {}, 'Bidirectional devices: '), 'this is fed by a battery, PV or generator. Confirm the protective devices are suitable for bidirectional operation (Reg 530.3.201) and note it in the comments.'),
+    done ? h('div', { class: 'note', style: 'margin-top:6px' }, '\u2713 Note is in the comments.') : h('button', { class: 'btn small', style: 'margin-top:8px', onclick: () => { set(cert, k, addBidiNote(get(cert, k))); changed(); toast('Note added to the comments'); fill(box, h('div', {}, h('b', {}, 'Bidirectional devices: '), 'note added to the comments.')); } }, 'Add note'));
+  return box;
+}
 // v0.31.2: SPD boxes: N/A fills/ticks the blank others; a real value clears them.
 function spdGrid(cert, b) {
   const els = {};
@@ -413,6 +428,12 @@ function circuitEditor({ cert, c, ctx, back, title, prev, next, extra = [], mw =
       h('div', { class: 'rcdgrp' }, h('div', { class: 'phd' }, h('span', {}, 'RCD (if any)')),
         h('div', { class: 'grid2' }, inp('rcdBs'), inp('rcdType'), inp('rcdIdn'), inp('rcdRating')),
         h('label', { class: 'check' }, h('input', { type: 'checkbox', checked: !!c.rcdS, onchange: (e) => { c.rcdS = e.target.checked; changed(); refresh(); } }), 'Time-delayed (S-type) RCD')),
+      // v0.32: optional AFDD details (printed on the Minor Works form, which has the boxes).
+      h('div', { class: 'rcdgrp' }, h('div', { class: 'phd' }, h('span', {}, 'AFDD (if any)')),
+        h('div', { class: 'grid3' }, inp('afddBs', { label: 'AFDD BS (EN)' }), inp('afddType', { label: 'AFDD type' }), inp('afddRating', { label: 'AFDD rating (A)' }))),
+      mw ? h('div', { class: 'rcdgrp' }, h('div', { class: 'phd' }, h('span', {}, 'SPD (if any)')),
+        h('div', { class: 'grid2' }, inp('spdBs', { label: 'SPD BS (EN)' }), inp('spdType', { label: 'SPD type' }))) : null,
+      bidiBox(cert, () => circuitFedBySource(c)),
       h('div', { class: 'phd cablehd' }, h('span', {}, 'Cable and wiring')),
       cableBox),
     sect('Test results',

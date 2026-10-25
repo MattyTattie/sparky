@@ -43,9 +43,9 @@ test('Not operational adds one C2 observation; untick removes it unless edited',
 test('PDF status N/A tick follows type N/A (old spdStatusNA still prints)', () => {
   assert.match(readFileSync(new URL('../js/pdf.js', import.meta.url), 'utf8'), /\['N\/A', !!\(b\.spdNA \|\| b\.spdStatusNA\)\]\], \{ label: 'SPD:' \}/);
 });
-test('version 0.31.4 and tick boxes do not shrink', () => {
-  assert.match(readFileSync(new URL('../js/config.js', import.meta.url), 'utf8'), /APP_VERSION = '0\.31\.4/);
-  assert.match(readFileSync(new URL('../sw.js', import.meta.url), 'utf8'), /sparky-v0\.31\.4/);
+test('version 0.32.0 and tick boxes do not shrink', () => {
+  assert.match(readFileSync(new URL('../js/config.js', import.meta.url), 'utf8'), /APP_VERSION = '0\.32\.0/);
+  assert.match(readFileSync(new URL('../sw.js', import.meta.url), 'utf8'), /sparky-v0\.32\.0/);
   assert.match(readFileSync(new URL('../styles.css', import.meta.url), 'utf8'), /\.check input \{ flex-shrink: 0; \}/);
 });
 test('v0.31.4: no auto observation on certs without an observations section', () => {

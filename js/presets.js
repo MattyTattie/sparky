@@ -16,7 +16,9 @@ export const BASE_KEYS = ['device', 'bs', 'type', 'rating', 'bka', 'rcdBs', 'rcd
 // v0.25: MCCB/MPCB settings (Im, and Ig/tg on LSIG MCCBs) added at the end. Additive only:
 // a preset without them has the same key as before, so old and new presets still merge.
 export const EXTRA_KEYS = ['im', 'ig', 'tg'];
-export const PRESET_KEYS = [...BASE_KEYS, ...EXTRA_KEYS];
+// v0.32: optional AFDD boxes (BS EN, type, rating). Additive like EXTRA_KEYS: old presets keep their key.
+export const AFDD_KEYS = ['afddBs', 'afddType', 'afddRating'];
+export const PRESET_KEYS = [...BASE_KEYS, ...EXTRA_KEYS, ...AFDD_KEYS];
 export const RCD_KEYS = ['rcdBs', 'rcdType', 'rcdIdn', 'rcdRating', 'rcdS'];
 // v0.25: MCCBs/MPCBs have no RCD of their own: their presets never keep RCD boxes
 // (before v0.25 a board's RCD details could leak into an MCCB preset).
@@ -43,14 +45,15 @@ export function presetFrom(c) {
 export const keyOf = (f0) => { const f = clean(f0 || {});
   const base = BASE_KEYS.map((k) => (k === 'rcdS' ? (f[k] ? 'S' : '') : String(f[k] ?? '').toUpperCase())).join('|');
   const extra = EXTRA_KEYS.map((k) => String(f[k] ?? '').trim());
-  return extra.some(Boolean) ? base + '|' + extra.join('|') : base; };
+  const afdd = AFDD_KEYS.map((k) => String(f[k] ?? '').trim().toUpperCase());
+  return (extra.some(Boolean) ? base + '|' + extra.join('|') : base) + (afdd.some(Boolean) ? '|AFDD|' + afdd.join('|') : ''); };
 // e.g. "B32 RCBO · 30 mA Type A · 6 kA"
 export function nameFor(f) {
   const d = deviceById(f.device); const kind = d ? d.label.split(' (')[0] : f.bs ? 'BS EN ' + f.bs : 'Device';
   const rcd = real(f.rcdIdn) ? `${f.rcdIdn} mA${real(f.rcdType) ? ' Type ' + f.rcdType : ''}${f.rcdS ? ' S' : ''}` : '';
   const tp = /^[BCD123]$/.test(String(f.type || '')) ? f.type : ''; // v0.20: no 'adj32 MCCB' / 'plug13'
   const adj = d && d.adj ? [real(f.im) ? `Im ${f.im} A` : '', real(f.ig) ? `Ig ${f.ig} A${real(f.tg) ? ', tg ' + f.tg + ' s' : ''}` : ''].filter(Boolean).join(', ') : '';
-  return [tp ? `${tp}${f.rating} ${kind}` : `${f.rating} A ${kind}`, d && d.adj ? '' : rcd, adj, real(f.bka) ? f.bka + ' kA' : ''].filter(Boolean).join(' · ');
+  return [tp ? `${tp}${f.rating} ${kind}` : `${f.rating} A ${kind}`, d && d.adj ? '' : rcd, adj, real(f.bka) ? f.bka + ' kA' : '', real(f.afddBs) || real(f.afddRating) ? 'AFDD' + (real(f.afddRating) ? ' ' + f.afddRating + ' A' : '') : ''].filter(Boolean).join(' · ');
 }
 // Fill a circuit's device boxes from a preset. Returns the keys changed.
 export function applyPreset(c, p) {
@@ -58,7 +61,7 @@ export function applyPreset(c, p) {
   const f = clean(p.fields || {}); const adj = isAdj(f);
   for (const k of PRESET_KEYS) {
     if (adj && RCD_KEYS.includes(k)) continue; // v0.25: an MCCB preset leaves the RCD boxes alone
-    if (EXTRA_KEYS.includes(k) && !(k in f)) continue; // older presets: don't blank Im/Ig/tg
+    if ((EXTRA_KEYS.includes(k) || AFDD_KEYS.includes(k)) && !(k in f)) continue; // older presets: don't blank Im/Ig/tg/AFDD
     const v = k === 'rcdS' ? !!f[k] : f[k] ?? ''; if ((c[k] ?? (k === 'rcdS' ? false : '')) !== v) { c[k] = v; out.push(k); } }
   return out;
 }
