@@ -141,6 +141,25 @@ export function rcdGroupChanged(o, k, keys = RCD_GROUP) {
   else if (v) { for (const x of keys) if (x !== k && isNA(o[x])) { o[x] = ''; out.push(x); } }
   return out;
 }
+// v0.31.2: board SPD boxes, same idea as the main RCD. "N/A" (the SPD type N/A or
+// SPD status N/A tick, or N/A typed in the SPD protective device) ticks the other
+// N/A tick and fills a BLANK device box; a real value (T1/T2/T3, status confirmed,
+// or a real device) clears the N/As. User-ticked T1-T3 / status / typed device are never touched.
+export const SPD_GROUP = ['spdDevice', 'spdT1', 'spdT2', 'spdT3', 'spdNA', 'spdOk', 'spdStatusNA'];
+const SPD_NA = ['spdNA', 'spdStatusNA'];
+export function spdGroupChanged(o, k) {
+  const v = o[k]; const out = [];
+  const naNow = SPD_NA.includes(k) ? v === true : k === 'spdDevice' && isNA(v);
+  const realNow = SPD_NA.includes(k) ? false : k === 'spdDevice' ? !!String(v ?? '').trim() && !isNA(v) : v === true;
+  if (naNow) {
+    for (const x of SPD_NA) if (x !== k && !o[x]) { o[x] = true; out.push(x); }
+    if (k !== 'spdDevice' && !String(o.spdDevice ?? '').trim()) { o.spdDevice = 'N/A'; out.push('spdDevice'); }
+  } else if (realNow) {
+    for (const x of SPD_NA) if (o[x]) { o[x] = false; out.push(x); }
+    if (k !== 'spdDevice' && isNA(o.spdDevice)) { o.spdDevice = ''; out.push('spdDevice'); }
+  }
+  return out;
+}
 // v0.31: spare way line on the circuit card: the full device if one is picked, else just "Spare way".
 export function spareLine(c, deviceLabel = '') {
   if (c.noDevice) return 'Spare way \u00b7 no device fitted';

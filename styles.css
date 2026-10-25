@@ -857,3 +857,8 @@ a.newphone-link { display: block; text-decoration: none; }
 .reflist { margin: 6px 0 0; padding-left: 20px; line-height: 1.5; }
 .reflist li { margin-bottom: 6px; overflow-wrap: break-word; }
 .refmore summary { font-weight: 700; cursor: pointer; min-height: 44px; display: flex; align-items: center; }
+/* v0.31.2: tick boxes never squash when the label wraps (long labels shrank them, so short-label ones looked bigger). */
+.check input { flex-shrink: 0; }
+/* v0.31.2: boxes in a row line up: labels sit at the top, inputs pinned to the bottom of the row. */
+.grid2 > label.f, .grid3 > label.f { display: flex; flex-direction: column; }
+.grid2 > label.f > span:first-child, .grid3 > label.f > span:first-child { flex: 1 0 auto; }

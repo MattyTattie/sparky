@@ -156,3 +156,9 @@
 - Choice when several exist: a "Zs Pro" folder beats "Sparky jobs"; then the one with most items; then the oldest. Contents of the others are moved in (ids kept) and the empty folder goes to Drive's bin (restorable 30 days).
 - Old version on another device: if it already synced it has the folder id cached and carries on fine in the renamed folder. If it's a fresh install/cleared data it can't find "Sparky jobs" and makes a new one; the new version moves that in and bins it on its next start (one extra Drive check per app start). Update both phone and Mac to 0.31.1 to avoid the back-and-forth.
 - Merging two folders can leave two settings.json files; the first found is used (as v0.26).
+
+## v0.31.2 notes (SPD N/A + board details tidy, Matthew 25 Oct)
+- SPD boxes cascade like the main RCD: ticking "SPD status N/A" or SPD type "N/A", or typing N/A in "SPD protective device", ticks the other N/A and fills the device box only if blank. Ticking T1/T2/T3 or "status confirmed", or typing a real device, clears the N/As. T1-T3/status ticks and a typed device are never changed. Unticking an N/A does nothing to the others.
+- Tick boxes were squashed (flex-shrink) when their label wrapped on narrow screens, so short-label ones like "SPD status N/A" looked bigger. Now all stay 24x24. PDF ticks were already one size.
+- Boxes in a 2/3-column row line up (labels at the top, inputs at the bottom), e.g. Supplying device / Type / Rating when "Supplying device BS (EN)" wraps.
+- DB reference and Location are each on their own full-width row.
