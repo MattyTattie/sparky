@@ -9,7 +9,7 @@ import { h, fill, toast, modal, confirmBox, fmtDate, pickFile, shrinkImage, blob
 import { S, flush, getProfile, getInstruments, calibrationWarnings, INSTRUMENT_KINDS, INSTRUMENT_TAGS, instrumentText, touchJob, saveSetting } from './state.js';
 import { looksLikeCalDate, CAL_DATE_WARN } from './instruments.js';
 import { labelInputs } from './a11y.js';
-import { APP_NAME, APP_VERSION, APP_SLUG, DRIVE_ROOT } from './config.js';
+import { APP_NAME, APP_VERSION, APP_SLUG, DRIVE_ROOT, DRIVE_ROOT_OLD } from './config.js';
 import { TYPES, copyCertForJob } from './certmodel.js';
 import { JOB_COLS, jobRows, sortRows } from './jobtable.js';
 import { calibrationState } from './checks.js';
@@ -466,7 +466,7 @@ route(/^\/settings$/, async () => {
         h('button', { class: 'btn primary', id: 'restore-new', onclick: restoreFromDrive }, 'Restore from Google Drive'))) : null;
     fill(syncBox,
       newPhone,
-      h('p', { class: 'note' }, 'Your jobs, photos and PDFs are kept in your Google Drive (\u201c' + DRIVE_ROOT + '\u201d) and kept the same on all your devices. Changes go up within about 20 seconds; another device picks them up when you open it. If a job is changed on two devices before they catch up, the newest is kept and the other is saved as a \u201cconflict copy\u201d. The app can only see files it made itself.'),
+      h('p', { class: 'note' }, 'Your jobs, photos and PDFs are kept in your Google Drive, in the \u201c' + DRIVE_ROOT + '\u201d folder (it used to be called \u201c' + DRIVE_ROOT_OLD + '\u201d; the app renames it for you), and kept the same on all your devices. Changes go up within about 20 seconds; another device picks them up when you open it. If a job is changed on two devices before they catch up, the newest is kept and the other is saved as a \u201cconflict copy\u201d. The app can only see files it made itself.'),
       toggle,
       h('div', { class: 'syncline' }, c.enabled ? h('span', { class: 'syncchip ' + col }, h('i', {}), h('span', {}, t)) : h('span', { class: 'syncchip' }, h('i', {}), h('span', {}, 'Sync off')),
         h('span', { class: 'note' }, signed && who ? 'Connected as ' + who : signed ? 'Connected' : 'Not connected')),

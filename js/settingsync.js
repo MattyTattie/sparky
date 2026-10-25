@@ -1,7 +1,7 @@
 // =====================================================================
 // settingsync.js — v0.26: your details (with logo), saved signature and
 // test instruments follow you to every device through Drive sync.
-// One small "settings.json" in the "Sparky jobs" folder:
+// One small "settings.json" in the "Zs Pro" folder:
 //   { app:'sparky', kind:'settings', format:1, savedAt, device, values:{profile, mysig, instruments}, stamps:{key: iso} }
 // Each key is "last save wins" by its stamp (set when you save it).
 // An empty device never wins: a blank Mac can't wipe the phone's logo.

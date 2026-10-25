@@ -1,6 +1,6 @@
 // =====================================================================
 // sync.js — v0.9: keep jobs the same on all your devices, through
-// your own Google Drive (the same "Sparky jobs" folders the backup uses).
+// your own Google Drive (the same "Zs Pro" folders the backup uses).
 //  - Sign in once on each device (Settings → Google Drive).
 //  - A change is sent up about 20 s after you stop typing.
 //  - Opening the app, coming back to it, or signal coming back fetches

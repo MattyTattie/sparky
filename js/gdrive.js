@@ -382,6 +382,20 @@ export async function writeBlob(id, blob, mimeType = 'image/jpeg', { timeoutMs =
   }
   return sendResumable(session, blob, { timeoutMs, tries: timeoutMs ? 2 : 4 });
 }
+// v0.31.1: rename a file/folder this app made (drive.file allows it).
+export function rename(id, name) {
+  return call(`${API}/files/${id}?fields=${q(FIELDS)}&supportsAllDrives=true`, {
+    method: 'PATCH', headers: { 'Content-Type': 'application/json' }, timeoutMs: META_TIMEOUT,
+    body: JSON.stringify({ name }),
+  });
+}
+// v0.31.1: move a file into another folder (same id, nothing re-uploaded).
+export function move(id, toParent, fromParent) {
+  return call(`${API}/files/${id}?addParents=${q(toParent)}&removeParents=${q(fromParent)}&fields=${q('id,parents')}&supportsAllDrives=true`, {
+    method: 'PATCH', headers: { 'Content-Type': 'application/json' }, timeoutMs: META_TIMEOUT,
+    body: '{}',
+  });
+}
 // v13.8: move a file this app made to Drive's bin (never a permanent
 // delete; it can be restored from the bin for 30 days).
 export function trash(id) {

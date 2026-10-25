@@ -5,7 +5,8 @@
 import { serialPerKey } from './filerules.js';
 import * as db from './db.js';
 import * as G from './gdrive.js';
-import { DRIVE_ROOT, APP_SLUG } from './config.js';
+import { DRIVE_ROOT, DRIVE_ROOT_OLD, APP_SLUG } from './config.js';
+import { findRoot, sweepStrays } from './driveroot.js';
 import { deviceLabel } from './syncmerge.js';
 import * as presets from './presets.js';
 import { skipDeleted, DELETED } from './pdflist.js';
@@ -35,12 +36,16 @@ export async function importAll(json) {
 }
 
 // ---------- One Drive folder per job ----------
-// Sparky jobs / <job folder> / job.json + photos + certificate PDFs
+// Zs Pro (was "Sparky jobs") / <job folder> / job.json + photos + certificate PDFs
+// v0.31.1: the folder is now "Zs Pro". The cached id keeps working after a
+// rename (ids never change). Once per app start we also tidy up a stray
+// "Sparky jobs" folder an older version on another device may have made.
+let swept = false;
 export async function rootFolder() {
   let id = await db.getMeta('drive.root');
-  if (id) { try { const m = await G.getMeta(id); if (!m.trashed) return id; } catch (e) { if (!(e instanceof G.NotFoundError)) throw e; } }
-  const found = await G.list(`name = '${DRIVE_ROOT}' and mimeType = 'application/vnd.google-apps.folder' and trashed = false`);
-  id = found.length ? found[0].id : (await G.createFolder(DRIVE_ROOT)).id;
+  if (id) { try { const m = await G.getMeta(id); if (!m.trashed) { if (m.name !== DRIVE_ROOT) { try { await G.rename(id, DRIVE_ROOT); } catch {} } if (!swept) { swept = true; try { await sweepStrays(G, id, { name: DRIVE_ROOT, legacy: DRIVE_ROOT_OLD }); } catch {} } return id; } } catch (e) { if (!(e instanceof G.NotFoundError)) throw e; } }
+  id = await findRoot(G, { name: DRIVE_ROOT, legacy: DRIVE_ROOT_OLD });
+  swept = true;
   await db.setMeta('drive.root', id); return id;
 }
 export const jobFolderName = (job, customer) => [job.createdAt ? job.createdAt.slice(0, 10) : '', customer && customer.name, (job.siteAddress || '').split(/[,\n]/)[0], job.title].filter(Boolean).join(' – ').replace(/[\\/]/g, '-').slice(0, 120);

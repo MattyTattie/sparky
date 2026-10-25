@@ -9,7 +9,7 @@ import { presetFrom, keyOf, mergePresets, applyPreset, PRESET_KEYS } from '../js
 import { adjRemark } from '../js/pdf.js';
 import { APP_NAME, DRIVE_ROOT } from '../js/config.js';
 
-test('name changes, Drive folder does not', () => { assert.equal(APP_NAME, 'Zs Pro'); assert.equal(DRIVE_ROOT, 'Sparky jobs'); });
+test('name and Drive folder (v0.31.1)', () => { assert.equal(APP_NAME, 'Zs Pro'); assert.equal(DRIVE_ROOT, 'Zs Pro'); });
 
 test('load spread evenly halves the volt drop on a radial', () => {
   const a = voltDrop({ size: '2.5', ib: 20, length: 30 });

@@ -150,3 +150,9 @@
 - [NEXT UPDATE] Parts list PDF (Matthew 25 Oct): PDF button currently goes straight to share/download; give it the same View / Share choice as the DC plan PDF (pdfview.js viewPdf).
 
 - [NEXT UPDATE] (Matthew 25 Oct) Version shown in Settings. "Copy to next way" for a circuit (breaker, cable, etc; not test results). Mark several ways spare at once. Cert PDFs get View / Share choice. Mac: Tab/Enter move quickly through test boxes.
+
+## v0.31.1 notes (Drive folder renamed to "Zs Pro", Matthew 25 Oct)
+- The app renames its own "Sparky jobs" folder to "Zs Pro" (same folder id, so jobs/photos/settings stay put). Don't rename it by hand.
+- Choice when several exist: a "Zs Pro" folder beats "Sparky jobs"; then the one with most items; then the oldest. Contents of the others are moved in (ids kept) and the empty folder goes to Drive's bin (restorable 30 days).
+- Old version on another device: if it already synced it has the folder id cached and carries on fine in the renamed folder. If it's a fresh install/cleared data it can't find "Sparky jobs" and makes a new one; the new version moves that in and bins it on its next start (one extra Drive check per app start). Update both phone and Mac to 0.31.1 to avoid the back-and-forth.
+- Merging two folders can leave two settings.json files; the first found is used (as v0.26).
