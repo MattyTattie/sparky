@@ -17,7 +17,9 @@ export const GUIDANCE = {
     'This Certificate is intended to be issued only for a new electrical installation or for new work associated with an addition or alteration to an existing installation. It can not be used for the inspection and testing of an existing electrical installation. An \u2018Electrical Installation Condition Report\u2019 is to be issued for such an inspection.',
     'This Certificate is only valid if the Schedule of Inspection has been completed to confirm that all relevant inspections have been carried out, and where accompanied by Schedule(s) of Circuit Details and Schedule(s) of Test Results.',
     RCD, AFDD, SPD, ALT] },
-  MW: { title: 'MINOR ELECTRICAL INSTALLATION WORKS CERTIFICATE', heading: 'GUIDANCE FOR RECIPIENTS (to be appended to the Certificate)', paras: [
+  MW: { title: 'MINOR ELECTRICAL INSTALLATION WORKS CERTIFICATE', notes: { heading: 'Notes for the person producing the Certificate:', paras: [
+    'The Minor Electrical Installation Works Certificate is intended to be used for additions and alterations to an installation that do not extend to the provision of a new circuit. Examples include the addition of socket-outlets or lighting points to an existing circuit, the relocation of a light switch etc.',
+    'This Certificate may also be used for the replacement of equipment such as accessories or luminaires, but not for the replacement of consumer units, distribution boards or similar items. Appropriate inspection and testing, however, should always be carried out irrespective of the extent of the work undertaken.'] }, heading: 'GUIDANCE FOR RECIPIENTS (to be appended to the Certificate)', paras: [
     'This Certificate has been issued to confirm that the electrical installation work to which it relates has been designed, constructed, inspected and tested in accordance with BS 7671.',
     'You should have received an \u2018original\u2019 Certificate and the person that issued the Certificate should have retained a duplicate. If you were the person ordering the work, but not the owner of the installation, you should pass this Certificate, or a copy of it, to the owner. A separate Certificate should have been received for each existing circuit on which minor works have been carried out. This Certificate is not appropriate if you requested the person that issued the Certificate to undertake more extensive installation work, for which you should have received an Electrical Installation Certificate.',
     'The signature on this Certificate is that of the person authorized by the company executing the work of design, construction and inspection and testing.',
@@ -25,7 +27,7 @@ export const GUIDANCE = {
     'For safety reasons, the electrical installation will need to be inspected at appropriate intervals by a skilled person or persons, competent in such work.',
     bold(RCD), AFDD, bold(SPD), ALT] },
   EICR: { title: 'CONDITION REPORT', heading: 'GUIDANCE FOR RECIPIENTS (to be appended to the Report)', paras: [
-    'This Report is an important and valuable document which should be retained for future reference.',
+    '**This Report is an important and valuable document which should be retained for future reference.**',
     '1. The purpose of this Report is to confirm, so far as reasonably practicable, whether or not the electrical installation is in a satisfactory condition for continued service at the date of inspection and testing (see Section E). The Report should identify any damage, deterioration, defects, dangerous conditions and/or non-compliances with the requirements of BS 7671, which might give rise to danger (see Section K).',
     '2. This Report is only valid if accompanied by the Schedule(s) of Inspections and the Schedule(s) of Circuit Details and Schedule(s) of Test Results.',
     '3. The person ordering the Report should have received the \u2018original\u2019 Report and the inspector should have retained a duplicate.',

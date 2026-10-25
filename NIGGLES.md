@@ -6,6 +6,7 @@
 - EIC Section C liability + "For CONSTRUCTION / INSPECTION AND TESTING" lines; Section J now fits on page 2 (EIC is 5 pages).
 - Section G: kVA / A (delete as appropriate), RA/ZA, lightning protection system, optional RCD main switch kA, protective device settings note; Section F AC/DC ticks.
 - EICR wording: 1.0 caveat, 7.1/8.1 "and attach to the report", Section D bullets, continuation hints; MW bold safety sentences, MW "Other (Specify)" bonding always shown; "Adding to an existing installation"; Remarks continuation hint.
+- Page-by-page check vs IET refs: added RA/ZA "(delete as appropriate)", bold EICR Section G declaration, schedule "persons responsible" note, full 5.4/5.12/5.17 wording with bullets, MW "Notes for the person producing the Certificate", bold EICR guidance lead line.
 - Not done (optional item 9 extras).
 
 ## [BUILT v0.32.0 on branch `v0.32.0-a4-forms`, 25 Oct 2026 — NOT LIVE] screenshots in /workspace/sparky-shots/v0.32.0, publish only on his OK

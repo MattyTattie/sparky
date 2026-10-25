@@ -30,3 +30,11 @@ test('v330: PDF labels and A4 wording present', () => {
   assert.ok(src('js/certmodel.js').includes('lightning protection system'));
   assert.ok(src('js/guidance.js').includes('bold('));
 });
+test('v330: page-check fixes (full item wording, MW notes, bold EICR lead line)', async () => {
+  const t = (k) => EICR_ITEMS.find((r) => r[0] === k)?.[1] || '';
+  assert.match(t('5.12'), /\n• Final circuits supplying luminaires/); assert.match(t('5.17'), /\n• Adequately connected at point of entry/); assert.match(t('5.4'), /\n• To include/);
+  const { GUIDANCE } = await import('../js/guidance.js');
+  assert.match(GUIDANCE.MW.notes.heading, /Notes for the person producing/);
+  assert.ok(GUIDANCE.EICR.paras[0].startsWith('**'));
+  assert.ok(src('js/pdf.js').includes('RA/ZA (delete as appropriate)'));
+});

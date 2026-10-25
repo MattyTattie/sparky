@@ -140,7 +140,7 @@ function particularsSection(k, cert, letter) {
     k.t('Details of Installation Earth Electrode (where applicable)', x + c, y + 4.6, { size: 7, bold: true });
     k.field('Type (rod(s), tape etc)', el ? p.elType : NA, x + c, y + 9.2, w - c - 2);
     k.field('Location', el ? p.elLocation : NA, x + c, y + 13.8, w - c - 2);
-    k.field('Electrode resistance/impedance, RA/ZA', el ? p.elRa : NA, x + c, y + 18.4, w - c - 2, { unit: 'Ω' });
+    k.field('Electrode resistance/impedance, RA/ZA (delete as appropriate)', el ? p.elRa : NA, x + c, y + 18.4, w - c - 2, { unit: 'Ω' });
     k.y = y + 21;
     k.t('Main Protective Conductors', x, k.y + 3.2, { size: 7, bold: true }); k.y += 3.6;
     row(k, x, w, [['Earthing conductor   Material', p.ecMat, 0.45], ['csa', p.ecCsa, 0.25, { unit: 'mm²' }]]);
@@ -486,6 +486,7 @@ function guidancePage(k, kind) {
   const g = GUIDANCE[kind];
   k.addPage('p');
   k.t(g.title, k.x0, k.y + 5, { size: 12, bold: true }); k.y += 9;
+  if (g.notes) { k.t(g.notes.heading, k.x0, k.y + 3, { size: 9, bold: true }); k.y += 5; for (const p of g.notes.paras) k.y += k.para(p, k.x0, k.y + 2, k.cw, { size: 8.4, gap: 1.6 }); k.y += 3; } // v0.33: MW notes, as on the A4 form
   k.t(g.heading, k.x0, k.y + 3, { size: 9, bold: true }); k.y += 6;
   for (const p of g.paras) { k.y += (p.includes('**') ? richPara(k, p, k.x0, k.y + 2, k.cw, 8.4) + 1.6 : k.para(p, k.x0, k.y + 2, k.cw, { size: 8.4, gap: 1.6 })); if (k.y > k.H - 20) { k.addPage('p'); } }
 }
@@ -629,7 +630,7 @@ function eicr(k, cert, profile) {
     textBlock(k, x, w, 'for the following reasons', R.nextReasons);
   });
   k.section('SECTION G: DECLARATION', (k, x, w) => {
-    k.y += k.para('I/We, being the person(s) responsible for the inspection and testing of the electrical installation (as indicated by my/our signatures below), particulars of which are described above, having exercised reasonable skill and care when carrying out the inspection and testing, hereby declare that the information in this report, including the observations and the attached schedules, provides an accurate assessment of the condition of the electrical installation taking into account the stated extent and limitations in section D of this report.', x, k.y + 2.5, w, { size: 6.8 });
+    k.y += k.para('I/We, being the person(s) responsible for the inspection and testing of the electrical installation (as indicated by my/our signatures below), particulars of which are described above, having exercised reasonable skill and care when carrying out the inspection and testing, hereby declare that the information in this report, including the observations and the attached schedules, provides an accurate assessment of the condition of the electrical installation taking into account the stated extent and limitations in section D of this report.', x, k.y + 2.5, w, { size: 6.8, bold: true });
     const hw = w / 2 - 2; const y0 = k.y; const A = R.authoriser || {};
     const col = (cx, title, p, s) => {
       k.y = y0; k.t(title, cx, k.y + 3.4, { size: 7.5, bold: true }); k.y += 4;
@@ -697,6 +698,8 @@ function inspectionSchedule(k, cert, no) {
   k.addPage('p');
   formTitle(k, 'CONDITION REPORT SCHEDULE OF INSPECTION', no, 'FOR RESIDENTIAL AND SIMILAR PREMISES WITH UP TO 100 A SUPPLY');
   k.y += k.para('NOTE: This form is suitable for many types of smaller installation, not exclusively residential. Outcomes: tick = Acceptable condition · C1 or C2 Unacceptable condition · C3 Improvement recommended · FI Further investigation · N/V Not verified · LIM Limitation · N/A Not applicable. C1, C2, C3 and FI coded items to be recorded in Section K of the Condition Report.', k.x0, k.y + 1, k.cw, { size: 6.6 });
+  k.y += k.para('The persons responsible for the periodic inspection and testing of the installation should include the relevant items in relation to the electrical installation, the Schedule of Inspection can be reduced or expanded depending on the requirements for the installation.', k.x0, k.y + 1, k.cw, { size: 6.6 }); // v0.33
+
   const head = () => { const y = k.y; k.rect(k.x0, y, k.cw, 5.5, { lw: 0.35, color: INK, fill: [238, 238, 238] }); k.t('Item No.', k.x0 + 1.5, y + 3.8, { size: 7, bold: true }); k.t('Description', k.x0 + 16, y + 3.8, { size: 7, bold: true }); k.t('Outcome', k.x1 - 9, y + 3.8, { size: 7, bold: true, align: 'center' }); k.y += 5.5; };
   head();
   // v0.33: old single 1.1 outcome → the six sub-rows (on a copy; the saved cert isn't touched here)
