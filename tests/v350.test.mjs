@@ -55,10 +55,10 @@ test('inverter only: rating is not daily use; idle + kWh a day count', () => {
 });
 test('runtime at inverter load levels (worked example)', () => {
   const p = D.planDC({ ...D.PLAN_DEFAULTS, volts: '48', chem: 'lifepo4', dod: '90', battAh: '2400', loads: [], invW: '5000' });
-  assert.equal(p.inverter.usableWh, 103680);                 // 2400 × 48 × 0.9
+  assert.equal(p.inverter.usableWh, 110592);                 // 2400 × 51.2 V nominal × 0.9 (matches the kWh shown)
   const [f, t, h, q] = p.inverter.runtime;
-  assert.equal(f.draw, 5596); assert.equal(f.hours, 18.5);    // 5000 ÷ 0.9 + 40 idle
-  assert.equal(h.hours, Math.round(103680 / (2500 / 0.9 + 40) * 10) / 10);
+  assert.equal(f.draw, 5596); assert.equal(f.hours, 19.8);    // 5000 ÷ 0.9 + 40 idle
+  assert.equal(h.hours, Math.round(110592 / (2500 / 0.9 + 40) * 10) / 10);
   assert.deepEqual([f.pct, t.pct, h.pct, q.pct], [100, 75, 50, 25]);
 });
 
@@ -68,4 +68,13 @@ test('v0.35 QA: MPPT "would clip" note only when a smaller size exists', async (
   assert.equal(w(12).mppt, 60); assert.match(w(12).why, /A 45 A one would work/);
   assert.equal(w(24).mppt, 30); assert.doesNotMatch(w(24).why, /would work/);
   assert.equal(w(48).mppt, 15); assert.doesNotMatch(w(48).why, /would work/);
+});
+
+test('v0.35 QA: MCB presets never show an RCD; RCBO ones do; Size-for-me kWh is the suggested size', async () => {
+  const P = await import('../js/presets.js'); const D = await import('../js/dcplan.js');
+  assert.equal(P.ownRcd({ device: 'mcb', bs: '60898', rcdIdn: '300' }), false);
+  assert.equal(P.ownRcd({ device: 'rcbo', bs: '61009', rcdIdn: '30' }), true);
+  assert.equal(P.nameFor({ device: 'mcb', bs: '60898', type: 'B', rating: '50', bka: '6', rcdIdn: '300', rcdType: 'A-S', rcdS: true }), 'B50 MCB · 6 kA');
+  const b = D.planDC({ ...D.VAN_EXAMPLE }).battery;
+  if (b.suggestAh) assert.equal(b.suggestKwh, Math.round(b.suggestAh * b.nomV / 10) / 100);
 });

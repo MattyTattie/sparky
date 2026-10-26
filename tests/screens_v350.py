@@ -12,11 +12,12 @@ async def plan(pg, vals, step):
     await pg.evaluate(f"(async()=>{{const D=await import('./js/dcplan.js'); localStorage.setItem('sparky.dcplan1', JSON.stringify({{...D.VAN_EXAMPLE, ...{json.dumps(vals)}}})); localStorage.setItem('sparky.dcstep','{step}');}})()")
     await pg.goto(BASE + '#/calc/dc/plan/' + step); await pg.reload(); await pg.wait_for_timeout(1000)
     await pg.evaluate("document.querySelectorAll('.syncchip').forEach(e=>e.remove()); document.querySelectorAll('details').forEach(d=>d.open=true)")
+    if pg.viewport_size['width'] < 900: await pg.add_style_tag(content='.bottomnav{display:none!important}')
 async def shot(pg, name, sel=None):
     if sel:
         l = pg.locator(sel).first
         if await l.count(): await l.scroll_into_view_if_needed(); await pg.wait_for_timeout(200); await l.screenshot(path=f'{OUT}/{name}.png'); return
-    await pg.screenshot(path=f'{OUT}/{name}.png', full_page=True)
+    await pg.evaluate('scrollTo(0,0)'); await pg.screenshot(path=f'{OUT}/{name}.png')  # v0.35 QA: viewport, not a 10,000 px strip
 async def main():
     os.makedirs(OUT, exist_ok=True); errs = []
     async with async_playwright() as p:
@@ -33,9 +34,9 @@ async def main():
             await shot(pg, f'{tag}-11-diagram-results-full')
             bad = {'panels': '4', 'pvLayout': 'series'}
             await plan(pg, bad, 'results'); await shot(pg, f'{tag}-11-diagram-over-limit-red', '.wiring svg')
-            await plan(pg, {'volts': '48', 'battAh': '2400', 'loads': []}, 'results'); await shot(pg, f'{tag}-13-no-loads-results')
+            await plan(pg, {'volts': '48', 'battAh': '2400', 'loads': []}, 'results'); await shot(pg, f'{tag}-13-no-loads-results', '.card')
             inv = {'volts': '48', 'battAh': '2400', 'dod': '90', 'loads': [], 'invW': '5000', '_have': {'invW': True}, 'solarW': ''}
-            await plan(pg, inv, 'results'); await shot(pg, f'{tag}-14-inverter-only-results')
+            await plan(pg, inv, 'results'); await shot(pg, f'{tag}-14-inverter-only-results', '.card')
             await shot(pg, f'{tag}-15-runtime-table', '.card:has-text("Battery runtime at inverter load")')
             await plan(pg, inv, 'inverter'); await shot(pg, f'{tag}-14-inverter-step-kwh-idle')
             for r in ['#/calc/dc/plan/results', '#/calc/dc/pv']:

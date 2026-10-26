@@ -182,7 +182,7 @@ export function planDC(o0 = {}) {
   const fitted = num(o.battAh) || (num(o.battKwh) ? ahOfKwh(o.battKwh, chem, V) : 0);
   const battery = { chem, label: C.label, dod, days, needAh, suggestAh: up(BATTERY_AH, needAh), fittedAh: fitted || null,
     noLoads: !(daily.ah > 0) || (!dcWh && invNoUse), invNoUse, fittedDays: fitted && daily.ah ? r1((fitted * dod) / daily.ah) : null, ok: fitted ? fitted >= needAh - 0.05 : null };
-  battery.nomV = nominalV(chem, V); battery.kwh = kwhOf(fitted || battery.suggestAh || needAh, chem, V); battery.needKwh = kwhOf(needAh, chem, V);
+  battery.nomV = nominalV(chem, V); battery.kwh = kwhOf(fitted || battery.suggestAh || needAh, chem, V); battery.needKwh = kwhOf(needAh, chem, V); battery.suggestKwh = battery.suggestAh ? kwhOf(battery.suggestAh, chem, V) : null;
   battery.why = `${daily.wh} Wh a day ÷ ${V} V = ${daily.ah} Ah a day. × ${days} day${days === 1 ? '' : 's'} with no charging ÷ ${Math.round(dod * 100)}% usable = ${needAh} Ah at ${V} V (${battery.needKwh} kWh at ${battery.nomV} V nominal).` +
     (invNoUse && !dcWh ? ' Add what the inverter runs (or kWh a day) to see how long the battery lasts.' : !(daily.ah > 0) ? ' No loads entered yet. Add loads to see how long it lasts.' : fitted ? ` Your ${fitted} Ah (${kwhOf(fitted, chem, V)} kWh) gives about ${battery.fittedDays} day${battery.fittedDays === 1 ? '' : 's'}${battery.ok ? '.' : ' — a bit short of what you asked for.'}` : ` Nearest common size: ${battery.suggestAh ? battery.suggestAh + ' Ah (' + kwhOf(battery.suggestAh, chem, V) + ' kWh)' : 'over ' + BATTERY_AH[BATTERY_AH.length - 1] + ' Ah'}.`);
 
@@ -310,7 +310,7 @@ export function planDC(o0 = {}) {
   plan.cables = cableList(plan); plan.parts = partsList(plan, o);
   // v0.35: runtime at inverter load levels: usable Wh (Ah × V × DoD) ÷ (load W ÷ 0.9 + idle W).
   if (inverter) {
-    const ah = fitted || battery.suggestAh || needAh; const usable = ah * V * dod;
+    const ah = fitted || battery.suggestAh || needAh; const usable = ah * (battery.nomV || V) * dod; // nominal volts, so it matches the kWh shown
     inverter.usableWh = Math.round(usable);
     inverter.runtime = [1, 0.75, 0.5, 0.25].map((f) => { const draw = (invW * f) / INV_EFF + idleW; return { pct: f * 100, w: Math.round(invW * f), draw: Math.round(draw), hours: draw > 0 && usable > 0 ? r1(usable / draw) : 0 }; });
   }

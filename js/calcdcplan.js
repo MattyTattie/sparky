@@ -14,6 +14,8 @@ import { setLastCalc, formKit, icard, more, fold, banner, resline, pchip } from 
 import { icon } from './icons.js';
 
 const KEY = 'sparky.dcplan1';
+// v0.35: '2 in parallel', not '1 in series', when the panels are paralleled (matches the diagram).
+const pvLayoutText = (pv) => (pv.strings === 1 ? (pv.series > 1 ? `${pv.series} in series` : '1 panel') : pv.series === 1 ? `${pv.strings} in parallel` : `${pv.series} series × ${pv.strings} parallel`);
 export const dcSubTabs = () => null; // v0.6 tabs, replaced by the Calculators home in v0.7
 export const loadPlanInputs = () => { try { return { ...PLAN_DEFAULTS, ...(JSON.parse(localStorage.getItem(KEY) || 'null') || {}) }; } catch { return { ...PLAN_DEFAULTS }; } };
 export const storePlanInputs = (v) => localStorage.setItem(KEY, JSON.stringify(v));
@@ -108,10 +110,10 @@ route(/^\/calc\/dc\/plan(?:\/(\w+))?$/, async (stepArg) => {
       h('div', { class: 'tot' }, `That\u2019s ${p.daily.wh} Wh a day = ${p.daily.ah} Ah at ${p.V} V`),
       // v0.21: battery sized after the loads (it needs them), so it moved here from System.
       icard('Battery', [v.battUnit === 'kwh' && (v._have || {}).battAh
-        ? h('div', { class: 'f fld2' }, h('div', { class: 'chips seg2' }, h('button', { class: 'chip', type: 'button', onclick: () => { (v._have ||= {}).battAh = false; v.battKwh = ''; v.battAh = ''; save(); } }, `Size for me${p.battery.suggestAh ? ` (${p.battery.suggestAh} Ah · ${p.battery.kwh} kWh)` : ''}`), h('button', { class: 'chip on', type: 'button' }, 'I already have one')),
+        ? h('div', { class: 'f fld2' }, h('div', { class: 'chips seg2' }, h('button', { class: 'chip', type: 'button', onclick: () => { (v._have ||= {}).battAh = false; v.battKwh = ''; v.battAh = ''; save(); } }, `Size for me${p.battery.suggestAh ? ` (${p.battery.suggestAh} Ah · ${p.battery.suggestKwh} kWh)` : ''}`), h('button', { class: 'chip on', type: 'button' }, 'I already have one')),
           F.num('battKwh', 'Your battery', { unit: 'kWh', hint: `= ${p.battery.fittedAh || '?'} Ah at ${p.battery.nomV} V nominal. You need about ${p.battery.needKwh} kWh (${p.battery.needAh} Ah).` }))
-        : have('battAh', { auto: `Size for me${p.battery.suggestAh ? ` (${p.battery.suggestAh} Ah · ${p.battery.kwh} kWh)` : ''}`, mine: 'Your battery', unit: 'Ah', hint: `You need about ${p.battery.needAh} Ah (${p.battery.needKwh} kWh) for what you\u2019ve put in.${p.battery.fittedAh ? ` Yours is ${p.battery.kwh} kWh at ${p.battery.nomV} V nominal.` : ''}`, dflt: String(p.battery.suggestAh || '') }),
-        (v._have || {}).battAh || String(v.battAh || '').trim() || String(v.battKwh || '').trim() ? F.seg('battUnit', 'Battery size in', [['ah', 'Ah'], ['kwh', 'kWh']], 'kWh = Ah × nominal volts ÷ 1000 (12.8 V per 12 V for LiFePO4).', 'small') : null])],
+        : have('battAh', { auto: `Size for me${p.battery.suggestAh ? ` (${p.battery.suggestAh} Ah · ${p.battery.suggestKwh} kWh)` : ''}`, mine: 'Your battery', unit: 'Ah', hint: `You need about ${p.battery.needAh} Ah (${p.battery.needKwh} kWh) for what you\u2019ve put in.${p.battery.fittedAh ? ` Yours is ${p.battery.kwh} kWh at ${p.battery.nomV} V nominal.` : ''}`, dflt: String(p.battery.suggestAh || '') }),
+        (v._have || {}).battAh || String(v.battAh || '').trim() || String(v.battKwh || '').trim() ? (v.battUnit ||= 'ah', F.seg('battUnit', 'Battery size in', [['ah', 'Ah'], ['kwh', 'kWh']], 'kWh = Ah × nominal volts ÷ 1000 (12.8 V per 12 V for LiFePO4).', 'small')) : null])],
 
     charging: (p) => {
       const sOn = !!String(v.solarW || '').trim(), dOn = !!String(v.dcdcA || '').trim(), mOn = !!String(v.shoreA || '').trim();
@@ -149,7 +151,7 @@ route(/^\/calc\/dc\/plan(?:\/(\w+))?$/, async (stepArg) => {
       return [
         icard('Inverter (230 V from the battery)', [
           h('p', { class: 'help', style: 'margin-top:0' }, `An inverter turns the battery\u2019s ${p.V} V into 230 V for mains things like a laptop charger or a low-watt kettle.`),
-          acW ? h('div', { class: 'tot inl' }, `Your 230 V things add up to ${acW} W`) : h('p', { class: 'help' }, 'You\u2019ve no 230 V things in step 2, so you don\u2019t need one. Set a size below if you want one anyway.'),
+          acW ? h('div', { class: 'tot inl' }, `Your 230 V things add up to ${acW} W`) : (v._have || {}).invW || String(v.invW || '').trim() ? h('p', { class: 'help' }, 'No 230 V things listed in step 2: add them there, or put the kWh a day below.') : h('p', { class: 'help' }, 'You\u2019ve no 230 V things in step 2, so you don\u2019t need one. Set a size below if you want one anyway.'),
           have('invW', { auto: acW ? `Size for me (${p.inverter && p.inverter.suggest ? p.inverter.suggest : '?'} W)` : 'No inverter', mine: 'Your inverter', unit: 'W', hint: 'Continuous rating (not the peak). Pure sine wave.', dflt: String((p.inverter && p.inverter.suggest) || 1000) }),
           p.inverter ? h('div', { class: 'grid2' },
             F.num('acKwh', '230 V use a day (if not listed as loads)', { unit: 'kWh', hint: `Taken from the battery ÷ ${INV_EFF * 100}% inverter efficiency. Leave blank if you added the 230 V loads in step 2.` }),
@@ -197,7 +199,7 @@ function results(v, p) {
   const need = [
     ['Battery', `${p.V} V ${p.battery.fittedAh || p.battery.suggestAh || p.battery.needAh} Ah · ${p.battery.kwh} kWh ${p.battery.label.replace(' (lithium)', '')}`, p.battery.invNoUse && !p.daily.dcWh ? 'Add what the inverter runs (or kWh a day) to see how long the battery lasts' : p.battery.noLoads ? 'No loads entered yet. Add loads to see how long it lasts' : p.battery.fittedAh ? `Needs ${p.battery.needAh} Ah (${p.battery.needKwh} kWh): yours lasts about ${p.battery.fittedDays} days` : `Needs ${p.battery.needAh} Ah (${p.battery.needKwh} kWh) for ${p.battery.days} day${p.battery.days === 1 ? '' : 's'}`, p.battery.ok !== false],
     p.inverter ? ['Inverter', `${p.inverter.w} W pure sine`, `Up to ${p.inverter.current} A from the battery`, !p.inverter.small] : null,
-    p.solar ? ['Solar controller (MPPT)', `${p.solar.mpptV} V / ${p.solar.mppt} A`, `${p.solar.w} W of panels${p.solar.pv && p.solar.pv.cold ? `, ${p.solar.pv.series} in series` : ''}`, !(p.solar.pv && p.solar.pv.vocOk === false) && !(p.solar.mpptHave && p.solar.mpptHave < p.solar.needA)] : null,
+    p.solar ? ['Solar controller (MPPT)', `${p.solar.mpptV} V / ${p.solar.mppt} A`, `${p.solar.w} W of panels${p.solar.pv && p.solar.pv.cold ? ', ' + pvLayoutText(p.solar.pv) : ''}`, !(p.solar.pv && p.solar.pv.vocOk === false) && !(p.solar.mpptHave && p.solar.mpptHave < p.solar.needA)] : null,
     p.solar ? ['Solar cable', p.solar.pvDrop ? `${p.solar.pvDrop.size} mm² PV cable` : '4 mm² PV cable', p.solar.pvDrop ? `Panels to controller: ${p.solar.pvDrop.current} A, drop ${p.solar.pvDrop.volts} V (${p.solar.pvDrop.pct}%, target ≤ 3%) at ${p.solar.pvDrop.vstring} V` : 'Add the panel Voc, Vmp and Isc (step 3) to work out the volt drop', true] : null,
     p.dcdc ? ['DC-DC charger', `${p.dcdc.a} A`, `About ${p.dcdc.inI} A from the alternator (${Math.round(p.dcdc.altShare * 100)}% of ${p.dcdc.altRated} A${p.dcdc.altAssumed ? ' assumed' : ''})${p.dcdc.smart ? '. Smart alternator: needs the trigger wire' : ''}`, !p.dcdc.tooBig] : null,
     p.shore ? ['Mains charger', `${p.shore.a} A`, '', true] : null,
@@ -225,16 +227,16 @@ function results(v, p) {
       h('p', { class: 'help', style: 'margin-top:0' }, 'Every link between the kit: cable, length, fuse and where it goes. Red = positive, black = negative.'),
       h('ol', { class: 'conns' }, conns.map(conn))),
     p.inverter && p.inverter.runtime ? h('div', { class: 'card' }, h('h3', {}, 'Battery runtime at inverter load'),
-      h('table', { class: 'tbl runtime' }, h('thead', {}, h('tr', {}, h('th', {}, 'Inverter load'), h('th', {}, 'From battery'), h('th', {}, 'Lasts about'))),
-        h('tbody', {}, p.inverter.runtime.map((r) => h('tr', {}, h('td', {}, `${r.pct}% (${r.w} W)`), h('td', {}, `${r.draw} W`), h('td', {}, `${r.hours} h`))))),
-      h('p', { class: 'help' }, `Usable ${Math.round(p.inverter.usableWh / 100) / 10} kWh (${p.battery.fittedAh || p.battery.suggestAh || p.battery.needAh} Ah × ${p.V} V × ${Math.round(p.battery.dod * 100)}%) ÷ (load ÷ ${INV_EFF * 100}% + ${p.daily.idleW} W idle). Steady load, full battery; real runtimes vary.`)) : null,
+      h('div', { class: 'reftblwrap' }, h('table', { class: 'reftbl runtime' }, h('thead', {}, h('tr', {}, h('th', {}, 'Inverter load'), h('th', {}, 'From battery'), h('th', {}, 'Lasts about'))),
+        h('tbody', {}, p.inverter.runtime.map((r) => h('tr', {}, h('td', {}, `${r.pct}% (${r.w} W)`), h('td', {}, `${r.draw} W`), h('td', {}, `${r.hours} h`)))))),
+      h('p', { class: 'help' }, `Usable ${Math.round(p.inverter.usableWh / 100) / 10} kWh (${p.battery.fittedAh || p.battery.suggestAh || p.battery.needAh} Ah × ${p.battery.nomV || p.V} V × ${Math.round(p.battery.dod * 100)}%) ÷ (load ÷ ${INV_EFF * 100}% + ${p.daily.idleW} W idle). Steady load, full battery; real runtimes vary.`)) : null,
     h('div', { class: 'card' }, fold('dc-diagram', 'Wiring diagram', [h('div', { class: 'wiring' + (localStorage.getItem('sparky.wzoom') === '1' ? ' zoom' : ''), html: svg }), h('div', { class: 'btns' }, h('button', { class: 'btn small noic', type: 'button', onclick: (e) => { const w = e.target.closest('.foldin').querySelector('.wiring'); const z = w.classList.toggle('zoom'); localStorage.setItem('sparky.wzoom', z ? '1' : '0'); e.target.textContent = z ? 'Fit to screen' : 'Make it bigger'; } }, localStorage.getItem('sparky.wzoom') === '1' ? 'Fit to screen' : 'Make it bigger')), h('p', { class: 'help' }, 'A layout guide, not to scale. Fuses sit at the busbar end of each positive unless it says otherwise.')], { open: true })),
     h('div', { class: 'card foldcard' }, fold('dc-runs', 'Cables & fuses', [
       h('table', { class: 'calctab runs' }, h('tr', {}, ['Run', 'A', 'Fuse', 'mm²', 'Drop'].map((t) => h('th', {}, t))),
         p.runs.map((r) => h('tr', {}, h('td', {}, r.name), h('td', {}, r.peak > r.current ? `${r.current} (${r.peak})` : r.current), h('td', {}, r.fuse ? r.fuse.A : '?'), h('td', { class: r.size ? '' : 'bad' }, r.size ?? '✗'), h('td', { class: r.vd && r.vd.pct <= r.pct ? '' : 'bad' }, r.vd ? r.vd.pct + '%' : '–')))),
       h('p', { class: 'note' }, 'A (peak) · fuse ≥ 1.25 × peak · cable rated ≥ the fuse · drop at the working current, + and − cables together.')], { badge: h('span', { class: 'fbadge' }, String(p.runs.length)) })),
     h('div', { class: 'card' }, h('h2', {}, 'Charger settings'),
-      h('p', { class: 'help', style: 'margin-top:0' }, `For ${p.profile.name} at ${p.V} V. Set the ${[p.solar ? 'solar controller (MPPT)' : '', p.dcdc ? 'DC-DC charger' : '', p.shore ? 'mains charger' : ''].filter(Boolean).join(', ') || 'chargers'} to match.`),
+      h('p', { class: 'help', style: 'margin-top:0' }, `For ${p.profile.name} at ${p.V} V. Set the ${[p.solar ? 'solar controller (MPPT)' : '', p.dcdc ? 'DC-DC charger' : '', p.shore ? 'mains charger' : ''].filter(Boolean).join(', ').replace(/, ([^,]*)$/, ' and $1') || 'chargers'} to match.`),
       h('div', { class: 'needlist' }, [['Absorption (boost)', p.profile.absorb, p.profile.absorbTime], ['Float', p.profile.float, ''], ['Equalise', p.profile.equalise || 'Off', p.profile.equalise ? 'Now and then only' : ''], ['Temperature compensation', p.profile.tempComp ? `${p.profile.tempComp} mV/°C` : 'Off', '']].map(([k, val, sub]) => h('div', { class: 'need' }, h('div', { class: 'nk' }, k), h('div', { class: 'nv' }, val), sub ? h('div', { class: 'ns' }, sub) : null))),
       h('ul', { class: 'note' }, p.profile.extra.map((t) => h('li', {}, t)), h('li', {}, '⚠ Typical figures: the battery maker\u2019s data sheet wins.'))),
     h('div', { class: 'card foldcard' }, fold('dc-parts', 'Parts list', [groups, h('div', { class: 'btns' }, h('button', { class: 'btn small', type: 'button', onclick: () => sharePartsPdf(p) }, 'Parts list PDF'))], { badge: h('span', { class: 'fbadge' }, String(p.parts.reduce((a, g) => a + g.items.length, 0))) })),

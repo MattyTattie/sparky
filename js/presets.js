@@ -47,6 +47,8 @@ export const keyOf = (f0) => { const f = clean(f0 || {});
   const extra = EXTRA_KEYS.map((k) => String(f[k] ?? '').trim());
   const afdd = AFDD_KEYS.map((k) => String(f[k] ?? '').trim().toUpperCase());
   return (extra.some(Boolean) ? base + '|' + extra.join('|') : base) + (afdd.some(Boolean) ? '|AFDD|' + afdd.join('|') : ''); };
+// v0.35: does this preset's device have an RCD of its own (RCBO etc.)?
+export const ownRcd = (f = {}) => { const d = deviceById(f.device) || deviceFromBs(f.bs); return !!(d && d.rcd); };
 // e.g. "B32 RCBO · 30 mA Type A · 6 kA"
 export function nameFor(f) {
   const d = deviceById(f.device); const kind = d ? d.label.split(' (')[0] : f.bs ? 'BS EN ' + f.bs : 'Device';
