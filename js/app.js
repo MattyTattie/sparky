@@ -579,7 +579,7 @@ route(/^\/settings\/presets$/, async () => {
     for (const ms of [0, 400]) setTimeout(() => box.querySelectorAll('textarea.pname').forEach((t) => { t.style.height = 'auto'; t.style.height = t.scrollHeight + 'px'; }), ms);
   };
   draw();
-  page('Device presets', [h('p', { class: 'note' }, 'Most recently used first. Tapping one on a circuit fills only the protective device boxes (BS EN, type, rating, kA, RCD, and the MCCB settings); cable sizes and readings are never touched. Saved on this device and in your backup; synced with your jobs.'), box], { back: '#/settings' });
+  page('Device presets', [h('p', { class: 'note' }, 'Most recently used first. Tapping one on a circuit fills only the protective device boxes (BS EN, type, rating, kA, the RCD boxes for RCBOs only, and the MCCB settings); cable sizes and readings are never touched. Saved on this device and in your backup; synced with your jobs.'), box], { back: '#/settings' });
 });
 
 // Auto-backup when leaving a job or certificate (only if switched on and signed in).

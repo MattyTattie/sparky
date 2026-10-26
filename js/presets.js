@@ -64,9 +64,9 @@ export function nameFor(f) {
 // Fill a circuit's device boxes from a preset. Returns the keys changed.
 export function applyPreset(c, p) {
   const out = [];
-  const f = clean(p.fields || {}); const adj = isAdj(f);
+  const f = clean(p.fields || {}); const adj = isAdj(f); const keepRcd = adj || !ownRcd(f);
   for (const k of PRESET_KEYS) {
-    if (adj && RCD_KEYS.includes(k)) continue; // v0.25: an MCCB preset leaves the RCD boxes alone
+    if (keepRcd && RCD_KEYS.includes(k)) continue; // v0.25 MCCB / v0.35 MCB, fuse etc.: only a device with its own RCD (RCBO) fills the RCD boxes
     if ((EXTRA_KEYS.includes(k) || AFDD_KEYS.includes(k)) && !(k in f)) continue; // older presets: don't blank Im/Ig/tg/AFDD
     const v = k === 'rcdS' ? !!f[k] : f[k] ?? ''; if ((c[k] ?? (k === 'rcdS' ? false : '')) !== v) { c[k] = v; out.push(k); } }
   return out;

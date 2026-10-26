@@ -78,3 +78,14 @@ test('v0.35 QA: MCB presets never show an RCD; RCBO ones do; Size-for-me kWh is 
   const b = D.planDC({ ...D.VAN_EXAMPLE }).battery;
   if (b.suggestAh) assert.equal(b.suggestKwh, Math.round(b.suggestAh * b.nomV / 10) / 100);
 });
+
+test('v0.35: MCB preset leaves RCD boxes alone, RCBO preset fills them', async () => {
+  const P = await import('../js/presets.js');
+  const c = { rcdBs: '61008', rcdType: 'A', rcdIdn: '30', rcdRating: '63', rcdS: false };
+  const ch = P.applyPreset(c, { fields: { device: 'mcb', bs: '60898', type: 'B', rating: '32', bka: '6', rcdBs: '', rcdType: '', rcdIdn: '', rcdRating: '', rcdS: false } });
+  assert.equal(c.rcdIdn, '30'); assert.equal(c.rcdBs, '61008'); assert.equal(c.rating, '32');
+  assert.ok(!ch.some((k) => k.startsWith('rcd')));
+  const d = {};
+  P.applyPreset(d, { fields: { device: 'rcbo', bs: '61009', type: 'B', rating: '32', bka: '6', rcdBs: '61009', rcdType: 'A', rcdIdn: '30', rcdRating: '32', rcdS: false } });
+  assert.equal(d.rcdIdn, '30'); assert.equal(d.rcdType, 'A'); assert.equal(d.rcdBs, '61009');
+});
