@@ -45,10 +45,10 @@ test('sizer: 20 A at 32 m on T&E: 2.5 fails volt drop, so 4 mm²', () => {
   assert.equal(r.inA, 20); assert.equal(r.pick.size, 4);
   assert.match(r.steps.join(' '), /2\.5 mm² fails on volt drop at 32 m .*so 4 mm²/); // v0.19: wording now says "mm²" (item 6)
 });
-test('sizer: 9.5 kW shower → 50 A, 10 mm² (6 mm² fails on current)', () => {
+test('sizer: 9.5 kW shower → 45 A (v0.35), 6 mm²', () => {
   const r = sizeCircuit({ load: 9.5, unit: 'kW', length: 12, cable: 'te', method: 'C', loadType: 'heating' });
-  assert.equal(r.ib, 41.3); assert.equal(r.inA, 50); assert.equal(r.pick.size, 10);
-  assert.match(r.steps.join(' '), /6 mm² CCC after factors: [\d.]+ A, too small/); // v0.19: "mm²" wording
+  assert.equal(r.ib, 41.3); assert.equal(r.inA, 45); assert.equal(r.pick.size, 6);
+  assert.match(r.steps.join(' '), /4 mm² CCC after factors: [\d.]+ A, too small/); // v0.19: "mm²" wording
 });
 test('sizer: motor suggests Type C', () => {
   const r = sizeCircuit({ load: 2.2, unit: 'kW', pf: 0.8, length: 15, loadType: 'motor' });

@@ -449,11 +449,11 @@ function trimCanvas(cv) {
   return out.toDataURL('image/png');
 }
 
-// v0.34: on a new installation, the description of the work belongs on page 1 (Section B).
+// v0.34: on a new installation, the description of the work belongs in Section B.
 // If it's been typed in Section I, one tap moves it to the description of installation.
 function moveToDescription(cert, draw) {
   if (!isNewInstall(cert) || !String(cert.comments || '').trim()) return null;
   return h('div', { class: 'notice amber' },
-    h('div', {}, 'This is a new installation, so Section I (comments on the existing installation) would normally be N/A. If this describes the work, it belongs in the description on page 1.'),
-    h('button', { class: 'btn small', style: 'margin-top:8px', onclick: () => { const d = String(get(cert, 'install.description') || '').trim(); set(cert, 'install.description', (d ? d + '\n' : '') + String(cert.comments).trim()); cert.comments = ''; changed(); toast('Moved to the description on page 1'); draw(); } }, 'Move to the description on page 1'));
+    h('div', {}, 'This is a new installation, so Section I (comments on the existing installation) would normally be N/A. If this describes the work, it belongs in Section B, Description and extent of the installation.'),
+    h('button', { class: 'btn small', style: 'margin-top:8px', onclick: () => { const d = String(get(cert, 'install.description') || '').trim(); set(cert, 'install.description', (d ? d + '\n' : '') + String(cert.comments).trim()); cert.comments = ''; changed(); toast('Moved to Section B, Description and extent of the installation'); draw(); } }, 'Move to Section B, Description and extent'));
 }

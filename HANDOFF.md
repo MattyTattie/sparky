@@ -237,3 +237,16 @@ Open points
 - Board: "Copy to another job" (circuits + readings by default; scan photos not copied). Also on the landscape/desktop schedule view.
 - Desktop: Esc closes the top overlay (photos, forms, dialogs) via backnav.js.
 - Tests: tests/v340.test.mjs. Screens: tests/screens_v340.py → /workspace/sparky-shots/v0.34.0.
+
+## v0.35.0 beta (branch v0.35.0-dc-solar, NOT live)
+- Section I hint/button/toast point to "Section B, Description and extent of the installation".
+- Preset labels: breaker only ("B50 MCB · 6 kA"); RCD text only on RCBOs; no doubled S.
+- 45 A MCB/RCBO B/C/D (Zs 0.97/0.49/0.24 @0.4 s, 0.49 D @5 s, from 230×0.95÷Ia) everywhere via MAX_ZS.
+- button.switch single knob CSS; DC-DC wording "charges your second (leisure) battery from the alternator while you drive".
+- DC-DC alternator share warning (>50%, note 25–50%, 120 A assumed); smart alternator (Euro 6) trigger wire in plan/parts/diagram.
+- Charger settings follow battery type (chargeProfile). Solar cable volt drop; series/parallel/custom layout; cold Voc warning.
+- Parts list PDF (View/Share). Planner wiring diagram extended: layout, string fuses, PV isolator, cold Voc pill, mm²·A labels, red over-limit, inverter DC isolator + AC out, wrapped text (no '…').
+- Battery kWh beside Ah everywhere (nominal 12.8 V/12 V LiFePO4, 12 V lead/AGM); kWh entry (battUnit/battKwh).
+- No loads: no null days; inverter-only prompts for use. acKwh (÷0.9), inverter idle (invIdle, default 0.8% of rating min 8 W, invHours default 24; van example 4 h).
+- Runtime table at 100/75/50/25% inverter load (Results + PDF).
+- Tests: tests/v350.test.mjs; shots: tests/screens_v350.py → /workspace/sparky-shots/v0.35.0.

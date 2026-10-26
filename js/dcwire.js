@@ -40,6 +40,11 @@ export function connections(p, o = {}) {
       note: `About ${p.dcdc.inI} A from the starter battery. Allowed 5% drop (the charger brings the voltage back up).` });
     add({ id: 'dcdcOut', from: 'DC-DC charger', to: '+ busbar', ...fromRun(p.dcdc.outRun), colour: 'red + black',
       fuse: p.dcdc.outRun.fuse ? { text: fuseLong(p.dcdc.outRun.fuse), where: 'at the busbar end of the positive' } : null, note: `${p.dcdc.a} A charger.` });
+    // v0.35: smart alternator (Euro 6): ignition / D+ trigger wire to the charger.
+    if (p.dcdc.trigger) { const t = p.dcdc.trigger;
+      add({ id: 'trigger', from: 'Ignition-switched live (or alternator D+)', to: 'DC-DC trigger input', size: t.size, length: t.length, colour: 'one thin wire (signal only)', vd: null,
+        fuse: t.fuse ? { text: fuseLong(t.fuse), where: 'at the ignition feed (add-a-fuse tap or in-line holder)' } : null,
+        note: 'Tells the charger the engine is running. Turn on its smart-alternator mode. Carries well under 1 A.' }); }
   }
   if (p.shore) add({ id: 'shore', from: 'Mains charger', to: '+ busbar', ...fromRun(p.shore.run), colour: 'red + black',
     fuse: p.shore.run.fuse ? { text: fuseLong(p.shore.run.fuse), where: 'at the busbar end of the positive' } : null,
@@ -71,16 +76,19 @@ export function wiringModel(p, o = {}) {
   const Y = { r0: 8, r1: 92, r2: 166, bus: 248, r3: 314 };
   const H = { r0: 40, r1: 30, r2: 38, bus: 22, r3: 44 };
   const boxes = [], wires = [], pills = [], texts = [];
-  const box = (col, row, t, s = [], kind = 'kit') => { const b = { x: X[col], y: Y[row], w: CW, h: H[row], t: fit(t, CW - 8, 8.5), s: s.filter(Boolean).map((x) => fit(x, CW - 8, 7)), kind }; boxes.push(b); return b; };
+  // v0.35: box text wraps (never cut short with '…'); the box grows if it needs to.
+  const box = (col, row, t, s = [], kind = 'kit') => { const sub = s.filter(Boolean).flatMap((x) => wrapEst(x, CW - 8, 7)); const b = { x: X[col], y: Y[row], w: CW, h: Math.max(H[row], 14 + sub.length * 9 + 4), t, s: sub, kind }; boxes.push(b); return b; };
   const wire = (pts, c = 'pos') => wires.push({ pts, c });
   // cable (and fuse) labels stacked in the middle of a vertical wire
-  const tags = (x, y1, y2, cable, fuse) => { const list = [cable && { t: cable, kind: 'cable' }, fuse && { t: fuse, kind: 'fuse' }].filter(Boolean); const hh = 13, gap = 2; let y = (y1 + y2) / 2 - (list.length * hh + (list.length - 1) * gap) / 2;
-    for (const it of list) { const w = Math.min(CW + 12, estW(it.t, 7.5) + 10); pills.push({ cx: x, y, w, h: hh, t: it.t, kind: it.kind }); y += hh + gap; } };
+  // v0.35: extra tags ({ t, kind, bad }) for isolators / cold Voc; bad = over a limit (drawn red).
+  const tags = (x, y1, y2, cable, fuse, extra = []) => { const list = [cable && (typeof cable === 'object' ? { kind: 'cable', ...cable } : { t: cable, kind: 'cable' }), fuse && { t: fuse, kind: 'fuse' }, ...extra].filter(Boolean); const hh = 13, gap = 2; let y = (y1 + y2) / 2 - (list.length * hh + (list.length - 1) * gap) / 2;
+    for (const it of list) { const w = Math.min(CW + 12, estW(it.t, 7.5) + 10); pills.push({ cx: x, y, w, h: hh, t: it.t, kind: it.kind, bad: !!it.bad }); y += hh + gap; } };
   const mm = (r) => r && r.size ? `${r.size} mm²` : 'size ?';
-  const down = (col, rowA, rowB, c, cable, fuse) => { const x = MID[col], y1 = Y[rowA] + H[rowA], y2 = Y[rowB]; wire([[x, y1], [x, y2]], c); tags(x, y1, y2, cable, fuse); };
+  const down = (col, rowA, rowB, c, cable, fuse, extra) => { const x = MID[col], y1 = Y[rowA] + H[rowA], y2 = Y[rowB]; wire([[x, y1], [x, y2]], c); tags(x, y1, y2, cable, fuse, extra); };
+  const amps = (r) => r && r.size ? `${r.size} mm² · ${Math.round(r.current * 10) / 10} A` : 'size ?';
   const b = p.battery;
   // centre: battery → main fuse → isolator → busbar
-  box(1, 'r0', 'Battery', [`${p.V} V ${b.fittedAh || b.suggestAh || b.needAh} Ah`, b.label.replace(' (lithium)', '').replace(' (flooded)', '')]);
+  box(1, 'r0', 'Battery', [`${p.V} V ${b.fittedAh || b.suggestAh || b.needAh} Ah · ${b.kwh} kWh`, b.label.replace(' (lithium)', '').replace(' (flooded)', '')]);
   if (p.main) {
     box(1, 'r1', 'Main fuse', [fuseShort(p.main.fuse) || '?'], 'fuse');
     box(1, 'r2', 'Isolator', [`${p.isolator.a} A DC`]);
@@ -88,19 +96,25 @@ export function wiringModel(p, o = {}) {
   }
   // left: solar
   if (p.solar) {
-    const pv = p.solar.pv; const pick = pv && pv.size && pv.size.pick;
-    box(0, 'r0', 'Solar panels', [`${p.solar.w} W`, pv ? `${pv.series} in series × ${pv.strings}` : `${p.solar.panels} panel${p.solar.panels > 1 ? 's' : ''}`]);
-    box(0, 'r1', 'PV isolator', [`≥ ${pv && pv.cold ? Math.ceil(pv.cold) : p.solar.mpptV} V DC`], 'fuse');
-    box(0, 'r2', 'MPPT', ['solar controller', `${p.solar.mpptV} V / ${p.solar.mppt} A`]);
-    const pvc = `${pick ? pick.size : 4} mm² PV`;
-    down(0, 'r0', 'r1', 'pv', pvc); down(0, 'r1', 'r2', 'pv', pvc);
-    down(0, 'r2', 'bus', 'pos', mm(p.solar.run), fuseShort(p.solar.run.fuse));
+    // v0.35: series / parallel layout, string fuses, cold Voc against the controller (red if over),
+    // PV cable size + current + drop, and the controller-to-busbar cable with its current.
+    const pv = p.solar.pv; const pick = pv && pv.size && pv.size.pick; const over = !!(pv && pv.vocOk === false);
+    const lay = !pv ? `${p.solar.panels} panel${p.solar.panels > 1 ? 's' : ''}` : pv.strings === 1 ? (pv.series > 1 ? `${pv.series} in series` : '1 panel') : pv.series === 1 ? `${pv.strings} in parallel` : `${pv.series} series × ${pv.strings} parallel`;
+    const pb = box(0, 'r0', 'Solar panels', [`${p.solar.w} W`, lay]); pb.bad = over;
+    const ib = box(0, 'r1', 'PV isolator', [`≥ ${pv && pv.cold ? Math.ceil(pv.cold) : p.solar.mpptV} V DC`], 'fuse');
+    const mb = box(0, 'r2', 'MPPT', [`${p.solar.mpptV} V / ${p.solar.mppt} A`, over ? `OVER: Voc ${pv.cold} V` : 'solar controller']); mb.bad = over;
+    const pvI = p.solar.pvDrop ? p.solar.pvDrop.current : null;
+    const pvc = { t: `${pick ? pick.size : 4} mm² PV${pvI ? ` · ${pvI} A` : ''}${pick ? ` · ${pick.vd.pct}%` : ''}`, bad: !!(pv && pv.size && !pick) };
+    const sf = pv && pv.fuse && pv.fuse.needed ? (pv.fuse.fuse ? `${pv.fuse.fuse} A gPV string fuses` : 'string fuses ?') : null;
+    down(0, 'r0', 'r1', 'pv', pvc, sf, pv && pv.cold ? [{ t: `Voc ${pv.cold} V ${over ? '>' : '≤'} ${p.solar.mpptV} V`, kind: over ? 'cable' : 'volt', bad: over }] : []);
+    down(0, 'r1', 'r2', 'pv', pvc);
+    down(0, 'r2', 'bus', 'pos', { t: amps(p.solar.run), bad: !p.solar.run.ok }, fuseShort(p.solar.run.fuse));
   }
   // right: DC-DC from the starter battery; mains charger
   let shoreRow = null;
   if (p.dcdc) {
     box(2, 'r0', 'Starter battery', [`${p.vehV} V vehicle`, 'alternator']);
-    box(2, 'r2', 'DC-DC charger', [`${p.dcdc.a} A`]);
+    box(2, 'r2', 'DC-DC charger', [`${p.dcdc.a} A`, p.dcdc.trigger ? '+ trigger wire' : '']);
     const x = MID[2], y1 = Y.r0 + H.r0, y2 = Y.r2; wire([[x, y1], [x, y2]]); tags(x, y1, y2, mm(p.dcdc.inRun), fuseShort(p.dcdc.inRun.fuse));
     down(2, 'r2', 'bus', 'pos', mm(p.dcdc.outRun), fuseShort(p.dcdc.outRun.fuse));
     if (p.shore) shoreRow = 'r3';
@@ -115,9 +129,13 @@ export function wiringModel(p, o = {}) {
   const busBot = Y.bus + H.bus; let bottom = busBot;
   if (p.inverter) {
     const ac = p.acLoads.map((l) => l.name.replace(/ \((230 V )?via inverter\)/, '').replace(/^Low-watt /, ''));
-    box(0, 'r3', 'Inverter', [`${p.inverter.w} W → 230 V`, ac.length ? ac.join(', ') : '']);
-    const x = MID[0]; wire([[x, busBot], [x, Y.r3]]); tags(x, busBot, Y.r3, mm(p.inverter.run), fuseShort(p.inverter.run.fuse));
-    bottom = Math.max(bottom, Y.r3 + H.r3);
+    box(0, 'r3', 'Inverter', [`${p.inverter.w} W → 230 V`, `${p.inverter.current} A DC`]);
+    const x = MID[0]; wire([[x, busBot], [x, Y.r3]]); tags(x, busBot, Y.r3, { t: amps(p.inverter.run), bad: !p.inverter.run.ok }, fuseShort(p.inverter.run.fuse), p.inverter.isoA ? [{ t: `${p.inverter.isoA} A DC isolator`, kind: 'fuse' }] : []);
+    // v0.35: AC output under the inverter
+    const yA = Y.r3 + H.r3 + 22; wire([[x, Y.r3 + H.r3], [x, yA]], 'ac');
+    const acLines = wrapEst(ac.length ? `230 V AC out: ${ac.join(', ')}` : '230 V AC out (RCD protected)', CW - 8, 7);
+    boxes.push({ x: X[0], y: yA, w: CW, h: 16 + acLines.length * 9, t: 'AC output', s: acLines, kind: 'neg' });
+    bottom = Math.max(bottom, yA + 16 + acLines.length * 9);
   }
   if (p.fuseBox) {
     box(1, 'r3', 'Fuse box', [`${p.fuseBox.ways}-way blade`]);
@@ -127,11 +145,15 @@ export function wiringModel(p, o = {}) {
       const last = y + (loads.length - 1) * (rh + gap) + rh / 2;
       wire([[bx, Y.r3 + H.r3], [bx, last]]);
       for (const l of loads) { const r = l.run; wire([[bx, y + rh / 2], [lx, y + rh / 2]]);
-        boxes.push({ x: lx, y, w: lw, h: rh, t: fit(l.name, lw - 8, 8), s: [fit(r ? `${mm(r)} · ${fuseShort(r.fuse) || 'fuse ?'} · ${r.length} m` : 'add a run length (step 5)', lw - 8, 7)], kind: 'load' }); y += rh + gap; }
+        boxes.push({ x: lx, y, w: lw, h: rh, t: l.name, s: [r ? `${mm(r)} · ${fuseShort(r.fuse) || 'fuse ?'} · ${r.length} m` : 'add a run length (step 5)'], kind: 'load' }); y += rh + gap; }
       bottom = Math.max(bottom, y - gap);
     }
   }
   if (shoreRow === 'r3') bottom = Math.max(bottom, Y.r3 + H.r3);
+  // v0.35: smart-alternator trigger wire, as a note under the diagram (wrapped, never cut short).
+  if (p.dcdc && p.dcdc.trigger) { const t = p.dcdc.trigger; let yT = bottom + 16;
+    for (const line of wrapEst(`Smart alternator: ${t.size} mm² trigger wire from an ignition-switched live (or alternator D+) to the DC-DC trigger input, ${t.fuse ? t.fuse.A + ' A blade fuse' : 'fused'} at the feed end.`, W - 16, 7.5)) { texts.push({ x: 8, y: yT, t: line, size: 7.5, color: 'sub' }); yT += 11; }
+    bottom = yT - 6; }
   // negative side
   let yN = bottom + 34;
   texts.push({ x: 8, y: yN - 10, t: 'NEGATIVE SIDE', size: 7.5, bold: true, color: 'sub' });
@@ -147,7 +169,7 @@ export function wiringModel(p, o = {}) {
 
 // Inline SVG (a string, so it can go in with innerHTML; all text is escaped).
 const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-export const WIRE_COL = { pos: '#d92d20', neg: '#101828', pv: '#d92d20' };
+export const WIRE_COL = { pos: '#d92d20', neg: '#101828', pv: '#d92d20', ac: '#667085' };
 export function wiringSvg(m) {
   const S = [];
   S.push(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${m.W} ${m.H}" width="100%" role="img" aria-label="Wiring diagram" font-family="Inter, Arimo, system-ui, sans-serif">`);
@@ -155,7 +177,7 @@ export function wiringSvg(m) {
   const fills = { kit: ['#ffffff', '#c9d2ee', '#101828'], fuse: ['#fff4f2', '#f3a59a', '#9f1d14'], bus: ['#2952ff', '#2952ff', '#ffffff'], load: ['#fbfcff', '#d7ddeb', '#101828'], neg: ['#f2f4f7', '#98a2b3', '#101828'] };
   for (const b of m.boxes) {
     const [bg, line, ink] = fills[b.kind] || fills.kit; const n = b.s.length; const cx = b.x + b.w / 2;
-    S.push(`<rect x="${b.x}" y="${b.y}" width="${b.w}" height="${b.h}" rx="7" fill="${bg}" stroke="${line}" stroke-width="1.3"/>`);
+    S.push(`<rect x="${b.x}" y="${b.y}" width="${b.w}" height="${b.h}" rx="7" fill="${b.bad ? '#fef3f2' : bg}" stroke="${b.bad ? '#d92d20' : line}" stroke-width="${b.bad ? 2 : 1.3}"/>`);
     if (b.kind === 'load') { S.push(`<text x="${b.x + 6}" y="${b.y + 12}" font-size="8" font-weight="700" fill="${ink}">${esc(b.t)}</text>`); S.push(`<text x="${b.x + 6}" y="${b.y + 23}" font-size="7" fill="#475467">${esc(b.s[0] || '')}</text>`); continue; }
     const top = b.y + b.h / 2 - (n * 9) / 2 + 3;
     S.push(`<text x="${cx}" y="${top}" text-anchor="middle" font-size="${b.kind === 'bus' ? 9 : 8.5}" font-weight="800" fill="${ink}">${esc(b.t)}</text>`);
@@ -163,8 +185,9 @@ export function wiringSvg(m) {
   }
   for (const p of m.pills) {
     const fuse = p.kind === 'fuse';
-    S.push(`<rect x="${p.cx - p.w / 2}" y="${p.y}" width="${p.w}" height="${p.h}" rx="6.5" fill="${fuse ? '#fff4f2' : '#ffffff'}" stroke="${fuse ? '#f3a59a' : '#c9d2ee'}" stroke-width="1"/>`);
-    S.push(`<text x="${p.cx}" y="${p.y + 9.4}" text-anchor="middle" font-size="7.5" font-weight="700" fill="${fuse ? '#9f1d14' : '#101828'}">${esc(p.t)}</text>`);
+    const [bg, ln, ink] = p.bad ? ['#fee4e2', '#d92d20', '#b42318'] : p.kind === 'volt' ? ['#ecfdf3', '#75e0a7', '#067647'] : fuse ? ['#fff4f2', '#f3a59a', '#9f1d14'] : ['#ffffff', '#c9d2ee', '#101828'];
+    S.push(`<rect x="${p.cx - p.w / 2}" y="${p.y}" width="${p.w}" height="${p.h}" rx="6.5" fill="${bg}" stroke="${ln}" stroke-width="${p.bad ? 1.6 : 1}"/>`);
+    S.push(`<text x="${p.cx}" y="${p.y + 9.4}" text-anchor="middle" font-size="7.5" font-weight="700" fill="${ink}">${esc(p.t)}</text>`);
   }
   for (const t of m.texts) S.push(`<text x="${t.x}" y="${t.y}" font-size="${t.size}"${t.bold ? ' font-weight="800" letter-spacing=".6"' : ''} fill="${t.color === 'sub' ? '#475467' : '#101828'}">${esc(t.t)}</text>`);
   S.push('</svg>');

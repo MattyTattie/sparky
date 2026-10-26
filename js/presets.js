@@ -50,7 +50,11 @@ export const keyOf = (f0) => { const f = clean(f0 || {});
 // e.g. "B32 RCBO · 30 mA Type A · 6 kA"
 export function nameFor(f) {
   const d = deviceById(f.device); const kind = d ? d.label.split(' (')[0] : f.bs ? 'BS EN ' + f.bs : 'Device';
-  const rcd = real(f.rcdIdn) ? `${f.rcdIdn} mA${real(f.rcdType) ? ' Type ' + f.rcdType : ''}${f.rcdS ? ' S' : ''}` : '';
+  // v0.35: only an RCBO (or a device that is itself an RCD) shows RCD details; a plain MCB/fuse
+  // never shows the upstream RCCB's. No doubled S when the type already says S (e.g. 'A-S').
+  const dd = d || deviceFromBs(f.bs); const ownRcd = !!(dd && dd.rcd);
+  const rt = real(f.rcdType) ? String(f.rcdType).trim() : ''; const sTyped = /(^|[-\s])S$/i.test(rt);
+  const rcd = ownRcd && real(f.rcdIdn) ? `${f.rcdIdn} mA${rt ? ' Type ' + rt : ''}${f.rcdS && !sTyped ? ' S' : ''}` : '';
   const tp = /^[BCD123]$/.test(String(f.type || '')) ? f.type : ''; // v0.20: no 'adj32 MCCB' / 'plug13'
   const adj = d && d.adj ? [real(f.im) ? `Im ${f.im} A` : '', real(f.ig) ? `Ig ${f.ig} A${real(f.tg) ? ', tg ' + f.tg + ' s' : ''}` : ''].filter(Boolean).join(', ') : '';
   return [tp ? `${tp}${f.rating} ${kind}` : `${f.rating} A ${kind}`, d && d.adj ? '' : rcd, adj, real(f.bka) ? f.bka + ' kA' : '', real(f.afddBs) || real(f.afddRating) ? 'AFDD' + (real(f.afddRating) ? ' ' + f.afddRating + ' A' : '') : ''].filter(Boolean).join(' · ');

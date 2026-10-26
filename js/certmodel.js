@@ -155,7 +155,7 @@ export function sectionsFor(type) {
     ] },
     SUPPLY, PARTS,
     { id: 'inspections', title: 'Schedule of inspections', form: 'H', special: 'inspections' },
-    { id: 'comments', title: 'Comments on existing installation', form: 'I', fields: [f('comments', 'Comments (see Regulation 644.1.2)', 'area', { opt: true, placeholder: (c) => (isNewInstall(c) ? SECTION_I_NA : ''), hint: (c) => (isNewInstall(c) ? 'New installation: leave blank and the certificate prints \u201cN/A \u2013 new installation\u201d. Describe the work in the description on page 1.' : '') })] },
+    { id: 'comments', title: 'Comments on existing installation', form: 'I', fields: [f('comments', 'Comments (see Regulation 644.1.2)', 'area', { opt: true, placeholder: (c) => (isNewInstall(c) ? SECTION_I_NA : ''), hint: (c) => (isNewInstall(c) ? 'New installation: leave blank and the certificate prints \u201cN/A \u2013 new installation\u201d. Describe the work in Section B, Description and extent of the installation.' : '') })] },
     { id: 'boards', title: 'Circuits and test results', form: 'Schedules', special: 'boards' },
     { id: 'bonding', title: 'Supplementary bonding', form: 'Schedule', special: 'bonding' },
     { id: 'sign', title: 'Sign', form: 'C', special: 'sign' },

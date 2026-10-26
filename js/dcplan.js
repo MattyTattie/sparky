@@ -20,11 +20,37 @@ export const SYSTEM_VOLTS = [12, 24, 48];
 // working voltage per 12 V nominal (used for the inverter's worst-case current),
 // chargeC = a sensible max charge current as a fraction of Ah.
 export const CHEMS = {
-  lifepo4: { label: 'LiFePO4 (lithium)', dod: 0.8, low: 11.5, charge: 14.4, chargeC: 0.5, mainFuse: 'classT' },
-  agm: { label: 'AGM', dod: 0.5, low: 11.0, charge: 14.4, chargeC: 0.2, mainFuse: 'mega' },
-  lead: { label: 'Lead-acid (flooded)', dod: 0.5, low: 11.0, charge: 14.4, chargeC: 0.15, mainFuse: 'mega' },
+  lifepo4: { label: 'LiFePO4 (lithium)', nom: 12.8, dod: 0.8, low: 11.5, charge: 14.4, chargeC: 0.5, mainFuse: 'classT' },
+  agm: { label: 'AGM', nom: 12, dod: 0.5, low: 11.0, charge: 14.4, chargeC: 0.2, mainFuse: 'mega' },
+  lead: { label: 'Lead-acid (flooded)', nom: 12, dod: 0.5, low: 11.0, charge: 14.4, chargeC: 0.15, mainFuse: 'mega' },
 };
+// v0.35: charge profiles per 12 V nominal (× V ÷ 12 for 24 / 48 V). ⚠ Typical makers' figures:
+// the battery maker's data sheet wins. tempComp = mV/°C per 12 V (lead batteries only).
+export const PROFILES = {
+  lifepo4: { name: 'Lithium (LiFePO4)', absorb: [14.2, 14.4], float: [13.4, 13.6], equalise: null, tempComp: 0, absorbTime: 'short: 15–30 min, or end at about 0.05 × Ah (tail current)',
+    extra: ['Temperature compensation: OFF (lithium doesn’t need it).', 'Equalise: OFF (never equalise lithium).', 'Don’t charge below 0 °C: use the battery’s low-temperature cut-off, or the charger’s battery temperature sensor.', 'Pick the charger’s lithium / LiFePO4 setting if it has one.'] },
+  agm: { name: 'AGM', absorb: [14.4, 14.7], float: [13.5, 13.8], equalise: null, tempComp: -18, absorbTime: 'about 2–4 h, or until the current drops to about 0.02 × Ah',
+    extra: ['Temperature compensation: ON, about −18 mV/°C per 12 V (−3 mV/°C per cell). Fit the battery temperature sensor if the charger has one.', 'Equalise: OFF unless the battery maker says otherwise.', 'Pick the charger’s AGM setting.'] },
+  lead: { name: 'Lead-acid (flooded)', absorb: [14.4, 14.8], float: [13.2, 13.5], equalise: [15.5, 16.0], tempComp: -18, absorbTime: 'about 2–4 h',
+    extra: ['Temperature compensation: ON, about −18 mV/°C per 12 V (−3 mV/°C per cell).', 'Equalise: now and then only (e.g. monthly), battery vented, check the water level after.', 'Pick the charger’s flooded / wet setting.'] },
+};
+export function chargeProfile(chem, V = 12) {
+  const P = PROFILES[chem] || PROFILES.lifepo4; const k = (Number(V) || 12) / 12;
+  const rng = (a) => (a ? `${r1(a[0] * k)}–${r1(a[1] * k)} V` : null);
+  return { chem, name: P.name, V: Number(V) || 12, absorb: rng(P.absorb), float: rng(P.float), equalise: rng(P.equalise), tempComp: P.tempComp ? r1(P.tempComp * k) : 0, absorbTime: P.absorbTime, extra: P.extra,
+    lines: [`Absorption (boost): ${rng(P.absorb)}, ${P.absorbTime}.`, `Float: ${rng(P.float)}.`, ...P.extra] };
+}
+// v0.35: an alternator should not be asked for more than about half its rating by a DC-DC charger
+// (it also runs the engine, lights and fans, and runs hot at full output). ⚠ Rule of thumb.
+export const ALT_DEFAULT = 120, ALT_SHARE_WARN = 0.5, ALT_SHARE_ADVISE = 0.25;
+// v0.35: smart-alternator (Euro 6) trigger wire: thin signal wire, fused at the feed. ⚠ Typical.
+export const TRIGGER = { size: 1, fuse: 3 };
+export const PV_LAYOUTS = [['auto', 'Pick for me'], ['series', 'All in series'], ['parallel', 'All in parallel'], ['custom', 'Set the number in series']];
 export const INV_EFF = 0.9;
+// v0.35: battery energy. kWh = Ah × nominal V ÷ 1000; nominal 12.8 V per 12 V for LiFePO4 (4 cells × 3.2 V), 12 V for lead / AGM.
+export const nominalV = (chem, V) => r2(((CHEMS[chem] || CHEMS.lifepo4).nom * (Number(V) || 12)) / 12);
+export const kwhOf = (ah, chem, V) => (Number(ah) === 0 ? 0 : Number(ah) > 0 ? r2((Number(ah) * nominalV(chem, V)) / 1000) : null);
+export const ahOfKwh = (kwh, chem, V) => (Number(kwh) > 0 ? Math.round((Number(kwh) * 1000) / nominalV(chem, V)) : null);
 // Fuse families and the ratings makers usually sell (A). ⚠ Typical ranges.
 export const FUSES = {
   blade: { label: 'blade fuse (ATO/ATC)', sizes: [1, 2, 3, 5, 7.5, 10, 15, 20, 25, 30] },
@@ -69,15 +95,15 @@ export const quickLoad = (key) => { const q = QUICK_LOADS.find((x) => x.key === 
 export const PLAN_DEFAULTS = {
   volts: '12', chem: 'lifepo4', dod: '', days: '1', battAh: '', bmsA: '',
   loads: [quickLoad('lights'), quickLoad('fridge'), quickLoad('pump'), quickLoad('sockets')],
-  solarW: '', panels: '', panelVoc: '', panelVmp: '', panelIsc: '', series: '', coef: '-0.29', tmin: '-10', mpptV: '100', pvLen: '5',
-  dcdcA: '', altA: '', vehV: '12', dcdcLen: '5', shoreA: '',
+  solarW: '', panels: '', pvLayout: '', panelVoc: '', panelVmp: '', panelIsc: '', series: '', coef: '-0.29', tmin: '-10', mpptV: '100', pvLen: '5',
+  dcdcA: '', altA: '', vehV: '12', dcdcLen: '5', shoreA: '', smartAlt: '', trigLen: '3',
   invW: '', invLen: '1.5', mpptA: '',
   cable: 'tri90', install: 'clipped', ambient: '30', mainPct: '2', mainLen: '1', fuseBoxLen: '1', chargeLen: '1',
 };
 
 // The worked camper-van example (used for the screenshots and tests).
 export const VAN_EXAMPLE = {
-  ...PLAN_DEFAULTS, volts: '12', chem: 'lifepo4', dod: '80', days: '2', battAh: '200',
+  ...PLAN_DEFAULTS, volts: '12', chem: 'lifepo4', dod: '80', days: '2', battAh: '200', invHours: '4',
   loads: [quickLoad('fridge'), quickLoad('lights'), quickLoad('pump'), quickLoad('heater'), quickLoad('laptop'), quickLoad('kettle')],
   solarW: '400', panels: '2', panelVoc: '24.3', panelVmp: '20.4', panelIsc: '10.6', series: '', mpptV: '100', pvLen: '5',
   dcdcA: '30', altA: '', dcdcLen: '5', shoreA: '', invW: '1500', invLen: '1.5',
@@ -138,15 +164,27 @@ export function planDC(o0 = {}) {
   });
   const dcLoads = loads.filter((l) => !l.ac), acLoads = loads.filter((l) => l.ac);
   const dcWh = dcLoads.reduce((a, l) => a + l.wh, 0), acWh = acLoads.reduce((a, l) => a + l.wh, 0);
-  const daily = { wh: r1(dcWh + acWh), dcWh: r1(dcWh), acWh: r1(acWh), ah: r1((dcWh + acWh) / V) };
+  // v0.35: energy through the inverter. AC loads (already ÷ 90%), or a typed kWh a day of 230 V use (÷ 90%),
+  // plus the inverter's own idle (no-load) draw while it is switched on. The inverter RATING is never daily use.
+  const acW0 = acLoads.reduce((a, l) => a + l.w, 0);
+  const invW0 = num(o.invW) || (acW0 ? up(INVERTER_SIZES, acW0 * 1.25) : 0) || 0;
+  const acKwhWh = num(o.acKwh) > 0 ? (num(o.acKwh) * 1000) / INV_EFF : 0;
+  const idleW = invW0 ? (num(o.invIdle) > 0 ? num(o.invIdle) : Math.max(8, Math.round(invW0 * 0.008))) : 0;
+  const idleH = invW0 ? (o.invHours !== undefined && o.invHours !== '' ? Math.min(24, Math.max(0, num(o.invHours))) : 24) : 0;
+  const idleWh = idleW * idleH;
+  const invNoUse = !!invW0 && !acWh && !acKwhWh;
+  const acAll = acWh + acKwhWh + idleWh, tot = dcWh + acAll;
+  const daily = { wh: r1(tot), dcWh: r1(dcWh), acWh: r1(acAll), acLoadsWh: r1(acWh), acKwhWh: r1(acKwhWh), idleW, idleH, idleWh: r1(idleWh), invNoUse, ah: r1(tot / V) };
 
   // ---- battery ----
   const needAh = r1((daily.ah * days) / dod);
-  const fitted = num(o.battAh);
+  // v0.35: battery size can be typed in kWh (battKwh) instead of Ah.
+  const fitted = num(o.battAh) || (num(o.battKwh) ? ahOfKwh(o.battKwh, chem, V) : 0);
   const battery = { chem, label: C.label, dod, days, needAh, suggestAh: up(BATTERY_AH, needAh), fittedAh: fitted || null,
-    fittedDays: fitted && daily.ah ? r1((fitted * dod) / daily.ah) : null, ok: fitted ? fitted >= needAh - 0.05 : null };
-  battery.why = `${daily.wh} Wh a day ÷ ${V} V = ${daily.ah} Ah a day. × ${days} day${days === 1 ? '' : 's'} with no charging ÷ ${Math.round(dod * 100)}% usable = ${needAh} Ah at ${V} V.` +
-    (fitted ? ` Your ${fitted} Ah gives about ${battery.fittedDays} day${battery.fittedDays === 1 ? '' : 's'}${battery.ok ? '.' : ' — a bit short of what you asked for.'}` : ` Nearest common size: ${battery.suggestAh ?? 'over ' + BATTERY_AH[BATTERY_AH.length - 1]} Ah.`);
+    noLoads: !(daily.ah > 0) || (!dcWh && invNoUse), invNoUse, fittedDays: fitted && daily.ah ? r1((fitted * dod) / daily.ah) : null, ok: fitted ? fitted >= needAh - 0.05 : null };
+  battery.nomV = nominalV(chem, V); battery.kwh = kwhOf(fitted || battery.suggestAh || needAh, chem, V); battery.needKwh = kwhOf(needAh, chem, V);
+  battery.why = `${daily.wh} Wh a day ÷ ${V} V = ${daily.ah} Ah a day. × ${days} day${days === 1 ? '' : 's'} with no charging ÷ ${Math.round(dod * 100)}% usable = ${needAh} Ah at ${V} V (${battery.needKwh} kWh at ${battery.nomV} V nominal).` +
+    (invNoUse && !dcWh ? ' Add what the inverter runs (or kWh a day) to see how long the battery lasts.' : !(daily.ah > 0) ? ' No loads entered yet. Add loads to see how long it lasts.' : fitted ? ` Your ${fitted} Ah (${kwhOf(fitted, chem, V)} kWh) gives about ${battery.fittedDays} day${battery.fittedDays === 1 ? '' : 's'}${battery.ok ? '.' : ' — a bit short of what you asked for.'}` : ` Nearest common size: ${battery.suggestAh ? battery.suggestAh + ' Ah (' + kwhOf(battery.suggestAh, chem, V) + ' kWh)' : 'over ' + BATTERY_AH[BATTERY_AH.length - 1] + ' Ah'}.`);
 
   // ---- inverter ----
   const acW = acLoads.reduce((a, l) => a + l.w, 0);
@@ -157,7 +195,8 @@ export function planDC(o0 = {}) {
     const vlow = (C.low * V) / 12;
     const I = r1(invW / (vlow * INV_EFF));
     const run = sizeRun({ ...common, id: 'inverter', name: 'Inverter', current: I, length: o.invLen, pct: mainPct, kind: 'inverter' });
-    inverter = { w: invW, acW: r1(acW), suggest: invSuggest, current: I, vlow: r2(vlow), run, small: acW && invW < acW * 1.25,
+    const isoA = run.fuse ? up(ISOLATOR_SIZES, run.fuse.A) : null;
+    inverter = { isoA, w: invW, acW: r1(acW), suggest: invSuggest, current: I, vlow: r2(vlow), run, small: acW && invW < acW * 1.25,
       why: `${acW ? `The 230 V loads add up to ${r1(acW)} W; with 25% headroom that\u2019s ${r1(acW * 1.25)} W, so ${invSuggest ?? 'over 5000'} W.` : 'No 230 V loads listed.'}${num(o.invW) ? ` You\u2019ve set ${invW} W.` : ''} DC current at full output: ${invW} W ÷ (${r2(vlow)} V low battery × ${INV_EFF} efficiency) = ${I} A. The cable and fuse are sized for the inverter\u2019s full rating, not just today\u2019s loads.`,
       surge: 'Motors, pumps, compressors and some chargers take 2–3 × their running power for a moment: check the inverter\u2019s peak (surge) rating covers it. Use a pure sine wave inverter.' };
     if (inverter.small) warnings.push(`Inverter ${invW} W is less than the 230 V loads + 25% (${r1(acW * 1.25)} W).`);
@@ -173,18 +212,33 @@ export function planDC(o0 = {}) {
     if (mpptHave && mpptHave < needA) warnings.push(`Solar: your ${mpptHave} A controller is smaller than the ${needA} A worked out (solar W ÷ battery V × 1.25). It will clip on the best days; ${mpptPick ?? 'a bigger'} A would catch it all.`);
     const panels = Math.max(1, Math.round(num(o.panels, 1)));
     const voc = num(o.panelVoc), vmp = num(o.panelVmp), isc = num(o.panelIsc); const mpptV = num(o.mpptV, 100);
-    let series = Math.round(num(o.series)); let pv = null; let seriesAuto = false;
+    // v0.35: layout choice. Old plans (no pvLayout) keep working: a typed series count = 'custom'.
+    const layout = ['auto', 'series', 'parallel', 'custom'].includes(o.pvLayout) ? o.pvLayout : (num(o.series) ? 'custom' : 'auto');
+    let series = layout === 'series' ? panels : layout === 'parallel' ? 1 : layout === 'custom' ? Math.round(num(o.series)) : 0; let pv = null; let seriesAuto = false;
+    if (series > panels) series = panels;
     if (voc) {
       if (!series) { seriesAuto = true; series = 1; for (let s = panels; s >= 1; s--) { const cv = coldVoc({ n: s, voc, coefPct: o.coef, tmin: o.tmin }); if (panels % s === 0 && cv <= mpptV * 0.95) { series = s; break; } } }
       const strings = Math.max(1, Math.round(panels / series));
       pv = { series, strings, seriesAuto, ...pvString({ n: series, voc, vmp: vmp || voc * 0.82, isc: isc || null, imp: isc ? isc * 0.94 : null, coefPct: o.coef, tmin: o.tmin, invMax: mpptV, length: o.pvLen, targetPct: 3, temp: 70, strings, cable: 'xlpe90' }) };
       pv.hotVmpLow = vmp ? r1(series * vmp * (1 + (-0.35 / 100) * (70 - 25))) : null;
       pv.vmpOk = pv.hotVmpLow ? pv.hotVmpLow >= (C.charge * V) / 12 + 5 : null;
+      pv.layout = layout;
+      // v0.35: with strings in parallel the cable from the join (combiner) to the controller carries
+      // every string, so size it for strings × Imp (and 1.25 × strings × Isc), not one string.
+      if (strings > 1 && pv.vstring && isc) {
+        const iw = isc * 0.94 * strings; pv.cableAmps = r2(1.25 * isc * strings);
+        const need = pv.fuse && pv.fuse.needed && pv.fuse.fuse ? Math.max(pv.cableAmps, pv.fuse.fuse) : pv.cableAmps;
+        pv.size = dcCableSize({ current: iw, length: o.pvLen, volts: pv.vstring, targetPct: 3, temp: 70, needAmps: need, cable: 'xlpe90', minSize: 4 }); pv.needAmps = need; pv.combined = true;
+      }
       if (pv.vocOk === false) warnings.push(`Solar: cold-morning Voc ${pv.cold} V is over the controller\u2019s ${mpptV} V.`);
+      else if (pv.near) notes.push(`Solar: cold-morning Voc ${pv.cold} V is within 5% of the controller\u2019s ${mpptV} V. Leave more margin if the site gets colder than ${o.tmin} °C.`);
       if (pv.vmpOk === false) warnings.push('Solar: the string voltage on a hot day may be too close to the battery voltage for the MPPT to charge well. Put more panels in series (if the cold Voc allows).');
     }
     const run = sizeRun({ ...common, id: 'mppt', name: 'MPPT to battery', current: mppt || needA, length: o.chargeLen, pct: mainPct, kind: 'charge' });
-    solar = { w: solarW, minA, needA, mppt, mpptPick, mpptHave: mpptHave || null, mpptV, panels, pv, run,
+    // v0.35: PV cable volt drop, panels → controller, shown next to its size.
+    const pvPick = pv && pv.size && pv.size.pick;
+    const pvDrop = pvPick ? { size: pvPick.size, volts: pvPick.vd.volts, pct: pvPick.vd.pct, limit: 3, vstring: pv.vstring, current: r2(pv.strings * (isc ? isc * 0.94 : 0)), combined: !!pv.combined } : null;
+    solar = { w: solarW, minA, needA, mppt, mpptPick, mpptHave: mpptHave || null, mpptV, panels, pv, run, pvDrop, layout,
       summerWh: Math.round(solarW * 4 * 0.8), winterWh: Math.round(solarW * 0.7 * 0.8),
       why: `${solarW} W ÷ ${V} V = ${minA} A; × 1.25 margin = ${needA} A, so a ${mpptPick ?? 'over 100'} A controller${mpptHave ? ` (you\u2019ve set ${mpptHave} A)` : ''}. (A ${up(MPPT_SIZES, minA)} A one would work but clip on the best days.)` };
   }
@@ -193,14 +247,21 @@ export function planDC(o0 = {}) {
   const dcdcA = num(o.dcdcA); const altA = num(o.altA); const vehV = num(o.vehV, 12);
   const battAhForCharge = fitted || battery.suggestAh || needAh;
   const battLimit = battAhForCharge * C.chargeC;
-  const altLimit = (altA || 120) * 0.25;
+  const altLimit = (altA || ALT_DEFAULT) * ALT_SHARE_ADVISE;
   const dcdcSuggest = [...DCDC_SIZES].reverse().find((s) => s <= Math.min(battLimit, altLimit)) || DCDC_SIZES[0];
   let dcdc = null;
   if (dcdcA) {
     const inI = r1((dcdcA * (C.charge * V) / 12) / (vehV * (13 / 12) * INV_EFF));
     const inRun = sizeRun({ ...common, id: 'dcdcIn', name: 'Starter battery to DC-DC', current: inI, length: o.dcdcLen, volts: vehV, pct: 5, kind: 'charge' });
     const outRun = sizeRun({ ...common, id: 'dcdcOut', name: 'DC-DC to battery', current: dcdcA, length: o.chargeLen, pct: mainPct, kind: 'charge' });
-    dcdc = { a: dcdcA, inI, inRun, outRun, suggest: dcdcSuggest, tooBig: dcdcA > Math.min(battLimit, altLimit) + 1e-9,
+    const altRated = altA || ALT_DEFAULT; const altShare = r2(inI / altRated);
+    const altBad = altShare > ALT_SHARE_WARN + 1e-9;
+    if (altBad) warnings.push(`DC-DC: it draws about ${inI} A from the alternator, ${Math.round(altShare * 100)}% of its ${altA ? altA + ' A' : 'assumed ' + ALT_DEFAULT + ' A'} rating (over half).`);
+    else if (altShare > ALT_SHARE_ADVISE + 1e-9) notes.push(`DC-DC: it draws about ${inI} A, ${Math.round(altShare * 100)}% of the ${altA ? altA + ' A' : 'assumed ' + ALT_DEFAULT + ' A'} alternator. That\u2019s OK for most vans, but check the alternator\u2019s rating on its label or the handbook.`);
+    const smart = !!o.smartAlt && o.smartAlt !== '0';
+    const trigger = smart ? { size: TRIGGER.size, fuse: pickFuse(TRIGGER.fuse, 'blade'), length: num(o.trigLen, 3),
+      why: 'Euro 6 (and most newer) vans have a smart alternator: its voltage drops while you drive, so the DC-DC charger can\u2019t tell the engine is running from the voltage alone. Run a thin wire from an ignition-switched live (or the alternator D+ terminal) to the charger\u2019s ignition / trigger input, fused at the feed end. Turn on the charger\u2019s smart-alternator mode.' } : null;
+    dcdc = { a: dcdcA, inI, inRun, outRun, suggest: dcdcSuggest, altRated, altAssumed: !altA, altShare, altBad, smart, trigger, tooBig: dcdcA > Math.min(battLimit, altLimit) + 1e-9 || altBad,
       why: `About ${inI} A from the starter battery to give ${dcdcA} A at ${r1((C.charge * V) / 12)} V (${INV_EFF * 100}% efficient, ${vehV} V side at about ${r1(vehV * 13 / 12)} V running). Fuse it at both ends. Input cable sized for 5% drop (the charger makes the voltage back up; check the maker\u2019s cable table).` };
   }
   const dcdcAdvice = `Suggested DC-DC: ${dcdcSuggest} A — no more than about ${Math.round(C.chargeC * 100)}% of the battery (${Math.round(battLimit)} A) and about a quarter of the alternator (${altA ? altA + ' A' : 'assumed 120 A'}) = ${r1(altLimit)} A. Euro 6 vans with a smart alternator need a DC-DC with a smart-alternator / ignition wire input.`;
@@ -244,8 +305,15 @@ export function planDC(o0 = {}) {
 
   // ---- runs, cables and the parts list ----
   const runs = [main, fuseBox && fuseBox.run, inverter && inverter.run, solar && solar.run, dcdc && dcdc.inRun, dcdc && dcdc.outRun, shore && shore.run, ...dcLoads.map((l) => l.run)].filter(Boolean);
-  const plan = { V, vehV, chem, cable: cab, cableLabel: PLAN_CABLES[cab].label, derate, ca, cg, ambient: amb, mainPct, loads, dcLoads, acLoads, daily, battery, inverter, solar, dcdc, dcdcAdvice, shore, shoreSuggest, fuseBox, discharge, charge, main, shunt, isolator, busbar, chassis, runs, warnings, notes };
+  const profile = chargeProfile(chem, V);
+  const plan = { profile, V, vehV, chem, cable: cab, cableLabel: PLAN_CABLES[cab].label, derate, ca, cg, ambient: amb, mainPct, loads, dcLoads, acLoads, daily, battery, inverter, solar, dcdc, dcdcAdvice, shore, shoreSuggest, fuseBox, discharge, charge, main, shunt, isolator, busbar, chassis, runs, warnings, notes };
   plan.cables = cableList(plan); plan.parts = partsList(plan, o);
+  // v0.35: runtime at inverter load levels: usable Wh (Ah × V × DoD) ÷ (load W ÷ 0.9 + idle W).
+  if (inverter) {
+    const ah = fitted || battery.suggestAh || needAh; const usable = ah * V * dod;
+    inverter.usableWh = Math.round(usable);
+    inverter.runtime = [1, 0.75, 0.5, 0.25].map((f) => { const draw = (invW * f) / INV_EFF + idleW; return { pct: f * 100, w: Math.round(invW * f), draw: Math.round(draw), hours: draw > 0 && usable > 0 ? r1(usable / draw) : 0 }; });
+  }
   return plan;
 }
 
@@ -261,7 +329,7 @@ export function partsList(p, o = {}) {
   const G = { Battery: [], Charging: [], Inverter: [], Protection: [], Cables: [], Monitoring: [], Misc: [] };
   const add = (g, item, qty = 1, why = '') => G[g].push({ item, qty, why });
   const b = p.battery;
-  add('Battery', `${b.label} battery, ${p.V} V ${b.fittedAh || b.suggestAh || b.needAh} Ah`, 1, b.why);
+  add('Battery', `${b.label} battery, ${p.V} V ${b.fittedAh || b.suggestAh || b.needAh} Ah (${b.kwh} kWh)`, 1, b.why);
   if (p.chem !== 'lifepo4') add('Battery', 'Battery box with a vent to outside (lead/AGM give off gas when charging)', 1);
   else add('Battery', 'Battery strap / secure mounting (and low-temperature charge protection for winter)', 1);
   if (p.solar) {
@@ -272,11 +340,14 @@ export function partsList(p, o = {}) {
     add('Charging', 'MC4 connectors (pairs) and a roof cable entry gland', pv ? Math.max(2, pv.strings * 2) : 2);
     if (pv && pv.fuse && pv.fuse.needed && pv.fuse.fuse) add('Protection', `${pv.fuse.fuse} A gPV string fuses + holders (+ and −)`, pv.strings * 2, pv.fuse.why);
   }
-  if (p.dcdc) add('Charging', `DC-DC (battery-to-battery) charger ${p.dcdc.a} A, ${p.vehV} → ${p.V} V`, 1, p.dcdcAdvice);
+  if (p.dcdc) { add('Charging', `DC-DC (battery-to-battery) charger ${p.dcdc.a} A, ${p.vehV} → ${p.V} V${p.dcdc.smart ? ', with a smart-alternator / ignition trigger input' : ''}`, 1, p.dcdcAdvice);
+    if (p.dcdc.trigger) { const t = p.dcdc.trigger; add('Charging', `Ignition / D+ trigger wire, ${t.size} mm² (red or another colour you\u2019ll recognise)`, `${upHalf(t.length * 1.1)} m`, t.why);
+      add('Protection', `${t.fuse.A} A ${t.fuse.label} + add-a-fuse tap or in-line holder — trigger wire, at the ignition feed`, 1, t.why); } }
   else add('Charging', `Optional: DC-DC charger about ${p.dcdcAdvice.match(/DC-DC: (\d+)/)[1]} A to charge from the engine`, 1, p.dcdcAdvice);
   if (p.shore) add('Charging', `Mains (shore) battery charger ${p.shore.a} A`, 1, `Typical: about ${p.shoreSuggest} A for this battery. The 230 V hook-up side (inlet, RCD, consumer unit) is BS 7671 Section 721 work.`);
   if (p.inverter) {
     add('Inverter', `Pure sine inverter ${p.inverter.w} W continuous, ${p.V} V input`, 1, p.inverter.why + ' ' + p.inverter.surge);
+    if (p.inverter.isoA) add('Protection', `Inverter DC isolator, DC-rated ${p.inverter.isoA} A continuous`, 1, 'Lets you isolate the inverter from the busbar. At least the inverter fuse rating.');
     add('Inverter', '230 V outlets on the inverter output with RCD protection, earthed to the maker\u2019s instructions', 1, 'Follow the inverter maker\u2019s neutral–earth / RCD instructions.');
   }
   const fuseLine = (r, where) => r && r.fuse ? add('Protection', `${r.fuse.A} A ${r.fuse.label} + holder — ${where}`, 1, r.why) : null;
@@ -323,6 +394,7 @@ export function planText(p, title = 'DC system plan') {
   if (p.solar) L.push(`Solar: ${p.solar.w} W → MPPT ${p.solar.mpptV} V / ${p.solar.mppt} A`);
   if (p.main) L.push(`Main fuse: ${p.main.fuse ? p.main.fuse.A + ' A ' + p.main.fuse.label : '?'}, main cable ${p.main.size ?? '?'} mm²`);
   for (const w of p.warnings) L.push('⚠ ' + w);
+  if (p.profile) { L.push('', `CHARGER SETTINGS (${p.profile.name}, ${p.V} V)`); for (const l of p.profile.lines) L.push('- ' + l); }
   L.push('', 'PARTS LIST');
   for (const g of p.parts) { L.push('', g.group.toUpperCase()); for (const it of g.items) L.push(`- ${it.item}${typeof it.qty === 'string' ? `: ${it.qty}` : it.qty !== 1 ? `  × ${it.qty}` : ''}`); }
   L.push('', 'CABLE RUNS (current, fuse, cable, volt drop)');

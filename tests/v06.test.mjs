@@ -16,10 +16,11 @@ const van = P.planDC(P.VAN_EXAMPLE);
 test('van: daily energy and battery', () => {
   assert.equal(van.V, 12);
   assert.equal(van.daily.dcWh, 738);            // fridge 360 + lights 120 + pump 18 + heater 240
-  assert.equal(van.daily.acWh, 255.5);          // (65×2 + 1000×0.1) ÷ 0.9
-  assert.equal(van.daily.ah, 82.8);
-  assert.equal(van.battery.needAh, 207);        // 82.8 × 2 days ÷ 0.8
-  assert.equal(van.battery.fittedDays, 1.9);
+  assert.equal(van.daily.acLoadsWh, 255.5);     // (65×2 + 1000×0.1) ÷ 0.9
+  assert.equal(van.daily.idleWh, 48);           // v0.35: inverter idle 12 W × 4 h
+  assert.equal(van.daily.ah, 86.8);             // (738 + 255.5 + 48) ÷ 12
+  assert.equal(van.battery.needAh, 217);        // 86.8 × 2 days ÷ 0.8
+  assert.equal(van.battery.fittedDays, 1.8);
   assert.equal(van.battery.ok, false);
 });
 test('van: inverter 1500 W → 144.9 A, 200 A MEGA, 50 mm²', () => {
@@ -58,7 +59,7 @@ test('lighting at 10% gets a smaller cable than 3%', () => {
 test('24 V halves the currents', () => {
   const p = P.planDC({ ...P.VAN_EXAMPLE, volts: '24' });
   assert.ok(Math.abs(p.inverter.current - van.inverter.current / 2) < 0.05);
-  assert.equal(p.daily.ah, 41.4);
+  assert.equal(p.daily.ah, 43.4); // v0.35: incl. inverter idle
 });
 test('parts list is grouped, and text export has every group', () => {
   const groups = van.parts.map((g) => g.group);

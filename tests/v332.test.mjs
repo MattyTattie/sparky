@@ -24,6 +24,6 @@ test('v332: visible affordance (pointer, underline, chevron, hover)', () => {
   assert.match(src, /class: 'wc', 'aria-hidden': 'true' \}, '›'/);
 });
 test('v332: version 0.33.2', () => {
-  assert.match(readFileSync(new URL('../js/config.js', import.meta.url), 'utf8'), /APP_VERSION = '0\.3[34]\.[02] beta'/);
-  assert.match(readFileSync(new URL('../sw.js', import.meta.url), 'utf8'), /sparky-v0\.3[34]\.[02]/);
+  assert.match(readFileSync(new URL('../js/config.js', import.meta.url), 'utf8'), /APP_VERSION = '0\.3[345]\.[02] beta'/);
+  assert.match(readFileSync(new URL('../sw.js', import.meta.url), 'utf8'), /sparky-v0\.3[345]\.[02]/);
 });
