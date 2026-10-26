@@ -61,3 +61,11 @@ test('runtime at inverter load levels (worked example)', () => {
   assert.equal(h.hours, Math.round(103680 / (2500 / 0.9 + 40) * 10) / 10);
   assert.deepEqual([f.pct, t.pct, h.pct, q.pct], [100, 75, 50, 25]);
 });
+
+test('v0.35 QA: MPPT "would clip" note only when a smaller size exists', async () => {
+  const D = await import('../js/dcplan.js');
+  const w = (V) => D.planDC({ ...D.VAN_EXAMPLE, volts: String(V), solarW: '500', panels: '10' }).solar;
+  assert.equal(w(12).mppt, 60); assert.match(w(12).why, /A 45 A one would work/);
+  assert.equal(w(24).mppt, 30); assert.doesNotMatch(w(24).why, /would work/);
+  assert.equal(w(48).mppt, 15); assert.doesNotMatch(w(48).why, /would work/);
+});

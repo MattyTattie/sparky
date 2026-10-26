@@ -240,7 +240,7 @@ export function planDC(o0 = {}) {
     const pvDrop = pvPick ? { size: pvPick.size, volts: pvPick.vd.volts, pct: pvPick.vd.pct, limit: 3, vstring: pv.vstring, current: r2(pv.strings * (isc ? isc * 0.94 : 0)), combined: !!pv.combined } : null;
     solar = { w: solarW, minA, needA, mppt, mpptPick, mpptHave: mpptHave || null, mpptV, panels, pv, run, pvDrop, layout,
       summerWh: Math.round(solarW * 4 * 0.8), winterWh: Math.round(solarW * 0.7 * 0.8),
-      why: `${solarW} W ÷ ${V} V = ${minA} A; × 1.25 margin = ${needA} A, so a ${mpptPick ?? 'over 100'} A controller${mpptHave ? ` (you\u2019ve set ${mpptHave} A)` : ''}. (A ${up(MPPT_SIZES, minA)} A one would work but clip on the best days.)` };
+      why: `${solarW} W ÷ ${V} V = ${minA} A; × 1.25 margin = ${needA} A, so a ${mpptPick ?? 'over 100'} A controller${mpptHave ? ` (you\u2019ve set ${mpptHave} A)` : ''}.${up(MPPT_SIZES, minA) && up(MPPT_SIZES, minA) !== mpptPick ? ` (A ${up(MPPT_SIZES, minA)} A one would work but clip on the best days.)` : ''}` };
   }
 
   // ---- DC-DC (alternator) ----
