@@ -8,7 +8,7 @@ import { h, fill, toast, modal, confirmBox, fmtDate, shareOrDownload, blobToData
 import { route, page, go, render } from './app.js';
 import { S, openCert, changed, flush, getProfile, defaultInstruments, defaultInstrumentIds, getInstruments, instrumentsFor, instrumentText, calibrationWarnings, INSTRUMENT_KINDS, saveSetting } from './state.js';
 import { calDateFields, CAL_DATE_WARN } from './instruments.js';
-import { TYPES, newCert, sectionsFor, sectionDone, missingFields, visible, get, set, eicrOverall, blankBond, BOND_LOCATIONS, BOND_PARTS, SOURCE_TYPES, blankSource, sourcesMissing } from './certmodel.js';
+import { TYPES, newCert, sectionsFor, sectionDone, missingFields, visible, get, set, eicrOverall, blankBond, BOND_LOCATIONS, BOND_PARTS, SOURCE_TYPES, blankSource, sourcesMissing, isNewInstall } from './certmodel.js';
 import { INTAKE_NOTE_10, INTAKE_NOTES, INTAKE_NOTIFIED, migrateIntake, EIC_ITEMS, EIC_OUTCOMES, EICR_ITEMS, EICR_OUTCOMES, CODE_TEXT, OBSERVATIONS, OBS_CATS, EIC_HELP, EICR_HELP } from './inspections.js';
 import { checkCircuit, isSpare } from './checks.js';
 import { CHECK_NOTE } from './limits.js';
@@ -31,7 +31,8 @@ export function field(cert, fd, onChange) {
   const upd = (v) => { set(cert, fd.k, v); changed(); if (onChange) onChange(fd.k, v, fd); };
   if (!visible(cert, fd)) return null;
   const cls = fd.indent ? ' sub' : '';
-  const hint = fd.hint ? h('div', { class: 'note fhint' }, fd.hint) : null;
+  const hintT = typeof fd.hint === 'function' ? fd.hint(cert) : fd.hint; // v0.34: hint can be worked out
+  const hint = hintT ? h('div', { class: 'note fhint' }, hintT) : null;
   if (fd.type === 'heading') return h('h3', { class: 'fhead' }, fd.label);
   if (fd.type === 'check') return h('label', { class: 'check' + cls }, h('input', { type: 'checkbox', checked: !!(val == null && fd.dflt ? fd.dflt(cert) : val), onchange: (e) => upd(e.target.checked) }), fd.label);
   if (fd.type === 'chips') {
@@ -161,8 +162,9 @@ route(/^\/cert\/([^/]+)\/s\/([^/]+)$/, async (id, sid) => {
     else if (s.special === 'mwcircuit') content = [stateBox(cert, s), h('div', { class: 'card' }, s.fields.map((fd) => field(cert, fd, () => refreshState()))), h('a', { class: 'btn primary', href: `#/cert/${id}/mwc`, style: 'width:100%;margin-bottom:12px' }, 'Circuit details and test results →')];
     else {
       content = [h('div', { class: 'notice ' + stateLine(cert, s)[0] + ' secstate' }, stateLine(cert, s)[1]),
-        h('div', { class: 'card' }, s.fields.map((fd) => field(cert, fd, (k, v, d) => { if (k === 'eic.samePerson' || k.startsWith('people.designer')) { if (k === 'eic.samePerson' || get(cert, 'eic.samePerson')) syncPeople(cert); if (k === 'eic.samePerson') return draw(); } if (d.redraw) draw(); else refreshState(); }))),
-        s.id === 'supply' && get(cert, 'supply.otherSources') ? sourcesSection(cert, draw) : null];
+        h('div', { class: 'card' }, s.fields.map((fd) => field(cert, fd, (k, v, d) => { if (k === 'comments') { const el = document.getElementById('movedesc'); if (el) fill(el, moveToDescription(cert, draw)); } if (k === 'eic.samePerson' || k.startsWith('people.designer')) { if (k === 'eic.samePerson' || get(cert, 'eic.samePerson')) syncPeople(cert); if (k === 'eic.samePerson') return draw(); } if (d.redraw) draw(); else refreshState(); }))),
+        s.id === 'supply' && get(cert, 'supply.otherSources') ? sourcesSection(cert, draw) : null,
+        s.id === 'comments' ? h('div', { id: 'movedesc' }, moveToDescription(cert, draw)) : null];
     }
     fill(box, content, sid === 'summary' && cert.type === 'EICR' ? h('div', { class: 'notice ' + (eicrOverall(cert) === 'SATISFACTORY' ? 'green' : 'red') }, `From your observations: ${eicrOverall(cert)}. ${cert.eicr.overall ? '' : 'Used on the PDF unless you pick one above.'}`) : null,
       h('div', { class: 'stick' }, nextBtn()));
@@ -445,4 +447,13 @@ function trimCanvas(cv) {
   const out = document.createElement('canvas'); const pw = Math.max(1, x1 - x0 + 8), ph = Math.max(1, y1 - y0 + 8);
   out.width = pw; out.height = ph; out.getContext('2d').drawImage(cv, x0 - 4, y0 - 4, pw, ph, 0, 0, pw, ph);
   return out.toDataURL('image/png');
+}
+
+// v0.34: on a new installation, the description of the work belongs on page 1 (Section B).
+// If it's been typed in Section I, one tap moves it to the description of installation.
+function moveToDescription(cert, draw) {
+  if (!isNewInstall(cert) || !String(cert.comments || '').trim()) return null;
+  return h('div', { class: 'notice amber' },
+    h('div', {}, 'This is a new installation, so Section I (comments on the existing installation) would normally be N/A. If this describes the work, it belongs in the description on page 1.'),
+    h('button', { class: 'btn small', style: 'margin-top:8px', onclick: () => { const d = String(get(cert, 'install.description') || '').trim(); set(cert, 'install.description', (d ? d + '\n' : '') + String(cert.comments).trim()); cert.comments = ''; changed(); toast('Moved to the description on page 1'); draw(); } }, 'Move to the description on page 1'));
 }

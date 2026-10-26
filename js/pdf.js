@@ -3,7 +3,7 @@
 // (BS 7671:2018+A4:2026, 15 April 2026). No IET logo (their terms).
 // =====================================================================
 import { Kit, loadJsPDF, VALUE, GREY, INK, RED } from './pdfkit.js';
-import { TYPES, get, eicrOverall, isElectrode, msIsRcd, msIsOcpd, BOND_SERVICES, bondTicked, bondCsaFor, bondNone, sourceRows } from './certmodel.js';
+import { TYPES, get, eicrOverall, isElectrode, msIsRcd, msIsOcpd, BOND_SERVICES, bondTicked, bondCsaFor, bondNone, sourceRows, isNewInstall, SECTION_I_NA } from './certmodel.js';
 import { EIC_ITEMS, EICR_ITEMS, CODE_TEXT, INTAKE_NOTE_10, INTAKE_NOTES, INTAKE_NOTIFIED, migrateIntake } from './inspections.js';
 import { GUIDANCE } from './guidance.js';
 import { limitZs, isSpare } from './checks.js';
@@ -492,7 +492,7 @@ function sourcesSheet(k, cert, certNo) {
   });
 }
 const contSheets = (cert) => (cert.extraSheets || 0) + (bondRows(cert).length ? Math.ceil(bondRows(cert).length / 25) : 0) + sourceSheetCount(cert);
-const contWhat = (cert) => { const w = [bondRows(cert).length ? 'supplementary bonding' : '', sourceRows(cert).length ? 'other sources of supply' : ''].filter(Boolean); return w.length ? ` (incl. ${w.join(' and ')})` : ''; };
+const contWhat = (cert, iCont = 0) => { const w = [iCont ? 'Section I comments' : '', bondRows(cert).length ? 'supplementary bonding' : '', sourceRows(cert).length ? 'other sources of supply' : ''].filter(Boolean); return w.length ? ` (incl. ${w.join(' and ')})` : ''; };
 
 // v0.33: a paragraph with **bold** parts, wrapped word by word. Returns its height.
 function richPara(k, text, x, y, w, size) {
@@ -597,13 +597,52 @@ function eic(k, cert, profile) {
     });
     k.y = y0 + half * 4.3 + 1;
   });
-  k.section('SECTION I: COMMENTS ON EXISTING INSTALLATION (in the case of an addition or alteration see Regulation 644.1.2):', (k, x, w) => textBlock(k, x, w, '', withNotices(cert, cert.comments), { minLines: 2 }));
+  // v0.34: Section I. New installation with nothing typed: grey "N/A – new installation".
+  // A comment too long to leave Section J on page 2 goes WHOLLY to a continuation sheet
+  // (Section I then says "See continuation sheet"); a short one stays here.
+  const secI = withNotices(cert, cert.comments);
   const nb = (cert.boards || []).length;
-  k.section('SECTION J: SCHEDULES', (k, x, w) => {
-    k.y += k.para(`${contSheets(cert)}  Continuation sheet(s)${contWhat(cert)}    1  Schedule(s) of Inspection    ${nb}  Schedule(s) of Circuit Details and Schedule(s) of Test Results`, x, k.y + 3, w, { size: 7.5 }) + 1;
+  const iw = k.cw - 3.6; const ix = k.x0 + 1.8;
+  const iBody = (txt) => (k, x, w) => textBlock(k, x, w, '', txt, { minLines: 2 });
+  let iCont = 0;
+  const jBody = (k, x, w) => {
+    k.y += k.para(`${contSheets(cert) + iCont}  Continuation sheet(s)${contWhat(cert, iCont)}    1  Schedule(s) of Inspection    ${nb}  Schedule(s) of Circuit Details and Schedule(s) of Test Results`, x, k.y + 3, w, { size: 7.5 }) + 1;
     k.y += k.para('The schedule(s) and continuation sheet(s) listed are part of this document and this certificate is valid only when they are attached to it.', x, k.y + 3, w, { size: 7 });
-  }, { minGap: -6 }); // v0.33: let Section J use the space above the footer so it stays on page 2, as on the A4 form
+  };
+  if (secI.trim()) {
+    const hI = measure(k, () => iBody(secI)(k, ix, iw)) + 7.2;
+    const hJ = measure(k, () => jBody(k, ix, iw)) + 7.2;
+    if (k.y + hI + hJ > k.H - k.M - 8 + 6) iCont = commentPages(k, secI);
+  }
+  const I_TITLE = 'SECTION I: COMMENTS ON EXISTING INSTALLATION (in the case of an addition or alteration see Regulation 644.1.2):';
+  if (iCont) k.section(I_TITLE, iBody(`See continuation sheet${iCont > 1 ? 's' : ''} (Section I: comments on existing installation), after the schedules.`));
+  else if (!secI.trim() && isNewInstall(cert)) k.section(I_TITLE, (k, x, w) => { const y0 = k.y; textBlock(k, x, w, '', '', { minLines: 2 }); k.t(SECTION_I_NA, x + 0.5, y0 + 3.4, { size: 8.5, color: AUTO_GREY }); });
+  else k.section(I_TITLE, iBody(secI));
+  k.section('SECTION J: SCHEDULES', jBody, { minGap: -6 }); // v0.33: let Section J use the space above the footer so it stays on page 2, as on the A4 form
   schedules(k, cert, no);
+  if (iCont) commentsSheet(k, secI, no, iCont);
+}
+// v0.34: Section I comments continuation sheet (portrait): the whole comment, full wrap.
+const CONT_LH = 4.2;
+function commentPages(k, text) {
+  const per = Math.floor((k.H - 22 - 40) / CONT_LH); // room under the title on each A4 page
+  return Math.max(1, Math.ceil(k.wrap(text, k.cw - 4.6, 8.5).length / per));
+}
+function commentsSheet(k, text, certNo, total) {
+  let lines = null; let part = 0; let i = 0;
+  while (!lines || i < lines.length || part === 0) {
+    k.addPage('p'); part++;
+    if (!lines) lines = k.wrap(text, k.cw - 4.6, 8.5); // wrap on the portrait page (the schedules before it are landscape)
+    contTitle(k, 'COMMENTS ON EXISTING INSTALLATION (continuation sheet)', certNo, 'Continuation sheet' + (total > 1 ? ` ${part} of ${total}` : '') + ' · Section I (in the case of an addition or alteration see Regulation 644.1.2)');
+    const y0 = k.y; k.y += 2;
+    while (i < lines.length && k.y + 3.6 + CONT_LH < k.H - 22) {
+      const yy = k.y + 3.6;
+      k.line(k.x0 + 1.8, yy + 0.9, k.x1 - 1.8, yy + 0.9, { w: 0.15, color: [150, 150, 150], dash: [0.4, 0.6] });
+      k.t(lines[i], k.x0 + 2.3, yy - 0.2, { size: 8.5, color: VALUE });
+      k.y += CONT_LH; i++;
+    }
+    k.y += 2; k.rect(k.x0, y0, k.cw, k.y - y0, { lw: 0.35, color: INK });
+  }
 }
 
 // ---------- EICR ----------

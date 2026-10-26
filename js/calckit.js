@@ -5,7 +5,7 @@
 // and the details folded away. Layout only: no sums in here.
 // =====================================================================
 import { h, icon } from './ui.js';
-import { GROUPINGS, GROUP_INFO, METHOD_INFO, JOIST_HINT, cgFor } from './cables.js';
+import { GROUPINGS, GROUP_INFO, METHOD_INFO, JOIST_HINT, cgFor, methodHasInsulation, INSULATED_METHOD_NOTE } from './cables.js';
 
 // The calculator picker (Calculators home). key = what's remembered as "last used".
 export const CALCS = [
@@ -105,6 +105,14 @@ export function groupSel(F, v, set) {
   const on = isGrouped(v);
   return pickField({ label: 'Grouped how', value: v.grouping, options: GROUPINGS, onPick: (k) => set('grouping', k), info: groupInfo, disabled: !on, naText: 'N/A (not grouped)', hint: on ? `Cg ${cgFor(v.grouping, v.grouped)} (Table 4C1)` : '' });
 }
+// v0.34: Thermal insulation (Ci). Greyed out for methods A and 100–103, whose ratings already
+// allow for insulation; any saved Ci is kept but not used.
+export function ciPick(v, set, options) {
+  const off = methodHasInsulation(v.method);
+  return h('div', {}, pickField({ label: 'Thermal insulation', value: v.ci, options, onPick: (k) => set('ci', k), disabled: off, naText: 'N/A (Ci not used)' }),
+    off ? h('p', { class: 'note', 'data-cinote': '1' }, INSULATED_METHOD_NOTE + ` (method ${v.method}), so Ci isn’t applied on top.`) : null);
+}
+export const ciWords = (v, label) => (methodHasInsulation(v.method) ? 'insulation allowed for by the method' : label);
 export const groupWords = (v) => (isGrouped(v) ? `${Math.floor(Number(v.grouped))} grouped, ${((GROUPINGS.find(([k]) => k === v.grouping) || GROUPINGS[0])[1]).split(/[,(:]/)[0].trim().toLowerCase()}` : 'not grouped');
 
 // v0.23b: the CCC line with its workings folded under 'More info'.

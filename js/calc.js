@@ -1,7 +1,7 @@
 // =====================================================================
 // calc.js — the sums behind the calculators. Plain JS, tested with Node.
 // =====================================================================
-import { CABLES, CA, CA_NOTES, CG, cgFor, CF_BS3036, CABLE_TEMP, CU_MOHM_PER_M, ARMOUR_MOHM_PER_M, TEMP_MULT, CU5_MOHM_PER_M } from './cables.js';
+import { CABLES, CA, CA_NOTES, CG, cgFor, CF_BS3036, CABLE_TEMP, CU_MOHM_PER_M, ARMOUR_MOHM_PER_M, TEMP_MULT, CU5_MOHM_PER_M, effectiveCi } from './cables.js';
 import { UO, VOLT_DROP, maxZs } from './limits.js';
 
 const r2 = (n) => Math.round(n * 100) / 100;
@@ -42,16 +42,19 @@ export function sizeCable({ cable = 'te', method = 'C', ib, inA, length, ambient
   let { ca, note: caNote } = ambientFactor(cable, ambient);
   if (/^D/.test(method)) { ca = 1; caNote = 'Buried (method D): the tables assume 20 °C ground; the air-temperature factor isn\u2019t used. Check ground temperature and soil (Tables 4B2, 4B3).'; }
   const cg = (Number(grouped) || 1) > 1 ? cgFor(grouping, grouped) : 1; // v0.22: blank / 1 = not grouped
-  const ci = Number(insulationCi) || 1;
+  const ci = effectiveCi(method, insulationCi); // v0.34: A / 100–103 already allow for insulation
   const cf = bs3036 ? CF_BS3036 : 1;
   const factor = ca * cg * ci * cf;
   // 433.1.204 is written for 2.5 mm² copper rings on 30/32 A; anything else needs Iz ≥ In like a radial.
   const ringRule = (s) => ring && [30, 32].includes(Number(inA)) && s >= 2.5;
   const needFor = (s) => (ringRule(s) ? 20 : Number(inA));
+  // v0.34: where 433.1.204 applies (Iz ≥ 20 A ring), the 0.725 BS 3036 factor isn't added on top.
+  const factorFor = (s) => (ringRule(s) && cf !== 1 ? ca * cg * ci : factor);
   const rows = c.sizes.map((s) => {
     const it = m.amps[s];
     const vd = length ? voltDrop({ cable, size: s, ib, length, lighting, ring, uo, spread }) : null;
-    return { size: s, it, iz: it == null ? null : r2(it * factor), needIz: needFor(s), needIt: r2(needFor(s) / factor), currentOk: it != null && it >= needFor(s) / factor, vd };
+    const fs = factorFor(s);
+    return { size: s, it, iz: it == null ? null : r2(it * fs), factor: r2(fs), needIz: needFor(s), needIt: r2(needFor(s) / fs), currentOk: it != null && it >= needFor(s) / fs - 1e-9, vd };
   });
   const needIz = ring && [30, 32].includes(Number(inA)) ? 20 : Number(inA);
   const needIt = needIz / factor;

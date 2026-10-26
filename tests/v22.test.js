@@ -9,7 +9,7 @@ const sc = (o) => sizeCircuit({ load: '20', unit: 'A', loadType: 'general', leng
 test('v0.22 version', () => assert.match(APP_VERSION, /^0\.(2[2-9]|3\d)\./));
 test('v0.22 Table 4C1 rows and factors', () => {
   assert.deepEqual(GROUPINGS.map(([k]) => k), ['bunched', 'clipped', 'ceiling', 'tray', 'ladder', 'spaced']);
-  assert.equal(cgFor('bunched', 2), 0.8); assert.equal(cgFor('bunched', 9), 0.5); assert.equal(cgFor('bunched', 14), 0.45); assert.equal(cgFor('bunched', 25), 0.38);
+  assert.equal(cgFor('bunched', 2), 0.8); assert.equal(cgFor('bunched', 9), 0.5); assert.equal(cgFor('bunched', 14), 0.41); assert.equal(cgFor('bunched', 25), 0.38);
   assert.equal(cgFor('clipped', 3), 0.79); assert.equal(cgFor('clipped', 15), 0.7);
   assert.equal(cgFor('ceiling', 4), 0.68); assert.equal(cgFor('tray', 2), 0.88); assert.equal(cgFor('ladder', 6), 0.79); assert.equal(cgFor('spaced', 9), 1);
   assert.equal(cgFor('nonsense', 2), 0.8, 'unknown falls back to bunched');

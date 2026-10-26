@@ -84,6 +84,15 @@ export function copyBoard(b, { ref = '', keepResults = false, keepBoardTests = f
   nb.circuits = (b.circuits || []).map((c) => copyCircuit(c, c.num, { keepResults }));
   return nb;
 }
+// v0.34: copy a board, with its circuits and readings, into another certificate (another job).
+// Gets the next free DB ref in the target; new ids so nothing is shared with the original.
+export function boardRefFor(cert) { let n = (cert.boards || []).length + 1; while ((cert.boards || []).some((x) => x.ref === 'DB' + n)) n++; return 'DB' + n; }
+export function copyBoardToCert(target, b, { keepResults = true, keepBoardTests = true, ref = '' } = {}) {
+  target.boards = target.boards || [];
+  const same = (target.boards || []).some((x) => x.ref === b.ref);
+  const nb = copyBoard(b, { ref: ref || (b.ref && !same ? b.ref : boardRefFor(target)), keepResults, keepBoardTests });
+  target.boards.push(nb); return nb;
+}
 // v0.10: a spare is just "SPARE" in the description. Nothing typed is
 // overwritten: empty boxes SHOW a grey N/A (a placeholder, see autoNA) and
 // print it in lighter grey. Take "spare" out and the boxes are empty again.
@@ -216,4 +225,15 @@ export const circuitFedBySource = (c) => !!c && (c.fedBySource === true || SRC_R
 export const boardFedBySource = (b) => !!b && (b.fedBySource === true || (b.circuits || []).some(circuitFedBySource));
 export function bidiTarget(cert) { return cert.type === 'MW' ? 'mw.comments' : cert.type === 'EICR' ? 'eicr.general' : 'comments'; }
 export function hasBidiNote(text) { return /530\.3\.201|bidirectional/i.test(String(text || '')); }
+// v0.34: on an EIC / EICR the note goes in the Remarks of the affected circuits, not the comments.
+// Affected = circuits fed by a source; if none are but the board is ticked "fed by", every
+// circuit on the board except spares. The Minor Works form keeps its comments box.
+export const BIDI_REMARK = 'Devices confirmed suitable for bidirectional operation (Reg 530.3.201).';
+export function bidiCircuits(b) {
+  const list = (b && b.circuits) || [];
+  const fed = list.filter(circuitFedBySource);
+  return fed.length ? fed : b && b.fedBySource ? list.filter((c) => !isSpareCircuit(c)) : [];
+}
+export function addBidiRemark(c) { const t = String(c.remarks || '').trim(); if (!hasBidiNote(t)) c.remarks = (t ? t + '; ' : '') + BIDI_REMARK; return c; }
+export const bidiRemarksDone = (list) => list.length > 0 && list.every((c) => hasBidiNote(c.remarks));
 export function addBidiNote(text) { const t = String(text || '').trim(); return hasBidiNote(t) ? t : (t ? t + '\n' : '') + BIDI_NOTE; }

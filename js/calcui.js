@@ -8,7 +8,7 @@ import { ccc, CALCS, setLastCalc, lastCalc, formKit, icard, more, answerCard, pc
 import { ringCheck } from './checks.js';
 import { icon } from './icons.js';
 import { SYMBOLS } from './symbols.js';
-import { groupSel, groupWords, methodPick, longPick } from './calckit.js';
+import { groupSel, groupWords, methodPick, longPick, ciPick, ciWords } from './calckit.js';
 import { CABLES, CABLE_PICKS, AMBIENTS, CA_SOURCE, ARMOUR_MOHM_PER_M, TEMP_MULT, THREE_PHASE_CABLES, UL } from './cables.js';
 import { voltDrop, sizeCable, designZs, r1r2At20, izLine } from './calc.js';
 import { adiabatic, kFor, cpcAreaFor } from './design.js';
@@ -90,9 +90,9 @@ route(/^\/calc\/check$/, async () => {
           methodPick(v, set, cab),
           h('div', { class: 'grid2' }, F.sel('ambient', 'Hottest air round it', AMBIENTS.map((t) => [t, t + ' °C'])), F.num('grouped', 'Circuits grouped', { ph: '1', hint: 'Including this one. Blank = 1' })),
           groupSel(F, v, set),
-          longPick(v, set, 'ci', 'Thermal insulation', [['1', 'None (Ci 1.0)'], ['0.5', 'Totally surrounded for 0.5 m or more (Ci 0.5)']]),
+          ciPick(v, set, [['1', 'None (Ci 1.0)'], ['0.5', 'Totally surrounded for 0.5 m or more (Ci 0.5)']]),
           cab.note ? h('p', { class: 'note warnnote' }, cab.note) : null],
-          `method ${v.method}, ${amb} °C, ${groupWords(v)}, ${v.ci === '0.5' ? 'in insulation' : 'no insulation'}`)], { step: 3, gives: 'Iz', key: 'cable' }),
+          `method ${v.method}, ${amb} °C, ${groupWords(v)}, ${ciWords(v, v.ci === '0.5' ? 'in insulation' : 'no insulation')}`)], { step: 3, gives: 'Iz', key: 'cable' }),
       icard('Length and earthing', [
         h('div', { class: 'grid2' }, F.num('length', v.shape === 'radial' ? 'Length' : 'Ring length', { unit: 'm', hint: v.shape === 'radial' ? 'Board to the far end' : 'All the way round' }), F.num('ze', 'Ze at the board', { unit: 'Ω', ph: '0.35', hint: '0.35 Ω PME (TN-C-S), 0.8 Ω TN-S. Measured is best.' })),
         CABLES[v.cable].cores === 3 && !CABLES[v.cable].cpcCore ? F.seg('cpcMode', 'Earth (CPC)', [['core', '3rd core'], ['armour', 'Armour']], '', 'small') : null,
@@ -115,7 +115,7 @@ route(/^\/calc\/check$/, async () => {
     const z = size != null ? designZs({ ze: v.ze, cable: v.cable, live: size, cpc, length: +v.length, ring, device: v.device, type: v.type, rating: v.rating, time: v.time }) : null;
     if (z && z.ok && imag) { z.max = max; z.pass = z.zs == null ? null : z.zs <= max; }
     const line = resline;
-    const izInfo = (rw) => izLine({ size: rw.size, it: rw.it, iz: rw.iz, needIz: rw.needIz, f: s.factors, ring: !!ring && rw.needIz === 20, inA: +v.rating });
+    const izInfo = (rw) => izLine({ size: rw.size, it: rw.it, iz: rw.iz, needIz: rw.needIz, f: !!ring && rw.needIz === 20 ? { ...s.factors, cf: 1 } : s.factors, ring: !!ring && rw.needIz === 20, inA: +v.rating });
     const allOk = row && row.currentOk && (!row.vd || row.vd.pass) && (!z || z.pass !== false);
     let adi = null, adiCp = null, adiK = null, adiArea = null;
     if (z && z.ok && z.zs != null) { adiCp = cpcAreaFor(v.cable, size, v.cpcMode); adiArea = adiCp ? (adiCp.cpc === 'armour' ? adiCp.area : adiCp.cpc) : null; adiK = kFor({ cable: v.cable, cpcMode: v.cpcMode }); adi = adiabatic({ zs: z.zs, device: v.device, type: v.type, rating: v.rating, k: adiK.k, cpcCsa: adiArea, rcd: !!(d && d.rcd), time: v.time, imag, ig: igA, tg: tgS }); }

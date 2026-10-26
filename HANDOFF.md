@@ -226,3 +226,14 @@ Open points
 - Jobs home on desktop is a sortable table (`js/jobtable.js`: `jobRows`, `sortRows`; columns job, customer, address, certificates, status, updated). Click a header to sort; rows open the job (Enter works too).
 - Max demand (all widths): one box per kind (`kindBoxes()` in maxdemand.js), with the kind's working and rule, compact rows (name, − qty +, value, ×, per-line after-diversity share) and "+ Add another size". Adding a kind that's already there adds a row to its box. Stored state unchanged (`sparky.md1` list of lines).
 - Shots: `tests/screens_v28.py OUT [BASE] [phone]` (pass the main build's URL + `phone` to diff the phone layout).
+
+## v0.34.0 (26 Oct 2026, branch `v0.34.0-calcs-fixes`, NOT merged / not live)
+- Cg (Table 4C1) rounds UP to the next column between listed numbers (11 → the 12 column 0.45, 13 → 0.41, 17 → 0.38); `cgFor` in cables.js.
+- Ci is not applied for reference methods A and 100–103 (`methodHasInsulation`, `effectiveCi`); both calculators grey the picker ("N/A (Ci not used)") with the note "This method already allows for thermal insulation". Saved Ci is ignored for those methods.
+- BS 3036 ring (30/32 A, 2.5 mm²+): when 433.1.204 applies the 0.725 factor is not applied on top (`factorFor` in calc.js/design.js).
+- Table 4D1A singles method A 2.5 mm² checked: 20 A is correct; unchanged.
+- EIC Section I: new installation → placeholder/hint, PDF prints grey "N/A – new installation"; "Move to the description on page 1" button. Long Section I moves wholly to a portrait continuation sheet after the schedules ("See continuation sheet…"); Section J stays on page 2 and lists "Section I comments".
+- Bidirectional "Add note" (EIC/EICR) writes to the affected circuits' Remarks (MW unchanged).
+- Board: "Copy to another job" (circuits + readings by default; scan photos not copied). Also on the landscape/desktop schedule view.
+- Desktop: Esc closes the top overlay (photos, forms, dialogs) via backnav.js.
+- Tests: tests/v340.test.mjs. Screens: tests/screens_v340.py → /workspace/sparky-shots/v0.34.0.

@@ -80,6 +80,11 @@ export function eicrOverall(cert) {
 // ---------- Section lists for the screens ----------
 // f(key, label, type, extra)
 const f = (k, label, type = 'text', x = {}) => ({ k, label, type, ...x });
+// v0.34: EIC Section I on a new installation: nothing existing to comment on, so it prints
+// a grey "N/A – new installation" unless something is typed (or a danger notice adds a line).
+export const SECTION_I_NA = 'N/A \u2013 new installation';
+export const isNewInstall = (c) => !!c && c.type === 'EIC' && get(c, 'install.extentType') === 'New installation';
+export const DESC_HINT = 'e.g. Full rewire. New consumer unit (make and model) with RCBOs on every circuit.';
 const SUPPLY = { id: 'supply', title: 'Supply and earthing', form: 'F / I', fields: [
   f('supply.earthing', 'Earthing arrangement', 'chips', { opts: EARTHING }),
   f('supply.conductors', 'Live conductors', 'select', { opts: LIVE_COND }),
@@ -134,7 +139,7 @@ export function sectionsFor(type) {
       f('client.name', 'Client name'), f('client.address', 'Client address', 'area'), f('client.email', 'Client email (for emailing the certificate)', 'text', { opt: true, placeholder: 'Optional' }), 
       f('install.address', 'Installation address', 'area'), f('install.postcode', 'Installation postcode', 'text', { opt: true }),
       f('install.extentType', 'Type of work', 'chips', { opts: ['New installation', 'Addition to an existing installation', 'Alteration to an existing installation'] }),
-      f('install.description', 'Description of installation', 'area'), f('install.extent', 'Extent of installation covered by this certificate', 'area'),
+      f('install.description', 'Description of installation', 'area', { placeholder: DESC_HINT, hint: (c) => (isNewInstall(c) ? 'New installation: describe the work here (the board, RCBOs and so on), not in the comments on the existing installation.' : '') }), f('install.extent', 'Extent of installation covered by this certificate', 'area'),
     ] },
     { id: 'design', title: 'Design, construction, inspection', form: 'C / D', fields: [
       f('eic.designDepartures', 'Design: departures from BS 7671', 'area', { opt: true }), f('eic.exceptions', 'Permitted exceptions (411.3.3)', 'area', { opt: true }), f('eic.riskAttached', 'Risk assessment attached', 'check'),
@@ -150,7 +155,7 @@ export function sectionsFor(type) {
     ] },
     SUPPLY, PARTS,
     { id: 'inspections', title: 'Schedule of inspections', form: 'H', special: 'inspections' },
-    { id: 'comments', title: 'Comments on existing installation', form: 'I', fields: [f('comments', 'Comments (see Regulation 644.1.2)', 'area', { opt: true })] },
+    { id: 'comments', title: 'Comments on existing installation', form: 'I', fields: [f('comments', 'Comments (see Regulation 644.1.2)', 'area', { opt: true, placeholder: (c) => (isNewInstall(c) ? SECTION_I_NA : ''), hint: (c) => (isNewInstall(c) ? 'New installation: leave blank and the certificate prints \u201cN/A \u2013 new installation\u201d. Describe the work in the description on page 1.' : '') })] },
     { id: 'boards', title: 'Circuits and test results', form: 'Schedules', special: 'boards' },
     { id: 'bonding', title: 'Supplementary bonding', form: 'Schedule', special: 'bonding' },
     { id: 'sign', title: 'Sign', form: 'C', special: 'sign' },

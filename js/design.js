@@ -4,7 +4,7 @@
 // passes current, volt drop, Zs and adiabatic). Plain JS, tested by
 // tests/design.test.mjs. Every table comes from cables.js / limits.js.
 // =====================================================================
-import { CABLES, CABLE_PICKS, CABLE_TEMP, CG, cgFor, CF_BS3036, SINGLES_CPC, ARMOUR_CSA, K_VALUES, UL, TAILS_CPC, TYPICAL_NOTE } from './cables.js';
+import { CABLES, CABLE_PICKS, CABLE_TEMP, CG, cgFor, CF_BS3036, SINGLES_CPC, ARMOUR_CSA, K_VALUES, UL, TAILS_CPC, TYPICAL_NOTE, effectiveCi } from './cables.js';
 import { UO, CMIN, MAX_ZS, deviceById, ratingsFor, maxZs, INSTANT_MULT, MCB_INSTANT_T, MCB_CLASS3_I2T, RCD_TIMES, MPCB_MAG_MULT, mpcbRange, MCCB_FRAMES, maxZsForTrip } from './limits.js';
 import { ambientFactor, r1r2At20, RING_DIVISOR, izLine } from './calc.js';
 import { TEMP_MULT } from './cables.js';
@@ -225,8 +225,11 @@ export function sizeCircuit(o) {
   if (/^D/.test(method)) { ca = 1; caNote = 'Buried: air-temperature factor not used.'; }
   const cg = (Number(grouped) || 1) > 1 ? cgFor(m.bunched ? 'bunched' : grouping, grouped) : 1; // v0.22: blank / 1 = not grouped
   const cf = device === 'bs3036' ? CF_BS3036 : 1;
-  const factor = ca * cg * (Number(ci) || 1) * cf;
+  const ciEff = effectiveCi(method, ci); // v0.34: A / 100–103 already allow for insulation
+  const factor = ca * cg * ciEff * cf;
   const ringRule = (s) => ring && [30, 32].includes(inA) && s >= 2.5;
+  // v0.34: where 433.1.204 applies (Iz ≥ 20 A ring), the 0.725 BS 3036 factor isn't added on top.
+  const factorFor = (s) => (ringRule(s) && cf !== 1 ? ca * cg * ciEff : factor);
   const needIz = (s) => (ringRule(s) ? 20 : inA);
   const max = adj ? maxZsForTrip(adj.zsTrip || adj.imag, uo) : maxZs({ device: d.id, type: curve, rating: inA, time });
   const temp = CABLE_TEMP[cable] || 70; const mult = TEMP_MULT[temp] || 1.2;
@@ -234,8 +237,8 @@ export function sizeCircuit(o) {
   const spreadOn = !ring && !!spread; // v0.25: load spread evenly along a radial: half the length
   const div = ring ? RING_DIVISOR[ring] || 4 : spreadOn ? 2 : 1;
   const rows = cab.sizes.filter((s) => !ring || s >= 2.5).map((s) => {
-    const it = m.amps[s]; const needIt = needIz(s) / factor;
-    const cur = { pass: it != null && it >= needIt - 1e-9, it: it ?? null, iz: it == null ? null : r2(it * factor), needIz: needIz(s), needIt: r2(needIt) };
+    const it = m.amps[s]; const fs = factorFor(s); const needIt = needIz(s) / fs;
+    const cur = { pass: it != null && it >= needIt - 1e-9, it: it ?? null, iz: it == null ? null : r2(it * fs), needIz: needIz(s), needIt: r2(needIt) };
     const mv = cab.mvam[s]; const v = (mv * ib * L) / 1000 / div; const pct = (v / vref) * 100;
     const vd = { pass: pct <= limit + 1e-9, volts: r2(v), pct: r2(pct), limit, mvam: mv, div };
     const cp = cpcAreaFor(cable, s, cpcMode);
@@ -270,7 +273,7 @@ export function sizeCircuit(o) {
   }
   const notes = [
     three ? `Three-phase ${ul} V, balanced load, copper cables. Ib = P ÷ (√3 × ${ul} V × pf). Volt drop uses the three-phase mV/A/m and is a % of ${ul} V. Zs and the adiabatic check are phase to earth at Uo ${uo} V, using one phase conductor and the CPC${cab.cores === 4 && /swa/.test(cable) ? ' (the armour)' : ''}. Neutral current taken as nil (balanced, no harmonics).` : 'Single-phase 230 V, copper cables, BS 7671 Appendix 4 tables. Check against your own copy.',
-    `Current: In ≥ Ib, then tabulated It ≥ In ÷ (Ca ${ca} × Cg ${cg} × Ci ${Number(ci) || 1}${cf !== 1 ? ' × 0.725 BS 3036' : ''}) = ÷ ${r2(factor)}.${caNote ? ' ' + caNote : ''}`,
+    `Current: In ≥ Ib, then tabulated It ≥ In ÷ (Ca ${ca} × Cg ${cg} × Ci ${ciEff}${cf !== 1 ? ' × 0.725 BS 3036' : ''}) = ÷ ${r2(factor)}.${ciEff !== (Number(ci) || 1) ? ' Ci not used: method ' + method + ' already allows for thermal insulation.' : ''}${ring && cf !== 1 ? ' Ring on a BS 3036 fuse: the 0.725 isn\u2019t applied where 433.1.204 (Iz ≥ 20 A) is used.' : ''}${caNote ? ' ' + caNote : ''}`,
     ring ? `Ring: Iz ≥ 20 A on 2.5 mm² or bigger (433.1.204); volt drop and R1+R2 use the ring\u2019s loop length ÷ ${div === 8 ? '8 (load spread round the ring)' : '4 (load at the far point)'} for volt drop and ÷ 4 for R1+R2.` : null,
     spreadOn ? 'Load spread evenly along the run: volt drop worked out at half the length (the whole load at the far end would give twice the drop). Use this only when the load really is spread out, like lighting points.' : null,
     `Volt drop at Ib against ${limit}% of ${vref} V from the board. If it\u2019s a sub-board, add the sub-main\u2019s drop.`,
@@ -289,13 +292,13 @@ export function sizeCircuit(o) {
     let ibS = ibStep; const dev = steps.filter((t) => !isIb(t));
     const cut = ibS.indexOf(', so the next breaker size up is ');
     if (cut > 0) { dev.unshift('Breaker: the next size up is ' + ibS.slice(cut + ', so the next breaker size up is '.length)); ibS = ibS.slice(0, cut) + '.'; }
-    const chk = pick ? [izLine({ size: pick.size, it: pick.cur.it, iz: pick.cur.iz, needIz: pick.cur.needIz, f: { ca, cg, ci: Number(ci) || 1, cf }, ring: ringRule(pick.size), inA }).text,
+    const chk = pick ? [izLine({ size: pick.size, it: pick.cur.it, iz: pick.cur.iz, needIz: pick.cur.needIz, f: { ca, cg, ci: ciEff, cf: ringRule(pick.size) ? 1 : cf }, ring: ringRule(pick.size), inA }).text,
       `Volt drop ${pick.vd.volts} V (${pick.vd.pct}%), limit ${limit}%.`,
       pick.z.zs != null ? `Zs ${pick.z.zs} Ω, max ${pick.z.max ?? '?'} Ω.` : null,
       pick.adi.ok ? `Adiabatic: CPC needs ${pick.adi.smin} mm², ${pick.adi.armour ? 'armour is' : 'it has'} ${pick.adi.area} mm².` : null].filter(Boolean) : [];
     steps.length = 0; steps.push(ibS, ...dev, ...chk, last); }
-  const izInfo = pick ? izLine({ size: pick.size, it: pick.cur.it, iz: pick.cur.iz, needIz: pick.cur.needIz, f: { ca, cg, ci: Number(ci) || 1, cf }, ring: ringRule(pick.size), inA }) : null;
-  return { ok: true, spread: spreadOn, izInfo, adj: adj || null, cable, advice, phase: three ? 3 : 1, vref, ib, inA, curve, device: d.id, limit, factors: { ca, cg, ci: Number(ci) || 1, cf, total: r2(factor) }, rows, pick, reasons, steps, notes, max, k, ring };
+  const izInfo = pick ? izLine({ size: pick.size, it: pick.cur.it, iz: pick.cur.iz, needIz: pick.cur.needIz, f: { ca, cg, ci: ciEff, cf: ringRule(pick.size) ? 1 : cf }, ring: ringRule(pick.size), inA }) : null;
+  return { ok: true, spread: spreadOn, izInfo, adj: adj || null, cable, advice, phase: three ? 3 : 1, vref, ib, inA, curve, device: d.id, limit, factors: { ca, cg, ci: ciEff, cf, total: r2(factor) }, rows, pick, reasons, steps, notes, max, k, ring };
 }
 
 // ---------- v0.19: MPCB and MCCB (adjustable devices) ----------

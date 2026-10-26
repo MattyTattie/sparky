@@ -7,13 +7,13 @@ import * as db from './db.js';
 import { h, fill, toast, modal, confirmBox, pickFile, shrinkImage, icon, withIcon } from './ui.js';
 import { orderRows, mainSide, mainRow, settleSpdMcb } from './cuscan.js';
 import { route, page, go, render } from './app.js';
-import { openCert, changed, flush } from './state.js';
+import { openCert, changed, flush, touchJob } from './state.js';
 import { field, stateLine } from './certui.js';
 import { sectionsFor, get, set } from './certmodel.js';
 const boardsLine = (cert) => { const sec = sectionsFor(cert.type).find((x) => x.special === 'boards'); if (!sec) return null; const [c, t] = stateLine(cert, sec); return h('div', { class: 'notice ' + c + ' secstate' }, t); };
 import { blankBoard } from './certmodel.js';
 import * as presets from './presets.js';
-import { FIELDS, FIELD, TEMPLATES, blankCircuit, applyTemplate, copyCircuit, copyBoard, makeSpare, autoNA, descChanged, rcdGroupChanged, spdGroupChanged, SPD_HIDE, spdHidden, spdObservation, circuitFedBySource, boardFedBySource, bidiTarget, hasBidiNote, addBidiNote, spareLine, copyToNextWay, laterSequential, deleteCircuitAt } from './templates.js';
+import { FIELDS, FIELD, TEMPLATES, blankCircuit, applyTemplate, copyCircuit, copyBoard, copyBoardToCert, makeSpare, autoNA, descChanged, rcdGroupChanged, spdGroupChanged, SPD_HIDE, spdHidden, spdObservation, circuitFedBySource, boardFedBySource, bidiTarget, hasBidiNote, addBidiNote, bidiCircuits, addBidiRemark, bidiRemarksDone, spareLine, copyToNextWay, laterSequential, deleteCircuitAt } from './templates.js';
 import { checkCircuit, limitZs, isSpare } from './checks.js';
 import { autoFillOcpd, typed } from './ocpdfill.js';
 import { DEVICES, deviceById, deviceFromBs, ratingsFor, CHECK_NOTE } from './limits.js';
@@ -60,6 +60,30 @@ export async function copyBoardDialog(cert, b) {
   cert.boards.push(copyBoard(b, { ref: ref.value.trim() || nextRef(cert), keepResults: keep.checked, keepBoardTests: keepB.checked }));
   changed(); toast(`Copied to ${cert.boards[cert.boards.length - 1].ref}`); go(`#/cert/${cert.id}/b/${cert.boards.length - 1}`);
 }
+// v0.34: copy this board, with its circuits and readings, to a certificate in another job.
+export async function copyBoardToJobDialog(cert, b) {
+  await flush();
+  const [jobs, certs] = await Promise.all([db.all('jobs'), db.all('certs')]);
+  const jname = Object.fromEntries(jobs.map((j) => [j.id, j.title || 'Job']));
+  const list = certs.filter((c) => c.id !== cert.id && c.type !== 'MW' && Array.isArray(c.boards) && jname[c.jobId] && c.jobId !== cert.jobId)
+    .sort((a, b2) => String(b2.updatedAt || '').localeCompare(String(a.updatedAt || '')));
+  if (!list.length) return modal('Copy to another job', h('p', {}, 'No other job has an EIC or EICR yet. Start one in the job you want, then come back and copy this board.'), [{ label: 'OK', value: true, cls: 'primary' }]);
+  const to = h('select', { 'aria-label': 'Copy to' }, list.map((c) => h('option', { value: c.id }, `${jname[c.jobId]} \u2013 ${c.type} ${c.number || ''} (${(c.boards || []).length} board${(c.boards || []).length === 1 ? '' : 's'})`)));
+  const keep = h('input', { type: 'checkbox', checked: true }); const keepB = h('input', { type: 'checkbox', checked: true });
+  const ok = await modal('Copy to another job', h('div', {},
+    h('p', { class: 'note' }, `Copies ${b.ref || 'this board'} with its ${b.circuits.length} circuit(s) into the certificate you pick. This board stays as it is.`),
+    h('label', { class: 'f' }, h('span', {}, 'Copy to'), to),
+    h('label', { class: 'check' }, keep, 'Keep the circuit test results'),
+    h('label', { class: 'check' }, keepB, 'Keep the board\u2019s Zdb, Ipf and confirmations')),
+  [{ label: 'Cancel', value: false }, { label: 'Copy board', value: true, cls: 'primary' }]);
+  if (!ok) return;
+  const target = await db.get('certs', to.value); if (!target) return toast('That certificate has gone');
+  const nb = copyBoardToCert(target, b, { keepResults: keep.checked, keepBoardTests: keepB.checked });
+  target.updatedAt = new Date().toISOString(); target.version = (target.version || 0) + 1;
+  await db.put('certs', target); if (target.jobId) await touchJob(target.jobId);
+  toast(`Copied to ${jname[target.jobId]} as ${nb.ref}`);
+  if (await confirmBox('Board copied', `${nb.ref} is now in ${jname[target.jobId]} (${target.type} ${target.number || ''}). Open it?`, 'Open it')) go(`#/cert/${target.id}/b/${target.boards.length - 1}`);
+}
 const nextRef = (cert) => { let n = cert.boards.length + 1; while (cert.boards.some((x) => x.ref === 'DB' + n)) n++; return 'DB' + n; };
 // Copy one circuit: to this board or another one, readings optional.
 async function copyCircuitDialog(cert, b, bi, ci, base) {
@@ -84,14 +108,15 @@ route(/^\/cert\/([^/]+)\/b\/(\d+)$/, async (id, bi) => {
   const b = cert.boards[+bi]; if (!b) return go('#/cert/' + id);
   const back = cert.boards.length > 1 ? `#/cert/${id}/boards` : '#/cert/' + id;
   const tools = boardTools(cert, b, +bi);
-  if (LAND.matches) return page(`${b.ref || 'Board'} · schedule of test results`, [boardDetails(cert, b), tools, scheduleTable(cert, b, +bi)], { back, wide: true, sub: cert.number });
+  if (LAND.matches) return page(`${b.ref || 'Board'} · schedule of test results`, [boardDetails(cert, b), tools, scheduleTable(cert, b, +bi),
+    h('div', { class: 'btns' }, h('button', { class: 'btn small', onclick: () => copyBoardDialog(cert, b) }, 'Copy this board'), h('button', { class: 'btn small', onclick: () => copyBoardToJobDialog(cert, b) }, 'Copy to another job'))], { back, wide: true, sub: cert.number });
   page(b.ref || 'Board', [
     boardsLine(cert),
     boardDetails(cert, b),
     h('div', { class: 'note', style: 'margin:4px 0 8px' }, 'Tip: turn the phone sideways to see the whole schedule as a table.'),
     tools,
     circuitCards(cert, b, +bi),
-    h('div', { class: 'btns full' }, h('button', { class: 'btn', onclick: () => addBoard(cert) }, '+ Add another board'), h('button', { class: 'btn', onclick: () => copyBoardDialog(cert, b) }, 'Copy this board'), cert.boards.length > 1 ? h('button', { class: 'btn warn', onclick: async () => { if (await confirmBox('Delete this board?', `${b.ref} and its ${b.circuits.length} circuits`, 'Delete', 'warn')) { cert.boards.splice(+bi, 1); changed(); go(`#/cert/${id}/boards`); } } }, 'Delete board') : null),
+    h('div', { class: 'btns full' }, h('button', { class: 'btn', onclick: () => addBoard(cert) }, '+ Add another board'), h('button', { class: 'btn', onclick: () => copyBoardDialog(cert, b) }, 'Copy this board'), h('button', { class: 'btn', onclick: () => copyBoardToJobDialog(cert, b) }, 'Copy to another job'), cert.boards.length > 1 ? h('button', { class: 'btn warn', onclick: async () => { if (await confirmBox('Delete this board?', `${b.ref} and its ${b.circuits.length} circuits`, 'Delete', 'warn')) { cert.boards.splice(+bi, 1); changed(); go(`#/cert/${id}/boards`); } } }, 'Delete board') : null),
     h('div', { class: 'notice amber' }, CHECK_NOTE),
   ], { back, sub: cert.number });
 });
@@ -113,12 +138,19 @@ function boardDetails(cert, b) {
 
 // v0.32: "Fed by battery / PV / generator" on the board, and the bidirectional reminder.
 function bidiTick(cert, b) {
-  const box = h('div'); const draw = () => fill(box, bidiBox(cert, () => boardFedBySource(b)));
+  const box = h('div'); const draw = () => fill(box, bidiBox(cert, () => boardFedBySource(b), () => bidiCircuits(b)));
   const t = h('label', { class: 'check' }, h('input', { type: 'checkbox', checked: !!b.fedBySource, onchange: (e) => { b.fedBySource = e.target.checked; changed(); draw(); } }), 'Fed by battery / PV / generator');
   draw(); return h('div', {}, t, box);
 }
-function bidiBox(cert, fed) {
+function bidiBox(cert, fed, targets) {
   if (!fed()) return null;
+  if (cert.type !== 'MW' && targets) { // v0.34: the note goes in the affected circuits' Remarks
+    const list = targets(); const done = bidiRemarksDone(list); const n = list.length;
+    const box = h('div', { class: 'notice amber bidi' },
+      h('div', {}, h('b', {}, 'Bidirectional devices: '), 'this is fed by a battery, PV or generator. Confirm the protective devices are suitable for bidirectional operation (Reg 530.3.201) and note it in the circuit Remarks.'),
+      done ? h('div', { class: 'note', style: 'margin-top:6px' }, '\u2713 Note is in the Remarks' + (n > 1 ? ` of all ${n} circuits.` : '.')) : h('button', { class: 'btn small', style: 'margin-top:8px', onclick: () => { list.forEach(addBidiRemark); changed(); { const y = scrollY; Promise.resolve(render()).then(() => setTimeout(() => scrollTo(0, y), 30)); } toast(n > 1 ? `Note added to the Remarks of ${n} circuits` : 'Note added to the Remarks'); fill(box, h('div', {}, h('b', {}, 'Bidirectional devices: '), 'note added to the Remarks' + (n > 1 ? ` of circuits ${list.map((c) => c.num).join(', ')}.` : '.'))); } }, n > 1 ? `Add note to ${n} circuits\u2019 Remarks` : 'Add note to Remarks'));
+    return box;
+  }
   const k = bidiTarget(cert); const done = hasBidiNote(get(cert, k));
   const box = h('div', { class: 'notice amber bidi' },
     h('div', {}, h('b', {}, 'Bidirectional devices: '), 'this is fed by a battery, PV or generator. Confirm the protective devices are suitable for bidirectional operation (Reg 530.3.201) and note it in the comments.'),
@@ -436,7 +468,7 @@ function circuitEditor({ cert, c, ctx, back, title, prev, next, extra = [], mw =
         h('div', { class: 'grid3' }, inp('afddBs', { label: 'AFDD BS (EN)' }), inp('afddType', { label: 'AFDD type' }), inp('afddRating', { label: 'AFDD rating (A)' }))),
       mw ? h('div', { class: 'rcdgrp' }, h('div', { class: 'phd' }, h('span', {}, 'SPD (if any)')),
         h('div', { class: 'grid2' }, inp('spdBs', { label: 'SPD BS (EN)' }), inp('spdType', { label: 'SPD type' }))) : null,
-      bidiBox(cert, () => circuitFedBySource(c)),
+      bidiBox(cert, () => circuitFedBySource(c), () => [c]),
       h('div', { class: 'phd cablehd' }, h('span', {}, 'Cable and wiring')),
       cableBox),
     sect('Test results',

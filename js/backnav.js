@@ -37,6 +37,15 @@ export function start() {
       m.removedNodes.forEach((n) => { if (n.nodeType === 1 && n.matches && n.matches(SEL)) removed(n); });
     }
   }).observe(document.body, { childList: true });
+  // v0.34: Esc (Mac / desktop keyboard) closes what's open on top, the same way back does:
+  // photo zoom, dialogs and forms, pickers, the PDF preview and the symbol pop-up.
+  // X, tapping outside and back all still work as before.
+  addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape' || e.defaultPrevented || e.isComposing) return;
+    const sym = document.querySelector('.sympop'); if (sym) { sym.remove(); e.preventDefault(); return; }
+    const top = topOverlay(); if (!top) return;
+    e.preventDefault(); closeEl(top);
+  });
   addEventListener('popstate', (e) => {
     if (ignore) { ignore--; return; }
     const st = e.state || {};
@@ -45,5 +54,10 @@ export function start() {
     // landed on an entry of an overlay that's already gone (e.g. it opened another page): skip it
     if (st.sparkyOv && !stack.some((x) => x.id === st.sparkyOv)) { ignore++; history.back(); }
   });
+}
+// the open overlay on top: the last one tracked, or any in the page (last in the DOM is on top)
+function topOverlay() {
+  for (let i = stack.length - 1; i >= 0; i--) if (stack[i].el.isConnected) return stack[i].el;
+  const all = document.querySelectorAll(SEL); return all.length ? all[all.length - 1] : null;
 }
 export const _stack = stack; // tests

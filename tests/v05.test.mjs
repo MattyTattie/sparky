@@ -56,7 +56,7 @@ test('PDF: schedules grouped (all circuit details, then all test results), label
   assert.equal(scheduleSheets(c).length, Math.ceil(40 / PER_SHEET));
   const pages = pageTitles(await save('eic.pdf', await certificatePdf(c, { profile: S.PROFILE })));
   const kinds = pages.map((t) => (/SCHEDULE OF CIRCUIT DETAILS/.test(t) ? 'D' : /SCHEDULE OF TEST RESULTS/.test(t) ? 'T' : /SUPPLEMENTARY BONDING/.test(t) ? 'B' : '-')).join('');
-  assert.match(kinds, /^-+DDDT{3,}B-$/); // v0.33.1: long remarks grow rows; overflow rows go to a '(continued)' sheet
+  assert.match(kinds, /^-+DDDT{3,}B-{1,2}$/); // v0.34.0: a long Section I adds its continuation sheet after the schedules // v0.33.1: long remarks grow rows; overflow rows go to a '(continued)' sheet
   assert.equal(pages.filter((t) => /SCHEDULE OF TEST RESULTS/.test(t) && !/continued/.test(t)).length, 3);
   const d2 = pages.find((t) => /CIRCUIT DETAILS/.test(t) && /Sheet 2 of 3/.test(t));
   assert.ok(d2 && /DB-GARAGE-SUB-1/.test(d2) && /continuation/.test(d2) && /EIC-000123-LONG/.test(d2));

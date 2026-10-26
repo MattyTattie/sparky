@@ -113,7 +113,11 @@ export const GROUP_INFO = {
 export function cgFor(grouping, n) {
   const t = CG[grouping] || CG.bunched; const k = Math.max(1, Math.floor(Number(n) || 1));
   if (k <= 9) return t[k] ?? 1;
-  return t[Object.keys(t).map(Number).filter((x) => x <= k).sort((a, b) => b - a)[0]];
+  // v0.34: between Table 4C1 columns round UP to the next column (10–11 → 12, 13–15 → 16,
+  // 17–19 → 20; 20 or more → 20), never down, so the cable is never undersized.
+  const keys = Object.keys(t).map(Number).sort((a, b) => a - b);
+  const up = keys.find((x) => x >= k);
+  return t[up ?? keys[keys.length - 1]];
 }
 export const CF_BS3036 = 0.725; // Regulation 433.1.202 / Appendix 4 — semi-enclosed fuse
 export const CABLE_TEMP = { te: 70, swa: 70, swaX: 90, swa3: 70, swa3X: 90 };
@@ -228,6 +232,11 @@ export const K_VALUES = {
   armour90: { k: 46, label: 'Steel armour of a 90 °C XLPE SWA cable (Table 54.4)' },
 };
 
+// v0.34: methods whose ratings already allow for thermal insulation (A = conduit in an
+// insulated wall; 100–103 = T&E in insulated ceilings/walls, Table 4D5). Ci isn't applied on top.
+export const INSULATED_METHOD_NOTE = 'This method already allows for thermal insulation';
+export function methodHasInsulation(method) { return /^(A|10[0-3])$/.test(String(method || '')); }
+export function effectiveCi(method, ci) { return methodHasInsulation(method) ? 1 : Number(ci) || 1; }
 // Thermal insulation factor Ci (Table 52.2 for short lengths; 0.5 for 0.5 m or more).
 export const CI_OPTIONS = [
   ['1', 'None (Ci 1.0)'],
