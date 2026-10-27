@@ -26,7 +26,6 @@ export async function dcPlanPdf(p, { title = 'DC system plan', profile = {}, bas
     ['Daily use', `${p.daily.wh} Wh = ${p.daily.ah} Ah at ${p.V} V (DC ${p.daily.dcWh} Wh, 230 V ${p.daily.acWh} Wh${p.daily.idleWh ? `, incl. inverter idle ${p.daily.idleW} W × ${p.daily.idleH} h = ${p.daily.idleWh} Wh` : ''})`],
     ['Battery', p.battery.why],
     p.inverter ? ['Inverter', `${p.inverter.w} W pure sine, ${p.inverter.current} A DC at full output`] : null,
-    p.inverter && p.inverter.runtime ? ['Runtime', p.inverter.runtime.map((r) => `${r.pct}% (${r.w} W): ${r.hours} h`).join('; ') + ` from ${Math.round(p.inverter.usableWh / 100) / 10} kWh usable`] : null,
     p.solar ? ['Solar', `${p.solar.w} W → MPPT ${p.solar.mpptV} V / ${p.solar.mppt} A${p.solar.pv && p.solar.pv.cold ? `; cold Voc ${p.solar.pv.cold} V` : ''}`] : null,
     p.dcdc ? ['DC-DC', `${p.dcdc.a} A (${p.dcdc.inI} A from the starter battery)`] : null,
     p.shore ? ['Mains charger', `${p.shore.a} A`] : null,

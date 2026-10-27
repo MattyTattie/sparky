@@ -308,12 +308,6 @@ export function planDC(o0 = {}) {
   const profile = chargeProfile(chem, V);
   const plan = { profile, V, vehV, chem, cable: cab, cableLabel: PLAN_CABLES[cab].label, derate, ca, cg, ambient: amb, mainPct, loads, dcLoads, acLoads, daily, battery, inverter, solar, dcdc, dcdcAdvice, shore, shoreSuggest, fuseBox, discharge, charge, main, shunt, isolator, busbar, chassis, runs, warnings, notes };
   plan.cables = cableList(plan); plan.parts = partsList(plan, o);
-  // v0.35: runtime at inverter load levels: usable Wh (Ah × V × DoD) ÷ (load W ÷ 0.9 + idle W).
-  if (inverter) {
-    const ah = fitted || battery.suggestAh || needAh; const usable = ah * (battery.nomV || V) * dod; // nominal volts, so it matches the kWh shown
-    inverter.usableWh = Math.round(usable);
-    inverter.runtime = [1, 0.75, 0.5, 0.25].map((f) => { const draw = (invW * f) / INV_EFF + idleW; return { pct: f * 100, w: Math.round(invW * f), draw: Math.round(draw), hours: draw > 0 && usable > 0 ? r1(usable / draw) : 0 }; });
-  }
   return plan;
 }
 

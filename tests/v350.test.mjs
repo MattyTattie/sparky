@@ -53,15 +53,6 @@ test('inverter only: rating is not daily use; idle + kWh a day count', () => {
   assert.equal(p.battery.fittedDays, Math.round((2400 * 0.8 / 89.6) * 10) / 10);
   assert.doesNotMatch(p.battery.why, /null|NaN|Infinity/);
 });
-test('runtime at inverter load levels (worked example)', () => {
-  const p = D.planDC({ ...D.PLAN_DEFAULTS, volts: '48', chem: 'lifepo4', dod: '90', battAh: '2400', loads: [], invW: '5000' });
-  assert.equal(p.inverter.usableWh, 110592);                 // 2400 × 51.2 V nominal × 0.9 (matches the kWh shown)
-  const [f, t, h, q] = p.inverter.runtime;
-  assert.equal(f.draw, 5596); assert.equal(f.hours, 19.8);    // 5000 ÷ 0.9 + 40 idle
-  assert.equal(h.hours, Math.round(110592 / (2500 / 0.9 + 40) * 10) / 10);
-  assert.deepEqual([f.pct, t.pct, h.pct, q.pct], [100, 75, 50, 25]);
-});
-
 test('v0.35 QA: MPPT "would clip" note only when a smaller size exists', async () => {
   const D = await import('../js/dcplan.js');
   const w = (V) => D.planDC({ ...D.VAN_EXAMPLE, volts: String(V), solarW: '500', panels: '10' }).solar;

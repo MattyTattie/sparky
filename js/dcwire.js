@@ -71,20 +71,40 @@ export const estW = (t, size) => String(t).length * size * 0.56;
 const fit = (t, w, size) => { t = String(t); if (estW(t, size) <= w) return t; while (t.length > 1 && estW(t + '…', size) > w) t = t.slice(0, -1); return t.trimEnd() + '…'; };
 const wrapEst = (t, w, size) => { const out = []; let line = ''; for (const word of String(t).split(' ')) { const tryL = line ? line + ' ' + word : word; if (estW(tryL, size) > w && line) { out.push(line); line = word; } else line = tryL; } if (line) out.push(line); return out; };
 
+// v0.35.1: one layout rule for every leg. Stacked pills get PILL_GAP between them and
+// at least PILL_GAP clear of the box above and below; rows move down to make room.
+export const PILL_H = 13, PILL_GAP = 6;
+const ROWS = ['r0', 'r1', 'r2', 'bus', 'r3'];
+export const stackHeight = (n) => n * PILL_H + (n - 1) * PILL_GAP + 2 * PILL_GAP;
 export function wiringModel(p, o = {}) {
+  let Y = { r0: 8, r1: 92, r2: 166, bus: 248, r3: 314 };
+  let H = { r0: 40, r1: 30, r2: 38, bus: 22, r3: 44 };
+  for (let pass = 0; pass < 8; pass++) {
+    const m = buildModel(p, o, Y, H);
+    // real row heights (boxes grow when text wraps)
+    const H2 = { ...H }; for (const b of m.boxes) if (b.row) H2[b.row] = Math.max(H2[b.row], b.h);
+    const Y2 = { ...Y }; let moved = false;
+    for (let i = 1; i < ROWS.length; i++) { const r = ROWS[i], prev = ROWS[i - 1]; const base = Y[r] - Y[prev] - H[prev]; Y2[r] = Y2[prev] + H2[prev] + base; }
+    for (const s of m.stacks) { const room = Y2[s.b] - (Y2[s.a] + H2[s.a]); const short = stackHeight(s.n) - room;
+      if (short > 0) { moved = true; for (let i = ROWS.indexOf(s.b); i < ROWS.length; i++) Y2[ROWS[i]] += short; } }
+    if (!moved && ROWS.every((r) => Y2[r] === Y[r] && H2[r] === H[r])) { delete m.stacks; return m; }
+    Y = Y2; H = H2;
+  }
+  const m = buildModel(p, o, Y, H); delete m.stacks; return m;
+}
+function buildModel(p, o, Y, H) {
   const W = 360, CW = 104, X = [8, 128, 248], MID = X.map((x) => x + CW / 2);
-  const Y = { r0: 8, r1: 92, r2: 166, bus: 248, r3: 314 };
-  const H = { r0: 40, r1: 30, r2: 38, bus: 22, r3: 44 };
+  const stacks = [];
   const boxes = [], wires = [], pills = [], texts = [];
   // v0.35: box text wraps (never cut short with '…'); the box grows if it needs to.
-  const box = (col, row, t, s = [], kind = 'kit') => { const sub = s.filter(Boolean).flatMap((x) => wrapEst(x, CW - 8, 7)); const b = { x: X[col], y: Y[row], w: CW, h: Math.max(H[row], 14 + sub.length * 9 + 4), t, s: sub, kind }; boxes.push(b); return b; };
+  const box = (col, row, t, s = [], kind = 'kit') => { const sub = s.filter(Boolean).flatMap((x) => wrapEst(x, CW - 8, 7)); const b = { row, x: X[col], y: Y[row], w: CW, h: Math.max(H[row], 14 + sub.length * 9 + 4), t, s: sub, kind }; boxes.push(b); return b; };
   const wire = (pts, c = 'pos') => wires.push({ pts, c });
   // cable (and fuse) labels stacked in the middle of a vertical wire
   // v0.35: extra tags ({ t, kind, bad }) for isolators / cold Voc; bad = over a limit (drawn red).
-  const tags = (x, y1, y2, cable, fuse, extra = []) => { const list = [cable && (typeof cable === 'object' ? { kind: 'cable', ...cable } : { t: cable, kind: 'cable' }), fuse && { t: fuse, kind: 'fuse' }, ...extra].filter(Boolean); const hh = 13, gap = 2; let y = (y1 + y2) / 2 - (list.length * hh + (list.length - 1) * gap) / 2;
+  const tags = (x, y1, y2, cable, fuse, extra = [], a, bRow) => { const list = [cable && (typeof cable === 'object' ? { kind: 'cable', ...cable } : { t: cable, kind: 'cable' }), fuse && { t: fuse, kind: 'fuse' }, ...extra].filter(Boolean); if (a) stacks.push({ a, b: bRow, n: list.length }); const hh = PILL_H, gap = PILL_GAP; let y = (y1 + y2) / 2 - (list.length * hh + (list.length - 1) * gap) / 2;
     for (const it of list) { const w = Math.min(CW + 12, estW(it.t, 7.5) + 10); pills.push({ cx: x, y, w, h: hh, t: it.t, kind: it.kind, bad: !!it.bad }); y += hh + gap; } };
   const mm = (r) => r && r.size ? `${r.size} mm²` : 'size ?';
-  const down = (col, rowA, rowB, c, cable, fuse, extra) => { const x = MID[col], y1 = Y[rowA] + H[rowA], y2 = Y[rowB]; wire([[x, y1], [x, y2]], c); tags(x, y1, y2, cable, fuse, extra); };
+  const down = (col, rowA, rowB, c, cable, fuse, extra) => { const x = MID[col], y1 = Y[rowA] + H[rowA], y2 = Y[rowB]; wire([[x, y1], [x, y2]], c); tags(x, y1, y2, cable, fuse, extra, rowA, rowB); };
   const amps = (r) => r && r.size ? `${r.size} mm² · ${Math.round(r.current * 10) / 10} A` : 'size ?';
   const b = p.battery;
   // centre: battery → main fuse → isolator → busbar
@@ -115,14 +135,14 @@ export function wiringModel(p, o = {}) {
   if (p.dcdc) {
     box(2, 'r0', 'Starter battery', [`${p.vehV} V vehicle`, 'alternator']);
     box(2, 'r2', 'DC-DC charger', [`${p.dcdc.a} A`, p.dcdc.trigger ? '+ trigger wire' : '']);
-    const x = MID[2], y1 = Y.r0 + H.r0, y2 = Y.r2; wire([[x, y1], [x, y2]]); tags(x, y1, y2, mm(p.dcdc.inRun), fuseShort(p.dcdc.inRun.fuse));
+    const x = MID[2], y1 = Y.r0 + H.r0, y2 = Y.r2; wire([[x, y1], [x, y2]]); tags(x, y1, y2, mm(p.dcdc.inRun), fuseShort(p.dcdc.inRun.fuse), [], 'r0', 'r2');
     down(2, 'r2', 'bus', 'pos', mm(p.dcdc.outRun), fuseShort(p.dcdc.outRun.fuse));
     if (p.shore) shoreRow = 'r3';
   } else if (p.shore) shoreRow = 'r2';
   if (shoreRow) {
     box(2, shoreRow, 'Mains charger', [`${p.shore.a} A`, 'from 230 V hook-up']);
     if (shoreRow === 'r2') down(2, 'r2', 'bus', 'pos', mm(p.shore.run), fuseShort(p.shore.run.fuse));
-    else { const x = MID[2], y1 = Y.bus + H.bus, y2 = Y.r3; wire([[x, y1], [x, y2]]); tags(x, y1, y2, mm(p.shore.run), fuseShort(p.shore.run.fuse)); }
+    else { const x = MID[2], y1 = Y.bus + H.bus, y2 = Y.r3; wire([[x, y1], [x, y2]]); tags(x, y1, y2, mm(p.shore.run), fuseShort(p.shore.run.fuse), [], 'bus', 'r3'); }
   }
   boxes.push({ x: 8, y: Y.bus, w: W - 16, h: H.bus, t: `+ BUSBAR${p.busbar ? '  ' + p.busbar.a + ' A' : ''}`, s: [], kind: 'bus' });
   // below the busbar: inverter, fuse box and loads
@@ -130,7 +150,7 @@ export function wiringModel(p, o = {}) {
   if (p.inverter) {
     const ac = p.acLoads.map((l) => l.name.replace(/ \((230 V )?via inverter\)/, '').replace(/^Low-watt /, ''));
     box(0, 'r3', 'Inverter', [`${p.inverter.w} W → 230 V`, `${p.inverter.current} A DC`]);
-    const x = MID[0]; wire([[x, busBot], [x, Y.r3]]); tags(x, busBot, Y.r3, { t: amps(p.inverter.run), bad: !p.inverter.run.ok }, fuseShort(p.inverter.run.fuse), p.inverter.isoA ? [{ t: `${p.inverter.isoA} A DC isolator`, kind: 'fuse' }] : []);
+    const x = MID[0]; wire([[x, busBot], [x, Y.r3]]); tags(x, busBot, Y.r3, { t: amps(p.inverter.run), bad: !p.inverter.run.ok }, fuseShort(p.inverter.run.fuse), p.inverter.isoA ? [{ t: `${p.inverter.isoA} A DC isolator`, kind: 'fuse' }] : [], 'bus', 'r3');
     // v0.35: AC output under the inverter
     const yA = Y.r3 + H.r3 + 22; wire([[x, Y.r3 + H.r3], [x, yA]], 'ac');
     const acLines = wrapEst(ac.length ? `230 V AC out: ${ac.join(', ')}` : '230 V AC out (RCD protected)', CW - 8, 7);
@@ -139,7 +159,7 @@ export function wiringModel(p, o = {}) {
   }
   if (p.fuseBox) {
     box(1, 'r3', 'Fuse box', [`${p.fuseBox.ways}-way blade`]);
-    const x = MID[1]; wire([[x, busBot], [x, Y.r3]]); tags(x, busBot, Y.r3, mm(p.fuseBox.run), fuseShort(p.fuseBox.run.fuse));
+    const x = MID[1]; wire([[x, busBot], [x, Y.r3]]); tags(x, busBot, Y.r3, mm(p.fuseBox.run), fuseShort(p.fuseBox.run.fuse), [], 'bus', 'r3');
     const bx = X[1] + 14, lx = X[1] + 30, lw = W - 8 - lx, rh = 30, gap = 6; let y = Y.r3 + H.r3 + 14;
     const loads = p.dcLoads; if (loads.length) {
       const last = y + (loads.length - 1) * (rh + gap) + rh / 2;
@@ -164,7 +184,7 @@ export function wiringModel(p, o = {}) {
     yN += 32 + 8;
     for (const line of wrapEst(`Battery − to shunt to − busbar: ${p.main.size ?? '?'} mm² black. − busbar to chassis: ${p.chassis.size} mm² black. Every negative goes back to the − busbar, the same size as its positive.`, W - 16, 7.5)) { yN += 11; texts.push({ x: 8, y: yN, t: line, size: 7.5, color: 'sub' }); }
   }
-  return { W, H: yN + 10, boxes, wires, pills, texts };
+  return { W, H: yN + 10, boxes, wires, pills, texts, stacks };
 }
 
 // Inline SVG (a string, so it can go in with innerHTML; all text is escaped).

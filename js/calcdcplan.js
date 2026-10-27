@@ -226,10 +226,6 @@ function results(v, p) {
     h('div', { class: 'card conncard' }, h('h2', {}, 'Connections, in order'),
       h('p', { class: 'help', style: 'margin-top:0' }, 'Every link between the kit: cable, length, fuse and where it goes. Red = positive, black = negative.'),
       h('ol', { class: 'conns' }, conns.map(conn))),
-    p.inverter && p.inverter.runtime ? h('div', { class: 'card' }, h('h3', {}, 'Battery runtime at inverter load'),
-      h('div', { class: 'reftblwrap' }, h('table', { class: 'reftbl runtime' }, h('thead', {}, h('tr', {}, h('th', {}, 'Inverter load'), h('th', {}, 'From battery'), h('th', {}, 'Lasts about'))),
-        h('tbody', {}, p.inverter.runtime.map((r) => h('tr', {}, h('td', {}, `${r.pct}% (${r.w} W)`), h('td', {}, `${r.draw} W`), h('td', {}, `${r.hours} h`)))))),
-      h('p', { class: 'help' }, `Usable ${Math.round(p.inverter.usableWh / 100) / 10} kWh (${p.battery.fittedAh || p.battery.suggestAh || p.battery.needAh} Ah × ${p.battery.nomV || p.V} V × ${Math.round(p.battery.dod * 100)}%) ÷ (load ÷ ${INV_EFF * 100}% + ${p.daily.idleW} W idle). Steady load, full battery; real runtimes vary.`)) : null,
     h('div', { class: 'card' }, fold('dc-diagram', 'Wiring diagram', [h('div', { class: 'wiring' + (localStorage.getItem('sparky.wzoom') === '1' ? ' zoom' : ''), html: svg }), h('div', { class: 'btns' }, h('button', { class: 'btn small noic', type: 'button', onclick: (e) => { const w = e.target.closest('.foldin').querySelector('.wiring'); const z = w.classList.toggle('zoom'); localStorage.setItem('sparky.wzoom', z ? '1' : '0'); e.target.textContent = z ? 'Fit to screen' : 'Make it bigger'; } }, localStorage.getItem('sparky.wzoom') === '1' ? 'Fit to screen' : 'Make it bigger')), h('p', { class: 'help' }, 'A layout guide, not to scale. Fuses sit at the busbar end of each positive unless it says otherwise.')], { open: true })),
     h('div', { class: 'card foldcard' }, fold('dc-runs', 'Cables & fuses', [
       h('table', { class: 'calctab runs' }, h('tr', {}, ['Run', 'A', 'Fuse', 'mm²', 'Drop'].map((t) => h('th', {}, t))),
