@@ -180,7 +180,7 @@ route(/^\/calc\/dc\/plan(?:\/(\w+))?$/, async (stepArg) => {
         icard('Main cable runs', [
           h('p', { class: 'help', style: 'margin-top:0' }, 'One-way lengths. Short is good: the defaults suit a small van.'),
           h('div', { class: 'grid2' }, len('mainLen', 'Battery to busbar', 'Through the main fuse and isolator'), p.inverter ? len('invLen', 'Busbar to inverter', 'Keep it short') : null),
-          h('div', { class: 'grid2' }, p.dcLoads.length ? len('fuseBoxLen', 'Busbar to fuse box', '12 V fuse box for the loads') : null, (p.solar || p.dcdc || p.shore) ? len('chargeLen', 'Chargers to busbar', 'MPPT, DC-DC, mains charger') : null),
+          h('div', { class: 'grid2' }, p.dcLoads.length ? len('fuseBoxLen', p.fuseBox && p.fuseBox.breakers ? 'Busbar to DC breaker board' : 'Busbar to fuse box', p.fuseBox && p.fuseBox.breakers ? 'DC breaker board for the loads' : '12 V fuse box for the loads') : null, (p.solar || p.dcdc || p.shore) ? len('chargeLen', 'Chargers to busbar', 'MPPT, DC-DC, mains charger') : null),
           h('div', { class: 'grid2' }, p.solar ? len('pvLen', 'Roof panels to MPPT', 'Solar PV cable') : null, p.dcdc ? len('dcdcLen', 'Starter battery to DC-DC', 'Often front to back of the van') : null),
           more('dc-cable', [
             F.seg('cable', 'Cable', Object.entries(PLAN_CABLES).map(([k, c]) => [k, c.label]), 'Tri-rated or tinned marine cable is the usual choice.', 'small'),
@@ -197,9 +197,9 @@ route(/^\/calc\/dc\/plan(?:\/(\w+))?$/, async (stepArg) => {
           F.seg('fitPar', 'Cables per pole (+ and − each)', [['1', '1'], ['2', '2 in parallel'], ['3', '3 in parallel']], 'e.g. 2 × 35 mm². Parallel cables touching are rated × 0.85 (2) or × 0.79 (3), BS 7671 Table 4C1.', 'small'),
           h('div', { class: 'grid2' }, F.num('makerMin', 'Maker\u2019s minimum cable', { unit: 'mm²', ph: 'manual', hint: 'Total copper per pole, e.g. 70' }), F.seg('lugStud', 'Lug stud size', [['', 'Not sure'], ['M8', 'M8'], ['M10', 'M10'], ['M12', 'M12']], 'Match the battery, fuse and busbar terminals.', 'small')),
           p.fit && p.fit.checks.length ? h('ul', { class: 'note fitchecks' }, p.fit.checks.map((c) => h('li', { class: c.ok === false ? 'bad' : '' }, (c.ok === false ? '✗ ' : c.ok ? '✓ ' : '⚠ ') + c.text))) : null]) : null,
-        p.dcLoads.length ? icard('Fuse box to each load', [
+        p.dcLoads.length ? icard(p.fuseBox && p.fuseBox.breakers ? 'DC breaker board to each load' : 'Fuse box to each load', [
           h('div', { class: 'grid2' }, v.loads.map((l, i) => l.ac || !(Number(l.value) > 0) ? null : h('label', { class: 'f fld2' }, h('span', {}, shortName(l.name || `Load ${i + 1}`)), h('span', { class: 'withunit' }, h('input', { inputmode: 'decimal', value: l.length || '', placeholder: 'm', onchange: (e) => setLoad(i, 'length', e.target.value.trim()) }), h('span', { class: 'unit' }, 'm'))))),
-          h('p', { class: 'help' }, 'Fuse box to the load, one way. Blank = no cable sized for it.')]) : null];
+          h('p', { class: 'help' }, (p.fuseBox && p.fuseBox.breakers ? 'Breaker board' : 'Fuse box') + ' to the load, one way. Blank = no cable sized for it.')]) : null];
     },
 
     results: (p) => results(v, p),

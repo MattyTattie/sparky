@@ -199,7 +199,7 @@ export function planDC(o0 = {}) {
     const out = { i, name: l.name || `Load ${i + 1}`, ac, w: r1(w), peakW: r1(pkW), hours, wh: r1(wh), ah: r2(wh / V), lighting: !!l.lighting };
     if (!ac) {
       out.current = r2(w / V); out.peak = r2(pkW / V);
-      out.run = num(l.length) > 0 ? sizeRun({ ...common, id: 'load' + i, name: out.name, current: out.current, peak: out.peak, length: l.length, pct: l.lighting ? 10 : 3, kind: 'load' }) : null;
+      out.run = num(l.length) > 0 ? sizeRun({ ...common, id: 'load' + i, name: out.name, current: out.current, peak: out.peak, length: l.length, pct: l.lighting ? 10 : 3, kind: 'load', fam: V > 12 && Math.max(num(out.current), num(out.peak)) * 1.25 <= 63 ? 'mcbdc' : null }) : null;
     }
     return out;
   });
@@ -319,9 +319,11 @@ export function planDC(o0 = {}) {
   let fuseBox = null;
   if (dcLoads.length) {
     const I = r2(dcLoads.reduce((a, l) => a + l.peak, 0));
-    const run = sizeRun({ ...common, id: 'fusebox', name: 'Busbar to fuse box', current: I, length: o.fuseBoxLen, pct: 1, kind: 'charge' });
-    fuseBox = { current: I, ways: up(FUSEBOX_WAYS, dcLoads.length + 2) || dcLoads.length + 2, run,
-      why: `All the DC loads on at once (peaks): ${I} A. Feed sized for 1% so the loads get most of their volt-drop budget.` };
+    const run = sizeRun({ ...common, id: 'fusebox', name: V > 12 ? 'Busbar to DC breaker board' : 'Busbar to fuse box', current: I, length: o.fuseBoxLen, pct: 1, kind: 'charge' });
+    // v0.36.3c: blade fuse boxes are 12 V only; at 24 / 48 V it's a DC breaker board.
+    const breakers = V > 12; const ways = up(FUSEBOX_WAYS, dcLoads.length + 2) || dcLoads.length + 2;
+    fuseBox = { current: I, ways, run, breakers, label: breakers ? 'DC breaker board' : 'Fuse box', sub: breakers ? `${ways}-way DC breakers` : `${ways}-way blade`,
+      why: `${breakers ? `Blade fuse boxes are for 12 V only, so at ${V} V use a DC breaker board (DC-rated, 2-pole MCBs). ` : ''}All the DC loads on at once (peaks): ${I} A. Feed sized for 1% so the loads get most of their volt-drop budget.` };
   }
 
   // ---- main battery cable, fuse, isolator, shunt, busbars ----
@@ -342,7 +344,7 @@ export function planDC(o0 = {}) {
   if (main && main.fuse && main.size) {
     const byLoad = dcCableSize({ current: Imain, length: num(o.mainLen), volts: V, targetPct: mainPct, temp: 70, needAmps: r2(Imain * 1.25 / (derate || 1)), cable: (PLAN_CABLES[cab] || PLAN_CABLES.tri90).amps });
     const loadSize = byLoad && byLoad.pick ? byLoad.pick.size : 0;
-    if (loadSize && loadSize < main.size) main.why += mainMin >= main.size && feedMin < main.size ? ` Minimum ${MAIN_MIN} mm² for a battery main cable; the load alone needs ${loadSize} mm².` : mainMin >= main.size ? ` Kept at ${main.size} mm², the same as the fuse box feed it supplies (the load alone would need about ${loadSize} mm²).` : ` The cable is ${main.size} mm² because it must carry the ${main.fuse.A} A fuse, not the ${r1(Imain)} A load (the load alone would need about ${loadSize} mm²).`;
+    if (loadSize && loadSize < main.size) main.why += mainMin >= main.size && feedMin < main.size ? ` Minimum ${MAIN_MIN} mm² for a battery main cable; the load alone needs ${loadSize} mm².` : mainMin >= main.size ? ` Kept at ${main.size} mm², the same as the ${fuseBox.breakers ? 'DC breaker board' : 'fuse box'} feed it supplies (the load alone would need about ${loadSize} mm²).` : ` The cable is ${main.size} mm² because it must carry the ${main.fuse.A} A fuse, not the ${r1(Imain)} A load (the load alone would need about ${loadSize} mm²).`;
     if (main.fuse.fam === 'classT' && main.fuse.A < 100) main.why += ` Class T fuses come from 15 A (e.g. Bussmann JJN, 160 V DC, 20 kA). Under 100 A they use a different, smaller holder, so match the holder to the fuse.`;
   }
   const shunt = Imain ? { a: up(SHUNT_SIZES, mainFuseA), why: `At least the main fuse (${mainFuseA} A), so ${up(SHUNT_SIZES, mainFuseA)} A. It goes in the battery negative: nothing else on the battery negative, everything else on the negative busbar side.` } : null;
@@ -461,8 +463,8 @@ export function partsList(p, o = {}) {
   if (p.dcdc) { if (p.dcdc.inRun.fuse) add('Protection', `${p.dcdc.inRun.fuse.A} A ${p.dcdc.inRun.fuse.label} + holder — DC-DC input, at the starter battery`, 1, p.dcdc.inRun.why); fuseLine(p.dcdc.outRun, 'DC-DC output, at the busbar'); }
   if (p.shore) fuseLine(p.shore.run, 'mains charger');
   if (p.fuseBox) {
-    fuseLine(p.fuseBox.run, 'feed to the fuse box');
-    add('Protection', `Blade fuse box, ${p.fuseBox.ways}-way, rated ≥ ${p.fuseBox.run.fuse ? p.fuseBox.run.fuse.A : Math.ceil(p.fuseBox.current * 1.25)} A, with a negative bus`, 1, p.fuseBox.why);
+    fuseLine(p.fuseBox.run, `feed to the ${p.fuseBox.breakers ? 'DC breaker board' : 'fuse box'}`);
+    add('Protection', `${p.fuseBox.breakers ? 'DC breaker board (DC-rated 2-pole MCBs)' : 'Blade fuse box'}, ${p.fuseBox.ways}-way, rated ≥ ${p.fuseBox.run.fuse ? p.fuseBox.run.fuse.A : Math.ceil(p.fuseBox.current * 1.25)} A, with a negative bus`, 1, p.fuseBox.why);
     for (const l of p.dcLoads) if (l.run && l.run.fuse) add('Protection', `${l.run.fuse.A} A ${l.run.fuse.label} — ${l.name}`, 1, l.run.why);
   }
   for (const c of p.cables) add('Cables', `${c.size} mm² ${c.colour}, ${c.type}`, `${c.m} m`, c.runs.join(', ') + '. Big cable is often sold by the metre or in 10 m reels: a reel can work out cheaper.');

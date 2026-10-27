@@ -32,3 +32,12 @@ test('v0.36.3b: 6 mm² minimum main battery cable, with why text', () => {
   const a = D.planDC({ volts: '12', battAh: '660' }); assert.equal(a.main.size, 10); assert.match(a.main.why, /fuse box feed/);
   for (const V of ['12', '24', '48']) for (const invW of ['', '1000', '3000']) assert.ok(D.planDC({ volts: V, invW, battAh: '660' }).main.size >= 6);
 });
+test('v0.36.3c: blade fuse box at 12 V only; DC breaker board at 24/48 V', () => {
+  const a = D.planDC({ volts: '12', battAh: '660' }); assert.equal(a.fuseBox.label, 'Fuse box'); assert.equal(a.fuseBox.sub, '6-way blade');
+  for (const V of ['24', '48']) {
+    const p = D.planDC({ volts: V, battAh: '660' });
+    assert.equal(p.fuseBox.label, 'DC breaker board'); assert.equal(p.fuseBox.sub, '6-way DC breakers');
+    for (const l of p.dcLoads) if (l.run) assert.notEqual(l.run.fuse.fam, 'blade');
+    assert.ok(!D.partsList(p).some((r) => /[Bb]lade fuse box/.test(r.item)));
+  }
+});

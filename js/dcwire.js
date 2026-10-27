@@ -51,12 +51,12 @@ export function connections(p, o = {}) {
     fuse: p.shore.run.fuse ? { text: fuseLong(p.shore.run.fuse), where: 'at the busbar end of the positive' } : null,
     note: `${p.shore.a} A charger. The 230 V hook-up side is BS 7671 Section 721 work.` });
   if (p.fuseBox) {
-    add({ id: 'fusebox', from: '+ busbar', to: 'Fuse box', ...fromRun(p.fuseBox.run), colour: 'red + black',
-      fuse: p.fuseBox.run.fuse ? { text: fuseLong(p.fuseBox.run.fuse), where: 'at the busbar end of the positive' } : null, note: `${p.fuseBox.ways}-way blade fuse box with a negative bus.` });
+    add({ id: 'fusebox', from: '+ busbar', to: p.fuseBox.label || 'Fuse box', ...fromRun(p.fuseBox.run), colour: 'red + black',
+      fuse: p.fuseBox.run.fuse ? { text: fuseLong(p.fuseBox.run.fuse), where: 'at the busbar end of the positive' } : null, note: `${p.fuseBox.ways}-way ${p.fuseBox.breakers ? 'DC breaker board' : 'blade fuse box'} with a negative bus.` });
     for (const l of p.dcLoads) {
-      if (l.run) add({ id: 'load' + l.i, from: 'Fuse box', to: l.name, ...fromRun(l.run), colour: 'red + black', load: true,
-        fuse: l.run.fuse ? { text: fuseLong(l.run.fuse), where: 'in the fuse box' } : null });
-      else add({ id: 'load' + l.i, from: 'Fuse box', to: l.name, size: null, length: null, colour: 'red + black', load: true, ok: false, note: 'Add the run length (step 5) to size this cable and fuse.' });
+      if (l.run) add({ id: 'load' + l.i, from: p.fuseBox ? p.fuseBox.label : 'Fuse box', to: l.name, ...fromRun(l.run), colour: 'red + black', load: true,
+        fuse: l.run.fuse ? { text: fuseLong(l.run.fuse), where: p.fuseBox && p.fuseBox.breakers ? 'in the DC breaker board' : 'in the fuse box' } : null });
+      else add({ id: 'load' + l.i, from: p.fuseBox ? p.fuseBox.label : 'Fuse box', to: l.name, size: null, length: null, colour: 'red + black', load: true, ok: false, note: 'Add the run length (step 5) to size this cable and fuse.' });
     }
   }
   if (p.inverter && p.acLoads.length) add({ id: 'ac', from: 'Inverter', to: '230 V sockets', size: null, length: null, colour: '230 V cable', ac: true,
@@ -160,7 +160,7 @@ function buildModel(p, o, Y, H) {
     bottom = Math.max(bottom, yA + 16 + acLines.length * 9);
   }
   if (p.fuseBox) {
-    box(1, 'r3', 'Fuse box', [`${p.fuseBox.ways}-way blade`]);
+    box(1, 'r3', p.fuseBox.label || 'Fuse box', [p.fuseBox.sub || `${p.fuseBox.ways}-way blade`]);
     const x = MID[1]; wire([[x, busBot], [x, Y.r3]]); tags(x, busBot, Y.r3, mm(p.fuseBox.run), fz(p.fuseBox.run), [], 'bus', 'r3');
     const bx = X[1] + 14, lx = X[1] + 30, lw = W - 8 - lx, rh = 30, gap = 6; let y = Y.r3 + H.r3 + 14;
     const loads = p.dcLoads; if (loads.length) {
