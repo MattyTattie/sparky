@@ -26,3 +26,9 @@ test('inverter cases still sized up', () => {
   assert.equal(D.planDC({ volts: '12', invW: '3000' }).main.size, 120);
   const p = D.planDC({ volts: '48', invW: '1000' }); assert.equal(p.main.fuse.A, 40); assert.match(p.main.why, /must carry the 40 A fuse|Class T/);
 });
+test('v0.36.3b: 6 mm² minimum main battery cable, with why text', () => {
+  const b = D.planDC({ volts: '48', battAh: '660' });
+  assert.equal(b.main.size, 6); assert.match(b.main.why, /Minimum 6 mm² for a battery main cable; the load alone needs 1.5 mm²/);
+  const a = D.planDC({ volts: '12', battAh: '660' }); assert.equal(a.main.size, 10); assert.match(a.main.why, /fuse box feed/);
+  for (const V of ['12', '24', '48']) for (const invW of ['', '1000', '3000']) assert.ok(D.planDC({ volts: V, invW, battAh: '660' }).main.size >= 6);
+});

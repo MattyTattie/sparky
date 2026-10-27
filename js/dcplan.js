@@ -331,7 +331,9 @@ export function planDC(o0 = {}) {
   const Imain = Math.max(discharge, charge);
   const intro = `Biggest current: ${discharge >= charge ? `everything on at once = ${discharge} A (${inverter ? 'inverter' : ''}${inverter && dcLoads.length ? ' + ' : ''}${dcLoads.length ? 'DC loads' : ''})` : `all chargers at once = ${charge} A`}.`;
   // v0.36.3: with small fuses now allowed, keep the main cable at least as thick as the fuse box feed it supplies.
-  const mainMin = fuseBox && fuseBox.run && fuseBox.run.size ? fuseBox.run.size : 0;
+  // v0.36.3b: never under 6 mm² for the battery main (Matthew's choice), nor under the fuse box feed.
+  const MAIN_MIN = 6; const feedMin = fuseBox && fuseBox.run && fuseBox.run.size ? fuseBox.run.size : 0;
+  const mainMin = Math.max(MAIN_MIN, feedMin);
   const main = Imain ? sizeRun({ ...common, id: 'main', name: 'Battery to busbar (main)', intro, current: Imain, length: o.mainLen, pct: mainPct, kind: 'main', minSize: mainMin, ka: chem === 'lifepo4' ? battery.faultKA || 0 : 0 }) : null;
   if (main) main.why = main.why +
     (chem === 'lifepo4' ? ` Lithium batteries can give a huge short-circuit current (about ${battery.faultKA ?? '?'} kA here${battery.faultTyped ? ', your figure' : ', ⚠ a rough 20 × Ah estimate'}), so the main protection must break more than that: Class T, an NH DC fuse or a DC MCCB, not MEGA / ANL (about 2 kA). It must also be DC-rated above ${vmax} V (the battery\u2019s max charge voltage). Fit it as close to the battery positive as you can.` : ' Check the fuse\u2019s breaking capacity is above the battery\u2019s short-circuit current. Fit it as close to the battery positive as you can.');
@@ -340,7 +342,7 @@ export function planDC(o0 = {}) {
   if (main && main.fuse && main.size) {
     const byLoad = dcCableSize({ current: Imain, length: num(o.mainLen), volts: V, targetPct: mainPct, temp: 70, needAmps: r2(Imain * 1.25 / (derate || 1)), cable: (PLAN_CABLES[cab] || PLAN_CABLES.tri90).amps });
     const loadSize = byLoad && byLoad.pick ? byLoad.pick.size : 0;
-    if (loadSize && loadSize < main.size) main.why += mainMin >= main.size ? ` Kept at ${main.size} mm², the same as the fuse box feed it supplies (the load alone would need about ${loadSize} mm²).` : ` The cable is ${main.size} mm² because it must carry the ${main.fuse.A} A fuse, not the ${r1(Imain)} A load (the load alone would need about ${loadSize} mm²).`;
+    if (loadSize && loadSize < main.size) main.why += mainMin >= main.size && feedMin < main.size ? ` Minimum ${MAIN_MIN} mm² for a battery main cable; the load alone needs ${loadSize} mm².` : mainMin >= main.size ? ` Kept at ${main.size} mm², the same as the fuse box feed it supplies (the load alone would need about ${loadSize} mm²).` : ` The cable is ${main.size} mm² because it must carry the ${main.fuse.A} A fuse, not the ${r1(Imain)} A load (the load alone would need about ${loadSize} mm²).`;
     if (main.fuse.fam === 'classT' && main.fuse.A < 100) main.why += ` Class T fuses come from 15 A (e.g. Bussmann JJN, 160 V DC, 20 kA). Under 100 A they use a different, smaller holder, so match the holder to the fuse.`;
   }
   const shunt = Imain ? { a: up(SHUNT_SIZES, mainFuseA), why: `At least the main fuse (${mainFuseA} A), so ${up(SHUNT_SIZES, mainFuseA)} A. It goes in the battery negative: nothing else on the battery negative, everything else on the negative busbar side.` } : null;
