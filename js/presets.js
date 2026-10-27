@@ -1,3 +1,4 @@
+import { isSType, showRcdType } from './rcdtype.js';
 // =====================================================================
 // presets.js — v0.11: protective device presets for circuits.
 // A preset is just the device boxes (BS EN, type/curve, rating, kA, RCD
@@ -55,8 +56,8 @@ export function nameFor(f) {
   // v0.35: only an RCBO (or a device that is itself an RCD) shows RCD details; a plain MCB/fuse
   // never shows the upstream RCCB's. No doubled S when the type already says S (e.g. 'A-S').
   const dd = d || deviceFromBs(f.bs); const ownRcd = !!(dd && dd.rcd);
-  const rt = real(f.rcdType) ? String(f.rcdType).trim() : ''; const sTyped = /(^|[-\s])S$/i.test(rt);
-  const rcd = ownRcd && real(f.rcdIdn) ? `${f.rcdIdn} mA${rt ? ' Type ' + rt : ''}${f.rcdS && !sTyped ? ' S' : ''}` : '';
+  const rt = real(f.rcdType) ? String(f.rcdType).trim() : ''; const sTyped = isSType(rt);
+  const rcd = ownRcd && real(f.rcdIdn) ? `${f.rcdIdn} mA${rt ? ' Type ' + showRcdType(rt) : ''}${f.rcdS && !sTyped ? ' S' : ''}` : '';
   const tp = /^[BCD123]$/.test(String(f.type || '')) ? f.type : ''; // v0.20: no 'adj32 MCCB' / 'plug13'
   const adj = d && d.adj ? [real(f.im) ? `Im ${f.im} A` : '', real(f.ig) ? `Ig ${f.ig} A${real(f.tg) ? ', tg ' + f.tg + ' s' : ''}` : ''].filter(Boolean).join(', ') : '';
   return [tp ? `${tp}${f.rating} ${kind}` : `${f.rating} A ${kind}`, d && d.adj ? '' : rcd, adj, real(f.bka) ? f.bka + ' kA' : '', real(f.afddBs) || real(f.afddRating) ? 'AFDD' + (real(f.afddRating) ? ' ' + f.afddRating + ' A' : '') : ''].filter(Boolean).join(' · ');

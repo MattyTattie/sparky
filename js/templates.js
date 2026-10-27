@@ -18,7 +18,7 @@ export const FIELDS = [
   { k: 'bka', col: 11, label: 'Breaking capacity (kA)', short: 'kA', num: true },
   { k: 'maxZs', col: 12, label: 'Maximum permitted Zs (Ω)', short: 'Max Zs' },
   { k: 'rcdBs', col: 13, label: 'RCD BS (EN)', short: 'RCD BS' },
-  { k: 'rcdType', col: 14, label: 'RCD type', short: 'RCD type', opts: ['AC', 'A', 'F', 'B', 'S', 'A-S'] },
+  { k: 'rcdType', col: 14, label: 'RCD type', short: 'RCD type', opts: ['AC', 'A', 'F', 'B', 'AC S', 'A S', 'F S', 'B S'] },
   { k: 'rcdIdn', col: 15, label: 'RCD IΔn (mA)', short: 'IΔn', num: true },
   { k: 'rcdRating', col: 16, label: 'RCD rating (A)', short: 'RCD A', num: true },
   // test results

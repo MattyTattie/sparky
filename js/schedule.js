@@ -15,6 +15,7 @@ import { blankBoard } from './certmodel.js';
 import * as presets from './presets.js';
 import { FIELDS, FIELD, TEMPLATES, blankCircuit, applyTemplate, copyCircuit, copyBoard, copyBoardToCert, makeSpare, autoNA, descChanged, rcdGroupChanged, spdGroupChanged, SPD_HIDE, spdHidden, spdObservation, circuitFedBySource, boardFedBySource, bidiTarget, hasBidiNote, addBidiNote, bidiCircuits, addBidiRemark, bidiRemarksDone, spareLine, copyToNextWay, laterSequential, deleteCircuitAt } from './templates.js';
 import { checkCircuit, limitZs, isSpare } from './checks.js';
+import { WAVES, parseRcdType, formatRcdType, isSType } from './rcdtype.js';
 import { autoFillOcpd as autoFill0, typed, fillBoardRcd } from './ocpdfill.js';
 // v0.35.2: MCB / fuse lines take the RCD boxes from their board's main RCD.
 const boardOf = (cert, c) => ((cert && cert.boards) || []).find((x) => (x.circuits || []).includes(c)) || null;
@@ -176,15 +177,25 @@ function spdGrid(cert, b) {
   hide(); return box;
 }
 const F0 = (b, k, label) => field(b, { k, label, type: 'check' });
+// v0.35.2: RCD type picker: waveform (AC / A / F / B) plus S for time-delayed, saved as e.g. 'A S'.
+function rcdTypeChips(get, set) {
+  const box = h('div', { class: 'chips rcdtypechips' });
+  const draw = () => { const p = parseRcdType(get());
+    fill(box, ...WAVES.map((w) => h('button', { type: 'button', class: 'chip' + (p.wave === w ? ' on' : ''), onclick: () => { set(formatRcdType(p.wave === w ? '' : w, p.s)); draw(); } }, w)),
+      h('button', { type: 'button', class: 'chip' + (p.s ? ' on' : ''), title: 'Time-delayed (S-type)', onclick: () => { set(formatRcdType(p.wave, !p.s)); draw(); } }, 'S (time-delayed)')); };
+  draw(); box.redraw = draw; return box;
+}
 // v0.31: N/A in one main RCD box fills the blank others; a real value clears them.
 function rcdGrid(b) {
   const els = {}; let dirty = false;
-  const on = (k) => { if (fillBoardRcd(b, isSpare)) { changed(); dirty = true; } for (const x of rcdGroupChanged(b, k)) { const i = els[x] && els[x].querySelector('input'); if (i) i.value = b[x] ?? ''; } };
+  const on = (k) => { if (fillBoardRcd(b, isSpare)) { changed(); dirty = true; } for (const x of rcdGroupChanged(b, k)) { const i = els[x] && els[x].querySelector('input'); if (i) i.value = b[x] ?? ''; } if (chips) chips.redraw(); };
+  let chips = null;
   const R = (k, label, type = 'text') => (els[k] = field(b, { k, label, type }, on));
   // the circuit lines redraw once you leave the RCD boxes (not while typing)
   const out = () => { if (!dirty) return; setTimeout(() => { const a = document.activeElement; if (a && g.contains(a)) return; dirty = false; const y = scrollY; Promise.resolve(render()).then(() => setTimeout(() => scrollTo(0, y), 30)); }, 0); };
   const g = h('div', { class: 'grid2', onfocusout: out }, R('rcdBs', 'RCD BS (EN)'), R('rcdType', 'RCD type'), R('rcdIdn', 'IΔn (mA)', 'num'), R('rcdRating', 'Rating (A)', 'num'));
-  return g;
+  chips = rcdTypeChips(() => b.rcdType, (v) => { b.rcdType = v; const i = els.rcdType && els.rcdType.querySelector('input'); if (i) i.value = v; changed(); on('rcdType'); dirty = true; out(); });
+  return h('div', {}, g, chips);
 }
 function boardTools(cert, b, bi) {
   const bulk = (k, v, label) => h('button', { class: 'btn small', onclick: () => { let n = 0; for (const c of b.circuits) if (!isSpare(c) && !c[k]) { c[k] = v; n++; } changed(); toast(`${label}: filled ${n}`); render(); } }, label);
@@ -338,6 +349,10 @@ const isAutoBs = (c) => !String(c.bs || '').trim() || !!(c.autoF && c.autoF.bs =
 function circuitEditor({ cert, c, ctx, back, title, prev, next, extra = [], mw = false }) {
   const autoFillOcpd = (x) => autoFill0(x, { board: boardOf(cert, x) });
   leaving = c;
+  let sTick = null;
+  // v0.35.2: type chips; an S type ticks the S-type box (unless that tick was set by hand)
+  const cTypeChips = rcdTypeChips(() => c.rcdType, (v) => { c.rcdType = v; typed(c, 'rcdType'); if (inputs.rcdType) inputs.rcdType.value = v; if (!(c.handF && c.handF.rcdS)) { c.rcdS = isSType(v); if (sTick) sTick.checked = c.rcdS; } changed(); refresh(); });
+  const typeTyped = () => { cTypeChips.redraw(); if (!(c.handF && c.handF.rcdS) && isSType(c.rcdType) && !c.rcdS) { c.rcdS = true; if (sTick) sTick.checked = true; } };
   const pBox = presetPicker(c, () => render(), cert);
   const flagEls = {}; const inputs = {};
   const noDevBox = h('div');
@@ -359,7 +374,7 @@ function circuitEditor({ cert, c, ctx, back, title, prev, next, extra = [], mw =
   };
   const inp = (k, opts = {}) => {
     const fd = FIELD[k] || { label: opts.label, k };
-    const input = h('input', { value: c[k] ?? '', inputmode: fd.num ? 'decimal' : null, oninput: (e) => { const was = isSpare(c); c[k] = e.target.value; typed(c, k); if (k === 'bs') { const d = deviceFromBs(c.bs); if (d) c.device = d.id; } if (k === 'bs' || k === 'rating') autoFillOcpd(c); if (k === 'desc' && descChanged(c, was) && inputs.irV) inputs.irV.value = c.irV ?? ''; changed(); refresh(); } });
+    const input = h('input', { value: c[k] ?? '', inputmode: fd.num ? 'decimal' : null, oninput: (e) => { const was = isSpare(c); c[k] = e.target.value; typed(c, k); if (k === 'bs') { const d = deviceFromBs(c.bs); if (d) c.device = d.id; } if (k === 'bs' || k === 'rating') autoFillOcpd(c); if (k === 'rcdType') typeTyped(); if (k === 'desc' && descChanged(c, was) && inputs.irV) inputs.irV.value = c.irV ?? ''; changed(); refresh(); } });
     inputs[k] = input;
     const quick = [];
     if (k === 'irLL' || k === 'irLE') quick.push('>999');
@@ -367,7 +382,7 @@ function circuitEditor({ cert, c, ctx, back, title, prev, next, extra = [], mw =
     if (fd.test || ['rcdBs', 'rcdType', 'rcdIdn', 'rcdRating', 'bka', 'points'].includes(k)) quick.push('N/A');
     const msg = h('div', { class: 'msg' });
     const wrap = h('div', { class: 'fld' }, h('div', { class: 'lab' }, h('span', {}, opts.label || fd.label), fd.col ? h('span', { class: 'col' }, 'col ' + fd.col) : null),
-      h('div', { class: 'inrow' }, input, quick.map((q) => h('button', { class: 'q', onclick: () => { c[k] = c[k] === q ? '' : q; typed(c, k); input.value = c[k]; changed(); refresh(); } }, q))), msg);
+      h('div', { class: 'inrow' }, input, quick.map((q) => h('button', { class: 'q', onclick: () => { c[k] = c[k] === q ? '' : q; typed(c, k); input.value = c[k]; if (k === 'rcdType') cTypeChips.redraw(); changed(); refresh(); } }, q))), msg);
     flagEls[k] = { wrap, msg }; return wrap;
   };
   // Device chooser: fills BS (EN), offers types and ratings from the tables.
@@ -469,8 +484,8 @@ function circuitEditor({ cert, c, ctx, back, title, prev, next, extra = [], mw =
     // v0.14: the RCD boxes (cols 13-16) sit with the protective device, before the cable.
     sect('Circuit details', h('div', { class: 'grid2' }, inp('num'), inp('points')), inp('desc'), noDevBox, pBox, devBox,
       h('div', { class: 'rcdgrp' }, h('div', { class: 'phd' }, h('span', {}, 'RCD (if any)')),
-        h('div', { class: 'grid2' }, inp('rcdBs'), inp('rcdType'), inp('rcdIdn'), inp('rcdRating')),
-        h('label', { class: 'check' }, h('input', { type: 'checkbox', checked: !!c.rcdS, onchange: (e) => { c.rcdS = e.target.checked; changed(); refresh(); } }), 'Time-delayed (S-type) RCD')),
+        h('div', { class: 'grid2' }, inp('rcdBs'), inp('rcdType'), inp('rcdIdn'), inp('rcdRating')), cTypeChips,
+        h('label', { class: 'check' }, (sTick = h('input', { type: 'checkbox', checked: !!c.rcdS, onchange: (e) => { c.rcdS = e.target.checked; typed(c, 'rcdS'); changed(); refresh(); } })), 'Time-delayed (S-type) RCD')),
       // v0.32: optional AFDD details (printed on the Minor Works form, which has the boxes).
       h('div', { class: 'rcdgrp' }, h('div', { class: 'phd' }, h('span', {}, 'AFDD (if any)')),
         h('div', { class: 'grid3' }, inp('afddBs', { label: 'AFDD BS (EN)' }), inp('afddType', { label: 'AFDD type' }), inp('afddRating', { label: 'AFDD rating (A)' }))),

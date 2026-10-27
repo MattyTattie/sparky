@@ -1,3 +1,4 @@
+import { showRcdType } from './rcdtype.js';
 // =====================================================================
 // pdf.js — certificates as PDFs, laid out like the IET model forms
 // (BS 7671:2018+A4:2026, 15 April 2026). No IET logo (their terms).
@@ -165,7 +166,7 @@ function particularsSection(k, cert, letter) {
     k.t('If overcurrent protective device', x + a, y, { size: 7, bold: true });
     k.field('Device type MCCB / ACB / Fuse(s) / other', ocpd ? p.msType : NA, x + a, y + 4.6, a - 3); k.field('Device rating/setting', ocpd ? p.msRating : NA, x + a, y + 9.2, a - 3, { unit: 'A' }); k.field('Breaking capacity', ocpd ? p.msKa : NA, x + a, y + 13.8, a - 3, { unit: 'kA' });
     k.t('If RCD main switch', x + 2 * a, y, { size: 7, bold: true });
-    k.field('RCD Type AC / A / F / B / other', rcd ? p.rcdType : NA, x + 2 * a, y + 4.6, a); k.field('Rated residual operating current (IΔn)', rcd ? p.rcdIdn : NA, x + 2 * a, y + 9.2, a, { unit: 'mA' });
+    k.field('RCD Type AC / A / F / B / other', rcd ? showRcdType(p.rcdType) : NA, x + 2 * a, y + 4.6, a); k.field('Rated residual operating current (IΔn)', rcd ? p.rcdIdn : NA, x + 2 * a, y + 9.2, a, { unit: 'mA' });
     k.field('Rated time delay', rcd ? p.rcdDelay : NA, x + 2 * a, y + 13.8, a, { unit: 'ms' }); k.field('Measured operating time', rcd ? p.rcdMs : NA, x + 2 * a, y + 18.4, a, { unit: 'ms' });
     k.field('Breaking capacity', rcd ? (p.rcdKa || '') : NA, x + 2 * a, y + 23, a, { unit: 'kA' }); // v0.33
     k.para('Attach protective device settings where applicable on separate continuation sheet(s).', x + a, y + 19.2, a - 4, { size: 6.6 });
@@ -246,7 +247,7 @@ function boardHeaderDetails(k, cert, b, certNo) {
   row(k, x, w, [['DB/CU reference:', b.ref, 0.3], ['Location:', b.location, 0.35], ['Supplied from:', b.suppliedFrom, 0.35]]);
   row(k, x, w, [['Distribution circuit OCPD: BS (EN):', b.ocpdBs, 0.45], ['Type:', b.ocpdType, 0.2], ['Rating/Setting:', b.ocpdRating, 0.35, { unit: 'A' }]]);
   checks(k, x, [['T1', b.spdT1], ['T2', b.spdT2], ['T3†', b.spdT3], ['N/A', b.spdNA]], { label: 'SPD Details: Type(s)*:' });
-  row(k, x, w, [['RCD:  BS (EN)', b.rcdBs, 0.3], ['Type', b.rcdType, 0.15], ['Rating', b.rcdRating, 0.18, { unit: 'A' }], ['Rated residual operating current (IΔn):', b.rcdIdn, 0.37, { unit: 'mA' }]]);
+  row(k, x, w, [['RCD:  BS (EN)', b.rcdBs, 0.3], ['Type', showRcdType(b.rcdType), 0.15], ['Rating', b.rcdRating, 0.18, { unit: 'A' }], ['Rated residual operating current (IΔn):', b.rcdIdn, 0.37, { unit: 'mA' }]]);
   // v0.32: optional per-board maximum demand (only printed when filled in).
   if (String(b.maxDemand ?? '').trim()) row(k, x, w, [['Maximum demand (this board):', b.maxDemand, 0.4, { unit: 'A' }]]);
   k.rect(k.x0, y0, k.cw, k.y - y0 + 0.5, { lw: 0.35, color: INK });
@@ -368,6 +369,7 @@ export function scheduleRows(cert, b, flags = false) {
     // v0.18.4: also the ring boxes (r1, rn, r2) of a circuit that isn't a ring final.
     for (const f of FIELDS) if (autoNA(c, f.k)) r[f.k] = { v: 'N/A', auto: true };
     { const ar = adjRemark(c); if (ar && !String(c.remarks || '').includes(ar)) r.remarks = [String(c.remarks || '').trim().replace(/\.$/, ''), ar].filter(Boolean).join('. '); }
+    if (typeof r.rcdType === 'string') r.rcdType = showRcdType(r.rcdType); // v0.35.2: 'A-S' prints 'A S'
     if (r.type === 'adj') r.type = ''; // v0.20: MPCB/MCCB 'adj' is an app code, not a form Type
     if (flags && !spare) {
       const zs = parseFloat(c.zs);
@@ -821,7 +823,7 @@ function mw(k, cert, profile) {
     row(k, x, w, [['Circuit No.:', c.num, 0.2], ['Circuit description:', c.desc, 0.5], ['Reference method*', c.ref, 0.3]]);
     row(k, x, w, [['csa of conductors: Live', c.live, 0.4, { unit: 'mm²' }], ['CPC', c.cpc, 0.3, { unit: 'mm²' }]]);
     row(k, x, w, [['Circuit overcurrent protective device: BS (EN)', c.bs, 0.42], ['Type', c.type, 0.15], ['Rating', c.rating, 0.15, { unit: 'A' }], ['Breaking capacity', c.bka, 0.28, { unit: 'kA' }]]);
-    row(k, x, w, [['RCD:  BS (EN)', c.rcdBs, 0.25], ['Type', c.rcdType, 0.12], ['Rating', c.rcdRating, 0.14, { unit: 'A' }], ['Rated residual operating current (IΔn)', c.rcdIdn, 0.3, { unit: 'mA' }], ['Time delay', c.rcdDelay || '', 0.19, { unit: 'ms' }]]);
+    row(k, x, w, [['RCD:  BS (EN)', c.rcdBs, 0.25], ['Type', showRcdType(c.rcdType), 0.12], ['Rating', c.rcdRating, 0.14, { unit: 'A' }], ['Rated residual operating current (IΔn)', c.rcdIdn, 0.3, { unit: 'mA' }], ['Time delay', c.rcdDelay || '', 0.19, { unit: 'ms' }]]);
     row(k, x, w, [['AFDD:  BS (EN)', c.afddBs || '', 0.4], ['Rating', c.afddRating || '', 0.2, { unit: 'A' }]]);
     row(k, x, w, [['SPD:  BS (EN)', c.spdBs || '', 0.4], ['Type', c.spdType || '', 0.2]]);
     k.t('* See Table 4A2 of Appendix 4 of BS 7671:2018+A4:2026', x, k.y + 2.4, { size: 6.2 }); k.y += 3;

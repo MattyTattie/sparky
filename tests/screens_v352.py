@@ -8,7 +8,7 @@ PREP = r"""(async()=>{const db=await import('./js/db.js');
  const ins=(await db.getMeta('instruments'))||[]; ins.forEach(i=>{i.calDue='';}); await db.setMeta('instruments',ins);
  const walk=(o)=>{ if(Array.isArray(o)) return o.map(walk); if(o&&typeof o==='object'){ for(const k of Object.keys(o)){ if(/cal/i.test(k)&&!/local/i.test(k)) o[k]=''; else o[k]=walk(o[k]); } return o; } if(typeof o==='string') return o.replace(/\s*\(cal[^)]*\)/gi,''); return o; };
  const e=await db.get('certs','cert-eicr'); walk(e); const b=e.boards[0];
- Object.assign(b,{ref:'DB2',rcdBs:'61008',rcdType:'S',rcdIdn:'300',rcdRating:'100'});
+ Object.assign(b,{ref:'DB2',rcdBs:'61008',rcdType:'A S',rcdIdn:'300',rcdRating:'100'});
  const R=['rcdBs','rcdType','rcdIdn','rcdRating'];
  b.circuits.forEach((c,i)=>{ delete c.autoF; if(i===2){Object.assign(c,{device:'rcbo',bs:'61009',type:'B',rating:'32',bka:'6',rcdBs:'61009',rcdType:'A',rcdIdn:'30',rcdRating:'32'});} else { R.forEach(k=>c[k]=''); if(i<2) Object.assign(c,{device:'mcb',bs:'60898',type:'B'}); } });
  await db.put('certs',e); return b.circuits.map(c=>c.desc+':'+c.device); })"""

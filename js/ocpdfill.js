@@ -3,6 +3,7 @@
 // time (remembered in c.autoF), are filled or changed. Anything typed by hand
 // is left alone. Max Zs isn't a stored box: it's always worked out from the table.
 import { deviceById, deviceFromBs } from './limits.js';
+import { isSType, showRcdType } from './rcdtype.js';
 
 export const DEFAULT_KA = '6';
 // Standard breaking capacities (kA) where the product standard sets one.
@@ -21,7 +22,7 @@ export function standardFor(c, { ka, board } = {}) {
   else out.bka = KA[d.id] || ''; // no standard figure: take back only an earlier auto value
   const rating = String(c.rating ?? '').trim();
   if (d.rcd) { out.rcdBs = '61009'; out.rcdType = 'A'; out.rcdIdn = '30'; if (rating) out.rcdRating = rating; }
-  else for (const k of RCD4) out[k] = board ? String(board[k] ?? '').trim() : ''; // v0.35.2: not an RCBO: the board's main RCD (or N/A); no board: take back only what we filled
+  else { for (const k of RCD4) out[k] = board ? String(board[k] ?? '').trim() : ''; if (board) { out.rcdType = showRcdType(out.rcdType); out.rcdS = isSType(out.rcdType); } } // v0.35.2: not an RCBO: the board's main RCD (or N/A); no board: take back only what we filled
   return out;
 }
 const blank = (v) => v == null || String(v).trim() === '';
@@ -38,11 +39,16 @@ export function autoFillOcpd(c, opts = {}) {
     if (String(c[k] ?? '') !== v) { c[k] = v; changedKeys.push(k); }
     if (v === '') delete af[k]; else af[k] = v;
   }
+  // v0.35.2: the S-type tick follows the board's RCD unless ticked/unticked by hand
+  if ('rcdS' in want && !(c.handF && c.handF.rcdS) && (!c.rcdS || af.rcdS === true)) {
+    if (!!c.rcdS !== want.rcdS) { c.rcdS = want.rcdS; changedKeys.push('rcdS'); }
+    if (want.rcdS) af.rcdS = true; else delete af.rcdS;
+  }
   c.autoF = af;
   return changedKeys;
 }
 // A box the user types in is theirs from then on.
-export function typed(c, k) { if (c && c.autoF && k in c.autoF) delete c.autoF[k]; }
+export function typed(c, k) { if (c && c.autoF && k in c.autoF) delete c.autoF[k]; if (c && k === 'rcdS') c.handF = { ...(c.handF || {}), rcdS: true }; }
 // v0.35.2: every MCB / fuse line on a board picks up the board's main RCD (auto boxes only).
 // Returns how many circuits changed.
 export function fillBoardRcd(b, isSpare = () => false) {
