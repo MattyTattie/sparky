@@ -9,6 +9,6 @@ export const setLimitOn = (on) => { try { localStorage.setItem(KEY, on ? 'on' : 
 export const limitPct = (done, total) => (total > 0 ? Math.max(0, Math.min(100, Math.round((done / total) * 100))) : 0);
 export function limitBar(done, total) {
   const pct = limitPct(done, total), full = total > 0 && done >= total;
-  return h('div', { class: 'limitbar' + (full ? ' full' : ''), id: 'limitbar', role: 'progressbar', 'aria-valuemin': '0', 'aria-valuemax': '100', 'aria-valuenow': String(pct), 'aria-label': full ? 'Limit: certificate complete' : `${pct}% filled in` },
-    h('div', { class: 'lb-track' }, h('i', { style: `width:${full ? 100 : pct}%` })), h('span', { class: 'lb-word' }, full ? 'LIMIT' : `${pct}%`));
+  return h('div', { class: 'limitbar' + (full ? ' full' : ''), id: 'limitbar', role: 'progressbar', 'aria-valuemin': '0', 'aria-valuemax': '100', 'aria-valuenow': String(pct), 'aria-label': full ? 'Certificate complete, 100% filled in' : `${pct}% filled in` },
+    h('div', { class: 'lb-track' }, h('i', { style: `width:${full ? 100 : pct}%` })), h('span', { class: 'lb-word' }, full ? '100%' : `${pct}%`));
 }
