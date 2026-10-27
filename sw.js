@@ -3,7 +3,7 @@
 // When any file changes, bump CACHE (sparky-v0.1 -> sparky-v0.2).
 // Shares the mattytattie.github.io origin with Hearth, so it only ever
 // deletes caches whose names start with "sparky-".
-const CACHE = 'sparky-v0.35.2';
+const CACHE = 'sparky-v0.35.3';
 const FILES = [
   "./",
   "./dark.css",
@@ -20,7 +20,6 @@ const FILES = [
   "./js/app.js",
   "./js/backnav.js",
   "./js/backup.js",
-  "./js/driveroot.js",
   "./js/cables.js",
   "./js/calc.js",
   "./js/calcdc.js",
@@ -46,8 +45,10 @@ const FILES = [
   "./js/dcplanpdf.js",
   "./js/dcwire.js",
   "./js/design.js",
+  "./js/driveroot.js",
   "./js/email.js",
   "./js/filerules.js",
+  "./js/fitbox.js",
   "./js/gdrive.js",
   "./js/guidance.js",
   "./js/icons.js",
@@ -63,6 +64,7 @@ const FILES = [
   "./js/limits.js",
   "./js/main.js",
   "./js/maxdemand.js",
+  "./js/ocpdfill.js",
   "./js/ocr.js",
   "./js/parts.js",
   "./js/partspdf.js",
@@ -72,11 +74,11 @@ const FILES = [
   "./js/pdflist.js",
   "./js/pdfview.js",
   "./js/presets.js",
+  "./js/rcdtype.js",
   "./js/refdata.js",
   "./js/refui.js",
   "./js/reminders.js",
   "./js/schedule.js",
-  "./js/ocpdfill.js",
   "./js/settingsync.js",
   "./js/state.js",
   "./js/symbols.js",

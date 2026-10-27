@@ -31,6 +31,7 @@ export function refMethodsFor(c) {
   return REF_METHODS.filter(([k]) => fit.some(([f]) => f === k) || k === cur);
 }
 import { lengthFromR1R2 } from './calc.js';
+import { autoFitTable } from './fitbox.js';
 import { cableCheck, isRingLike, applyCable, ringCheck, circuitAdiabatic } from './checks.js';
 
 const LAND = window.matchMedia('(orientation: landscape) and (min-width: 600px)');
@@ -531,7 +532,8 @@ function scheduleTable(cert, b, bi) {
       h('td', { class: 'act' }, h('button', { title: 'Open', tabindex: -1, onclick: (e) => { saveTableScroll(`${cert.id}/${bi}`, e.currentTarget.closest('.tablewrap')); go(wayHref(cert.id, bi, ci)); } }, '✎'), h('button', { title: 'Copy row', tabindex: -1, onclick: () => { b.circuits.splice(ci + 1, 0, copyCircuit(c, b.circuits.length + 1)); renumberIfSequential(b); changed(); render(); } }, '⧉'), h('button', { title: 'Spare', tabindex: -1, onclick: () => { { const was = isSpare(c); Object.assign(c, makeSpare(c)); descChanged(c, was); } changed(); render(); } }, '∅'), h('button', { title: 'Delete circuit', class: 'del', tabindex: -1, onclick: async () => { if (await askDelete(b, ci)) render(); } }, icon('trash', { size: 16 })))));
     upd();
   });
-  const wrap = h('div', { class: 'tablewrap' }, h('table', { class: 'sched' }, h('thead', {}, head), body));
+  const tbl = h('table', { class: 'sched' }, h('thead', {}, head), body); autoFitTable(tbl); // v0.35.3: boxes grow to fit
+  const wrap = h('div', { class: 'tablewrap' }, tbl);
   restoreTableScroll(`${cert.id}/${bi}`, wrap);
   return h('div', {}, wrap,
     h('p', { class: 'note' }, `Zdb ${b.zdb || '–'} Ω · Ipf ${b.ipf || '–'} kA · Earthing ${cert.supply.earthing}. Red = over the limit, amber = worth a look ${mouseHelp()} `, CHECK_NOTE));
