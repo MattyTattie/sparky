@@ -59,10 +59,10 @@ export const FUSES = {
   midi: { label: 'MIDI fuse', sizes: [30, 40, 50, 60, 70, 80, 100, 125, 150, 175, 200], dcV: 32, ka: 2 },
   mega: { label: 'MEGA fuse', sizes: [40, 60, 80, 100, 125, 150, 175, 200, 225, 250, 300, 350, 400, 450, 500], dcV: 32, ka: 2 },
   anl: { label: 'ANL fuse', sizes: [35, 40, 50, 60, 80, 100, 125, 150, 175, 200, 225, 250, 300, 325, 350, 400, 500], dcV: 32, ka: 2 },
-  classT: { label: 'Class T fuse', sizes: [100, 110, 125, 150, 175, 200, 225, 250, 300, 350, 400], dcV: 160, ka: 20 },
+  classT: { label: 'Class T fuse', sizes: [15, 20, 25, 30, 35, 40, 45, 50, 60, 70, 80, 90, 100, 110, 125, 150, 175, 200, 225, 250, 300, 350, 400], dcV: 160, ka: 20 },
   mcbdc: { label: 'DC MCB (2-pole, DC-rated)', sizes: [1, 2, 3, 4, 6, 10, 13, 16, 20, 25, 32, 40, 50, 63], dcV: 125, ka: 6 },
   nhdc: { label: 'NH DC fuse + holder', sizes: [100, 125, 160, 200, 250, 315, 355, 400, 500], dcV: 250, ka: 50 },
-  mccb: { label: 'DC MCCB (DC-rated breaker)', sizes: [100, 125, 160, 200, 250, 320, 400, 500], dcV: 250, ka: 20 },
+  mccb: { label: 'DC MCCB (DC-rated breaker)', sizes: [16, 20, 25, 32, 40, 50, 63, 80, 100, 125, 160, 200, 250, 320, 400, 500], dcV: 250, ka: 20 },
 };
 // v0.36.2: isolator switches. ⚠ Typical: many battery switches are 32 or 48 V DC only.
 export const ISO_DCV = 48;
@@ -330,10 +330,19 @@ export function planDC(o0 = {}) {
   const charge = r2((solar ? solar.mppt || solar.needA : 0) + (dcdc ? dcdc.a : 0) + (shore ? shore.a : 0) + invChargeA);
   const Imain = Math.max(discharge, charge);
   const intro = `Biggest current: ${discharge >= charge ? `everything on at once = ${discharge} A (${inverter ? 'inverter' : ''}${inverter && dcLoads.length ? ' + ' : ''}${dcLoads.length ? 'DC loads' : ''})` : `all chargers at once = ${charge} A`}.`;
-  const main = Imain ? sizeRun({ ...common, id: 'main', name: 'Battery to busbar (main)', intro, current: Imain, length: o.mainLen, pct: mainPct, kind: 'main', ka: chem === 'lifepo4' ? battery.faultKA || 0 : 0 }) : null;
+  // v0.36.3: with small fuses now allowed, keep the main cable at least as thick as the fuse box feed it supplies.
+  const mainMin = fuseBox && fuseBox.run && fuseBox.run.size ? fuseBox.run.size : 0;
+  const main = Imain ? sizeRun({ ...common, id: 'main', name: 'Battery to busbar (main)', intro, current: Imain, length: o.mainLen, pct: mainPct, kind: 'main', minSize: mainMin, ka: chem === 'lifepo4' ? battery.faultKA || 0 : 0 }) : null;
   if (main) main.why = main.why +
     (chem === 'lifepo4' ? ` Lithium batteries can give a huge short-circuit current (about ${battery.faultKA ?? '?'} kA here${battery.faultTyped ? ', your figure' : ', ⚠ a rough 20 × Ah estimate'}), so the main protection must break more than that: Class T, an NH DC fuse or a DC MCCB, not MEGA / ANL (about 2 kA). It must also be DC-rated above ${vmax} V (the battery\u2019s max charge voltage). Fit it as close to the battery positive as you can.` : ' Check the fuse\u2019s breaking capacity is above the battery\u2019s short-circuit current. Fit it as close to the battery positive as you can.');
   const mainFuseA = main && main.fuse ? main.fuse.A : Imain * 1.25;
+  // v0.36.3: say so when the fuse, not the current or volt drop, sets the main cable size.
+  if (main && main.fuse && main.size) {
+    const byLoad = dcCableSize({ current: Imain, length: num(o.mainLen), volts: V, targetPct: mainPct, temp: 70, needAmps: r2(Imain * 1.25 / (derate || 1)), cable: (PLAN_CABLES[cab] || PLAN_CABLES.tri90).amps });
+    const loadSize = byLoad && byLoad.pick ? byLoad.pick.size : 0;
+    if (loadSize && loadSize < main.size) main.why += mainMin >= main.size ? ` Kept at ${main.size} mm², the same as the fuse box feed it supplies (the load alone would need about ${loadSize} mm²).` : ` The cable is ${main.size} mm² because it must carry the ${main.fuse.A} A fuse, not the ${r1(Imain)} A load (the load alone would need about ${loadSize} mm²).`;
+    if (main.fuse.fam === 'classT' && main.fuse.A < 100) main.why += ` Class T fuses come from 15 A (e.g. Bussmann JJN, 160 V DC, 20 kA). Under 100 A they use a different, smaller holder, so match the holder to the fuse.`;
+  }
   const shunt = Imain ? { a: up(SHUNT_SIZES, mainFuseA), why: `At least the main fuse (${mainFuseA} A), so ${up(SHUNT_SIZES, mainFuseA)} A. It goes in the battery negative: nothing else on the battery negative, everything else on the negative busbar side.` } : null;
   const fitFuseA = num(o.fitFuseA); const protA = fitFuseA || mainFuseA;
   const isolator = Imain ? { a: up(ISOLATOR_SIZES, protA), dcV: vmax, poles: V >= 48 ? 2 : 1, why: `Continuous rating at least the ${fitFuseA ? 'fitted' : 'main'} fuse or breaker (${protA} A), so it can\u2019t be overloaded while the fuse holds. DC-rated above ${vmax} V (the battery\u2019s max charge voltage)${V >= 48 ? ', double-pole (breaks + and −)' : '; double-pole breaks + and − (single-pole on the positive is usual in vans)'}. After the main fuse.` } : null;
