@@ -8,8 +8,8 @@ import { h, fill, toast, modal, shareOrDownload } from './ui.js';
 import { route, page, go } from './app.js';
 import * as db from './db.js';
 import { getProfile } from './state.js';
-import { planDC, planText, PLAN_DEFAULTS, VAN_EXAMPLE, QUICK_LOADS, quickLoad, CHEMS, PLAN_CABLES, SAFETY, PV_LAYOUTS, ALT_DEFAULT } from './dcplan.js';
-import { connections, wiringModel, wiringSvg, connectionText } from './dcwire.js';
+import { planDC, planText, PLAN_DEFAULTS, VAN_EXAMPLE, QUICK_LOADS, quickLoad, CHEMS, PLAN_CABLES, SAFETY, PV_LAYOUTS, ALT_DEFAULT, MAX_FUSE, ISOLATOR_SIZES, SHUNT_SIZES, ampsOr, mpptText } from './dcplan.js';
+import { connections, wiringModel, wiringSvg, connectionText, cSize } from './dcwire.js';
 import { setLastCalc, formKit, icard, more, fold, banner, resline, pchip } from './calckit.js';
 import { icon } from './icons.js';
 
@@ -33,6 +33,8 @@ export function warningTodo(w) {
   if (/BMS/.test(w)) return 'Pick a battery with a bigger BMS rating, or don\u2019t run everything at once.';
   if (/^All chargers at once/.test(w)) return 'Check the battery\u2019s data sheet allows that much charge current, or fit smaller chargers.';
   if (/^DC-DC: it draws/.test(w)) return 'Fit a smaller DC-DC charger (step 3), or put in your alternator\u2019s real rating (step 3 → DC-DC → More options). Check its label or the van handbook.';
+  if (/no standard (fuse|isolator)|biggest .* (shunt|busbar)|needs more than .* mm²/.test(w)) return 'Go up to 24 or 48 V in step 1 (half or a quarter of the current), or fit a smaller inverter in step 4.';
+  if (/^Solar: .* over the biggest/.test(w)) return 'Split the panels across 2 controllers, or go up a voltage in step 1.';
   if (/^Battery:/.test(w)) return 'Fit a bigger battery (step 1), use less each day (step 2), or plan for fewer days without charging.';
   return '';
 }
@@ -71,12 +73,19 @@ route(/^\/calc\/dc\/plan(?:\/(\w+))?$/, async (stepArg) => {
     idx > 0 ? h('a', { class: 'btn noic', href: '#/calc/dc/plan/' + STEPS[idx - 1][0] }, '‹ Back') : h('a', { class: 'btn noic', href: '#/calc' }, '‹ Calculators'),
     idx < STEPS.length - 1 ? h('a', { class: 'btn primary noic', href: '#/calc/dc/plan/' + STEPS[idx + 1][0] }, idx === STEPS.length - 2 ? 'See results ›' : 'Next ›') : h('a', { class: 'btn noic', href: '#/calc/dc/plan/system' }, 'Edit from step 1'));
 
+  // v0.35.1: battery sizing lives with the other battery settings on System (it still sizes from the loads).
+  const battBlock = (p) => [v.battUnit === 'kwh' && (v._have || {}).battAh
+        ? h('div', { class: 'f fld2' }, h('div', { class: 'chips seg2' }, h('button', { class: 'chip', type: 'button', onclick: () => { (v._have ||= {}).battAh = false; v.battKwh = ''; v.battAh = ''; save(); } }, `Size for me${p.battery.suggestAh ? ` (${p.battery.suggestAh} Ah · ${p.battery.suggestKwh} kWh)` : ''}`), h('button', { class: 'chip on', type: 'button' }, 'I already have one')),
+          F.num('battKwh', 'Your battery', { unit: 'kWh', hint: `= ${p.battery.fittedAh || '?'} Ah at ${p.battery.nomV} V nominal. You need about ${p.battery.needKwh} kWh (${p.battery.needAh} Ah).` }))
+        : have('battAh', { auto: `Size for me${p.battery.suggestAh ? ` (${p.battery.suggestAh} Ah · ${p.battery.suggestKwh} kWh)` : ''}`, mine: 'Your battery', unit: 'Ah', hint: `You need about ${p.battery.needAh} Ah (${p.battery.needKwh} kWh) for what you\u2019ve put in.${p.battery.fittedAh ? ` Yours is ${p.battery.kwh} kWh at ${p.battery.nomV} V nominal.` : ''}`, dflt: String(p.battery.suggestAh || '') }),
+        (v._have || {}).battAh || String(v.battAh || '').trim() || String(v.battKwh || '').trim() ? (v.battUnit ||= 'ah', F.seg('battUnit', 'Battery size in', [['ah', 'Ah'], ['kwh', 'kWh']], 'kWh = Ah × nominal volts ÷ 1000 (12.8 V per 12 V for LiFePO4).', 'small')) : null];
   const steps = {
     system: (p) => [
       icard('Your system', [
         F.seg('volts', 'System voltage', [['12', '12 V'], ['24', '24 V'], ['48', '48 V']], '12 V for most vans. 24 or 48 V for bigger systems: half or a quarter of the current, so thinner cables.'),
         F.seg('chem', 'Battery type', Object.entries(CHEMS).map(([k, c]) => [k, c.label]), 'LiFePO4 (lithium) is lighter and you can use about 80% of it. AGM and lead-acid: use about half if you want them to last.', 'small'),
         F.num('days', 'Days with no charging', { unit: 'days', hint: 'How long it has to last with no sun, no driving and no hook-up.' }),
+        ...battBlock(p),
         more('dc-sys', [
           F.num('dod', 'Usable part of the battery (depth of discharge)', { unit: '%', ph: String(Math.round((CHEMS[v.chem] || CHEMS.lifepo4).dod * 100)), hint: `Blank = ${Math.round((CHEMS[v.chem] || CHEMS.lifepo4).dod * 100)}% for ${(CHEMS[v.chem] || CHEMS.lifepo4).label}.` }),
           F.num('bmsA', 'Battery BMS max continuous current', { unit: 'A', ph: 'data sheet', hint: 'BMS = the battery\u2019s own protection board. Optional: lets Zs Pro check it can feed everything at once.' })],
@@ -107,13 +116,7 @@ route(/^\/calc\/dc\/plan(?:\/(\w+))?$/, async (stepArg) => {
             h('label', { class: 'check' }, h('input', { type: 'checkbox', checked: !!l.lighting, onchange: (e) => setLoad(i, 'lighting', e.target.checked) }), '10% volt drop is OK'), h('span', { class: 'help' }, 'Lighting and other things that don\u2019t mind a bit less voltage (the usual marine rule). Otherwise 3%.')],
             `${l.peak ? 'peak ' + l.peak + (l.unit === 'A' ? ' A' : ' W') : 'no peak'}, ${l.lighting ? '10%' : '3%'} drop`))),
         h('div', { class: 'help' }, 'Hours a day = how long it runs at that power. A fridge cycles on and off, so about 8 h on a warm day.')]),
-      h('div', { class: 'tot' }, `That\u2019s ${p.daily.wh} Wh a day = ${p.daily.ah} Ah at ${p.V} V`),
-      // v0.21: battery sized after the loads (it needs them), so it moved here from System.
-      icard('Battery', [v.battUnit === 'kwh' && (v._have || {}).battAh
-        ? h('div', { class: 'f fld2' }, h('div', { class: 'chips seg2' }, h('button', { class: 'chip', type: 'button', onclick: () => { (v._have ||= {}).battAh = false; v.battKwh = ''; v.battAh = ''; save(); } }, `Size for me${p.battery.suggestAh ? ` (${p.battery.suggestAh} Ah · ${p.battery.suggestKwh} kWh)` : ''}`), h('button', { class: 'chip on', type: 'button' }, 'I already have one')),
-          F.num('battKwh', 'Your battery', { unit: 'kWh', hint: `= ${p.battery.fittedAh || '?'} Ah at ${p.battery.nomV} V nominal. You need about ${p.battery.needKwh} kWh (${p.battery.needAh} Ah).` }))
-        : have('battAh', { auto: `Size for me${p.battery.suggestAh ? ` (${p.battery.suggestAh} Ah · ${p.battery.suggestKwh} kWh)` : ''}`, mine: 'Your battery', unit: 'Ah', hint: `You need about ${p.battery.needAh} Ah (${p.battery.needKwh} kWh) for what you\u2019ve put in.${p.battery.fittedAh ? ` Yours is ${p.battery.kwh} kWh at ${p.battery.nomV} V nominal.` : ''}`, dflt: String(p.battery.suggestAh || '') }),
-        (v._have || {}).battAh || String(v.battAh || '').trim() || String(v.battKwh || '').trim() ? (v.battUnit ||= 'ah', F.seg('battUnit', 'Battery size in', [['ah', 'Ah'], ['kwh', 'kWh']], 'kWh = Ah × nominal volts ÷ 1000 (12.8 V per 12 V for LiFePO4).', 'small')) : null])],
+      h('div', { class: 'tot' }, `That\u2019s ${p.daily.wh} Wh a day = ${p.daily.ah} Ah at ${p.V} V`)],
 
     charging: (p) => {
       const sOn = !!String(v.solarW || '').trim(), dOn = !!String(v.dcdcA || '').trim(), mOn = !!String(v.shoreA || '').trim();
@@ -199,13 +202,13 @@ function results(v, p) {
   const need = [
     ['Battery', `${p.V} V ${p.battery.fittedAh || p.battery.suggestAh || p.battery.needAh} Ah · ${p.battery.kwh} kWh ${p.battery.label.replace(' (lithium)', '')}`, p.battery.invNoUse && !p.daily.dcWh ? 'Add what the inverter runs (or kWh a day) to see how long the battery lasts' : p.battery.noLoads ? 'No loads entered yet. Add loads to see how long it lasts' : p.battery.fittedAh ? `Needs ${p.battery.needAh} Ah (${p.battery.needKwh} kWh): yours lasts about ${p.battery.fittedDays} days` : `Needs ${p.battery.needAh} Ah (${p.battery.needKwh} kWh) for ${p.battery.days} day${p.battery.days === 1 ? '' : 's'}`, p.battery.ok !== false],
     p.inverter ? ['Inverter', `${p.inverter.w} W pure sine`, `Up to ${p.inverter.current} A from the battery`, !p.inverter.small] : null,
-    p.solar ? ['Solar controller (MPPT)', `${p.solar.mpptV} V / ${p.solar.mppt} A`, `${p.solar.w} W of panels${p.solar.pv && p.solar.pv.cold ? ', ' + pvLayoutText(p.solar.pv) : ''}`, !(p.solar.pv && p.solar.pv.vocOk === false) && !(p.solar.mpptHave && p.solar.mpptHave < p.solar.needA)] : null,
+    p.solar ? ['Solar controller (MPPT)', `${p.solar.mpptV} V / ${mpptText(p.solar)}`, `${p.solar.w} W of panels${p.solar.pv && p.solar.pv.cold ? ', ' + pvLayoutText(p.solar.pv) : ''}`, !(p.solar.pv && p.solar.pv.vocOk === false) && !(p.solar.mpptHave && p.solar.mpptHave < p.solar.needA) && !!p.solar.mppt] : null,
     p.solar ? ['Solar cable', p.solar.pvDrop ? `${p.solar.pvDrop.size} mm² PV cable` : '4 mm² PV cable', p.solar.pvDrop ? `Panels to controller: ${p.solar.pvDrop.current} A, drop ${p.solar.pvDrop.volts} V (${p.solar.pvDrop.pct}%, target ≤ 3%) at ${p.solar.pvDrop.vstring} V` : 'Add the panel Voc, Vmp and Isc (step 3) to work out the volt drop', true] : null,
     p.dcdc ? ['DC-DC charger', `${p.dcdc.a} A`, `About ${p.dcdc.inI} A from the alternator (${Math.round(p.dcdc.altShare * 100)}% of ${p.dcdc.altRated} A${p.dcdc.altAssumed ? ' assumed' : ''})${p.dcdc.smart ? '. Smart alternator: needs the trigger wire' : ''}`, !p.dcdc.tooBig] : null,
     p.shore ? ['Mains charger', `${p.shore.a} A`, '', true] : null,
-    p.main ? ['Main fuse', p.main.fuse ? `${p.main.fuse.A} A ${p.main.fuse.label.replace(' fuse', '')}` : '?', 'At the battery positive', !!p.main.fuse] : null,
-    p.main ? ['Main cable', p.main.size ? `${p.main.size} mm²` : 'no size fits', `${p.cableLabel.split(' singles')[0]}, red + black`, !!p.main.size] : null,
-    p.main ? ['Isolator & shunt', `${p.isolator.a} A isolator · ${p.shunt.a} A shunt`, 'Shunt = battery monitor sensor, on the negative', true] : null,
+    p.main ? ['Main fuse', p.main.fuse ? `${p.main.fuse.A} A ${p.main.fuse.label.replace(' fuse', '')}` : `Over ${MAX_FUSE} A: no standard fuse`, p.main.fuse ? 'At the battery positive' : 'Go up a voltage (24 or 48 V) or fit a smaller inverter', !!p.main.fuse] : null,
+    p.main ? ['Main cable', p.main.size ? `${p.main.size} mm²` : 'Over 120 mm²: no single cable fits', `${p.cableLabel.split(' singles')[0]}, red + black`, !!p.main.size] : null,
+    p.main ? ['Isolator & shunt', `${ampsOr(p.isolator.a, ISOLATOR_SIZES)} isolator · ${ampsOr(p.shunt.a, SHUNT_SIZES)} shunt`, p.isolator.a && p.shunt.a ? 'Shunt = battery monitor sensor, on the negative' : 'No standard size that big: go up a voltage (24 or 48 V)', !!(p.isolator.a && p.shunt.a)] : null,
   ].filter(Boolean);
   const bad = p.warnings.length > 0 || p.runs.some((r) => !r.ok);
   const svg = wiringSvg(wiringModel(p, v));
@@ -214,7 +217,7 @@ function results(v, p) {
     h('div', { class: 'cn' }, String(i + 1)),
     h('div', { class: 'cb' },
       h('div', { class: 'cpath' }, [c.from, ...(c.via || []), c.to].map((x, j) => [j ? h('span', { class: 'arr' }, '→') : null, h('span', {}, x)])),
-      c.ac ? null : h('div', { class: 'cspec' }, c.size ? h('b', {}, `${c.size} mm²`) : h('b', { class: 'badt' }, 'size ?'), ` ${c.colour}`, c.length ? ` · ${c.length} m` : '', c.vd != null ? ` · ${c.vd}% drop` : ''),
+      c.ac ? null : h('div', { class: 'cspec' }, c.size ? h('b', {}, `${c.size} mm²`) : h('b', { class: 'badt' }, cSize(c)), ` ${c.colour}`, c.length ? ` · ${c.length} m` : '', c.vd != null ? ` · ${c.vd}% drop` : ''),
       c.fuse ? h('div', { class: 'cfuse' }, icon('zap', { size: 14 }), h('span', {}, h('b', {}, c.fuse.text), ' — ' + c.fuse.where)) : null,
       c.note ? h('div', { class: 'help' }, c.note) : null));
   return [
@@ -229,7 +232,7 @@ function results(v, p) {
     h('div', { class: 'card' }, fold('dc-diagram', 'Wiring diagram', [h('div', { class: 'wiring' + (localStorage.getItem('sparky.wzoom') === '1' ? ' zoom' : ''), html: svg }), h('div', { class: 'btns' }, h('button', { class: 'btn small noic', type: 'button', onclick: (e) => { const w = e.target.closest('.foldin').querySelector('.wiring'); const z = w.classList.toggle('zoom'); localStorage.setItem('sparky.wzoom', z ? '1' : '0'); e.target.textContent = z ? 'Fit to screen' : 'Make it bigger'; } }, localStorage.getItem('sparky.wzoom') === '1' ? 'Fit to screen' : 'Make it bigger')), h('p', { class: 'help' }, 'A layout guide, not to scale. Fuses sit at the busbar end of each positive unless it says otherwise.')], { open: true })),
     h('div', { class: 'card foldcard' }, fold('dc-runs', 'Cables & fuses', [
       h('table', { class: 'calctab runs' }, h('tr', {}, ['Run', 'A', 'Fuse', 'mm²', 'Drop'].map((t) => h('th', {}, t))),
-        p.runs.map((r) => h('tr', {}, h('td', {}, r.name), h('td', {}, r.peak > r.current ? `${r.current} (${r.peak})` : r.current), h('td', {}, r.fuse ? r.fuse.A : '?'), h('td', { class: r.size ? '' : 'bad' }, r.size ?? '✗'), h('td', { class: r.vd && r.vd.pct <= r.pct ? '' : 'bad' }, r.vd ? r.vd.pct + '%' : '–')))),
+        p.runs.map((r) => h('tr', {}, h('td', {}, r.name), h('td', {}, r.peak > r.current ? `${r.current} (${r.peak})` : r.current), h('td', { class: r.fuse ? '' : 'bad' }, r.fuse ? r.fuse.A : `>${MAX_FUSE}`), h('td', { class: r.size ? '' : 'bad' }, r.size ?? '✗'), h('td', { class: r.vd && r.vd.pct <= r.pct ? '' : 'bad' }, r.vd ? r.vd.pct + '%' : '–')))),
       h('p', { class: 'note' }, 'A (peak) · fuse ≥ 1.25 × peak · cable rated ≥ the fuse · drop at the working current, + and − cables together.')], { badge: h('span', { class: 'fbadge' }, String(p.runs.length)) })),
     h('div', { class: 'card' }, h('h2', {}, 'Charger settings'),
       h('p', { class: 'help', style: 'margin-top:0' }, `For ${p.profile.name} at ${p.V} V. Set the ${[p.solar ? 'solar controller (MPPT)' : '', p.dcdc ? 'DC-DC charger' : '', p.shore ? 'mains charger' : ''].filter(Boolean).join(', ').replace(/, ([^,]*)$/, ' and $1') || 'chargers'} to match.`),

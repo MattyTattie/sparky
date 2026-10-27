@@ -5,6 +5,7 @@
 // inline SVG (wiringSvg) and the PDF draws the same model with the Kit.
 // Only reads what planDC() already worked out: no new sums.
 // =====================================================================
+import { MAX_FUSE, MAX_CABLE, ISOLATOR_SIZES, SHUNT_SIZES, BUSBAR_SIZES, ampsOr, sizeText, mpptText } from './dcplan.js';
 const num = (v, d = 0) => { const n = Number(String(v ?? '').replace(',', '.')); return Number.isFinite(n) && String(v ?? '').trim() !== '' ? n : d; };
 export const fuseShort = (f) => f ? `${f.A} A ${f.label.replace(' fuse', '').replace(' (ATO/ATC)', '')}` : null;
 const fuseLong = (f) => f ? `${f.A} A ${f.label}` : null;
@@ -13,13 +14,13 @@ const fuseLong = (f) => f ? `${f.A} A ${f.label}` : null;
 export function connections(p, o = {}) {
   const C = [];
   const add = (c) => C.push({ fuse: null, vd: null, limit: null, ok: true, note: '', ...c });
-  const fromRun = (r) => r ? { size: r.size, length: r.length, vd: r.vd ? r.vd.pct : null, limit: r.pct, ok: r.ok } : {};
+  const fromRun = (r) => r ? { size: r.size, big: !r.size && r.current > 0 && r.length > 0, length: r.length, vd: r.vd ? r.vd.pct : null, limit: r.pct, ok: r.ok } : {};
   if (p.main) {
     add({ id: 'main', from: 'Battery +', via: ['Main fuse', 'Isolator'], to: '+ busbar', ...fromRun(p.main), colour: 'red',
       fuse: p.main.fuse ? { text: fuseLong(p.main.fuse), where: 'on the battery positive, as close to the terminal as you can' } : null,
-      note: `Isolator: ${p.isolator.a} A DC-rated, after the main fuse. Same cable all the way.` });
-    add({ id: 'neg', from: 'Battery −', via: ['Shunt'], to: '− busbar', size: p.main.size, length: p.main.length, colour: 'black', vd: null, ok: !!p.main.size,
-      note: `Shunt ${p.shunt.a} A goes on the battery negative: nothing else on the battery negative. No fuse on the negative.` });
+      note: `Isolator: ${ampsOr(p.isolator.a, ISOLATOR_SIZES)} DC-rated, after the main fuse. Same cable all the way.` });
+    add({ id: 'neg', from: 'Battery −', via: ['Shunt'], to: '− busbar', size: p.main.size, big: !p.main.size, length: p.main.length, colour: 'black', vd: null, ok: !!p.main.size,
+      note: `Shunt ${ampsOr(p.shunt.a, SHUNT_SIZES)} goes on the battery negative: nothing else on the battery negative. No fuse on the negative.` });
   }
   if (p.inverter) add({ id: 'inverter', from: '+ busbar', to: 'Inverter', ...fromRun(p.inverter.run), colour: 'red + black',
     fuse: p.inverter.run.fuse ? { text: fuseLong(p.inverter.run.fuse), where: 'at the busbar end of the positive' } : null,
@@ -32,7 +33,7 @@ export function connections(p, o = {}) {
       fuse: pv && pv.fuse && pv.fuse.needed && pv.fuse.fuse ? { text: `${pv.fuse.fuse} A gPV string fuses`, where: 'in each string, + and −' } : null,
       note: `PV isolator: DC-rated, at least ${isoV} V${isoA ? ` and ${isoA} A` : ''}. ${pick ? '' : 'Add the panel figures in Charging → More options to size the PV cable; 4 mm² suits most van roofs. '}MC4 plugs on the panel leads.` });
     add({ id: 'mppt', from: 'MPPT (solar controller)', to: '+ busbar', ...fromRun(p.solar.run), colour: 'red + black',
-      fuse: p.solar.run.fuse ? { text: fuseLong(p.solar.run.fuse), where: 'at the busbar end of the positive' } : null, note: `Controller ${p.solar.mpptV} V / ${p.solar.mppt} A.` });
+      fuse: p.solar.run.fuse ? { text: fuseLong(p.solar.run.fuse), where: 'at the busbar end of the positive' } : null, note: `Controller ${p.solar.mpptV} V / ${mpptText(p.solar)}.` });
   }
   if (p.dcdc) {
     add({ id: 'dcdcIn', from: 'Starter battery', to: 'DC-DC charger', ...fromRun(p.dcdc.inRun), colour: 'red (+ black to chassis or the starter battery −)',
@@ -101,18 +102,19 @@ function buildModel(p, o, Y, H) {
   const wire = (pts, c = 'pos') => wires.push({ pts, c });
   // cable (and fuse) labels stacked in the middle of a vertical wire
   // v0.35: extra tags ({ t, kind, bad }) for isolators / cold Voc; bad = over a limit (drawn red).
-  const tags = (x, y1, y2, cable, fuse, extra = [], a, bRow) => { const list = [cable && (typeof cable === 'object' ? { kind: 'cable', ...cable } : { t: cable, kind: 'cable' }), fuse && { t: fuse, kind: 'fuse' }, ...extra].filter(Boolean); if (a) stacks.push({ a, b: bRow, n: list.length }); const hh = PILL_H, gap = PILL_GAP; let y = (y1 + y2) / 2 - (list.length * hh + (list.length - 1) * gap) / 2;
+  const tags = (x, y1, y2, cable, fuse, extra = [], a, bRow) => { const list = [cable && (typeof cable === 'object' ? { kind: 'cable', ...cable } : { t: cable, kind: 'cable' }), fuse && (typeof fuse === 'object' ? { kind: 'fuse', ...fuse } : { t: fuse, kind: 'fuse' }), ...extra].filter(Boolean); if (a) stacks.push({ a, b: bRow, n: list.length }); const hh = PILL_H, gap = PILL_GAP; let y = (y1 + y2) / 2 - (list.length * hh + (list.length - 1) * gap) / 2;
     for (const it of list) { const w = Math.min(CW + 12, estW(it.t, 7.5) + 10); pills.push({ cx: x, y, w, h: hh, t: it.t, kind: it.kind, bad: !!it.bad }); y += hh + gap; } };
-  const mm = (r) => r && r.size ? `${r.size} mm²` : 'size ?';
+  const mm = (r) => sizeText(r);
+  const fz = (r) => fuseShort(r && r.fuse) || (r && r.need > MAX_FUSE ? { t: `over ${MAX_FUSE} A fuse`, bad: true } : null);
   const down = (col, rowA, rowB, c, cable, fuse, extra) => { const x = MID[col], y1 = Y[rowA] + H[rowA], y2 = Y[rowB]; wire([[x, y1], [x, y2]], c); tags(x, y1, y2, cable, fuse, extra, rowA, rowB); };
-  const amps = (r) => r && r.size ? `${r.size} mm² · ${Math.round(r.current * 10) / 10} A` : 'size ?';
+  const amps = (r) => r && r.size ? `${r.size} mm² · ${Math.round(r.current * 10) / 10} A` : `${sizeText(r)} · ${Math.round(((r && r.current) || 0) * 10) / 10} A`;
   const b = p.battery;
   // centre: battery → main fuse → isolator → busbar
   box(1, 'r0', 'Battery', [`${p.V} V ${b.fittedAh || b.suggestAh || b.needAh} Ah · ${b.kwh} kWh`, b.label.replace(' (lithium)', '').replace(' (flooded)', '')]);
   if (p.main) {
-    box(1, 'r1', 'Main fuse', [fuseShort(p.main.fuse) || '?'], 'fuse');
-    box(1, 'r2', 'Isolator', [`${p.isolator.a} A DC`]);
-    down(1, 'r0', 'r1', 'pos', mm(p.main)); down(1, 'r1', 'r2', 'pos', mm(p.main)); down(1, 'r2', 'bus', 'pos', mm(p.main));
+    box(1, 'r1', 'Main fuse', [fuseShort(p.main.fuse) || `Over ${MAX_FUSE} A`, p.main.fuse ? '' : 'no standard fuse'], 'fuse').bad = !p.main.fuse;
+    box(1, 'r2', 'Isolator', [`${ampsOr(p.isolator.a, ISOLATOR_SIZES)} DC`, p.isolator.a ? '' : 'no standard isolator']).bad = !p.isolator.a;
+    const mc = { t: mm(p.main), bad: !p.main.size }; down(1, 'r0', 'r1', 'pos', mc); down(1, 'r1', 'r2', 'pos', mc); down(1, 'r2', 'bus', 'pos', mc);
   }
   // left: solar
   if (p.solar) {
@@ -122,35 +124,35 @@ function buildModel(p, o, Y, H) {
     const lay = !pv ? `${p.solar.panels} panel${p.solar.panels > 1 ? 's' : ''}` : pv.strings === 1 ? (pv.series > 1 ? `${pv.series} in series` : '1 panel') : pv.series === 1 ? `${pv.strings} in parallel` : `${pv.series} series × ${pv.strings} parallel`;
     const pb = box(0, 'r0', 'Solar panels', [`${p.solar.w} W`, lay]); pb.bad = over;
     const ib = box(0, 'r1', 'PV isolator', [`≥ ${pv && pv.cold ? Math.ceil(pv.cold) : p.solar.mpptV} V DC`], 'fuse');
-    const mb = box(0, 'r2', 'MPPT', [`${p.solar.mpptV} V / ${p.solar.mppt} A`, over ? `OVER: Voc ${pv.cold} V` : 'solar controller']); mb.bad = over;
+    const mb = box(0, 'r2', 'MPPT', [`${p.solar.mpptV} V / ${mpptText(p.solar).replace(' (use 2 controllers)', '')}`, over ? `OVER: Voc ${pv.cold} V` : p.solar.mppt ? 'solar controller' : 'use 2 controllers']); mb.bad = over || !p.solar.mppt;
     const pvI = p.solar.pvDrop ? p.solar.pvDrop.current : null;
     const pvc = { t: `${pick ? pick.size : 4} mm² PV${pvI ? ` · ${pvI} A` : ''}${pick ? ` · ${pick.vd.pct}%` : ''}`, bad: !!(pv && pv.size && !pick) };
-    const sf = pv && pv.fuse && pv.fuse.needed ? (pv.fuse.fuse ? `${pv.fuse.fuse} A gPV string fuses` : 'string fuses ?') : null;
+    const sf = pv && pv.fuse && pv.fuse.needed ? (pv.fuse.fuse ? `${pv.fuse.fuse} A gPV string fuses` : 'gPV string fuses') : null;
     down(0, 'r0', 'r1', 'pv', pvc, sf, pv && pv.cold ? [{ t: `Voc ${pv.cold} V ${over ? '>' : '≤'} ${p.solar.mpptV} V`, kind: over ? 'cable' : 'volt', bad: over }] : []);
     down(0, 'r1', 'r2', 'pv', pvc);
-    down(0, 'r2', 'bus', 'pos', { t: amps(p.solar.run), bad: !p.solar.run.ok }, fuseShort(p.solar.run.fuse));
+    down(0, 'r2', 'bus', 'pos', { t: amps(p.solar.run), bad: !p.solar.run.ok }, fz(p.solar.run));
   }
   // right: DC-DC from the starter battery; mains charger
   let shoreRow = null;
   if (p.dcdc) {
     box(2, 'r0', 'Starter battery', [`${p.vehV} V vehicle`, 'alternator']);
     box(2, 'r2', 'DC-DC charger', [`${p.dcdc.a} A`, p.dcdc.trigger ? '+ trigger wire' : '']);
-    const x = MID[2], y1 = Y.r0 + H.r0, y2 = Y.r2; wire([[x, y1], [x, y2]]); tags(x, y1, y2, mm(p.dcdc.inRun), fuseShort(p.dcdc.inRun.fuse), [], 'r0', 'r2');
-    down(2, 'r2', 'bus', 'pos', mm(p.dcdc.outRun), fuseShort(p.dcdc.outRun.fuse));
+    const x = MID[2], y1 = Y.r0 + H.r0, y2 = Y.r2; wire([[x, y1], [x, y2]]); tags(x, y1, y2, mm(p.dcdc.inRun), fz(p.dcdc.inRun), [], 'r0', 'r2');
+    down(2, 'r2', 'bus', 'pos', mm(p.dcdc.outRun), fz(p.dcdc.outRun));
     if (p.shore) shoreRow = 'r3';
   } else if (p.shore) shoreRow = 'r2';
   if (shoreRow) {
     box(2, shoreRow, 'Mains charger', [`${p.shore.a} A`, 'from 230 V hook-up']);
-    if (shoreRow === 'r2') down(2, 'r2', 'bus', 'pos', mm(p.shore.run), fuseShort(p.shore.run.fuse));
-    else { const x = MID[2], y1 = Y.bus + H.bus, y2 = Y.r3; wire([[x, y1], [x, y2]]); tags(x, y1, y2, mm(p.shore.run), fuseShort(p.shore.run.fuse), [], 'bus', 'r3'); }
+    if (shoreRow === 'r2') down(2, 'r2', 'bus', 'pos', mm(p.shore.run), fz(p.shore.run));
+    else { const x = MID[2], y1 = Y.bus + H.bus, y2 = Y.r3; wire([[x, y1], [x, y2]]); tags(x, y1, y2, mm(p.shore.run), fz(p.shore.run), [], 'bus', 'r3'); }
   }
-  boxes.push({ x: 8, y: Y.bus, w: W - 16, h: H.bus, t: `+ BUSBAR${p.busbar ? '  ' + p.busbar.a + ' A' : ''}`, s: [], kind: 'bus' });
+  boxes.push({ x: 8, y: Y.bus, w: W - 16, h: H.bus, t: `+ BUSBAR${p.busbar ? '  ' + ampsOr(p.busbar.a, BUSBAR_SIZES) : ''}`, bad: !!(p.busbar && !p.busbar.a), s: [], kind: 'bus' });
   // below the busbar: inverter, fuse box and loads
   const busBot = Y.bus + H.bus; let bottom = busBot;
   if (p.inverter) {
     const ac = p.acLoads.map((l) => l.name.replace(/ \((230 V )?via inverter\)/, '').replace(/^Low-watt /, ''));
     box(0, 'r3', 'Inverter', [`${p.inverter.w} W → 230 V`, `${p.inverter.current} A DC`]);
-    const x = MID[0]; wire([[x, busBot], [x, Y.r3]]); tags(x, busBot, Y.r3, { t: amps(p.inverter.run), bad: !p.inverter.run.ok }, fuseShort(p.inverter.run.fuse), p.inverter.isoA ? [{ t: `${p.inverter.isoA} A DC isolator`, kind: 'fuse' }] : [], 'bus', 'r3');
+    const x = MID[0]; wire([[x, busBot], [x, Y.r3]]); tags(x, busBot, Y.r3, { t: amps(p.inverter.run), bad: !p.inverter.run.ok }, fz(p.inverter.run), p.inverter.isoA ? [{ t: `${p.inverter.isoA} A DC isolator`, kind: 'fuse' }] : [], 'bus', 'r3');
     // v0.35: AC output under the inverter
     const yA = Y.r3 + H.r3 + 22; wire([[x, Y.r3 + H.r3], [x, yA]], 'ac');
     const acLines = wrapEst(ac.length ? `230 V AC out: ${ac.join(', ')}` : '230 V AC out (RCD protected)', CW - 8, 7);
@@ -159,13 +161,13 @@ function buildModel(p, o, Y, H) {
   }
   if (p.fuseBox) {
     box(1, 'r3', 'Fuse box', [`${p.fuseBox.ways}-way blade`]);
-    const x = MID[1]; wire([[x, busBot], [x, Y.r3]]); tags(x, busBot, Y.r3, mm(p.fuseBox.run), fuseShort(p.fuseBox.run.fuse), [], 'bus', 'r3');
+    const x = MID[1]; wire([[x, busBot], [x, Y.r3]]); tags(x, busBot, Y.r3, mm(p.fuseBox.run), fz(p.fuseBox.run), [], 'bus', 'r3');
     const bx = X[1] + 14, lx = X[1] + 30, lw = W - 8 - lx, rh = 30, gap = 6; let y = Y.r3 + H.r3 + 14;
     const loads = p.dcLoads; if (loads.length) {
       const last = y + (loads.length - 1) * (rh + gap) + rh / 2;
       wire([[bx, Y.r3 + H.r3], [bx, last]]);
       for (const l of loads) { const r = l.run; wire([[bx, y + rh / 2], [lx, y + rh / 2]]);
-        boxes.push({ x: lx, y, w: lw, h: rh, t: l.name, s: [r ? `${mm(r)} · ${fuseShort(r.fuse) || 'fuse ?'} · ${r.length} m` : 'add a run length (step 5)'], kind: 'load' }); y += rh + gap; }
+        boxes.push({ x: lx, y, w: lw, h: rh, t: l.name, s: [r ? `${mm(r)} · ${fuseShort(r.fuse) || `over ${MAX_FUSE} A fuse`} · ${r.length} m` : 'add a run length (step 5)'], kind: 'load' }); y += rh + gap; }
       bottom = Math.max(bottom, y - gap);
     }
   }
@@ -178,11 +180,11 @@ function buildModel(p, o, Y, H) {
   let yN = bottom + 34;
   texts.push({ x: 8, y: yN - 10, t: 'NEGATIVE SIDE', size: 7.5, bold: true, color: 'sub' });
   if (p.main) {
-    const nb = [[8, 70, 'Battery −', ''], [106, 70, 'Shunt', `${p.shunt.a} A`], [212, 70, '− Busbar', p.busbar ? `${p.busbar.a} A` : ''], [306, 46, 'Chassis', '']];
+    const nb = [[8, 70, 'Battery −', ''], [106, 70, 'Shunt', ampsOr(p.shunt.a, SHUNT_SIZES)], [212, 70, '− Busbar', p.busbar ? ampsOr(p.busbar.a, BUSBAR_SIZES) : ''], [306, 46, 'Chassis', '']];
     for (const [x, w, t, s] of nb) boxes.push({ x, y: yN, w, h: 32, t, s: s ? [s] : [], kind: 'neg' });
     const ym = yN + 16; wire([[78, ym], [106, ym]], 'neg'); wire([[176, ym], [212, ym]], 'neg'); wire([[282, ym], [306, ym]], 'neg');
     yN += 32 + 8;
-    for (const line of wrapEst(`Battery − to shunt to − busbar: ${p.main.size ?? '?'} mm² black. − busbar to chassis: ${p.chassis.size} mm² black. Every negative goes back to the − busbar, the same size as its positive.`, W - 16, 7.5)) { yN += 11; texts.push({ x: 8, y: yN, t: line, size: 7.5, color: 'sub' }); }
+    for (const line of wrapEst(`Battery − to shunt to − busbar: ${sizeText(p.main)} black. − busbar to chassis: ${p.chassis.size} mm² black. Every negative goes back to the − busbar, the same size as its positive.`, W - 16, 7.5)) { yN += 11; texts.push({ x: 8, y: yN, t: line, size: 7.5, color: 'sub' }); }
   }
   return { W, H: yN + 10, boxes, wires, pills, texts, stacks };
 }
@@ -215,8 +217,9 @@ export function wiringSvg(m) {
 }
 
 // One connection as a line of text (share as text, PDF).
+export const cSize = (c) => c.big ? `over ${MAX_CABLE} mm²` : 'size to suit';
 export function connectionText(c) {
   const path = [c.from, ...(c.via || []), c.to].join(' → ');
-  const spec = c.ac ? '' : [c.size ? `${c.size} mm² ${c.colour}` : `size ? (${c.colour})`, c.length ? `${c.length} m` : null, c.vd != null ? `${c.vd}% drop` : null].filter(Boolean).join(', ');
+  const spec = c.ac ? '' : [c.size ? `${c.size} mm² ${c.colour}` : `${cSize(c)} (${c.colour})`, c.length ? `${c.length} m` : null, c.vd != null ? `${c.vd}% drop` : null].filter(Boolean).join(', ');
   return `${path}${spec ? ': ' + spec : ''}${c.fuse ? `. Fuse: ${c.fuse.text}, ${c.fuse.where}` : ''}${c.note ? `. ${c.note}` : ''}`;
 }

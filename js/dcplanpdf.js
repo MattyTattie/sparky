@@ -1,8 +1,8 @@
 // dcplanpdf.js — the DC system plan as an A4 PDF (summary, parts list,
 // cable runs with the reasons, safety notes). Uses the same Kit as the certificates.
 import { loadJsPDF, Kit, GREY, INK, VALUE, RED } from './pdfkit.js';
-import { SAFETY } from './dcplan.js';
-import { connections, wiringModel } from './dcwire.js';
+import { SAFETY, MAX_FUSE, ISOLATOR_SIZES, SHUNT_SIZES, BUSBAR_SIZES, ampsOr, fuseText, sizeText, mpptText } from './dcplan.js';
+import { connections, wiringModel, cSize } from './dcwire.js';
 
 export async function dcPlanPdf(p, { title = 'DC system plan', profile = {}, base, inputs = {} } = {}) {
   const { jsPDF } = await loadJsPDF(base);
@@ -26,10 +26,10 @@ export async function dcPlanPdf(p, { title = 'DC system plan', profile = {}, bas
     ['Daily use', `${p.daily.wh} Wh = ${p.daily.ah} Ah at ${p.V} V (DC ${p.daily.dcWh} Wh, 230 V ${p.daily.acWh} Wh${p.daily.idleWh ? `, incl. inverter idle ${p.daily.idleW} W × ${p.daily.idleH} h = ${p.daily.idleWh} Wh` : ''})`],
     ['Battery', p.battery.why],
     p.inverter ? ['Inverter', `${p.inverter.w} W pure sine, ${p.inverter.current} A DC at full output`] : null,
-    p.solar ? ['Solar', `${p.solar.w} W → MPPT ${p.solar.mpptV} V / ${p.solar.mppt} A${p.solar.pv && p.solar.pv.cold ? `; cold Voc ${p.solar.pv.cold} V` : ''}`] : null,
+    p.solar ? ['Solar', `${p.solar.w} W → MPPT ${p.solar.mpptV} V / ${mpptText(p.solar)}${p.solar.pv && p.solar.pv.cold ? `; cold Voc ${p.solar.pv.cold} V` : ''}`] : null,
     p.dcdc ? ['DC-DC', `${p.dcdc.a} A (${p.dcdc.inI} A from the starter battery)`] : null,
     p.shore ? ['Mains charger', `${p.shore.a} A`] : null,
-    p.main ? ['Main', `${p.main.fuse ? p.main.fuse.A + ' A ' + p.main.fuse.label : '?'}, ${p.main.size ?? '?'} mm² cable, ${p.isolator.a} A isolator, ${p.shunt.a} A shunt, ${p.busbar.a} A busbars`] : null,
+    p.main ? ['Main', `${fuseText(p.main)}, ${sizeText(p.main)} cable, ${ampsOr(p.isolator.a, ISOLATOR_SIZES)} isolator, ${ampsOr(p.shunt.a, SHUNT_SIZES)} shunt, ${ampsOr(p.busbar.a, BUSBAR_SIZES)} busbars`] : null,
   ].filter(Boolean);
   for (const [a, b] of sum) { const ls = k.wrap(b, k.cw - 32, 8); room(ls.length * k.lh(8) + 1); k.t(a, k.x0 + 1, k.y + 2.8, { size: 8, bold: true }); ls.forEach((s, i) => k.t(s, k.x0 + 32, k.y + 2.8 + i * k.lh(8), { size: 8, color: VALUE })); k.y += ls.length * k.lh(8) + 1.2; }
   for (const w of p.warnings) para('⚠ ' + w, { size: 8, bold: true, color: RED });
@@ -38,7 +38,7 @@ export async function dcPlanPdf(p, { title = 'DC system plan', profile = {}, bas
   head('Connections, in order (red = positive, black = negative)');
   connections(p, inputs).forEach((c, i) => {
     const path = `${i + 1}.  ${[c.from, ...(c.via || []), c.to].join(' → ')}`;
-    const spec = c.ac ? '' : [c.size ? `${c.size} mm² ${c.colour}` : `size ? (${c.colour})`, c.length ? `${c.length} m` : null, c.vd != null ? `${c.vd}% drop (≤ ${c.limit ?? '–'}%)` : null].filter(Boolean).join('  ·  ');
+    const spec = c.ac ? '' : [c.size ? `${c.size} mm² ${c.colour}` : `${cSize(c)} (${c.colour})`, c.length ? `${c.length} m` : null, c.vd != null ? `${c.vd}% drop (≤ ${c.limit ?? '–'}%)` : null].filter(Boolean).join('  ·  ');
     room(12); para(path, { size: 8.5, bold: true });
     if (spec) para(spec, { size: 8, color: VALUE, indent: 5 });
     if (c.fuse) para(`Fuse: ${c.fuse.text}, ${c.fuse.where}`, { size: 8, color: RED, indent: 5 });
@@ -58,7 +58,7 @@ export async function dcPlanPdf(p, { title = 'DC system plan', profile = {}, bas
   const rowH = 5.4; room(rowH * 2); cols.forEach(([t], i) => k.t(t, xs[i] + 1, k.y + 3.8, { size: 7.5, bold: true })); k.y += rowH;
   for (const r of p.runs) {
     room(rowH + 12);
-    const cells = [r.name, `${r.current} A${r.peak > r.current ? ` (${r.peak} pk)` : ''}`, r.fuse ? `${r.fuse.A} A ${r.fuse.label.replace(' fuse', '').replace(' (ATO/ATC)', '')}` : '?', r.size ? r.size + ' mm²' : '?', r.length + ' m', r.vd ? `${r.vd.volts} V (${r.vd.pct}%) ≤ ${r.pct}%` : '?'];
+    const cells = [r.name, `${r.current} A${r.peak > r.current ? ` (${r.peak} pk)` : ''}`, r.fuse ? `${r.fuse.A} A ${r.fuse.label.replace(' fuse', '').replace(' (ATO/ATC)', '')}` : `over ${MAX_FUSE} A`, sizeText(r), r.length + ' m', r.vd ? `${r.vd.volts} V (${r.vd.pct}%) ≤ ${r.pct}%` : '–'];
     k.line(k.x0, k.y, k.x1, k.y, { w: 0.15 });
     cells.forEach((c, i) => k.t(c, xs[i] + 1, k.y + 3.8, { size: 7.5, bold: i === 0 || i === 3, color: i === 0 ? INK : VALUE, maxW: cols[i][1] * (k.cw / 190) - 2 }));
     k.y += rowH; para(r.why, { size: 6.8, color: GREY, indent: 1 });

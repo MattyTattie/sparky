@@ -109,6 +109,16 @@ export const VAN_EXAMPLE = {
   dcdcA: '30', altA: '', dcdcLen: '5', shoreA: '', invW: '1500', invLen: '1.5',
 };
 
+// v0.35.1: over-limit text. Never print null / ? : the biggest size listed, or a red warning.
+export const MAX_FUSE = Math.max(...Object.values(FUSES).flatMap((f) => f.sizes));
+export const MAX_ISO = ISOLATOR_SIZES[ISOLATOR_SIZES.length - 1], MAX_MPPT = MPPT_SIZES[MPPT_SIZES.length - 1], MAX_CABLE = 120;
+export const fuseText = (r) => r && r.fuse ? `${r.fuse.A} A ${r.fuse.label}` : `Over ${MAX_FUSE} A: no standard fuse`;
+export const sizeText = (r) => r && r.size ? `${r.size} mm²` : r && r.current > 0 && r.length > 0 ? `over ${MAX_CABLE} mm²` : 'add a length';
+export const isoText = (a) => a ? `${a} A` : `Over ${MAX_ISO} A: no standard isolator`;
+export const ampsOr = (a, list) => a ? `${a} A` : `over ${list[list.length - 1]} A`;
+export const mpptText = (s) => s.mppt ? `${s.mppt} A` : `over ${MAX_MPPT} A (use 2 controllers)`;
+const UPV = 'go up a voltage (24 or 48 V)';
+
 export function pickFuse(need, fam) {
   const f = FUSES[fam]; if (!f) return null;
   const A = up(f.sizes, need); return A == null ? null : { A, fam, label: f.label };
@@ -305,6 +315,16 @@ export function planDC(o0 = {}) {
 
   // ---- runs, cables and the parts list ----
   const runs = [main, fuseBox && fuseBox.run, inverter && inverter.run, solar && solar.run, dcdc && dcdc.inRun, dcdc && dcdc.outRun, shore && shore.run, ...dcLoads.map((l) => l.run)].filter(Boolean);
+  // v0.35.1: over-limit setups (e.g. 12 V + 5000 W inverter) say so, in red, instead of a blank size.
+  const fix = inverter ? `${UPV} or fit a smaller inverter` : UPV;
+  for (const r of runs) {
+    if (!r.fuse && r.need > MAX_FUSE) warnings.push(`${r.name}: ${r.need} A is over ${MAX_FUSE} A, no standard fuse: ${fix}.`);
+    else if (!r.size && r.current > 0 && r.length > 0) warnings.push(`${r.name}: ${r.current} A needs more than ${MAX_CABLE} mm² cable: ${fix}, or shorten the run.`);
+  }
+  if (isolator && !isolator.a) warnings.push(`Isolator: ${r1(mainFuseA)} A is over ${MAX_ISO} A, no standard isolator: ${fix}.`);
+  if (shunt && !shunt.a) warnings.push(`Shunt: ${r1(mainFuseA)} A is over the biggest ${SHUNT_SIZES[SHUNT_SIZES.length - 1]} A shunt: ${fix}.`);
+  if (busbar && !busbar.a) warnings.push(`Busbar: ${r1(mainFuseA)} A is over the biggest ${BUSBAR_SIZES[BUSBAR_SIZES.length - 1]} A busbar: ${fix}.`);
+  if (solar && !solar.mppt) warnings.push(`Solar: ${solar.needA} A is over the biggest ${MAX_MPPT} A controller: use 2 controllers (split the panels) or ${UPV}.`);
   const profile = chargeProfile(chem, V);
   const plan = { profile, V, vehV, chem, cable: cab, cableLabel: PLAN_CABLES[cab].label, derate, ca, cg, ambient: amb, mainPct, loads, dcLoads, acLoads, daily, battery, inverter, solar, dcdc, dcdcAdvice, shore, shoreSuggest, fuseBox, discharge, charge, main, shunt, isolator, busbar, chassis, runs, warnings, notes };
   plan.cables = cableList(plan); plan.parts = partsList(plan, o);
@@ -329,8 +349,8 @@ export function partsList(p, o = {}) {
   if (p.solar) {
     const s = p.solar; const pv = s.pv;
     add('Charging', `Solar panels, ${s.w} W total${s.panels > 1 ? ` (${s.panels} panels${pv ? `, ${pv.series} in series × ${pv.strings} string${pv.strings > 1 ? 's' : ''}` : ''})` : ''}`, 1, `About ${s.summerWh} Wh on a good summer day, ${s.winterWh} Wh in winter (UK, flat panels: ⚠ rough).`);
-    add('Charging', `MPPT solar charge controller ${s.mpptV} V / ${s.mppt ?? '?'} A (${p.V} V battery)`, 1, s.why + (pv && pv.cold ? ` Cold-morning Voc ${pv.cold} V ${pv.vocOk ? '≤' : '>'} ${s.mpptV} V.` : ''));
-    add('Charging', `PV isolator, DC-rated ≥ ${pv && pv.cold ? Math.ceil(pv.cold) : s.mpptV} V and ≥ ${pv && pv.cableAmps ? Math.ceil(pv.cableAmps * Math.max(1, pv.strings)) : '?'} A`, 1, 'Lets you switch the panels off before working on the controller.');
+    add('Charging', `MPPT solar charge controller ${s.mpptV} V / ${mpptText(s)} (${p.V} V battery)`, 1, s.why + (pv && pv.cold ? ` Cold-morning Voc ${pv.cold} V ${pv.vocOk ? '≤' : '>'} ${s.mpptV} V.` : ''));
+    add('Charging', `PV isolator, DC-rated ≥ ${pv && pv.cold ? Math.ceil(pv.cold) : s.mpptV} V and ≥ ${pv && pv.cableAmps ? Math.ceil(pv.cableAmps * Math.max(1, pv.strings)) + ' A' : 'the panels\u2019 short-circuit current'}`, 1, 'Lets you switch the panels off before working on the controller.');
     add('Charging', 'MC4 connectors (pairs) and a roof cable entry gland', pv ? Math.max(2, pv.strings * 2) : 2);
     if (pv && pv.fuse && pv.fuse.needed && pv.fuse.fuse) add('Protection', `${pv.fuse.fuse} A gPV string fuses + holders (+ and −)`, pv.strings * 2, pv.fuse.why);
   }
@@ -346,8 +366,8 @@ export function partsList(p, o = {}) {
   }
   const fuseLine = (r, where) => r && r.fuse ? add('Protection', `${r.fuse.A} A ${r.fuse.label} + holder — ${where}`, 1, r.why) : null;
   if (p.main) fuseLine(p.main, 'main battery fuse, at the battery positive');
-  if (p.isolator) add('Protection', `Battery isolator switch, DC-rated ${p.isolator.a} A continuous`, 1, p.isolator.why);
-  if (p.busbar) { add('Protection', `Positive busbar / fuse distribution ≥ ${p.busbar.a} A, ${p.busbar.pos}+ studs`, 1, p.busbar.why); add('Protection', `Negative busbar ≥ ${p.busbar.a} A, ${p.busbar.neg}+ studs`, 1, p.busbar.why); }
+  if (p.isolator) add('Protection', `Battery isolator switch, DC-rated ${isoText(p.isolator.a)} continuous`, 1, p.isolator.why);
+  if (p.busbar) { add('Protection', `Positive busbar / fuse distribution ≥ ${ampsOr(p.busbar.a, BUSBAR_SIZES)}, ${p.busbar.pos}+ studs`, 1, p.busbar.why); add('Protection', `Negative busbar ≥ ${ampsOr(p.busbar.a, BUSBAR_SIZES)}, ${p.busbar.neg}+ studs`, 1, p.busbar.why); }
   if (p.inverter) fuseLine(p.inverter.run, 'inverter');
   if (p.solar) fuseLine(p.solar.run, 'MPPT to battery');
   if (p.dcdc) { if (p.dcdc.inRun.fuse) add('Protection', `${p.dcdc.inRun.fuse.A} A ${p.dcdc.inRun.fuse.label} + holder — DC-DC input, at the starter battery`, 1, p.dcdc.inRun.why); fuseLine(p.dcdc.outRun, 'DC-DC output, at the busbar'); }
@@ -359,7 +379,7 @@ export function partsList(p, o = {}) {
   }
   for (const c of p.cables) add('Cables', `${c.size} mm² ${c.colour}, ${c.type}`, `${c.m} m`, c.runs.join(', '));
   if (p.solar) add('Cables', `${p.solar.pv && p.solar.pv.size && p.solar.pv.size.pick ? p.solar.pv.size.pick.size : 4} mm² solar PV cable (H1Z2Z2-K), red + black`, `${upHalf(num(o.pvLen, 5) * 1.1)} m each`, p.solar.pv && p.solar.pv.size && p.solar.pv.size.pick ? `Panels to the controller: drop ${p.solar.pv.size.pick.vd.pct}% at ${p.solar.pv.vstring} V.` : 'Enter the panel figures to size it; 4 mm² suits most van roofs.');
-  if (p.shunt) add('Monitoring', `Battery monitor with ${p.shunt.a} A shunt`, 1, p.shunt.why);
+  if (p.shunt) add('Monitoring', `Battery monitor with ${ampsOr(p.shunt.a, SHUNT_SIZES)} shunt`, 1, p.shunt.why);
   // lugs: 2 conductors × 2 ends per run, plus the extra joints on the main run (fuse, isolator, shunt).
   const lugs = {};
   for (const r of p.runs) if (r.size) lugs[r.size] = (lugs[r.size] || 0) + 4 + (r.id === 'main' ? 6 : 0);
@@ -385,14 +405,14 @@ export function planText(p, title = 'DC system plan') {
   L.push(title.toUpperCase(), `${p.V} V ${p.battery.label} system. Made with Zs Pro.`, '');
   L.push(`Daily use: ${p.daily.wh} Wh (${p.daily.ah} Ah at ${p.V} V)`, `Battery: ${p.battery.why}`);
   if (p.inverter) L.push(`Inverter: ${p.inverter.w} W, ${p.inverter.current} A DC at full output`);
-  if (p.solar) L.push(`Solar: ${p.solar.w} W → MPPT ${p.solar.mpptV} V / ${p.solar.mppt} A`);
-  if (p.main) L.push(`Main fuse: ${p.main.fuse ? p.main.fuse.A + ' A ' + p.main.fuse.label : '?'}, main cable ${p.main.size ?? '?'} mm²`);
+  if (p.solar) L.push(`Solar: ${p.solar.w} W → MPPT ${p.solar.mpptV} V / ${mpptText(p.solar)}`);
+  if (p.main) L.push(`Main fuse: ${fuseText(p.main)}, main cable ${sizeText(p.main)}`);
   for (const w of p.warnings) L.push('⚠ ' + w);
   if (p.profile) { L.push('', `CHARGER SETTINGS (${p.profile.name}, ${p.V} V)`); for (const l of p.profile.lines) L.push('- ' + l); }
   L.push('', 'PARTS LIST');
   for (const g of p.parts) { L.push('', g.group.toUpperCase()); for (const it of g.items) L.push(`- ${it.item}${typeof it.qty === 'string' ? `: ${it.qty}` : it.qty !== 1 ? `  × ${it.qty}` : ''}`); }
   L.push('', 'CABLE RUNS (current, fuse, cable, volt drop)');
-  for (const r of p.runs) L.push(`- ${r.name}: ${r.current} A${r.peak > r.current ? ` (${r.peak} A peak)` : ''}, ${r.fuse ? r.fuse.A + ' A ' + r.fuse.label : 'fuse ?'}, ${r.size ?? '?'} mm² × ${r.length} m, drop ${r.vd ? r.vd.pct + '%' : '?'} (≤ ${r.pct}%)`);
+  for (const r of p.runs) L.push(`- ${r.name}: ${r.current} A${r.peak > r.current ? ` (${r.peak} A peak)` : ''}, ${fuseText(r)}, ${sizeText(r)} × ${r.length} m, drop ${r.vd ? r.vd.pct + '%' : 'not worked out'} (≤ ${r.pct}%)`);
   L.push('', 'NOTES'); for (const n of [...p.notes, ...SAFETY]) L.push('- ' + n);
   return L.join('\n');
 }

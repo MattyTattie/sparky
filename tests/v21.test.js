@@ -15,7 +15,8 @@ test('v0.21 card order per calculator', () => {
   assert.deepEqual(keys('calcmore.js', "route(/^\\/calc\\/fault"), ['origin', 'run', 'device']);
   assert.deepEqual(keys('calcdc.js', "route(/^\\/calc\\/dc\\/pv"), ['panels', 'run', 'battery']);
   const plan = fs.readFileSync(new URL('../js/calcdcplan.js', import.meta.url), 'utf8');
-  assert.ok(plan.indexOf("icard('Battery'") > plan.indexOf('loads: (p) =>') && plan.indexOf("icard('Battery'") < plan.indexOf('charging: (p) =>'), 'battery card sits after the loads');
+  assert.ok(plan.indexOf('...battBlock(p)') > plan.indexOf('system: (p) =>') && plan.indexOf('...battBlock(p)') < plan.indexOf('loads: (p) =>'), 'v0.35.1: battery sizing sits in the System step with the battery settings');
+  assert.ok(!plan.slice(plan.indexOf('loads: (p) =>'), plan.indexOf('charging: (p) =>')).includes("Size for me"), 'loads step ends at the daily total');
 });
 test('v0.21 Size a cable steps go Ib -> In -> Iz -> VD -> Zs -> adiabatic', () => {
   for (const o of [{ load: '20', unit: 'A', loadType: 'general' }, { load: '20', unit: 'A', loadType: 'ring' }, { load: '90', unit: 'A', loadType: 'general', device: 'mccb', cable: 'swa3X', ze: 0.1, im: '1000' }, { load: '10', unit: 'A', loadType: 'motor', start: 'dol' }]) {
