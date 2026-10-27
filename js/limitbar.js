@@ -1,6 +1,6 @@
 // v0.36.4: a bit of fun — a "Limit" style gauge on the certificate screen.
-// Pink fill as sections get filled in; at 100% it flashes rainbow colours with
-// LIMIT. Plain CSS, no game assets. Screen only (never on PDFs).
+// Pink fill as sections get filled in; at 100% it flashes rainbow colours (no text, just 100%).
+// Plain CSS, no game assets. Screen only (never on PDFs).
 // Switch: Settings → Appearance, saved on this device (localStorage sparky.limitbar).
 import { h } from './ui.js';
 const KEY = 'sparky.limitbar';
