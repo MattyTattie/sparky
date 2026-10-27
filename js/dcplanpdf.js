@@ -29,10 +29,13 @@ export async function dcPlanPdf(p, { title = 'DC system plan', profile = {}, bas
     p.solar ? ['Solar', `${p.solar.w} W → MPPT ${p.solar.mpptV} V / ${mpptText(p.solar)}${p.solar.pv && p.solar.pv.cold ? `; cold Voc ${p.solar.pv.cold} V` : ''}`] : null,
     p.dcdc ? ['DC-DC', `${p.dcdc.a} A (${p.dcdc.inI} A from the starter battery)`] : null,
     p.shore ? ['Mains charger', `${p.shore.a} A`] : null,
+    p.invDrop ? ['Volt drop', `Battery to inverter ${p.invDrop.volts} V (${p.invDrop.pct}%) at ${p.inverter.current} A (aim for 1–3%)${p.invDrop.cut ? `; inverter sees ${p.invDrop.atInv} V vs its ${p.invDrop.cut} V cut-off` : ''}`] : null,
+    p.main ? ['Ratings', `Fuses, breakers and isolators DC-rated above ${p.vmax} V (max charge voltage); main fuse to break about ${p.battery.faultKA ?? '?'} kA`] : null,
     p.main ? ['Main', `${fuseText(p.main)}, ${sizeText(p.main)} cable, ${ampsOr(p.isolator.a, ISOLATOR_SIZES)} isolator, ${ampsOr(p.shunt.a, SHUNT_SIZES)} shunt, ${ampsOr(p.busbar.a, BUSBAR_SIZES)} busbars`] : null,
   ].filter(Boolean);
   for (const [a, b] of sum) { const ls = k.wrap(b, k.cw - 32, 8); room(ls.length * k.lh(8) + 1); k.t(a, k.x0 + 1, k.y + 2.8, { size: 8, bold: true }); ls.forEach((s, i) => k.t(s, k.x0 + 32, k.y + 2.8 + i * k.lh(8), { size: 8, color: VALUE })); k.y += ls.length * k.lh(8) + 1.2; }
   for (const w of p.warnings) para('⚠ ' + w, { size: 8, bold: true, color: RED });
+  if (p.fit && p.fit.checks.length) { head('Your fitted kit'); for (const c of p.fit.checks) para((c.ok === false ? 'FIX: ' : c.ok ? 'OK: ' : 'CHECK: ') + c.text, { size: 8, bold: c.ok === false, color: c.ok === false ? RED : VALUE }); }
   if (p.profile) { head(`Charger settings (${p.profile.name}, ${p.V} V)`); for (const l of p.profile.lines) para('• ' + l, { size: 7.5 }); }
   // v0.7: every link between the kit, in order
   head('Connections, in order (red = positive, black = negative)');

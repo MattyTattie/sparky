@@ -24,13 +24,18 @@ export const STEPS = [['system', 'System'], ['loads', 'Loads'], ['charging', 'Ch
 const QUICK_IC = { lights: 'sun', fridge: 'layers', pump: 'zap', sockets: 'zap', heater: 'zap', fan: 'zap', laptop: 'fileText', kettle: 'zap', ac: 'zap' };
 const shortName = (n) => n.replace(' (via inverter)', '').replace(' (230 V via inverter)', '');
 
+// v0.36.2: protection that can't safely do its job shows in red.
+export const isRed = (w) => /DC-rated|breaks only|Breaking capacity|fuse wouldn\u2019t protect|wouldn’t protect|below the .* that can flow|isolator could overload|under the maker/.test(w);
 // What to do about each warning planDC() can give.
 export function warningTodo(w) {
   if (/^Inverter .*less than/.test(w)) return 'Pick a bigger inverter in step 4, or take some 230 V things off in step 2.';
   if (/^Solar: cold-morning Voc/.test(w)) return 'Put fewer panels in series (step 3 → Solar → More options), or use a controller with a higher max PV voltage.';
   if (/^Solar: the string voltage on a hot day/.test(w)) return 'Step 3 → Solar → More options → panels in series.';
   if (/^Solar: your .*controller/.test(w)) return 'Fit the bigger controller, or live with losing a bit of charge on the sunniest days.';
-  if (/BMS/.test(w)) return 'Pick a battery with a bigger BMS rating, or don\u2019t run everything at once.';
+  if (/^BMS/.test(w)) return 'Set the inverter\u2019s battery charge and discharge current limits to the BMS rating or below (inverter settings), or fit a battery / BMS rated for more.';
+  if (/^Charge rate/.test(w)) return 'Lower the inverter\u2019s max charge current (and the other chargers) in their settings, or check the battery maker allows that much.';
+  if (/^(Cable|Fitted|Isolator|Fuse \/ breaker|Breaking capacity|Main fuse|.*DC-rated)/.test(w)) return 'Step 5 → What you\u2019ve fitted: change the part, or fit the size suggested.';
+  if (/^Volt drop battery to inverter/.test(w)) return 'Thicker or shorter cables in step 5.';
   if (/^All chargers at once/.test(w)) return 'Check the battery\u2019s data sheet allows that much charge current, or fit smaller chargers.';
   if (/^DC-DC: it draws/.test(w)) return 'Fit a smaller DC-DC charger (step 3), or put in your alternator\u2019s real rating (step 3 → DC-DC → More options). Check its label or the van handbook.';
   if (/no standard (fuse|isolator)|biggest .* (shunt|busbar)|needs more than .* mm²/.test(w)) return 'Go up to 24 or 48 V in step 1 (half or a quarter of the current), or fit a smaller inverter in step 4.';
@@ -88,7 +93,8 @@ route(/^\/calc\/dc\/plan(?:\/(\w+))?$/, async (stepArg) => {
         ...battBlock(p),
         more('dc-sys', [
           F.num('dod', 'Usable part of the battery (depth of discharge)', { unit: '%', ph: String(Math.round((CHEMS[v.chem] || CHEMS.lifepo4).dod * 100)), hint: `Blank = ${Math.round((CHEMS[v.chem] || CHEMS.lifepo4).dod * 100)}% for ${(CHEMS[v.chem] || CHEMS.lifepo4).label}.` }),
-          F.num('bmsA', 'Battery BMS max continuous current', { unit: 'A', ph: 'data sheet', hint: 'BMS = the battery\u2019s own protection board. Optional: lets Zs Pro check it can feed everything at once.' })],
+          F.num('bmsA', 'Battery BMS max continuous current', { unit: 'A', ph: 'data sheet', hint: 'BMS = the battery\u2019s own protection board. Optional: lets Zs Pro check it can feed everything at once.' }),
+          F.num('battIscKA', 'Battery short-circuit current', { unit: 'kA', ph: String(p.battery.faultKA ?? ''), hint: `Optional, from the data sheet. Blank = about ${p.battery.faultKA ?? '?'} kA (⚠ rough: 20 × Ah for LiFePO4, 10 × Ah for lead). Used to pick a main fuse that can break it.` })],
           `${v.dod || Math.round((CHEMS[v.chem] || CHEMS.lifepo4).dod * 100)}% usable${v.bmsA ? `, BMS ${v.bmsA} A` : ''}`)], { step: 1 }),
       h('div', { class: 'btns full' }, h('button', { class: 'btn', onclick: () => { Object.assign(v, clone(VAN_EXAMPLE)); delete v._off; delete v._have; save(); toast('Camper van example loaded'); } }, 'Load camper van example'),
         h('button', { class: 'btn', onclick: () => { Object.keys(v).forEach((k) => delete v[k]); Object.assign(v, clone(PLAN_DEFAULTS)); v.loads = []; save(); } }, 'Start again'))],
@@ -161,7 +167,11 @@ route(/^\/calc\/dc\/plan(?:\/(\w+))?$/, async (stepArg) => {
             F.num('invIdle', 'Inverter idle (no-load) draw', { unit: 'W', ph: String(p.daily.idleW), hint: `Blank = about ${p.daily.idleW} W. On the data sheet as no-load or standby power.` }),
             F.num('invHours', 'Hours a day the inverter is on', { unit: 'h', ph: '24', hint: `Idle draw ${p.daily.idleW} W × ${p.daily.idleH} h = ${p.daily.idleWh} Wh a day.` })) : null,
           p.daily.invNoUse ? h('p', { class: 'help warnline' }, 'Add what the inverter runs (or kWh a day) to see how long the battery lasts. Its rating is not daily use.') : null,
-          p.inverter ? h('div', { class: 'help' }, `At full power it draws about ${p.inverter.current} A from the battery: its cable and fuse are sized for that.`) : null], { step: 4 })];
+          p.inverter ? h('div', { class: 'grid2' },
+            F.num('invMaxA', 'Inverter max battery current', { unit: 'A', ph: 'data sheet', hint: `Optional. Blank = ${p.inverter.calcCurrent} A worked out (W ÷ low battery V × 90%). If lower, Zs Pro uses this.` }),
+            F.num('invChargeA', 'Inverter max charge current', { unit: 'A', ph: p.inverter.maxA ? String(p.inverter.maxA) : 'if it charges', hint: 'Hybrid / inverter-chargers only. Blank = the max battery current above (if set). Counted in the charge-rate check.' }),
+            F.num('invCutV', 'Inverter low-voltage cut-off', { unit: 'V', ph: 'optional', hint: 'Checks the volt drop won\u2019t trip it early.' })) : null,
+          p.inverter ? h('div', { class: 'help' }, `At full power it draws about ${p.inverter.current} A from the battery${p.inverter.capped ? ` (capped at your ${p.inverter.maxA} A; ${p.inverter.calcCurrent} A worked out)` : ''}: its cable and fuse are sized for that.`) : null], { step: 4 })];
     },
 
     cables: (p) => {
@@ -178,6 +188,15 @@ route(/^\/calc\/dc\/plan(?:\/(\w+))?$/, async (stepArg) => {
             F.seg('ambient', 'Hottest it gets round the cables', [['30', '30 °C'], ['40', '40 °C'], ['50', '50 °C']], 'Engine bays and under-floor near exhausts get hot.', 'small'),
             F.seg('mainPct', 'Volt drop for the main, inverter and charger cables', [['1', '1%'], ['2', '2%'], ['3', '3%']], 'Loads use 3%, or 10% where you ticked it.', 'small')],
             `${PLAN_CABLES[v.cable] ? PLAN_CABLES[v.cable].label.split(' singles')[0] : ''}, ${v.install === 'bundled' ? 'bundled' : 'clipped'}, ${v.ambient} °C, ${v.mainPct}% drop`)], { step: 5 }),
+        p.main ? icard('What you\u2019ve fitted (optional)', [
+          h('p', { class: 'help', style: 'margin-top:0' }, 'Already got the main fuse, isolator or cable? Put them in and Zs Pro checks them: limit ≤ fuse ≤ isolator and cable rating, and their DC voltage.'),
+          sw(!!v.battBreaker, 'Breaker supplied with the battery', (on) => set('battBreaker', on ? '1' : ''), 'Then the parts list won\u2019t add a second main fuse. Put its rating below.'),
+          h('div', { class: 'grid2' }, F.num('fitFuseA', v.battBreaker ? 'Battery breaker' : 'Main fuse / breaker', { unit: 'A', ph: p.main.fuse ? String(p.main.fuse.A) : '' }), F.num('fitFuseV', 'Its DC volts', { unit: 'V', ph: 'label', hint: `Must be above ${p.vmax} V` })),
+          h('div', { class: 'grid2' }, F.num('fitFuseKA', 'Its breaking capacity', { unit: 'kA', ph: 'label', hint: `About ${p.battery.faultKA ?? '?'} kA needed` }), F.num('fitIsoA', 'Isolator', { unit: 'A', ph: p.isolator && p.isolator.a ? String(p.isolator.a) : '' })),
+          h('div', { class: 'grid2' }, F.num('fitIsoV', 'Isolator DC volts', { unit: 'V', ph: 'label' }), F.num('fitCable', 'Main cable', { unit: 'mm²', ph: p.main.size ? String(p.main.size) : '' })),
+          F.seg('fitPar', 'Cables per pole (+ and − each)', [['1', '1'], ['2', '2 in parallel'], ['3', '3 in parallel']], 'e.g. 2 × 35 mm². Parallel cables touching are rated × 0.85 (2) or × 0.79 (3), BS 7671 Table 4C1.', 'small'),
+          h('div', { class: 'grid2' }, F.num('makerMin', 'Maker\u2019s minimum cable', { unit: 'mm²', ph: 'manual', hint: 'Total copper per pole, e.g. 70' }), F.seg('lugStud', 'Lug stud size', [['', 'Not sure'], ['M8', 'M8'], ['M10', 'M10'], ['M12', 'M12']], 'Match the battery, fuse and busbar terminals.', 'small')),
+          p.fit && p.fit.checks.length ? h('ul', { class: 'note fitchecks' }, p.fit.checks.map((c) => h('li', { class: c.ok === false ? 'bad' : '' }, (c.ok === false ? '✗ ' : c.ok ? '✓ ' : '⚠ ') + c.text))) : null]) : null,
         p.dcLoads.length ? icard('Fuse box to each load', [
           h('div', { class: 'grid2' }, v.loads.map((l, i) => l.ac || !(Number(l.value) > 0) ? null : h('label', { class: 'f fld2' }, h('span', {}, shortName(l.name || `Load ${i + 1}`)), h('span', { class: 'withunit' }, h('input', { inputmode: 'decimal', value: l.length || '', placeholder: 'm', onchange: (e) => setLoad(i, 'length', e.target.value.trim()) }), h('span', { class: 'unit' }, 'm'))))),
           h('p', { class: 'help' }, 'Fuse box to the load, one way. Blank = no cable sized for it.')]) : null];
@@ -208,6 +227,8 @@ function results(v, p) {
     p.shore ? ['Mains charger', `${p.shore.a} A`, '', true] : null,
     p.main ? ['Main fuse', p.main.fuse ? `${p.main.fuse.A} A ${p.main.fuse.label.replace(' fuse', '')}` : `Over ${MAX_FUSE} A: no standard fuse`, p.main.fuse ? 'At the battery positive' : 'Go up a voltage (24 or 48 V) or fit a smaller inverter', !!p.main.fuse] : null,
     p.main ? ['Main cable', p.main.size ? `${p.main.size} mm²` : 'Over 120 mm²: no single cable fits', `${p.cableLabel.split(' singles')[0]}, red + black`, !!p.main.size] : null,
+    p.fit && p.fit.checks.length ? ['Your fitted kit', p.fit.checks.some((c) => c.ok === false) ? `${p.fit.checks.filter((c) => c.ok === false).length} to fix` : 'Checks pass', p.fit.checks.filter((c) => c.ok !== true).map((c) => c.text.split(':')[0]).slice(0, 2).join(' · '), !p.fit.checks.some((c) => c.ok === false)] : null,
+    p.invDrop ? ['Volt drop to inverter', `${p.invDrop.volts} V (${p.invDrop.pct}%)`, `At ${p.inverter.current} A, battery → busbar → inverter. Aim for 1–3%.`, p.invDrop.ok] : null,
     p.main ? ['Isolator & shunt', `${(t => t[0].toUpperCase() + t.slice(1))(ampsOr(p.isolator.a, ISOLATOR_SIZES))} isolator · ${ampsOr(p.shunt.a, SHUNT_SIZES)} shunt`, p.isolator.a && p.shunt.a ? 'Shunt = battery monitor sensor, on the negative' : 'No standard size that big: go up a voltage (24 or 48 V)', !!(p.isolator.a && p.shunt.a)] : null,
   ].filter(Boolean);
   const bad = p.warnings.length > 0 || p.runs.some((r) => !r.ok);
@@ -225,7 +246,7 @@ function results(v, p) {
       h('div', { class: 'ans-k' }, 'What you need'),
       h('div', { class: 'needlist' }, need.map(([k, val, sub, ok]) => h('div', { class: 'need' + (ok ? '' : ' bad') }, h('div', { class: 'nk' }, k), h('div', { class: 'nv' }, val), sub ? h('div', { class: 'ns' }, sub) : null))),
       h('div', { class: 'pchips' }, p.battery.noLoads ? h('a', { class: 'pchip warn', href: '#/calc/dc/plan/loads' }, '0 Wh a day: add loads') : pchip(null, `${p.daily.wh} Wh a day`), p.battery.noLoads ? null : pchip(p.battery.ok === false ? 'warn' : true, `${p.battery.fittedDays ?? p.battery.days} days off-grid`), pchip(p.runs.every((r) => r.ok), `${p.runs.length} cable runs`))),
-    p.warnings.map((w) => banner(w, warningTodo(w))),
+    p.warnings.map((w) => banner(w, warningTodo(w), isRed(w) ? 'red' : 'amber')),
     h('div', { class: 'card conncard' }, h('h2', {}, 'Connections, in order'),
       h('p', { class: 'help', style: 'margin-top:0' }, 'Every link between the kit: cable, length, fuse and where it goes. Red = positive, black = negative.'),
       h('ol', { class: 'conns' }, conns.map(conn))),
@@ -250,7 +271,8 @@ function results(v, p) {
       h('h3', { class: 'subh' }, 'Where the numbers come from'),
       h('ul', { class: 'note' },
         h('li', {}, `Cable ratings: ${PLAN_CABLES[p.cable].note} Factors: ambient ${p.ambient} °C × ${p.ca} (Table 4B1)${p.cg < 1 ? `, bundled × ${p.cg} (Table 4C1, 3 circuits)` : ''}. Smallest size 1.5 mm². Thin-wall automotive cable (FLRY) is rated by its maker: don\u2019t use these figures for it.`),
-        h('li', {}, 'Volt drop: copper resistance at 70 °C, out and back (+ and −), as % of the system voltage. Loads 3% (10% where ticked); the battery-to-busbar, inverter and charger cables use the target you pick; fuse box feed 1%; DC-DC input 5%.'),
+        h('li', {}, 'Cable temperature: Zs Pro always works the volt drop with the copper at 70 °C (fixed, a cautious figure for a well-loaded cable; a cooler cable drops a little less). Volt drop: copper resistance at 70 °C, out and back (+ and −), as % of the system voltage. Loads 3% (10% where ticked); the battery-to-busbar, inverter and charger cables use the target you pick; fuse box feed 1%; DC-DC input 5%.'),
+        h('li', {}, `Fuses, breakers and isolators must be DC-rated above the battery\u2019s max charge voltage (${p.vmax} V here) and, for the main fuse, break more than its short-circuit current (about ${p.battery.faultKA ?? '?'} kA). MEGA / ANL / MIDI: about 32 V and 2 kA; Class T: about 160 V, 20 kA; DC MCB / NH DC / DC MCCB to their labels. ⚠ Typical: the part\u2019s data sheet wins.`),
         h('li', {}, 'Fuses: at least 1.25 × the current (peak for loads); cable rated at least the fuse. Blade up to 30 A, then MIDI, MEGA / ANL; Class T for the LiFePO4 main fuse. ⚠ Size ranges are typical makers\u2019 ranges.'),
         h('li', {}, `Inverter current = W ÷ (lowest battery voltage ${p.inverter ? p.inverter.vlow + ' V' : '(11.5 V per 12 V for LiFePO4, 11 V for lead)'} × 90%). 230 V loads use 90% inverter efficiency for daily energy; the inverter\u2019s own idle draw (often 5–20 W) isn\u2019t counted.`),
         h('li', {}, 'MPPT current = solar W ÷ battery V × 1.25. Cold Voc uses the same sum as the Solar / battery checks. ⚠ Solar yield is a rough UK figure (4 h summer, 0.7 h winter, × 0.8).'),
