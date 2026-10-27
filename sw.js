@@ -3,7 +3,7 @@
 // When any file changes, bump CACHE (sparky-v0.1 -> sparky-v0.2).
 // Shares the mattytattie.github.io origin with Hearth, so it only ever
 // deletes caches whose names start with "sparky-".
-const CACHE = 'sparky-v0.35.3';
+const CACHE = 'sparky-v0.36.0';
 const FILES = [
   "./",
   "./dark.css",
@@ -106,7 +106,8 @@ const FILES = [
   "./vendor/tesseract/tesseract.min.js",
   "./vendor/tesseract/worker.min.js",
 ];
-self.addEventListener('install', (e) => { e.waitUntil(caches.open(CACHE).then((c) => c.addAll(FILES.map((f) => new Request(f, { cache: 'reload' })))).then(() => self.skipWaiting())); });
+self.addEventListener('install', (e) => { e.waitUntil(caches.open(CACHE).then((c) => c.addAll(FILES.map((f) => new Request(f, { cache: 'reload' }))))); }); // v0.36: waits for the "tap to update" banner
+self.addEventListener('message', (e) => { if (e.data === 'skipWaiting') self.skipWaiting(); });
 self.addEventListener('activate', (e) => { e.waitUntil(caches.keys().then((ks) => Promise.all(ks.filter((k) => k.startsWith('sparky-') && k !== CACHE).map((k) => caches.delete(k)))).then(() => self.clients.claim())); });
 self.addEventListener('fetch', (e) => {
   const u = new URL(e.request.url);

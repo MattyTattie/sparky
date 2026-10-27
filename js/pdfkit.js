@@ -19,6 +19,9 @@ export function loadJsPDF(base = './vendor/jspdf/jspdf.umd.min.js') {
 export const INK = [20, 20, 20];
 export const VALUE = [0, 0, 0];   // filled-in values: black
 export const GREY = [120, 120, 120];
+export const NA_GREY = [170, 170, 170]; // v0.36: every N/A (typed, chosen or automatic) prints light grey
+// v0.36: a whole value of na, n/a, NA, N.A., n / a (any case, trimmed) counts as N/A.
+export const isNA = (v) => /^\s*n\s*[\/.]?\s*a\s*\.?\s*$/i.test(String(v ?? ''));
 export const LINE = [90, 90, 90];
 export const RED = [190, 30, 30];
 
@@ -70,22 +73,17 @@ export class Kit {
     let sz = size; while (sz > min && this.tw(text, sz, bold) > w) sz = Math.round((sz - 0.25) * 100) / 100;
     return this.tw(text, sz, bold) <= w ? sz : 0;
   }
-  // Cut text with "…" so it fits w at this size.
-  ellipsis(text, w, size, bold = false) {
-    let s = String(text ?? ''); if (this.tw(s, size, bold) <= w) return s;
-    while (s.length > 1 && this.tw(s + '…', size, bold) > w) s = s.slice(0, -1);
-    return s.trimEnd() + '…';
-  }
   lh(size) { return size * 0.3528 * 1.2; } // line height in mm
   t(text, x, y, { size = 8, bold = false, color = INK, align = 'left', angle = 0, maxW = 0 } = {}) {
-    if (this.dry) return; this.font(size, bold, color);
-    const s = String(text ?? '').replace(/\s*\r?\n\s*/g, ' '); // one line only (callers wrap first)
-    let out = s;
-    if (maxW && this.doc.getTextWidth(s) > maxW) { // shrink to fit (down to 4.5 pt), then cut with "…"
-      const sz = this.fitSize(s, maxW, size, 4.5, bold);
-      if (sz) this.font(sz, bold, color); else { out = this.ellipsis(s, maxW, 4.5, bold); this.font(4.5, bold, color); }
+    if (this.dry) return;
+    let s = String(text ?? '').replace(/\s*\r?\n\s*/g, ' '); // one line only (callers wrap first)
+    if (color === VALUE && isNA(s)) { s = 'N/A'; color = NA_GREY; }
+    this.font(size, bold, color);
+    if (maxW && this.doc.getTextWidth(s) > maxW) { // v0.36: shrink until it fits — never cut short
+      let sz = size; while (sz > 2 && this.tw(s, sz, bold) > maxW) sz = Math.round((sz - 0.25) * 100) / 100;
+      this.font(sz, bold, color);
     }
-    this.doc.text(out, x, y, { align, angle, baseline: 'alphabetic' });
+    this.doc.text(s, x, y, { align, angle, baseline: 'alphabetic' });
   }
   tw(text, size = 8, bold = false) { this.font(size, bold); return this.doc.getTextWidth(String(text ?? '')); }
   line(x1, y1, x2, y2, { w = 0.2, color = LINE, dash = null } = {}) {
@@ -117,7 +115,7 @@ export class Kit {
   //  - fixed (default): the field keeps ONE line. The value shrinks to fit
   //    (down to 6 pt); if it still won't fit, the label shrinks a little too;
   //    then it goes on two small lines inside the same line (word breaks
-  //    only); the very last resort is "…".
+  //    only); v0.36: the last resort is smaller mini lines (never cut short).
   //  - grow: true (used by row(), which moves down by the height returned):
   //    shrink to 6.5 pt first, otherwise wrap on whole words at full size
   //    and draw a dotted line under each line.
@@ -130,7 +128,7 @@ export class Kit {
     const unitW = unit ? this.tw(unit, size) + 1.5 : 0;
     let lsize = size; let lab = label;
     // the label (and unit) must leave at least 10 mm for the value: shrink the label, then cut it
-    if (lab) { while (lsize > 5.5 && this.tw(lab, lsize) + 1.5 + unitW + 10 > w) lsize -= 0.25; if (this.tw(lab, lsize) + 1.5 + unitW + 10 > w) lab = this.ellipsis(lab, Math.max(4, w - unitW - 11.5), lsize); }
+    if (lab) { while (lsize > 5.5 && this.tw(lab, lsize) + 1.5 + unitW + 10 > w) lsize -= 0.25; while (lsize > 3 && this.tw(lab, lsize) + 1.5 + unitW + 10 > w) lsize -= 0.25; } // v0.36: never cut short, the label shrinks
     let lw = lab ? this.tw(lab, lsize) + 1.5 : 0;
     let vw = Math.max(8, w - lw - unitW);
     const step = this.lh(vsize) + 0.6;
@@ -151,15 +149,19 @@ export class Kit {
           let s2 = Math.min(5.4, vsize);
           while (s2 >= 4.2 && (!this.wordsFit(val, vw - 1, s2) || this.wrap(val, vw - 1, s2).length > 2)) s2 -= 0.2;
           if (s2 >= 4.2) { vl = this.wrap(val, vw - 1, s2); vs = s2; }
-          else { vl = [this.ellipsis(val, vw - 1, 6)]; vs = 6; }
+          else { // v0.36: never cut short: wrap smaller and smaller until it sits in the line (whole words where possible)
+            s2 = 4.2; vl = this.wrap(val, vw - 1, s2);
+            while (s2 > 2 && vl.length * this.lh(s2) * 0.92 > this.lh(vsize) * 1.15) { s2 -= 0.2; vl = this.wrap(val, vw - 1, s2); }
+            vs = s2;
+          }
         }
       }
     }
     if (lab) this.t(lab, x, y, { size: lsize });
     for (let i = 0; i < n; i++) this.line(x + lw, y + 0.9 + i * step, x + lw + vw, y + 0.9 + i * step, { w: 0.15, color: [150, 150, 150], dash: [0.4, 0.6] });
-    if (vl.length === 2 && n === 1) { // two mini lines sit between the line above and the dotted line
+    if (vl.length >= 2 && n === 1) { // mini lines sit between the line above and the dotted line
       const ms = this.lh(vs) * 0.92;
-      vl.forEach((s, i) => this.t(s, x + lw + 0.5, y + 0.45 - (1 - i) * ms, { size: vs, color: VALUE }));
+      vl.forEach((s, i) => this.t(s, x + lw + 0.5, y + 0.45 - (vl.length - 1 - i) * ms, { size: vs, color: VALUE }));
     } else vl.forEach((s, i) => this.t(s, x + lw + 0.5, y - 0.2 + i * step, { size: vs, color: VALUE }));
     if (unit) this.t(unit, x + lw + vw + 1, y, { size });
     return (n - 1) * step;
@@ -215,9 +217,11 @@ export class Kit {
       const right = `${certNo ? certNo + '   ·   ' : ''}Page ${i} of ${n}`;
       this.font(7, true, INK); const rw = this.doc.getTextWidth(right);
       this.doc.text(right, W - 10, H - 4.6, { align: 'right' });
-      this.font(6.3, false, GREY);
-      const left = this.ellipsis(this.footerText, W - 20 - rw - 6, 6.3); this.font(6.3, false, GREY);
-      this.doc.text(left, 10, H - 4.6);
+      // v0.36: the note shrinks a little, then wraps onto two lines — never cut short
+      const fw = W - 20 - rw - 6; let fs = 6.3; while (fs > 5.2 && this.tw(this.footerText, fs) > fw) fs -= 0.1;
+      this.font(fs, false, GREY);
+      if (this.doc.getTextWidth(this.footerText) <= fw) this.doc.text(this.footerText, 10, H - 4.6);
+      else { let ls = this.wrap(this.footerText, fw, fs); while (ls.length > 2 && fs > 3.5) { fs -= 0.2; ls = this.wrap(this.footerText, fw, fs); } this.font(fs, false, GREY); const st = this.lh(fs); ls.forEach((l, i) => this.doc.text(l, 10, H - 4.6 - (ls.length - 1 - i) * st * 0.5 + i * st * 0.5)); }
     }
   }
   blob() { return this.doc.output('blob'); }

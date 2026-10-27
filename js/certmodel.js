@@ -54,6 +54,32 @@ export function newCert(type, { job = {}, customer = {}, profile = {}, instrumen
   return c;
 }
 
+// v0.36: make sure every section a certificate needs is there, so an old or
+// damaged job (missing or null sections) never crashes the screens or the PDF.
+// Only fills in what's MISSING with empty objects/lists; never changes a value
+// that is already there, and never adds a default the user didn't pick.
+const isObj = (v) => v != null && typeof v === 'object' && !Array.isArray(v);
+export function normaliseCert(c) {
+  if (!isObj(c)) return c;
+  if (!['EIC', 'EICR', 'MW'].includes(c.type)) c.type = c.type || 'EIC';
+  for (const k of ['client', 'install', 'supply', 'parts', 'inspections', 'eic', 'people', 'sigs', 'eicr', 'mw', 'instruments']) if (!isObj(c[k])) c[k] = {};
+  for (const k of ['designer', 'designer2', 'constructor', 'inspector']) if (!isObj(c.people[k])) c.people[k] = {};
+  if (!isObj(c.eicr.authoriser)) c.eicr.authoriser = {};
+  if (!Array.isArray(c.observations)) c.observations = [];
+  c.observations = c.observations.filter(isObj);
+  if (!Array.isArray(c.photoIds)) c.photoIds = [];
+  if (!Array.isArray(c.boards)) c.boards = c.type === 'MW' ? [] : [blankBoard(1)];
+  c.boards = c.boards.filter(isObj);
+  c.boards.forEach((b, i) => {
+    if (!b.id) b.id = blankBoard(i + 1).id;
+    if (!Array.isArray(b.circuits)) b.circuits = [];
+    b.circuits = b.circuits.map((x, j) => (isObj(x) ? x : blankCircuit(j + 1)));
+  });
+  if (!isObj(c.mw.circuit)) c.mw.circuit = blankCircuit(1);
+  if (c.number == null) c.number = '';
+  return c;
+}
+
 // Duplicate a certificate for a new job: keeps installation details,
 // boards and circuit details, clears readings, signatures and dates.
 export function copyCertForJob(src, { job = {}, customer = {}, number = '' } = {}) {

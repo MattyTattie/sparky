@@ -79,7 +79,7 @@ test('v340: Section I on a new installation', () => {
 test('v340: Esc closes the top overlay (backnav)', () => {
   const s = src('js/backnav.js'); assert.match(s, /e\.key !== 'Escape'/); assert.match(s, /closeEl\(top\)/);
 });
-test('v340: version', () => { assert.match(src('js/config.js'), /APP_VERSION = '0\.3[45]\.[0-3] beta'/); assert.match(src('sw.js'), /sparky-v0\.3[45]\.[0-3]/); });
+test('v340: version', () => { assert.match(src('js/config.js'), /APP_VERSION = '0\.3[4-6]\.[0-3] beta'/); assert.match(src('sw.js'), /sparky-v0\.3[4-6]\.[0-3]/); });
 
 // PDF: real render with the Node jsPDF build, read back with pdftotext.
 const JSPDF = '/workspace/sparky-work/npm/package/dist/jspdf.node.min.js';

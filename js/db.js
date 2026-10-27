@@ -39,6 +39,19 @@ export const get = (s, id) => tx(s, 'readonly', (st) => st.get(id));
 // v0.9: sync.js listens for saves (to send changes up after a pause).
 export const onPut = new Set();
 export const put = (s, v) => tx(s, 'readwrite', (st) => st.put(v)).then((r) => { onPut.forEach((fn) => { try { fn(s, v); } catch {} }); return r; });
+// v0.36: many writes in ONE transaction — all of them land, or none do (safe restore).
+// writes: [{ store, value, key }] (key only for 'meta').
+export async function putMany(writes) {
+  if (!writes.length) return 0;
+  const db = await open(); const stores = [...new Set(writes.map((w) => w.store))];
+  await new Promise((res, rej) => {
+    const t = db.transaction(stores, 'readwrite');
+    t.oncomplete = () => res(); t.onerror = () => rej(t.error); t.onabort = () => rej(t.error || new Error('aborted'));
+    try { for (const w of writes) { const st = t.objectStore(w.store); if (w.store === 'meta') st.put(w.value, w.key); else st.put(w.value); } } catch (e) { try { t.abort(); } catch {} rej(e); }
+  });
+  for (const w of writes) if (w.store !== 'meta') onPut.forEach((fn) => { try { fn(w.store, w.value); } catch {} });
+  return writes.length;
+}
 export const del = (s, id) => tx(s, 'readwrite', (st) => st.delete(id));
 export const byJob = (s, jobId) => tx(s, 'readonly', (st) => st.index('jobId').getAll(jobId));
 export const getMeta = (k) => tx('meta', 'readonly', (st) => st.get(k));

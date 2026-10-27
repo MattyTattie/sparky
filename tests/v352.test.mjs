@@ -53,6 +53,6 @@ test('v352: old saved job (no autoF, typed RCD) loads and keeps its values', () 
 test('v352: app wiring and version', () => {
   const s = readFileSync(new URL('../js/schedule.js', import.meta.url), 'utf8');
   assert.match(s, /fillBoardRcd\(b, isSpare\)\) changed\(\)/); assert.match(s, /releaseUpstreamRcd/); assert.doesNotMatch(s, /autoFill0\(c\)/);
-  assert.match(readFileSync(new URL('../js/config.js', import.meta.url), 'utf8'), /'0\.35\.[23] beta'/);
-  assert.match(readFileSync(new URL('../sw.js', import.meta.url), 'utf8'), /sparky-v0\.35\.[23]/);
+  assert.match(readFileSync(new URL('../js/config.js', import.meta.url), 'utf8'), /'0\.3(5\.[23]|6\.\d) beta'/);
+  assert.match(readFileSync(new URL('../sw.js', import.meta.url), 'utf8'), /sparky-v0\.3(5\.[23]|6\.\d)/);
 });

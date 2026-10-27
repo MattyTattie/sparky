@@ -6,6 +6,7 @@
 import * as db from './db.js';
 import { debounce } from './ui.js';
 import { calibrationState } from './checks.js';
+import { normaliseCert } from './certmodel.js';
 
 export const S = { cert: null, job: null, dirty: false, onSaved: null };
 const now = () => new Date().toISOString();
@@ -41,7 +42,7 @@ export async function touchJob(jobId) {
 }
 export async function openCert(id) {
   if (S.cert && S.cert.id === id) return S.cert;
-  await flush(); S.cert = (await db.get('certs', id)) || null; return S.cert;
+  await flush(); S.cert = normaliseCert((await db.get('certs', id)) || null); return S.cert; // v0.36: old/damaged jobs get their missing sections
 }
 
 // ---------- Your details and instruments ----------

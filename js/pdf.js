@@ -4,7 +4,7 @@ import { showRcdType } from './rcdtype.js';
 // (BS 7671:2018+A4:2026, 15 April 2026). No IET logo (their terms).
 // =====================================================================
 import { Kit, loadJsPDF, VALUE, GREY, INK, RED } from './pdfkit.js';
-import { TYPES, get, eicrOverall, isElectrode, msIsRcd, msIsOcpd, BOND_SERVICES, bondTicked, bondCsaFor, bondNone, sourceRows, isNewInstall, SECTION_I_NA } from './certmodel.js';
+import { TYPES, get, eicrOverall, isElectrode, msIsRcd, msIsOcpd, BOND_SERVICES, bondTicked, bondCsaFor, bondNone, sourceRows, isNewInstall, SECTION_I_NA, normaliseCert } from './certmodel.js';
 import { EIC_ITEMS, EICR_ITEMS, CODE_TEXT, INTAKE_NOTE_10, INTAKE_NOTES, INTAKE_NOTIFIED, migrateIntake } from './inspections.js';
 import { GUIDANCE } from './guidance.js';
 import { limitZs, isSpare } from './checks.js';
@@ -889,6 +889,7 @@ export async function boardChartPdf(cert, board, profile) {
 // ---------- entry point ----------
 export async function certificatePdf(cert, { profile = {}, photos = [] } = {}) {
   const { jsPDF } = await loadJsPDF();
+  cert = normaliseCert(structuredClone(cert || {})); profile = profile || {}; // v0.36: old/damaged jobs never crash the PDF
   const k = new Kit(jsPDF, { orientation: 'p', footer: FOOT + (profile.business ? '  Issued by ' + profile.business + '.' : '') });
   if (cert.type === 'EIC') { eic(k, cert, profile); guidancePage(k, 'EIC'); }
   else if (cert.type === 'EICR') { k.noLabel = 'Report No.'; eicr(k, cert, profile); guidancePage(k, 'EICR'); }

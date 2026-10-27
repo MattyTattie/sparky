@@ -48,8 +48,8 @@ function jobPane() {
     box.append(h('div', { class: 'list' }, jobs.map((j) => {
       const n = certs.filter((c) => c.jobId === j.id);
       return h('a', { class: 'row' + (j.id === cur ? ' on' : ''), href: '#/job/' + j.id, 'aria-current': j.id === cur ? 'page' : null },
-        h('div', { class: 'main' }, h('div', { class: 't' }, j.title || 'Job'), h('div', { class: 's' }, jobLine(j, cmap[j.customerId]) || 'No customer yet')),
-        n.length ? h('span', { class: 'pill' }, n.map((c) => (TYPES[c.type] || { short: c.type || '?' }).short).join(', ')) : null);
+        h('div', { class: 'main' }, h('div', { class: 't' }, j.title || 'Job'), h('div', { class: 's' }, jobLine(j, cmap[j.customerId]) || 'No customer yet'),
+          n.length ? h('div', { class: 'rowtags' }, h('span', { class: 'pill' }, n.map((c) => (TYPES[c.type] || { short: c.type || '?' }).short).join(', '))) : null));
     })));
     const on = box.querySelector('.row.on'); if (on && on.scrollIntoView) on.scrollIntoView({ block: 'nearest' });
   })().catch(() => {});
@@ -135,8 +135,9 @@ route(/^\/$/, async () => {
       const n = certs.filter((c) => c.jobId === j.id);
       const tt = n.length ? ({ EICR: ' t-eicr', MW: ' t-mw' })[n[0].type] || '' : '';
       return h('a', { class: 'row', href: '#/job/' + j.id }, h('span', { class: 'tile' + tt }, icon(n.length ? 'fileCheck' : 'briefcase', { size: 20 })),
-        h('div', { class: 'main' }, h('div', { class: 't' }, j.title || 'Job'), h('div', { class: 's' }, jobLine(j, cmap[j.customerId]) || 'No customer yet')),
-        n.length ? h('span', { class: 'pill' }, n.map((c) => (TYPES[c.type] || { short: c.type || '?' }).short).join(', ')) : null, h('span', { class: 'go' }, '›'));
+        h('div', { class: 'main' }, h('div', { class: 't' }, j.title || 'Job'), h('div', { class: 's' }, jobLine(j, cmap[j.customerId]) || 'No customer yet'),
+          n.length ? h('div', { class: 'rowtags' }, h('span', { class: 'pill' }, n.map((c) => (TYPES[c.type] || { short: c.type || '?' }).short).join(', '))) : null), // v0.36: tags under the title, so words stay whole
+        h('span', { class: 'go' }, '›'));
     }) : [jobs.length ? emptyState('search', `No jobs match “${q}”.`) : emptyState('briefcase', 'No jobs yet. Start one, then add its certificates.', h('button', { class: 'btn primary', onclick: () => go('#/newjob') }, '+ New job'))]));
   };
   // v0.28: on a wide screen the jobs are a sortable table instead of cards.
@@ -553,7 +554,7 @@ route(/^\/settings$/, async () => {
       h('p', { class: 'note' }, 'Backups and imports from a file you keep anywhere. Restoring adds to what\u2019s here; imports show you every change first and never overwrite or remove anything.'),
       h('div', { class: 'btns full stack' },
         h('button', { class: 'btn', onclick: async () => { const b = await backup.exportAll(); await shareOrDownload(b, `${APP_SLUG}-backup-${new Date().toISOString().slice(0, 10)}.json`); } }, 'Save backup file'),
-        h('button', { class: 'btn', onclick: async () => { const [f] = await pickFile({ accept: '.json,application/json' }); if (!f) return; try { const n = await backup.importAll(await f.text()); toast(`Restored ${n} item(s)`); } catch (e) { toast(e.message); } } }, 'Restore from file'),
+        h('button', { class: 'btn', onclick: async () => { const [f] = await pickFile({ accept: '.json,application/json' }); if (!f) return; try { const n = await backup.importAll(f); toast(`Restored ${n} item(s)`); render(); } catch (e) { toast(e.message); } } }, 'Restore from file'),
         h('button', { class: 'btn', onclick: async () => (await import('./importextra.js')).startExtra() }, 'Import extra details'),
         h('button', { class: 'btn', onclick: pickResultsCert }, 'Import results file')),
       h('p', { class: 'note', style: 'margin-top:8px' }, 'Import extra details: adds certificates\u2019 boards, circuits and sources from a Zs Pro (Sparky) job.json or backup. Import results file: fills test results on one certificate you choose.')),

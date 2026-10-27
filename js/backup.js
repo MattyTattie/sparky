@@ -10,6 +10,7 @@ import { findRoot, sweepStrays } from './driveroot.js';
 import { deviceLabel } from './syncmerge.js';
 import * as presets from './presets.js';
 import { skipDeleted, DELETED } from './pdflist.js';
+import { normaliseCert } from './certmodel.js';
 
 const toB64 = (blob) => new Promise((res) => { const r = new FileReader(); r.onload = () => res(String(r.result)); r.readAsDataURL(blob); });
 const fromB64 = async (u) => (await fetch(u)).blob();
@@ -22,17 +23,55 @@ export async function exportAll() {
   return new Blob([JSON.stringify(out)], { type: 'application/json' });
 }
 // Restores without deleting anything: same id = replaced, newest wins.
-export async function importAll(json) {
-  const d = typeof json === 'string' ? JSON.parse(json) : json;
-  if (!d || d.app !== APP_SLUG) throw new Error('That isn\u2019t a backup file from this app.');
-  let n = 0;
-  for (const s of ['customers', 'jobs', 'certs']) for (const v of d[s] || []) {
-    const cur = await db.get(s, v.id);
-    if (!cur || (v.updatedAt || '') >= (cur.updatedAt || '')) { await db.put(s, v); n++; }
+// v0.36: the whole file is checked first, then everything is written in ONE
+// go — if anything goes wrong nothing is changed. Backup format unchanged.
+export const BAD_BACKUP = 'That file isn\u2019t a Zs Pro backup, or it\u2019s damaged. Nothing was changed.';
+const isObj = (v) => v != null && typeof v === 'object' && !Array.isArray(v);
+const okId = (v) => isObj(v) && (typeof v.id === 'string' || typeof v.id === 'number') && String(v.id) !== '';
+export function parseBackup(json) {
+  let d = json;
+  if (typeof json === 'string') { try { d = JSON.parse(json); } catch { throw new Error(BAD_BACKUP); } }
+  if (!isObj(d)) throw new Error(BAD_BACKUP);
+  if (d.app !== APP_SLUG) throw new Error('That isn\u2019t a backup file from this app. Nothing was changed.');
+  for (const s of ['customers', 'jobs', 'certs', 'files']) {
+    if (d[s] == null) continue;
+    if (!Array.isArray(d[s]) || !d[s].every(okId)) throw new Error(BAD_BACKUP);
   }
-  for (const f of d.files || []) if (!(await db.get('files', f.id))) await db.put('files', { ...f, blob: await fromB64(f.blob) });
-  for (const [k, v] of Object.entries(d.meta || {})) { if (k === presets.KEY) { if (v && v.list) await presets.mergeIn(v.list); continue; } if (v != null && (await db.getMeta(k)) == null) await db.setMeta(k, v); }
-  return n;
+  if ((d.files || []).some((f) => f.blob != null && !(typeof f.blob === 'string' && f.blob.startsWith('data:')))) throw new Error(BAD_BACKUP);
+  if (d.meta != null && !isObj(d.meta)) throw new Error(BAD_BACKUP);
+  return d;
+}
+// Works out every write first (reads only). getCur(store, id) / getMeta(key) read what's on the phone.
+// Photos: a backup copy replaces the phone's copy only when its version is
+// HIGHER (it was edited later) — the same rule Drive sync uses. Equal or
+// lower versions are left alone.
+export async function planRestore(d, { getCur, getMeta, decode = fromB64 }) {
+  const writes = []; let n = 0;
+  for (const s of ['customers', 'jobs', 'certs']) for (const v0 of d[s] || []) {
+    const v = s === 'certs' ? normaliseCert(v0) : v0;
+    const cur = await getCur(s, v.id);
+    if (!cur || (v.updatedAt || '') >= (cur.updatedAt || '')) { writes.push({ store: s, value: v }); n++; }
+  }
+  const files = d.files || [];
+  for (let i = 0; i < files.length; i++) {
+    const f = files[i]; const cur = await getCur('files', f.id);
+    if (cur && (cur.version || 1) >= (f.version || 1)) { files[i] = null; continue; }
+    let blob = null; if (f.blob) { try { blob = await decode(f.blob); } catch { throw new Error(BAD_BACKUP); } }
+    writes.push({ store: 'files', value: { ...f, blob } });
+    files[i] = null; // free the big text copy as we go (lighter on the phone's memory)
+  }
+  const pres = [];
+  for (const [k, v] of Object.entries(d.meta || {})) { if (k === presets.KEY) { if (v && v.list) pres.push(v.list); continue; } if (v != null && (await getMeta(k)) == null) writes.push({ store: 'meta', key: k, value: v }); }
+  return { writes, n, presets: pres };
+}
+// json: the file's text, the parsed object, or a File/Blob (read here so the text can be freed early).
+export async function importAll(json) {
+  if (json && typeof json.text === 'function' && typeof json !== 'string') json = await json.text();
+  const d = parseBackup(json); json = null;
+  const plan = await planRestore(d, { getCur: (s, id) => db.get(s, id), getMeta: (k) => db.getMeta(k) });
+  try { await db.putMany(plan.writes); } catch { throw new Error('The restore couldn\u2019t be saved (is the phone full?). Nothing was changed.'); }
+  for (const l of plan.presets) await presets.mergeIn(l);
+  return plan.n;
 }
 
 // ---------- One Drive folder per job ----------
@@ -112,7 +151,7 @@ export async function applyRemote(d, folderId, jsonId, { onlyIfNewer = false, fo
     await db.put('jobs', { ...d.job, driveFolderId: folderId, driveJsonId: jsonId, version: v, backedUpVersion: v, backedUpAt: d.savedAt || d.job.backedUpAt || null, syncSavedAt: d.savedAt || null });
   }
   const changedCerts = [];
-  for (const c of d.certs || []) { const cur = await db.get('certs', c.id); if (!cur || force || (cur.updatedAt || '') < (c.updatedAt || '')) { await db.put('certs', c); changedCerts.push(c.id); } }
+  for (const c0 of d.certs || []) { const c = normaliseCert(c0); const cur = await db.get('certs', c.id); if (!cur || force || (cur.updatedAt || '') < (c.updatedAt || '')) { await db.put('certs', c); changedCerts.push(c.id); } }
   for (const f of d.files || []) {
     if (!f.driveId) continue;
     const cur = await db.get('files', f.id);

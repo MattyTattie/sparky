@@ -879,3 +879,22 @@ table.sched td button.wayopen .wc { font-size: 16px; line-height: 1; opacity: .7
 table.sched td button.wayopen:hover { background: color-mix(in srgb, var(--brand) 10%, transparent); }
 table.sched td button.wayopen:hover .wn { text-decoration-color: currentColor; }
 table.sched td button.wayopen:focus-visible { outline: 2px solid var(--brand); outline-offset: -2px; }
+
+/* v0.36: job list — certificate tags sit under the title; titles break between words only */
+.row .rowtags { margin-top: 5px; display: flex; flex-wrap: wrap; gap: 4px; }
+.row .main .t { overflow-wrap: normal; word-break: normal; hyphens: manual; }
+/* v0.36: phone on its side (short screen) — a slim header and bottom menu so they don't cover the content */
+@media (orientation: landscape) and (max-height: 500px) and (max-width: 899px) {
+  :root { --navh: 40px; }
+  header.top { position: relative; min-height: 44px; padding-top: max(4px, env(safe-area-inset-top)); padding-bottom: 4px; border-radius: 0 0 14px 14px; }
+  header.top .iconbtn, header.top button { height: 34px; min-width: 34px; width: auto; }
+  header.top .brandmark { width: 30px; height: 30px; }
+  .bottomnav { padding-left: env(safe-area-inset-left); padding-right: env(safe-area-inset-right); }
+  .navi { flex-direction: row; justify-content: center; gap: 6px; min-height: 36px; padding: 3px 0; font-size: 12px; }
+  .navi svg { width: 18px; height: 18px; }
+  main.hasnav { padding-bottom: calc(var(--navh) + 72px + env(safe-area-inset-bottom)); }
+}
+/* v0.36: "New version" banner */
+.updbar { position: fixed; left: 0; right: 0; margin: 0 auto; width: max-content; bottom: calc(var(--navh) + 14px + env(safe-area-inset-bottom)); z-index: 100; display: flex; align-items: center; gap: 10px; padding: 10px 12px 10px 16px; border-radius: 999px; background: #101828; color: #fff; font-size: 14px; font-weight: 600; box-shadow: 0 8px 24px rgba(16,24,40,.3); border: 0; max-width: 92vw; cursor: pointer; white-space: nowrap; }
+.updbar b { background: var(--brand); padding: 6px 12px; border-radius: 999px; font-weight: 700; }
+@media (min-width: 900px) { .updbar { bottom: 24px; } }
