@@ -71,6 +71,13 @@ export function applyPreset(c, p) {
     const v = k === 'rcdS' ? !!f[k] : f[k] ?? ''; if ((c[k] ?? (k === 'rcdS' ? false : '')) !== v) { c[k] = v; out.push(k); } }
   return out;
 }
+// v0.35.2: an MCB / fuse preset: RCD boxes still holding that preset's stored upstream RCD
+// (filled by an older version) are handed back to the app, so the board's RCD goes in.
+export function releaseUpstreamRcd(c, f = {}) {
+  for (const k of ['rcdBs', 'rcdType', 'rcdIdn', 'rcdRating']) {
+    const v = String(c[k] ?? '').trim(); if (v && v === String(f[k] ?? '').trim()) { c.autoF = c.autoF || {}; c.autoF[k] = c[k]; }
+  }
+}
 // Which device boxes would change (and already hold something) — for "are you sure".
 export function wouldOverwrite(c, fields) {
   return Object.keys(fields).filter((k) => { const cur = c[k]; const nv = fields[k]; const has = typeof cur === 'boolean' ? cur : String(cur ?? '').trim() !== ''; return has && String(cur) !== String(nv); });

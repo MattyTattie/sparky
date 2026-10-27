@@ -15,7 +15,9 @@ import { blankBoard } from './certmodel.js';
 import * as presets from './presets.js';
 import { FIELDS, FIELD, TEMPLATES, blankCircuit, applyTemplate, copyCircuit, copyBoard, copyBoardToCert, makeSpare, autoNA, descChanged, rcdGroupChanged, spdGroupChanged, SPD_HIDE, spdHidden, spdObservation, circuitFedBySource, boardFedBySource, bidiTarget, hasBidiNote, addBidiNote, bidiCircuits, addBidiRemark, bidiRemarksDone, spareLine, copyToNextWay, laterSequential, deleteCircuitAt } from './templates.js';
 import { checkCircuit, limitZs, isSpare } from './checks.js';
-import { autoFillOcpd, typed } from './ocpdfill.js';
+import { autoFillOcpd as autoFill0, typed, fillBoardRcd } from './ocpdfill.js';
+// v0.35.2: MCB / fuse lines take the RCD boxes from their board's main RCD.
+const boardOf = (cert, c) => ((cert && cert.boards) || []).find((x) => (x.circuits || []).includes(c)) || null;
 import { DEVICES, deviceById, deviceFromBs, ratingsFor, CHECK_NOTE } from './limits.js';
 import { voiceSupported, listen } from './voice.js';
 import { CABLES, CABLE_PICKS, WIRING_TYPES, REF_METHODS, METHODS_FOR_PICK } from './cables.js';
@@ -107,6 +109,7 @@ route(/^\/cert\/([^/]+)\/b\/(\d+)$/, async (id, bi) => {
   const cert = await openCert(id); if (!cert) return go('#/');
   const b = cert.boards[+bi]; if (!b) return go('#/cert/' + id);
   const back = cert.boards.length > 1 ? `#/cert/${id}/boards` : '#/cert/' + id;
+  if (fillBoardRcd(b, isSpare)) changed(); // v0.35.2: older jobs pick up the board's RCD on MCB lines
   const tools = boardTools(cert, b, +bi);
   if (LAND.matches) return page(`${b.ref || 'Board'} · schedule of test results`, [boardDetails(cert, b), tools, scheduleTable(cert, b, +bi),
     h('div', { class: 'btns' }, h('button', { class: 'btn small', onclick: () => copyBoardDialog(cert, b) }, 'Copy this board'), h('button', { class: 'btn small', onclick: () => copyBoardToJobDialog(cert, b) }, 'Copy to another job'))], { back, wide: true, sub: cert.number });
@@ -175,10 +178,13 @@ function spdGrid(cert, b) {
 const F0 = (b, k, label) => field(b, { k, label, type: 'check' });
 // v0.31: N/A in one main RCD box fills the blank others; a real value clears them.
 function rcdGrid(b) {
-  const els = {};
-  const on = (k) => { for (const x of rcdGroupChanged(b, k)) { const i = els[x] && els[x].querySelector('input'); if (i) i.value = b[x] ?? ''; } };
+  const els = {}; let dirty = false;
+  const on = (k) => { if (fillBoardRcd(b, isSpare)) { changed(); dirty = true; } for (const x of rcdGroupChanged(b, k)) { const i = els[x] && els[x].querySelector('input'); if (i) i.value = b[x] ?? ''; } };
   const R = (k, label, type = 'text') => (els[k] = field(b, { k, label, type }, on));
-  return h('div', { class: 'grid2' }, R('rcdBs', 'RCD BS (EN)'), R('rcdType', 'RCD type'), R('rcdIdn', 'IΔn (mA)', 'num'), R('rcdRating', 'Rating (A)', 'num'));
+  // the circuit lines redraw once you leave the RCD boxes (not while typing)
+  const out = () => { if (!dirty) return; setTimeout(() => { const a = document.activeElement; if (a && g.contains(a)) return; dirty = false; const y = scrollY; Promise.resolve(render()).then(() => setTimeout(() => scrollTo(0, y), 30)); }, 0); };
+  const g = h('div', { class: 'grid2', onfocusout: out }, R('rcdBs', 'RCD BS (EN)'), R('rcdType', 'RCD type'), R('rcdIdn', 'IΔn (mA)', 'num'), R('rcdRating', 'Rating (A)', 'num'));
+  return g;
 }
 function boardTools(cert, b, bi) {
   const bulk = (k, v, label) => h('button', { class: 'btn small', onclick: () => { let n = 0; for (const c of b.circuits) if (!isSpare(c) && !c[k]) { c[k] = v; n++; } changed(); toast(`${label}: filled ${n}`); render(); } }, label);
@@ -314,14 +320,15 @@ addEventListener('hashchange', async () => {
   const l = await presets.load(); const r = presets.remember(l, c);
   if (r.added) { await presets.save(l); toast(`Saved \u201c${r.preset.name}\u201d as a device preset`, 3500); }
 });
-function presetPicker(c, after) {
+function presetPicker(c, after, cert) {
+  const autoFillOcpd = (x) => autoFill0(x, { board: boardOf(cert, x) });
   const box = h('div', { class: 'presetbox' });
   const draw = async () => {
     const list = presets.shown(await presets.load()); const cur = presets.presetFrom(c); const k = cur && presets.keyOf(cur);
     const match = k && list.find((p) => presets.keyOf(p.fields) === k);
     fill(box, h('div', { class: 'phd' }, h('span', {}, 'Device presets'), list.length ? h('a', { href: '#/settings/presets', class: 'note' }, 'Manage') : null),
       list.length ? h('div', { class: 'chips presets' }, list.slice(0, 12).map((p) => h('button', { class: 'chip' + (match && match.id === p.id ? ' on' : ''), type: 'button', title: 'Fill the device boxes', onclick: async () => {
-        const ch = presets.applyPreset(c, p); for (const k of Object.keys(c.autoF || {})) if (k in (p.fields || {}) && !(presets.RCD_KEYS.includes(k) && !presets.ownRcd(p.fields))) delete c.autoF[k]; ch.push(...autoFillOcpd(c)); await presets.used(p.id); changed(); toast(ch.length ? `Filled the device from \u201c${p.name}\u201d (cable and readings left alone)` : 'Already set like that'); after(); } }, p.name)))
+        const ch = presets.applyPreset(c, p); for (const k of Object.keys(c.autoF || {})) if (k in (p.fields || {}) && !(presets.RCD_KEYS.includes(k) && !presets.ownRcd(p.fields))) delete c.autoF[k]; if (!presets.ownRcd(p.fields)) presets.releaseUpstreamRcd(c, p.fields); ch.push(...autoFillOcpd(c)); await presets.used(p.id); changed(); toast(ch.length ? `Filled the device from \u201c${p.name}\u201d (cable and readings left alone)` : 'Already set like that'); after(); } }, p.name)))
         : h('p', { class: 'note' }, 'Fill in a device below and it\u2019s remembered here for next time.'),
       cur && !match ? h('button', { class: 'btn small savepreset', type: 'button', onclick: async () => { const l = await presets.load(); const r = presets.remember(l, c); if (r.deleted) { const p = l.find((x) => presets.keyOf(x.fields) === k); Object.assign(p, { deleted: false, updatedAt: new Date().toISOString(), uses: 1 }); } await presets.save(l); toast('Saved as a device preset'); draw(); } }, '+ Save as preset: ' + presets.nameFor(cur)) : null);
   };
@@ -329,8 +336,9 @@ function presetPicker(c, after) {
 }
 const isAutoBs = (c) => !String(c.bs || '').trim() || !!(c.autoF && c.autoF.bs === c.bs) || !!deviceFromBs(c.bs); // a standard number is replaced by the new device's
 function circuitEditor({ cert, c, ctx, back, title, prev, next, extra = [], mw = false }) {
+  const autoFillOcpd = (x) => autoFill0(x, { board: boardOf(cert, x) });
   leaving = c;
-  const pBox = presetPicker(c, () => render());
+  const pBox = presetPicker(c, () => render(), cert);
   const flagEls = {}; const inputs = {};
   const noDevBox = h('div');
   const limBox = h('div', { class: 'limit' });
@@ -481,6 +489,7 @@ function circuitEditor({ cert, c, ctx, back, title, prev, next, extra = [], mw =
 
 // ---------- Landscape: the whole schedule as a table ----------
 function scheduleTable(cert, b, bi) {
+  const autoFillOcpd = (x) => autoFill0(x, { board: b });
   const cols = FIELDS.filter((f) => f.k !== 'maxZs');
   const head = h('tr', {}, h('th', { class: 'sl' }, h('span', { class: 'n' }, '1'), 'No.'), h('th', { class: 'sl2' }, h('span', { class: 'n' }, '2'), 'Description'),
     cols.slice(2).map((f) => [h('th', {}, h('span', { class: 'n' }, f.col), f.short), f.k === 'bka' ? h('th', {}, h('span', { class: 'n' }, '12'), 'Max Zs') : null]), h('th', {}, ''));

@@ -7,10 +7,11 @@ import { deviceById, deviceFromBs } from './limits.js';
 export const DEFAULT_KA = '6';
 // Standard breaking capacities (kA) where the product standard sets one.
 const KA = { mcb: null, rcbo: null, 'bs88-2': '50', 'bs88-3': '16', bs1362: '6' };
+const RCD4 = ['rcdBs', 'rcdType', 'rcdIdn', 'rcdRating'];
 export const FILL_KEYS = ['bs', 'type', 'bka', 'rcdBs', 'rcdType', 'rcdIdn', 'rcdRating'];
 
 // The standard values for this circuit's device (and RCD part for an RCBO).
-export function standardFor(c, { ka } = {}) {
+export function standardFor(c, { ka, board } = {}) {
   const d = deviceById(c.device) || deviceFromBs(c.bs); if (!d) return {};
   const out = {};
   if (d.bs) out.bs = d.bs;
@@ -20,7 +21,7 @@ export function standardFor(c, { ka } = {}) {
   else out.bka = KA[d.id] || ''; // no standard figure: take back only an earlier auto value
   const rating = String(c.rating ?? '').trim();
   if (d.rcd) { out.rcdBs = '61009'; out.rcdType = 'A'; out.rcdIdn = '30'; if (rating) out.rcdRating = rating; }
-  else for (const k of ['rcdBs', 'rcdType', 'rcdIdn', 'rcdRating']) out[k] = ''; // not an RCBO: take back only what we filled
+  else for (const k of RCD4) out[k] = board ? String(board[k] ?? '').trim() : ''; // v0.35.2: not an RCBO: the board's main RCD (or N/A); no board: take back only what we filled
   return out;
 }
 const blank = (v) => v == null || String(v).trim() === '';
@@ -42,3 +43,9 @@ export function autoFillOcpd(c, opts = {}) {
 }
 // A box the user types in is theirs from then on.
 export function typed(c, k) { if (c && c.autoF && k in c.autoF) delete c.autoF[k]; }
+// v0.35.2: every MCB / fuse line on a board picks up the board's main RCD (auto boxes only).
+// Returns how many circuits changed.
+export function fillBoardRcd(b, isSpare = () => false) {
+  let n = 0; for (const c of (b && b.circuits) || []) if (!isSpare(c) && autoFillOcpd(c, { board: b }).length) n++;
+  return n;
+}
