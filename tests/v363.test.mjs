@@ -19,18 +19,18 @@ test('main fuse is the smallest rating >= 1.25 x design current, never MEGA/ANL/
 test('12 V vs 48 V now differ; 12 V no-inverter case', () => {
   const a = D.planDC({ volts: '12', battAh: '660' }), b = D.planDC({ volts: '48', battAh: '660' });
   assert.equal(a.main.fuse.A, 30); assert.equal(b.main.fuse.A, 15);
-  assert.ok(a.main.size >= a.fuseBox.run.size); assert.ok(a.main.size > b.main.size);
+  assert.ok(a.main.size >= a.fuseBox.run.size); assert.ok(a.main.size >= b.main.size);
   assert.match(a.main.why, /fuse box feed/); assert.match(b.main.why, /Class T fuses come from 15 A/);
 });
 test('inverter cases still sized up', () => {
   assert.equal(D.planDC({ volts: '12', invW: '3000' }).main.size, 120);
   const p = D.planDC({ volts: '48', invW: '1000' }); assert.equal(p.main.fuse.A, 40); assert.match(p.main.why, /must carry the 40 A fuse|Class T/);
 });
-test('v0.36.3b: 6 mm² minimum main battery cable, with why text', () => {
+test('v0.36.3b: 10 mm² minimum main battery cable, with why text', () => {
   const b = D.planDC({ volts: '48', battAh: '660' });
-  assert.equal(b.main.size, 6); assert.match(b.main.why, /Minimum 6 mm² for a battery main cable; the load alone needs 1.5 mm²/);
+  assert.equal(b.main.size, 10); assert.match(b.main.why, /Minimum 10 mm² for a battery main cable; the load alone needs 1.5 mm²/);
   const a = D.planDC({ volts: '12', battAh: '660' }); assert.equal(a.main.size, 10); assert.match(a.main.why, /fuse box feed/);
-  for (const V of ['12', '24', '48']) for (const invW of ['', '1000', '3000']) assert.ok(D.planDC({ volts: V, invW, battAh: '660' }).main.size >= 6);
+  for (const V of ['12', '24', '48']) for (const invW of ['', '1000', '3000']) assert.ok(D.planDC({ volts: V, invW, battAh: '660' }).main.size >= 10);
 });
 test('v0.36.3c: blade fuse box at 12 V only; DC breaker board at 24/48 V', () => {
   const a = D.planDC({ volts: '12', battAh: '660' }); assert.equal(a.fuseBox.label, 'Fuse box'); assert.equal(a.fuseBox.sub, '6-way blade');

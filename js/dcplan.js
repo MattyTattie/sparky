@@ -333,8 +333,8 @@ export function planDC(o0 = {}) {
   const Imain = Math.max(discharge, charge);
   const intro = `Biggest current: ${discharge >= charge ? `everything on at once = ${discharge} A (${inverter ? 'inverter' : ''}${inverter && dcLoads.length ? ' + ' : ''}${dcLoads.length ? 'DC loads' : ''})` : `all chargers at once = ${charge} A`}.`;
   // v0.36.3: with small fuses now allowed, keep the main cable at least as thick as the fuse box feed it supplies.
-  // v0.36.3b: never under 6 mm² for the battery main (Matthew's choice), nor under the fuse box feed.
-  const MAIN_MIN = 6; const feedMin = fuseBox && fuseBox.run && fuseBox.run.size ? fuseBox.run.size : 0;
+  // v0.36.3b: never under 10 mm² for the battery main (was 6) (Matthew's choice), nor under the fuse box feed.
+  const MAIN_MIN = 10; const feedMin = fuseBox && fuseBox.run && fuseBox.run.size ? fuseBox.run.size : 0;
   const mainMin = Math.max(MAIN_MIN, feedMin);
   const main = Imain ? sizeRun({ ...common, id: 'main', name: 'Battery to busbar (main)', intro, current: Imain, length: o.mainLen, pct: mainPct, kind: 'main', minSize: mainMin, ka: chem === 'lifepo4' ? battery.faultKA || 0 : 0 }) : null;
   if (main) main.why = main.why +
