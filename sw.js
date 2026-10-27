@@ -3,7 +3,7 @@
 // When any file changes, bump CACHE (sparky-v0.1 -> sparky-v0.2).
 // Shares the mattytattie.github.io origin with Hearth, so it only ever
 // deletes caches whose names start with "sparky-".
-const CACHE = 'sparky-v0.36.0';
+const CACHE = 'sparky-v0.36.1';
 const FILES = [
   "./",
   "./dark.css",
@@ -106,9 +106,14 @@ const FILES = [
   "./vendor/tesseract/tesseract.min.js",
   "./vendor/tesseract/worker.min.js",
 ];
-self.addEventListener('install', (e) => { e.waitUntil(caches.open(CACHE).then((c) => c.addAll(FILES.map((f) => new Request(f, { cache: 'reload' }))))); }); // v0.36: waits for the "tap to update" banner
+self.addEventListener('install', (e) => { e.waitUntil(caches.open(CACHE).then((c) => c.addAll(FILES.map((f) => new Request(f, { cache: 'reload' })))).then(() => self.skipWaiting())); }); // v0.36.1: take over straight away (a waiting worker could sit for ever on TWA/Mac)
 self.addEventListener('message', (e) => { if (e.data === 'skipWaiting') self.skipWaiting(); });
-self.addEventListener('activate', (e) => { e.waitUntil(caches.keys().then((ks) => Promise.all(ks.filter((k) => k.startsWith('sparky-') && k !== CACHE).map((k) => caches.delete(k)))).then(() => self.clients.claim())); });
+self.addEventListener('activate', (e) => { e.waitUntil(caches.keys().then(async (ks) => {
+  const stuck = ks.some((k) => /^sparky-v0\.(\d|[12]\d|3[0-5])\./.test(k)); // pages still running 0.35.x or older have no update banner
+  await Promise.all(ks.filter((k) => k.startsWith('sparky-') && k !== CACHE).map((k) => caches.delete(k)));
+  await self.clients.claim();
+  if (stuck) for (const c of await self.clients.matchAll({ type: 'window' })) c.navigate(c.url).catch(() => {}); // one-off self-heal reload
+})); });
 self.addEventListener('fetch', (e) => {
   const u = new URL(e.request.url);
   if (e.request.method !== 'GET' || u.origin !== location.origin || !u.pathname.startsWith(new URL('./', self.registration.scope).pathname)) return;
