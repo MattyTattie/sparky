@@ -12,6 +12,7 @@ import { TYPES, newCert, sectionsFor, sectionDone, missingFields, visible, get, 
 import { INTAKE_NOTE_10, INTAKE_NOTES, INTAKE_NOTIFIED, migrateIntake, EIC_ITEMS, EIC_OUTCOMES, EICR_ITEMS, EICR_OUTCOMES, CODE_TEXT, OBSERVATIONS, OBS_CATS, EIC_HELP, EICR_HELP } from './inspections.js';
 import { checkCircuit, isSpare } from './checks.js';
 import { CHECK_NOTE } from './limits.js';
+import { limitOn, limitBar } from './limitbar.js';
 import { dangerCodes, noticeForObs, noticesOf, noticeMissing, noticeNo } from './dangermodel.js';
 
 export async function createCert(type, job, cust) {
@@ -61,7 +62,7 @@ route(/^\/cert\/([^/]+)$/, async (id) => {
     h('div', { class: 'card' },
       h('div', { style: 'display:flex;justify-content:space-between;align-items:center' }, h('b', {}, cert.number), cert.status === 'issued' ? h('span', { class: 'pill green' }, 'Issued ' + fmtDate(cert.issuedAt)) : h('span', { class: 'pill' }, 'Draft')),
       h('div', { class: 'note' }, [cert.client.name, (cert.install.address || '').split(/[,\n]/)[0]].filter(Boolean).join(' · ')),
-      h('div', { class: 'prog', style: 'margin-top:10px' }, h('i', { style: `width:${Math.round((done / secs.length) * 100)}%` })),
+      limitOn() ? limitBar(done, secs.length) : h('div', { class: 'prog', style: 'margin-top:10px' }, h('i', { style: `width:${Math.round((done / secs.length) * 100)}%` })),
       h('div', { class: 'note', style: 'margin-top:4px' }, `${done} of ${secs.length} sections filled in`)),
     nFlags ? h('div', { class: 'notice red' }, `${nFlags} circuit(s) have a reading outside the limits. Check the schedule before issuing.`) : null,
     warns.map((w) => h('div', { class: 'notice ' + w.level }, w.text)),

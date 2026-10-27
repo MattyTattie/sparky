@@ -2,6 +2,7 @@
 // app.js — screens: jobs, customers, settings, backup. The certificate
 // screens are in certui.js, the schedule of test results in schedule.js.
 // =====================================================================
+import { limitOn, setLimitOn } from './limitbar.js';
 import { pdfRows, madeAt } from './pdflist.js';
 import { nextStep } from './jobnext.js';
 import * as db from './db.js';
@@ -417,7 +418,8 @@ function appearanceCard() {
   const draw = () => fill(box, [['system', 'System'], ['light', 'Light'], ['dark', 'Dark']].map(([v, t]) => h('button', { class: 'chip' + (T.get() === v ? ' on' : ''), role: 'radio', 'aria-checked': T.get() === v ? 'true' : 'false', onclick: () => { T.set(v); draw(); } }, t)));
   draw();
   return h('div', { class: 'card', id: 'appearance' }, h('h2', {}, 'Appearance'), box,
-    h('p', { class: 'note', style: 'margin-top:10px' }, 'System follows your device’s dark mode setting. Certificates and PDFs always print on white. Saved on this device only.'));
+    h('p', { class: 'note', style: 'margin-top:10px' }, 'System follows your device’s dark mode setting. Certificates and PDFs always print on white. Saved on this device only.'),
+    h('label', { class: 'check', id: 'limitrow', style: 'margin-top:10px' }, h('input', { type: 'checkbox', id: 'limiton', checked: limitOn(), onchange: (e) => setLimitOn(e.target.checked) }), 'Limit bar on certificates (just for fun: flashes when it\u2019s all filled in)'));
 }
 // ---------- Settings: you, your logo, test instruments, backup ----------
 route(/^\/settings$/, async () => {
