@@ -208,7 +208,7 @@ function results(v, p) {
     p.shore ? ['Mains charger', `${p.shore.a} A`, '', true] : null,
     p.main ? ['Main fuse', p.main.fuse ? `${p.main.fuse.A} A ${p.main.fuse.label.replace(' fuse', '')}` : `Over ${MAX_FUSE} A: no standard fuse`, p.main.fuse ? 'At the battery positive' : 'Go up a voltage (24 or 48 V) or fit a smaller inverter', !!p.main.fuse] : null,
     p.main ? ['Main cable', p.main.size ? `${p.main.size} mm²` : 'Over 120 mm²: no single cable fits', `${p.cableLabel.split(' singles')[0]}, red + black`, !!p.main.size] : null,
-    p.main ? ['Isolator & shunt', `${ampsOr(p.isolator.a, ISOLATOR_SIZES)} isolator · ${ampsOr(p.shunt.a, SHUNT_SIZES)} shunt`, p.isolator.a && p.shunt.a ? 'Shunt = battery monitor sensor, on the negative' : 'No standard size that big: go up a voltage (24 or 48 V)', !!(p.isolator.a && p.shunt.a)] : null,
+    p.main ? ['Isolator & shunt', `${(t => t[0].toUpperCase() + t.slice(1))(ampsOr(p.isolator.a, ISOLATOR_SIZES))} isolator · ${ampsOr(p.shunt.a, SHUNT_SIZES)} shunt`, p.isolator.a && p.shunt.a ? 'Shunt = battery monitor sensor, on the negative' : 'No standard size that big: go up a voltage (24 or 48 V)', !!(p.isolator.a && p.shunt.a)] : null,
   ].filter(Boolean);
   const bad = p.warnings.length > 0 || p.runs.some((r) => !r.ok);
   const svg = wiringSvg(wiringModel(p, v));
