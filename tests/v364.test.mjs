@@ -20,6 +20,6 @@ test('wired into certificate screen + settings, not PDFs', () => {
 });
 test('reduced motion, version and cache', () => {
   assert.match(src('styles.css'), /prefers-reduced-motion: reduce\) \{ \.limitbar/);
-  assert.match(src('js/config.js'), /APP_VERSION = '0\.36\.4 beta'/);
-  assert.match(src('sw.js'), /'sparky-v0\.36\.4'/); assert.match(src('sw.js'), /\.\/js\/limitbar\.js/);
+  assert.match(src('js/config.js'), /APP_VERSION = '0\.36\.[45] beta'/);
+  assert.match(src('sw.js'), /'sparky-v0\.36\.[45]'/); assert.match(src('sw.js'), /\.\/js\/limitbar\.js/);
 });
