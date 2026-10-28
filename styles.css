@@ -905,18 +905,22 @@ table.sched td button.wayopen:focus-visible { outline: 2px solid var(--brand); o
 /* v0.36.5: closer to the PS1 FF7 battle Limit gauge: a thin gauge in a blue
    gradient window with a light bevelled edge; pink fill (lighter top edge);
    when full the whole bar cycles through the colours together (no sweep). */
-.limitbar { position: relative; margin-top: 10px; height: 18px; padding: 4px 6px; border-radius: 4px; background: linear-gradient(160deg, #3a4fc4 0%, #1b2a8c 45%, #070d3d 100%); border: 2px solid #d7d9e3; border-right-color: #8d90a3; border-bottom-color: #8d90a3; box-shadow: 0 0 0 1px #1a1a2a; }
-.limitbar .lb-track { height: 100%; border-radius: 1px; background: linear-gradient(#1a1a1a, #3a3a3a); box-shadow: inset 0 0 0 1px #000, 0 0 0 1px #6b6f86; overflow: hidden; }
-.limitbar .lb-track i { display: block; height: 100%; background: linear-gradient(#ffc2e0 0%, #ff6fb5 30%, #e0287f 70%, #9c1050 100%); transition: width .4s ease; }
+.limitbar { position: relative; margin-top: 10px; height: 18px; padding: 4px 6px; border-radius: 3px; background: linear-gradient(180deg, #00007a 0%, #000088 50%, #00005e 100%); border: 2px solid #afb0c8; border-right-color: #7c7d92; border-bottom-color: #7c7d92; box-shadow: 0 0 0 1px #000; }
+.limitbar .lb-track { height: 100%; border-radius: 0; background: linear-gradient(#0d0c24 0%, #383336 12%, #56544f 40%, #666766 60%, #575659 85%, #5b5c5f 100%); box-shadow: inset 0 0 0 1px #000, 0 0 0 1px #9091a6, 0 1px 0 1px #ababae; overflow: hidden; }
+/* Measured from PS1 footage: pastel fill, dark inner top line, brightest ~35% down, darker toward bottom. */
+.limitbar .lb-track i { display: block; height: 100%; background-color: #ffcbee; background-image: linear-gradient(rgba(20,0,40,.8) 0%, rgba(20,0,40,.55) 10%, rgba(0,0,0,0) 32%, rgba(0,0,0,.12) 55%, rgba(0,0,0,.38) 100%); transition: width .4s ease; }
 .limitbar .lb-word { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font: 800 11px/1 system-ui, sans-serif; color: #fff; letter-spacing: .12em; text-shadow: 1px 1px 0 #000, 0 0 2px #000; }
-.limitbar.full .lb-track i { animation: lb-cycle 1.6s linear infinite; }
+/* Full: whole bar flips through 8 pastel colours, one per PS1 frame (~33ms), 8-frame loop = 0.267s. */
+.limitbar.full .lb-track i { animation: lb-cycle .267s steps(1, end) infinite; }
 @keyframes lb-cycle {
-  0%, 100% { background: linear-gradient(#ffd0d0, #ff3030 45%, #a00000); }
-  16.6% { background: linear-gradient(#fff4c0, #ffd820 45%, #a07000); }
-  33.3% { background: linear-gradient(#d0ffd0, #30e040 45%, #007010); }
-  50% { background: linear-gradient(#d0ffff, #20d8ff 45%, #006090); }
-  66.6% { background: linear-gradient(#d8d8ff, #4050ff 45%, #10107a); }
-  83.3% { background: linear-gradient(#ffd0ff, #ff40e0 45%, #800070); }
+  0%, 100% { background-color: #a0a3ee; }
+  12.5% { background-color: #eda0f2; }
+  25% { background-color: #f2a0a8; }
+  37.5% { background-color: #ecbd8e; }
+  50% { background-color: #e8ea96; }
+  62.5% { background-color: #bdea96; }
+  75% { background-color: #9ae996; }
+  87.5% { background-color: #91e5e4; }
 }
 @media (prefers-reduced-motion: reduce) { .limitbar .lb-track i { transition: none; } .limitbar.full .lb-track i { animation-duration: 8s; } }
 @media print { .limitbar { display: none; } }

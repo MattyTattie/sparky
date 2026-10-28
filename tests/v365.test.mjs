@@ -12,3 +12,9 @@ test('settings preview + version', () => {
   assert.match(src('js/limitbar.js'), /export function limitDemo/); assert.match(src('js/app.js'), /limitDemo\(\)/);
   assert.match(src('js/config.js'), /APP_VERSION = '0\.36\.5 beta'/); assert.match(src('sw.js'), /'sparky-v0\.36\.5'/);
 });
+
+test('v0.36.5b: FF7-measured 8-colour, 0.267s stepped cycle', () => {
+  const css = fs.readFileSync(new URL('../styles.css', import.meta.url), 'utf8');
+  assert.match(css, /animation: lb-cycle \.267s steps\(1, end\) infinite/);
+  assert.match(css, /87\.5% \{ background-color: #91e5e4; \}/);
+});
