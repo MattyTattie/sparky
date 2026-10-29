@@ -3,6 +3,7 @@
 // screens are in certui.js, the schedule of test results in schedule.js.
 // =====================================================================
 import { limitOn, setLimitOn, limitDemo } from './limitbar.js';
+import { pdfFlagsDefault, setPdfFlagsDefault } from './certmodel.js';
 import { pdfRows, madeAt } from './pdflist.js';
 import { nextStep } from './jobnext.js';
 import * as db from './db.js';
@@ -160,7 +161,7 @@ route(/^\/$/, async () => {
   const profile = await getProfile();
   page(APP_NAME, [
     !jobs.length ? h('a', { class: 'notice info newphone-link', href: '#/settings', onclick: () => { try { sessionStorage.setItem('sparky.goRestore', '1'); } catch {} } }, h('b', {}, 'Setting up a new phone?'), ' Restore from Google\u00a0Drive\u00a0›') : null,
-    !profile.name ? h('a', { class: 'notice info', href: '#/settings', style: 'display:block;text-decoration:none' }, 'First, add your details, logo and test instruments in Settings. They fill in every certificate for you.') : null,
+    !profile.name ? h('a', { class: 'row setupcard', href: '#/settings', id: 'setupcard' }, h('span', { class: 'tile' }, icon('settings', { size: 18 })), h('div', { class: 'main' }, h('div', { class: 't' }, 'Set up your details'), h('div', { class: 's' }, 'Your name, logo and test instruments. They fill in every certificate for you.')), h('span', { class: 'go' }, '\u203a')) : null,
     warns.map((w) => h('a', { class: 'notice ' + w.level, href: '#/settings', style: 'display:block;text-decoration:none' }, w.text)),
     jobs.length ? statsStrip(jobs, certs) : null,
     dueCard(jobs, certs, cmap),
@@ -353,7 +354,7 @@ route(/^\/job\/([^/]+)(?:\/(photos|details|next|pdfs|backup|dc|parts))?$/, async
       h('div', { class: 'note' }, ns.sub),
       h('div', { class: 'btns full' }, ns.href ? h('a', { class: 'btn primary big', href: ns.href }, ns.label) : h('button', { class: 'btn primary big', onclick: addCert }, ns.label))),
     h('h2', { class: 'sec' }, 'Certificates'),
-    h('div', { class: 'list' }, certs.map(certRow), h('button', { class: 'row addrow', onclick: addCert }, h('span', { class: 'tile addt' }, icon('plus', { size: 18 })), h('div', { class: 'main' }, h('div', { class: 't' }, 'Add certificate…')))),
+    h('div', { class: 'list' }, certs.map(certRow), !certs.length ? null : h('button', { class: 'row addrow', onclick: addCert }, h('span', { class: 'tile addt' }, icon('plus', { size: 18 })), h('div', { class: 'main' }, h('div', { class: 't' }, 'Add certificate…')))),
     h('h2', { class: 'sec' }, 'Photos · notes · customer'),
     h('div', { class: 'list' },
       frow(back + '/photos', 'Photos', String(photos.length), 'camera'),
@@ -419,6 +420,7 @@ function appearanceCard() {
   draw();
   return h('div', { class: 'card', id: 'appearance' }, h('h2', {}, 'Appearance'), box,
     h('p', { class: 'note', style: 'margin-top:10px' }, 'System follows your device’s dark mode setting. Certificates and PDFs always print on white. Saved on this device only.'),
+    h('label', { class: 'check', id: 'pdfflagrow', style: 'margin-top:10px' }, h('input', { type: 'checkbox', id: 'pdfflags', checked: pdfFlagsDefault(), onchange: (e) => setPdfFlagsDefault(e.target.checked) }), 'Show readings over the limit in red on PDFs'),
     h('label', { class: 'check', id: 'limitrow', style: 'margin-top:10px' }, h('input', { type: 'checkbox', id: 'limiton', checked: limitOn(), onchange: (e) => setLimitOn(e.target.checked) }), 'Limit bar on certificates (just for fun: flashes when it\u2019s all filled in)'),
     limitDemo());
 }

@@ -1,3 +1,4 @@
+import { pdfFlagsOn } from './certmodel.js';
 import { showRcdType } from './rcdtype.js';
 // =====================================================================
 // pdf.js — certificates as PDFs, laid out like the IET model forms
@@ -386,7 +387,7 @@ export const PER_SHEET = 16;
 export function scheduleSheets(cert) {
   const out = [];
   for (const b of cert.boards || []) {
-    const rows = scheduleRows(cert, b, !!cert.pdfFlags);
+    const rows = scheduleRows(cert, b, pdfFlagsOn(cert));
     const parts = Math.max(1, Math.ceil(rows.length / PER_SHEET));
     for (let i = 0; i < parts; i++) out.push({ b, rows: pad(rows.slice(i * PER_SHEET, (i + 1) * PER_SHEET), 12), part: i + 1, parts });
   }

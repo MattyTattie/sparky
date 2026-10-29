@@ -2,14 +2,14 @@
 // jobnext.js — v0.18: the job page's "Next step" (pure, tested).
 // Looks at the job's certificates and says what to do next, with one button.
 // =====================================================================
-import { sectionsFor, sectionDone, TYPES } from './certmodel.js';
+import { screenSections, countsToward, sectionDone, TYPES } from './certmodel.js';
 import { isSpare } from './checks.js';
 
 const circuitsLeft = (cert) => (cert.boards || []).reduce((n, b) => n + (b.circuits || []).filter((c) => !isSpare(c) && !c.zs).length, 0);
 const certHref = (c, s) => (!s ? `#/cert/${c.id}` : s.special === 'boards' ? `#/cert/${c.id}/boards` : `#/cert/${c.id}/s/${s.id}`);
 
 export function certProgress(cert) {
-  const secs = sectionsFor(cert.type);
+  const secs = screenSections(cert.type).filter(countsToward);
   const left = secs.filter((s) => !sectionDone(cert, s));
   return { done: secs.length - left.length, total: secs.length, left, circuits: cert.type === 'MW' ? 0 : circuitsLeft(cert) };
 }

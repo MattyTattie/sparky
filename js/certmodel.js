@@ -159,6 +159,19 @@ const PARTS = { id: 'parts', title: 'Earthing, bonding and main switch', form: '
   f('parts.rcdType', 'RCD type (AC/A/F/B)', 'text', { showIf: msIsRcd, indent: true }), f('parts.rcdIdn', 'IΔn (mA)', 'num', { showIf: msIsRcd, indent: true }), f('parts.rcdDelay', 'Rated time delay (ms)', 'num', { showIf: msIsRcd, indent: true, hint: '0 if not time-delayed.' }), f('parts.rcdMs', 'Measured operating time (ms)', 'num', { showIf: msIsRcd, indent: true }), f('parts.rcdKa', 'Breaking capacity (kA)', 'num', { showIf: msIsRcd, indent: true, opt: true }),
 ], doneIf: (c) => bondNone(c) || BOND_SERVICES.some(([s]) => bondTicked(c, s)) || bondTicked(c, 'Other') };
 
+// v0.37: on-screen order only (the order you fill them in on site). The PDF keeps the IET form order.
+const SCREEN_ORDER = {
+  EIC: ['client', 'supply', 'parts', 'boards', 'bonding', 'inspections', 'design', 'comments', 'people', 'sign'],
+  EICR: ['client', 'install', 'extent', 'supply', 'parts', 'boards', 'bonding', 'inspections', 'observations', 'summary', 'sign'],
+};
+export function screenSections(type) {
+  const secs = sectionsFor(type); const ord = SCREEN_ORDER[type];
+  if (!ord) return secs;
+  const rank = (s) => { const i = ord.indexOf(s.id); return i < 0 ? 50 + secs.indexOf(s) : i; };
+  return secs.slice().sort((a, b) => rank(a) - rank(b));
+}
+// v0.37: sections that count towards progress (not ones with nothing you must fill in).
+export const countsToward = (s) => (s.special ? s.special !== 'observations' : (s.fields || []).some((x) => x.type !== 'check' && x.type !== 'heading' && !x.opt));
 export function sectionsFor(type) {
   if (type === 'EIC') return [
     { id: 'client', title: 'Client and installation', form: 'A / B', fields: [
@@ -291,3 +304,8 @@ export function sourcesMissing(cert) {
   return m;
 }
 export const sourcesOk = (cert) => !sourcesMissing(cert).length;
+
+// v0.37: red readings on the PDF. A setting (on unless turned off); an older certificate's own tick still wins.
+export const pdfFlagsDefault = () => { try { return localStorage.getItem('sparky.pdfFlags') !== 'off'; } catch { return true; } };
+export const setPdfFlagsDefault = (on) => { try { localStorage.setItem('sparky.pdfFlags', on ? 'on' : 'off'); } catch {} };
+export const pdfFlagsOn = (cert) => (typeof cert.pdfFlags === 'boolean' ? cert.pdfFlags : pdfFlagsDefault());

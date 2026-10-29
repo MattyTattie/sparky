@@ -14,7 +14,7 @@ test('switch: on by default, off sticks', { skip: !L && 'ui.js needs a browser' 
   assert.equal(L.limitOn(), true); L.setLimitOn(false); assert.equal(L.limitOn(), false); assert.equal(store['sparky.limitbar'], 'off'); L.setLimitOn(true); assert.equal(L.limitOn(), true);
 });
 test('wired into certificate screen + settings, not PDFs', () => {
-  assert.match(src('js/certui.js'), /limitOn\(\) \? limitBar\(done, secs\.length\)/);
+  assert.match(src('js/certui.js'), /limitOn\(\) \? limitBar\(done, counted\.length\)/);
   assert.match(src('js/app.js'), /id: 'limiton'/);
   for (const f of ['js/pdf.js', 'js/pdfkit.js', 'js/dcplanpdf.js', 'js/dangerpdf.js', 'js/partspdf.js']) assert.ok(!/limitbar|limitBar/.test(src(f)), f);
 });

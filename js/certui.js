@@ -8,6 +8,7 @@ import { h, fill, toast, modal, confirmBox, fmtDate, shareOrDownload, blobToData
 import { route, page, go, render } from './app.js';
 import { S, openCert, changed, flush, getProfile, defaultInstruments, defaultInstrumentIds, getInstruments, instrumentsFor, instrumentText, calibrationWarnings, INSTRUMENT_KINDS, saveSetting } from './state.js';
 import { calDateFields, CAL_DATE_WARN } from './instruments.js';
+import { screenSections, countsToward, pdfFlagsOn } from './certmodel.js';
 import { TYPES, newCert, sectionsFor, sectionDone, missingFields, visible, get, set, eicrOverall, blankBond, BOND_LOCATIONS, BOND_PARTS, SOURCE_TYPES, blankSource, sourcesMissing, isNewInstall } from './certmodel.js';
 import { INTAKE_NOTE_10, INTAKE_NOTES, INTAKE_NOTIFIED, migrateIntake, EIC_ITEMS, EIC_OUTCOMES, EICR_ITEMS, EICR_OUTCOMES, CODE_TEXT, OBSERVATIONS, OBS_CATS, EIC_HELP, EICR_HELP } from './inspections.js';
 import { checkCircuit, isSpare } from './checks.js';
@@ -54,30 +55,34 @@ export function field(cert, fd, onChange) {
 route(/^\/cert\/([^/]+)$/, async (id) => {
   const cert = await openCert(id); if (!cert) return go('#/');
   const job = cert.jobId ? await db.get('jobs', cert.jobId) : null;
-  const secs = sectionsFor(cert.type);
+  const secs = screenSections(cert.type);
+  const counted = secs.filter(countsToward);
   const nFlags = (cert.boards || []).reduce((n, b) => n + b.circuits.filter((c) => checkCircuit(c, { earthing: cert.supply.earthing, zdb: b.zdb }).worst === 'red').length, 0) + (cert.type === 'MW' && checkCircuit(cert.mw.circuit, { earthing: cert.mw.earthing, zdb: cert.mw.zdb }).worst === 'red' ? 1 : 0);
-  const done = secs.filter((s) => sectionDone(cert, s)).length;
+  const done = counted.filter((s) => sectionDone(cert, s)).length;
+  const nextSec = secs.find((s) => s.special !== 'sign' && countsToward(s) && !sectionDone(cert, s)) || secs.find((s) => countsToward(s) && !sectionDone(cert, s));
+  const secHref = (s) => (s.special === 'boards' ? `#/cert/${id}/boards` : `#/cert/${id}/s/${s.id}`);
   const warns = await calibrationWarnings();
   page(TYPES[cert.type].name, [
     h('div', { class: 'card' },
       h('div', { style: 'display:flex;justify-content:space-between;align-items:center' }, h('b', {}, cert.number), cert.status === 'issued' ? h('span', { class: 'pill green' }, 'Issued ' + fmtDate(cert.issuedAt)) : h('span', { class: 'pill' }, 'Draft')),
       h('div', { class: 'note' }, [cert.client.name, (cert.install.address || '').split(/[,\n]/)[0]].filter(Boolean).join(' · ')),
-      limitOn() ? limitBar(done, secs.length) : h('div', { class: 'prog', style: 'margin-top:10px' }, h('i', { style: `width:${Math.round((done / secs.length) * 100)}%` })),
-      h('div', { class: 'note', style: 'margin-top:4px' }, `${done} of ${secs.length} sections filled in`)),
+      limitOn() ? limitBar(done, counted.length) : h('div', { class: 'prog', style: 'margin-top:10px' }, h('i', { style: `width:${Math.round((done / counted.length) * 100)}%` })),
+      h('div', { class: 'note', style: 'margin-top:4px' }, `${done} of ${counted.length} sections filled in`),
+      cert.status !== 'issued' && nextSec ? h('a', { class: 'btn primary', id: 'continuebtn', style: 'display:block;margin-top:10px;text-align:center', href: secHref(nextSec) }, 'Continue: ' + nextSec.title + ' \u203a') : null),
     nFlags ? h('div', { class: 'notice red' }, `${nFlags} circuit(s) have a reading outside the limits. Check the schedule before issuing.`) : null,
     warns.map((w) => h('div', { class: 'notice ' + w.level }, w.text)),
     h('div', { class: 'list' }, secs.map((s) => h('a', { class: 'row', href: s.special === 'boards' ? `#/cert/${id}/boards` : `#/cert/${id}/s/${s.id}` },
-      h('span', { class: 'dot ' + (sectionDone(cert, s) ? 'ok' : '') }), h('div', { class: 'main' }, h('div', { class: 't' }, s.title), h('div', { class: 's' }, 'Form section ' + s.form)), h('span', { class: 'go' }, '›'))),
+      h('span', { class: 'dot ' + (sectionDone(cert, s) ? 'ok' : '') }), h('div', { class: 'main' }, h('div', { class: 't' }, s.title), h('div', { class: 's faint' }, 'On the IET form: section ' + s.form)), h('span', { class: 'go' }, '›'))),
       h('a', { class: 'row', href: `#/cert/${id}/s/instruments` }, h('span', { class: 'dot ' + (Object.values(cert.instruments || {}).some(Boolean) ? 'ok' : '') }), h('div', { class: 'main' }, h('div', { class: 't' }, 'Test instruments'), h('div', { class: 's' }, 'From your settings; change for this certificate')), h('span', { class: 'go' }, '›')),
       job ? h('a', { class: 'row', href: `#/cert/${id}/photos` }, h('span', { class: 'dot ' + ((cert.photoIds || []).length ? 'ok' : '') }), h('div', { class: 'main' }, h('div', { class: 't' }, 'Photos on the certificate'), h('div', { class: 's' }, `${(cert.photoIds || []).length} chosen`)), h('span', { class: 'go' }, '›')) : null),
     h('div', { class: 'card' }, h('h2', {}, 'PDF'),
-      h('p', { class: 'note' }, 'Makes the certificate as a PDF laid out like the IET model forms, with your logo. “View PDF” shows it here first so you can check it before printing or sharing. Sharing opens the share menu on your device: you choose the app and who it goes to. Nothing is sent by itself.'),
-      h('div', { class: 'btns full' }, h('button', { class: 'btn primary', onclick: (e) => makePdf(cert, e.currentTarget, 'share') }, 'Make PDF and share'), h('button', { class: 'btn', onclick: (e) => makePdf(cert, e.currentTarget, 'view') }, 'View PDF'),
-        h('button', { class: 'btn', id: 'emailbtn', onclick: (e) => makePdf(cert, e.currentTarget, 'email') }, withIcon('mail', 'Email to customer')),
-        cert.type !== 'MW' ? h('button', { class: 'btn', onclick: (e) => makeChart(cert, e.currentTarget) }, 'Circuit chart') : null),
-      h('p', { class: 'note' }, 'Email to customer opens your own mail app with the PDF attached' + (cert.client.email ? ' (to ' + cert.client.email + ')' : '') + '. You check it and press send yourself.'),
-      h('label', { class: 'check' }, h('input', { type: 'checkbox', checked: !!cert.pdfFlags, onchange: (e) => { cert.pdfFlags = e.target.checked; changed(); } }), 'Highlight readings over the limit in red on the PDF'),
-      cert.status !== 'issued' ? h('button', { class: 'btn', onclick: async () => { if (await confirmBox('Mark as issued?', 'Records today as the issue date. You can still edit it.', 'Mark issued')) { cert.status = 'issued'; cert.issuedAt = new Date().toISOString(); changed(); await flush(); render(); } } }, 'Mark as issued') : null),
+      h('p', { class: 'note' }, 'Laid out like the IET forms. Nothing is sent until you pick who it goes to.'),
+      h('div', { class: 'btns full' }, h('button', { class: 'btn primary', id: 'sharebtn', onclick: async (e) => { const ok = await makePdf(cert, e.currentTarget, 'share'); if (ok && cert.status !== 'issued') await askIssued(cert); } }, 'Share PDF')),
+      h('div', { class: 'btns small3' }, h('button', { class: 'btn small', onclick: (e) => makePdf(cert, e.currentTarget, 'view') }, 'View PDF'),
+        h('button', { class: 'btn small', id: 'emailbtn', onclick: async (e) => { const ok = await makePdf(cert, e.currentTarget, 'email'); if (ok && cert.status !== 'issued') await askIssued(cert); } }, withIcon('mail', 'Email')),
+        cert.type !== 'MW' ? h('button', { class: 'btn small', onclick: (e) => makeChart(cert, e.currentTarget) }, 'Circuit chart') : null),
+      h('p', { class: 'note' }, 'Email opens your own mail app' + (cert.client.email ? ' (to ' + cert.client.email + ')' : '') + '. You press send yourself.' + (pdfFlagsOn(cert) ? ' Readings over the limit show in red (change in Settings).' : '')),
+      cert.status !== 'issued' ? h('button', { class: 'btn', onclick: () => askIssued(cert, true) }, 'Mark as issued') : null),
     h('div', { class: 'card', id: 'dangercard' }, h('h2', {}, 'Danger notices'),
       h('p', { class: 'note' }, 'A one-page notice to hand over when you find something dangerous (C1) or potentially dangerous (C2). It prints as its own PDF.'),
       noticesOf(cert).length ? h('div', { class: 'list' }, noticesOf(cert).map((n) => h('a', { class: 'row', href: `#/cert/${id}/danger/${n.id}` }, h('span', { class: 'dot ' + (noticeMissing(n).length ? '' : 'ok') }), h('div', { class: 'main' }, h('div', { class: 't' }, noticeNo(cert, n) + ' · ' + n.items.length + ' item' + (n.items.length === 1 ? '' : 's') + (n.items.length ? ' · ' + [...new Set(n.items.map((i) => i.code))].join('/') : '')), h('div', { class: 's' }, (n.items.map((i) => i.text).filter(Boolean).join('; ') || 'No items yet').slice(0, 80))), h('span', { class: 'go' }, '›')))) : null,
@@ -103,7 +108,11 @@ export async function emailFor(cert, blob, name, notice = null) {
   const { emailPdf } = await import('./email.js');
   return emailPdf(cert, blob, name, { notice, profile: await getProfile() });
 }
+async function askIssued(cert, direct) {
+  if (await confirmBox(direct ? 'Mark as issued?' : 'Sent it? Mark as issued?', 'Records today as the issue date. You can still edit it.', 'Mark issued')) { cert.status = 'issued'; cert.issuedAt = new Date().toISOString(); changed(); await flush(); render(); }
+}
 async function makePdf(cert, btn, how) {
+  let ok = false;
   await flush(); const label = btn.textContent; btn.disabled = true; btn.textContent = 'Making PDF…';
   try {
     const { certificatePdf, pdfName } = await import('./pdf.js');
@@ -112,8 +121,10 @@ async function makePdf(cert, btn, how) {
     if (how === 'view') (await import('./pdfview.js')).viewPdf(blob, name, { shareText: `${TYPES[cert.type].name} ${cert.number}`, email: () => emailFor(cert, blob, name) });
     else if (how === 'email') await emailFor(cert, blob, name);
     else { const r = await shareOrDownload(blob, name, `${TYPES[cert.type].name} ${cert.number}`); if (r === 'downloaded') toast('Saved to your downloads'); }
+    ok = how !== 'view';
   } catch (e) { console.error(e); toast('Couldn\u2019t make the PDF: ' + ((e && e.message) || 'the browser wouldn\u2019t save it (private browsing?)')); }
   btn.disabled = false; btn.textContent = label;
+  return ok;
 }
 async function makeChart(cert, btn) {
   await flush(); btn.disabled = true;

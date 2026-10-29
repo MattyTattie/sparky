@@ -926,3 +926,10 @@ table.sched td button.wayopen:focus-visible { outline: 2px solid var(--brand); o
 @media print { .limitbar { display: none; } }
 
 .lb-demo { display: flex; gap: 10px; align-items: center; margin-top: 6px; } .lb-demo .limitbar { flex: 1; margin-top: 0; }
+/* v0.37 polish */
+.grid2 > .fld { display: flex; flex-direction: column; }
+.grid2 > .fld > .lab { flex: 1 0 auto; align-items: flex-end; }
+.row .s.faint { opacity: .6; font-size: 12px; }
+.btns.small3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(90px, 1fr)); gap: 8px; margin-top: 8px; }
+.btns.small3 .btn { white-space: normal; }
+a.row.setupcard { display: flex; text-decoration: none; border: 2px solid var(--accent, #4f46e5); border-radius: 14px; margin-bottom: 12px; }
