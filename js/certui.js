@@ -224,7 +224,7 @@ export function diagramIssues(cert) {
   const all = cert.type === 'MW' ? (cert.mw && cert.mw.circuit ? [cert.mw.circuit] : []) : (cert.boards || []).flatMap((b) => b.circuits || []);
   const out = [];
   for (const c of all) { if (!c || isSpareC(c)) continue;
-    const k = c.control; if (k && k.via && k.via !== 'none' && !String(k.controlCircuit || '').trim()) out.push({ c, kind: 'coil', text: 'Set the coil circuit in Controlled by', fixes: [] });
+    const k = c.control; if (k && k.via && k.via !== 'none' && !String(k.controlCircuit || '').trim()) out.push({ c, kind: 'coil', text: 'choose which circuit feeds the contactor coil', fixes: [] });
     const note = roomPointsNote(c); if (!note) continue;
     const rl = roomListOf(c) || []; const t = rl.reduce((a, r) => a + (+r.lights || 0) + (+r.fans || 0), 0); const n = parseInt(String(c.points ?? ''), 10);
     const fixes = [{ label: `Set points to ${t}`, apply: () => { c.points = String(t); } }];
@@ -276,6 +276,8 @@ export function jobRoomNames(all, except) {
     for (const r of (Array.isArray(c.diagram.roomList) ? c.diagram.roomList : [])) if (r && r.name) out.push(String(r.name).trim());
     if (c.diagram.rooms) out.push(...String(c.diagram.rooms).split(/,|\band\b/).map((x) => x.trim()));
   }
+  /* v0.43.2: old certs keep a room COUNT in diagram.rooms ("5"); only real names count */
+  for (let i = out.length - 1; i >= 0; i--) if (!isRoomName(out[i])) out.splice(i, 1);
   return [...new Set(out.filter(Boolean))];
 }
 function extrasCard(cert, redraw) {
@@ -409,9 +411,10 @@ export const TICK_ROOMS = ['Kitchen', 'Living room', 'Dining room', 'Hall', 'Lan
 export function roomsOnOtherCircuits(all, except) {
   const m = {};
   for (const x of all) { if (!x || x === except || !x.diagram || !Array.isArray(x.diagram.roomList)) continue;
-    for (const r of x.diagram.roomList) if (r && r.name && !m[String(r.name).trim()]) m[String(r.name).trim()] = String(x.num || '?'); }
+    for (const r of x.diagram.roomList) if (r && isRoomName(r.name) && !m[String(r.name).trim()]) m[String(r.name).trim()] = String(x.num || '?'); }
   return m;
 }
+export const isRoomName = (n) => { const t = String(n ?? '').trim(); return t.length > 0 && t.length <= 40 && /[a-z]/i.test(t); };
 export function defaultRoom(name, wiring = 'loop-in') { return { name, lights: 1, sw1: 1, sw2pairs: 0, swi: 0, wiring }; }
 export function roomIsDefault(r, wiring = 'loop-in') { const d = defaultRoom(r.name, wiring); return !(+r.fans > 0) && ['lights', 'sw1', 'sw2pairs', 'swi', 'wiring'].every((k) => String(r[k] ?? '') === String(d[k])); }
 function roomsEditor(c, redraw, usedNames = () => [], otherMap = () => ({})) {
@@ -423,7 +426,7 @@ function roomsEditor(c, redraw, usedNames = () => [], otherMap = () => ({})) {
     const st = (dv) => () => { const n = Math.max(min, Math.min(max, (parseInt(out.textContent, 10) || 0) + dv)); out.textContent = String(n); onset(n); };
     return h('div', { class: 'rstep', style: 'display:flex;align-items:center;gap:6px' }, h('button', { class: 'stepbtn', type: 'button', style: 'min-width:44px;min-height:44px', 'aria-label': label + ', one fewer', onclick: st(-1) }, '\u2212'), out, h('button', { class: 'stepbtn', type: 'button', style: 'min-width:44px;min-height:44px', 'aria-label': label + ', one more', onclick: st(1) }, '+')); };
   const chipCss = (on) => 'flex:1 1 auto;min-height:44px;padding:6px 10px;white-space:normal' + (on ? ';background:var(--brand,#2952ff);border-color:var(--brand,#2952ff);color:#fff' : '');
-  let typing = false;
+  let typing = false; let showOther = false;
   const draw = () => {
     const l = list(); const names = l.map((r) => r.name); const other = otherMap();
     const job = [...new Set([...usedNames(), ...Object.keys(other)])].filter((n) => n && !TICK_ROOMS.includes(n));
@@ -457,13 +460,16 @@ function roomsEditor(c, redraw, usedNames = () => [], otherMap = () => ({})) {
         h('span', { style: 'flex:1;white-space:normal;word-break:break-word' + (on ? ';font-weight:700' : '') }, n),
         elsewhere ? h('span', { class: 'note', style: 'margin:0;white-space:normal;text-align:right' }, 'on circuit ' + elsewhere) : null),
       on ? roomRow(l[names.indexOf(n)]) : null]; };
+    const all0 = [...new Set([...names, ...job, ...extra, ...TICK_ROOMS])].filter(isRoomName);
+    const here = names.filter(isRoomName); const free = all0.filter((n) => !names.includes(n) && !other[n]); const busy = all0.filter((n) => !names.includes(n) && other[n]);
     const note = roomPointsNote(c);
-    fill(box, [h('b', { style: 'display:block;margin:6px 0 2px' }, 'Rooms on this circuit'),
-      h('p', { class: 'note', style: 'margin:0 0 6px' }, 'Tick each room on this circuit. The feed runs room to room in the order ticked.'),
-      job.length ? h('div', { class: 'note', style: 'margin:6px 0 2px;font-weight:700' }, 'Used in this job') : null,
-      ...[...job, ...extra].flatMap(tickRow),
-      h('div', { class: 'note', style: 'margin:10px 0 2px;font-weight:700' }, 'Common rooms'),
-      ...TICK_ROOMS.flatMap(tickRow),
+    fill(box, [h('b', { style: 'display:block;margin:6px 0 2px' }, 'Rooms'),
+      h('p', { class: 'note', style: 'margin:0 0 6px' }, 'Tick each room. The feed runs room to room in the order ticked.'),
+      ...(here.length ? [h('div', { class: 'note onthis', style: 'margin:6px 0 2px;font-weight:700;color:inherit' }, 'On this circuit (feed order)'), ...here.flatMap(tickRow)] : [h('p', { class: 'note', style: 'margin:6px 0' }, 'No rooms ticked yet.')]),
+      h('div', { class: 'note', style: 'margin:10px 0 2px;font-weight:700' }, 'Add a room'),
+      ...free.flatMap(tickRow),
+      busy.length ? h('button', { class: 'btn ghost showother', type: 'button', 'aria-expanded': String(showOther), style: 'width:100%;min-height:44px;margin-top:6px;white-space:normal', onclick: () => { showOther = !showOther; draw(); } }, (showOther ? 'Hide' : 'Show') + ` rooms on other circuits (${busy.length})`) : null,
+      ...(showOther ? busy.flatMap(tickRow) : []),
       typing ? h('label', { class: 'f', style: 'margin-top:6px' }, h('span', {}, 'Room name'), h('input', { class: 'roomother', placeholder: 'Type the room name', 'aria-label': 'Room name', onchange: (e) => { const n = e.target.value.trim(); typing = false; if (n && !list().some((x) => x.name === n)) store([...list(), defaultRoom(n, defW())]); draw(); } }))
         : h('button', { class: 'btn ghost', type: 'button', id: 'roomother-' + (c.num || ''), style: 'width:100%;min-height:48px;margin-top:6px', onclick: () => { typing = true; draw(); const t = box.querySelector('.roomother'); if (t) t.focus(); } }, 'Other\u2026'),
       h('p', { class: 'note roomsnote', style: 'margin:6px 0;color:#9aa0aa' + (note ? '' : ';display:none') }, note)]);

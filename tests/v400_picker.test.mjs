@@ -24,7 +24,7 @@ test('picker: circuit dropdown, room tick-list', () => {
   const s = readFileSync(new URL('../js/certui.js', import.meta.url), 'utf8');
   assert.match(s, /id: 'extrascircuit'/);
   for (const r of ['Kitchen', 'Bedroom 4', 'En-suite', 'Loft', 'Outside']) assert.ok(s.includes(`'${r}'`), r);
-  assert.match(s, /Other\\u2026/); assert.match(s, /type: 'checkbox'/); assert.match(s, /'on circuit '/); assert.match(s, /Used in this job/);
+  assert.match(s, /Other\\u2026/); assert.match(s, /type: 'checkbox'/); assert.match(s, /'on circuit '/); assert.match(s, /On this circuit \(feed order\)/);
 });
 test('jb-switch rooms share ONE junction box; other rooms still daisy-chain', () => {
   const c = diagramEICRooms(); const l = c.boards[0].circuits.find((x) => String(x.num) === '2');

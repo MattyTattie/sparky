@@ -17,3 +17,11 @@ test('helpers keep the roomList format', async () => {
   const a = { num: 1, diagram: { roomList: [{ name: 'Kitchen' }] } }, b = { num: 2, diagram: { roomList: [{ name: 'Hall' }] } };
   assert.deepEqual(m.roomsOnOtherCircuits([a, b], a), { Hall: '2' });
 });
+test('v0.43.2: junk room names (old room counts like "5") are ignored', async () => {
+  const src = s.slice(s.indexOf('export function roomsOnOtherCircuits'), s.indexOf('function roomsEditor'));
+  const m = await import('data:text/javascript,' + encodeURIComponent(src));
+  assert.ok(!m.isRoomName('5')); assert.ok(!m.isRoomName(' ')); assert.ok(m.isRoomName('Bedroom 1'));
+  assert.deepEqual(m.roomsOnOtherCircuits([{ num: 1, diagram: { roomList: [{ name: '5' }, { name: 'Hall' }] } }], null), { Hall: '1' });
+  assert.match(s, /Show' : 'Hide'|'Hide' : 'Show'/); assert.match(s, /rooms on other circuits \(/);
+  assert.match(s, /choose which circuit feeds the contactor coil/);
+});

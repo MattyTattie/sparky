@@ -17,3 +17,7 @@ test('light-switch fan has no control box', () => {
   const [c] = mk('switch'); const t = texts(layout(diagramModel(c), { W: 560, font: 11 }));
   assert.ok(!t.includes('%RH')); assert.ok(t.some((s) => /switched live/.test(s)));
 });
+test('Points line splits lights and fans; fan feed starts at the room feed', () => {
+  const [c, x] = mk('humidistat'); x.points = '9'; const L = layout(diagramModel(c), { W: 560, font: 11 }); const t = texts(L);
+  assert.ok(t.includes('8 \u00d7 lights + 1 \u00d7 fan'), t.filter((s) => /\u00d7/.test(s)).join('|'));
+});
