@@ -78,7 +78,16 @@ const KIND_PLURAL = { socket: 'sockets', light: 'lights', cooker: 'cookers', sho
 const KIND_ONE = { socket: 'socket', light: 'light', cooker: 'cooker', shower: 'shower', alarm: 'alarm', immersion: 'immersion', ev: 'EV charger', fan: 'fan', fcu: 'FCU', appliance: 'fixed appliance', point: 'point' };
 // Optional per-circuit diagram extras: circuit.diagram = { rooms, sw1, sw2, swi }.
 // Old certs have none; a lighting circuit then gets one 1-way switch.
-const KEY_EXTRA = { jbsw: 'Switch-fed: JB to switch, looped switch to switch, each to its own lights', socket: 'Twin socket', socket1: 'Socket (single)', rose: 'Ceiling rose (loop-in)', jb: 'Junction box (JB)', strap: '2-way strappers (two wires)' };
+const KEY_EXTRA = { jbsw: 'Switch-fed: JB to switch, looped switch to switch, each to its own lights', socket: 'Twin socket', socket1: 'Socket (single)', rose: 'Ceiling rose (loop-in)', jb: 'Junction box (JB)', strap: '2-way strappers (two wires)', iso: 'Local isolator: double pole switch-disconnector (// = 2 poles)', isofcu: 'Local isolator: fused connection unit (switched shows the blade)' };
+// v0.43 (test): optional local isolator next to the load: circuit.diagram.isolator = { type, rating }.
+export const ISOLATORS = { dp20: '20 A DP switch', dp45: '45 A DP switch (cooker / shower)', sfcu: 'Switched FCU', ufcu: 'Unswitched FCU', rotary: 'Rotary isolator' };
+const ISO_SHORT = { dp20: '20A DP', dp45: '45A DP', sfcu: 'Switched FCU', ufcu: 'Unswitched FCU', rotary: 'Rotary isolator' };
+export function isolatorOf(c) {
+  const i = c && c.diagram && c.diagram.isolator; if (!i || !ISOLATORS[i.type]) return null;
+  const rating = val(i.rating).trim(); const fcu = i.type === 'sfcu' || i.type === 'ufcu';
+  const label = fcu ? ISO_SHORT[i.type] + (rating ? ' ' + rating : '') : (rating ? (/dp/.test(i.type) ? rating + (/DP/i.test(rating) ? '' : ' DP') : rating + ' rotary') : ISO_SHORT[i.type]);
+  return { type: i.type, rating, fcu, switched: i.type !== 'ufcu', label, name: ISOLATORS[i.type] };
+}
 export const SWITCH_NAME = { sw1: '1-way switch', sw2: '2-way switch', swi: 'Intermediate switch' };
 const num0 = (v) => { const n = parseInt(String(v ?? ''), 10); return Number.isFinite(n) && n > 0 ? Math.min(n, MAX_SYMBOLS) : 0; };
 export function switchInfo(c) {
@@ -403,7 +412,7 @@ export function layout(model, { W = 380, font = 12, screen = false, cableTable =
   });
   // key: only the symbols this diagram uses
   if (used.size) {
-    const sh = []; const y = 10; const order = ['socket', 'socket1', 'light', 'rose', 'jb', 'jbsw', 'sw1', 'sw2', 'swi', 'strap', 'cooker', 'shower', 'alarm', 'immersion', 'ev', 'fan', 'fcu', 'appliance', 'point', 'contactor', 'coil', 'timeclock', 'spd'];
+    const sh = []; const y = 10; const order = ['socket', 'socket1', 'light', 'rose', 'jb', 'jbsw', 'sw1', 'sw2', 'swi', 'strap', 'cooker', 'shower', 'alarm', 'immersion', 'ev', 'fan', 'fcu', 'appliance', 'point', 'contactor', 'coil', 'timeclock', 'iso', 'isofcu', 'spd'];
     let hh = textLines(sh, 8, y, 'Key', W - 16, { bold: true });
     const S = F * 1.5; const colW = (W - 16) / 2; let col = 0, rowY = y + hh + 4, rowH = 0;
     for (const k of order.filter((k) => used.has(k))) {
@@ -411,6 +420,8 @@ export function layout(model, { W = 380, font = 12, screen = false, cableTable =
       if (k === 'contactor') { nocSym(sh, x + S * 0.5, rowY - 2, S * 1.1); }
       else if (k === 'coil') { coilSym(sh, x + S * 0.2, rowY + S * 0.1, S * 0.8, S * 0.75); }
       else if (k === 'timeclock') { clockSym(sh, x + S / 2, rowY + S / 2, S * 0.42); }
+      else if (k === 'iso') { isoSym(sh, x + S * 0.4, rowY - 2, S * 1.2, false); }
+      else if (k === 'isofcu') { isoSym(sh, x + S * 0.4, rowY - 2, S * 1.2, true, true); }
       else if (k === 'spd') { spdSym(sh, x + S / 2, rowY - 2, F * 0.75); }
       else if (k === 'rose') { L(sh, x + S / 2 - S * 0.6, rowY + S / 2, x + S / 2 + S * 0.6, rowY + S / 2, { w: 0.9, color: COL.grey }); C(sh, x + S / 2, rowY + S / 2, S * 0.17, { fill: COL.line, lw: 0.8 }); }
       else if (k === 'jb') { R(sh, x - S * 0.2, rowY + S * 0.05, S * 1.4, S * 0.9, { fill: [255, 255, 255] }); T(sh, x + S * 0.5, rowY + S * 0.5 + small * 0.3, 'JB', { anchor: 'middle', bold: true, size: small * 0.85 }); }
@@ -488,6 +499,15 @@ export function layout(model, { W = 380, font = 12, screen = false, cableTable =
       L(sh, fx0, ky + kh, fx0, out, { w: 0.9, color: COL.grey });
       kh0 = Math.max(kh, nh) + 6; feedTop = out; hh += kh0;
     }
+    // v0.43: local isolator (DP switch, FCU, rotary) in line, just before the load
+    const iso = info.spare ? null : isolatorOf(c);
+    if (iso) { used.add(iso.fcu ? 'isofcu' : 'iso');
+      const iy = Math.max(feedTop, y + hh) + 4, ih = F * 2.4;
+      L(sh, fx0, feedTop, fx0, iy, { w: 0.9, color: COL.grey });
+      isoSym(sh, fx0, iy, ih, iso.fcu, iso.switched);
+      const nh = textLines(sh, fx0 + F * 1.3, iy + ih * 0.3 - small, iso.label, W - fx0 - F * 1.3 - 6, { size: small, bold: true });
+      const out = iy + Math.max(ih, nh) + 2; L(sh, fx0, iy + ih, fx0, out, { w: 0.9, color: COL.grey });
+      hh = out - y + 2; feedTop = out; }
     // this circuit feeds the coil of contactors on other circuits
     const sw = !info.spare && links[val(c.num)];
     if (sw) {
@@ -680,6 +700,21 @@ export function layout(model, { W = 380, font = 12, screen = false, cableTable =
   }
   // v0.42 IEC 60617 contactor NO contact, vertical, top at (x, y0), height h:
   // fixed contact with a small semicircle, blade hinged at the bottom.
+  // v0.43 BS EN 60617 single-line: switch-disconnector (blade, isolating bar at
+  // the fixed contact) with two strokes on the lead for 2 poles. FCU: box with
+  // the fuse symbol, plus the blade above it when switched.
+  function isoSym(o, x, y0, h, fcu = false, switched = true) {
+    const g = { w: 1.2, color: COL.line };
+    if (fcu) { const b = h * 0.55; let t = y0;
+      if (switched) { const sb = y0 + h * 0.4; L(o, x, y0, x, y0 + h * 0.1, g); L(o, x, sb, x - h * 0.22, y0 + h * 0.12, g); t = sb; } else L(o, x, y0, x, y0 + h * 0.4, g);
+      const by = y0 + h * 0.42, bh = h * 0.5, bw = h * 0.5; R(o, x - bw / 2, by, bw, bh, { lw: 1, fill: [255, 255, 255] });
+      R(o, x - bw * 0.16, by + bh * 0.15, bw * 0.32, bh * 0.7, { lw: 0.9, fill: [255, 255, 255] }); L(o, x, by + bh * 0.05, x, by + bh * 0.95, { w: 0.9 });
+      L(o, x, t, x, by, g); L(o, x, by + bh, x, y0 + h, g); void b; return; }
+    const top = y0 + h * 0.3, bot = y0 + h * 0.72;
+    L(o, x, y0, x, top, g); L(o, x - h * 0.12, top, x + h * 0.12, top, g); // fixed contact with isolating bar
+    L(o, x, bot, x - h * 0.26, top + h * 0.04, g); L(o, x, bot, x, y0 + h, g); // open blade, hinged at the bottom
+    for (const d of [-0.06, 0.06]) L(o, x - h * 0.1, y0 + h * (0.86 + d) + h * 0.05, x + h * 0.1, y0 + h * (0.86 + d) - h * 0.05, { w: 1 });
+  }
   function nocSym(o, x, y0, h) {
     const t = y0 + h * 0.3, b = y0 + h * 0.7, r = h * 0.08, g = { w: 1.2, color: COL.line };
     L(o, x, y0, x, t, g); L(o, x, b, x, y0 + h, g); L(o, x, b, x - h * 0.28, t + h * 0.02, g);
