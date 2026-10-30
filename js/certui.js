@@ -256,7 +256,7 @@ function extrasCard(cert, redraw) {
     const numIn = (k, label) => h('label', { class: 'f', style: 'flex:1;min-width:0' }, h('span', {}, label), ins[k] = h('input', { type: 'number', min: '0', max: '10', inputmode: 'numeric', 'aria-label': label + ', circuit ' + (c.num || ''), value: cur[k], onchange: () => { for (const o of ['sw1', 'sw2', 'swi']) { const n = Math.max(0, Math.min(10, parseInt(ins[o].value, 10) || 0)); ins[o].value = String(n); save(c, o, String(n)); } } }));
     fill(one, [h('b', { class: 'pickname', style: 'display:block;margin:8px 0 4px;word-break:break-word;white-space:normal' }, name(c)),
       isLight && arranging ? arrangeRooms(c, redraw, () => { arranging = false; drawOne(); }) : null,
-      isLight && !arranging ? roomsEditor(c, redraw, () => jobRoomNames(all, c)) : null,
+      isLight && !arranging ? roomsEditor(c, redraw, () => jobRoomNames(all, c), () => roomsOnOtherCircuits(all, c)) : null,
       isLight && !arranging ? templateRow(c, redraw, drawOne) : null,
       isLight && !arranging && (d.roomList || []).length > 1 ? h('button', { class: 'btn ghost', type: 'button', id: 'arrangebtn', style: 'width:100%;min-height:48px;margin-top:4px', onclick: () => { arranging = true; drawOne(); } }, 'Arrange room boxes') : null,
       isLight && !roomListOf(c) ? h('details', { class: 'fold', style: 'margin-top:6px' }, h('summary', {}, h('span', { class: 'foldt' }, 'Or just set switch counts', h('span', { class: 'folds' }, 'Without rooms')), h('span', { class: 'foldic' }, '\u203a')),
@@ -361,51 +361,66 @@ function arrangeRooms(c, redraw, done) {
 // Simple tap-to-choose buttons (wrap onto new lines, no truncation).
 const segs = (opts, cur, label, onpick) => h('div', { class: 'segs', role: 'group', 'aria-label': label, style: 'display:flex;flex-wrap:wrap;gap:6px' },
   opts.map(([v, t]) => h('button', { type: 'button', class: 'btn ghost seg' + (v === cur ? ' on' : ''), 'aria-pressed': String(v === cur), style: 'flex:1 1 auto;min-height:44px;padding:8px 10px;white-space:normal' + (v === cur ? ';background:var(--brand,#2952ff);border-color:var(--brand,#2952ff);color:#fff' : ''), onclick: () => onpick(v) }, t)));
-function roomsEditor(c, redraw, usedNames = () => []) {
+// v0.43 (test): one tick-list of rooms. Ticking adds the room to
+// circuit.diagram.roomList (same format: name, lights, sw1, sw2pairs, swi,
+// wiring); each ticked room gets a compact row; unticking removes it.
+export const TICK_ROOMS = ['Kitchen', 'Living room', 'Dining room', 'Hall', 'Landing', 'Stairs', 'Bedroom 1', 'Bedroom 2', 'Bedroom 3', 'Bedroom 4', 'Bathroom', 'En-suite', 'WC', 'Utility', 'Garage', 'Loft', 'Outside'];
+// name -> circuit number, for rooms on OTHER lighting circuits of this job
+export function roomsOnOtherCircuits(all, except) {
+  const m = {};
+  for (const x of all) { if (!x || x === except || !x.diagram || !Array.isArray(x.diagram.roomList)) continue;
+    for (const r of x.diagram.roomList) if (r && r.name && !m[String(r.name).trim()]) m[String(r.name).trim()] = String(x.num || '?'); }
+  return m;
+}
+export function defaultRoom(name, wiring = 'loop-in') { return { name, lights: 1, sw1: 1, sw2pairs: 0, swi: 0, wiring }; }
+export function roomIsDefault(r, wiring = 'loop-in') { const d = defaultRoom(r.name, wiring); return ['lights', 'sw1', 'sw2pairs', 'swi', 'wiring'].every((k) => String(r[k] ?? '') === String(d[k])); }
+function roomsEditor(c, redraw, usedNames = () => [], otherMap = () => ({})) {
   const box = h('div', { class: 'roomsed', style: 'margin:8px 0 4px' });
   const list = () => (c.diagram && Array.isArray(c.diagram.roomList) ? c.diagram.roomList : []);
   const store = (l) => { const d = { ...(c.diagram || {}) }; if (l.length) d.roomList = l; else delete d.roomList; if (Object.keys(d).length) c.diagram = d; else delete c.diagram; changed(); redraw(); };
+  const defW = () => { const l = list(); return (l[0] && l[0].wiring) || 'loop-in'; };
   const stepper = (val, label, onset, min = 0, max = 10) => { const out = h('span', { class: 'stepval', style: 'min-width:1.6em;text-align:center;font-weight:700' }, String(val));
     const st = (dv) => () => { const n = Math.max(min, Math.min(max, (parseInt(out.textContent, 10) || 0) + dv)); out.textContent = String(n); onset(n); };
-    return h('div', { class: 'rstep', style: 'display:flex;align-items:center;gap:6px' }, h('button', { class: 'stepbtn', type: 'button', 'aria-label': label + ', one fewer', onclick: st(-1) }, '\u2212'), out, h('button', { class: 'stepbtn', type: 'button', 'aria-label': label + ', one more', onclick: st(1) }, '+')); };
-  const row = (label, ctl) => h('div', { style: 'display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:10px' }, h('span', { style: 'white-space:normal' }, label), ctl);
-  let openPicker = -1; let otherFor = -1;
+    return h('div', { class: 'rstep', style: 'display:flex;align-items:center;gap:6px' }, h('button', { class: 'stepbtn', type: 'button', style: 'min-width:44px;min-height:44px', 'aria-label': label + ', one fewer', onclick: st(-1) }, '\u2212'), out, h('button', { class: 'stepbtn', type: 'button', style: 'min-width:44px;min-height:44px', 'aria-label': label + ', one more', onclick: st(1) }, '+')); };
+  const chipCss = (on) => 'flex:1 1 auto;min-height:44px;padding:6px 10px;white-space:normal' + (on ? ';background:var(--brand,#2952ff);border-color:var(--brand,#2952ff);color:#fff' : '');
+  let typing = false;
   const draw = () => {
-    const l = list(); const note = roomPointsNote(c);
-    const here = l.map((r) => r.name).filter(Boolean);
+    const l = list(); const names = l.map((r) => r.name); const other = otherMap();
+    const job = [...new Set([...usedNames(), ...Object.keys(other)])].filter((n) => n && !TICK_ROOMS.includes(n));
+    const extra = names.filter((n) => n && !TICK_ROOMS.includes(n) && !job.includes(n));
+    const tick = async (n) => { const i = names.indexOf(n);
+      if (i < 0) { store([...list(), defaultRoom(n, defW())]); draw(); return; }
+      const r = l[i]; if (!roomIsDefault(r, defW())) { const ok = await modal('Remove ' + n + '?', h('p', { class: 'note' }, 'Its lights, switches and wiring will be cleared.'), [{ label: 'Keep', value: false }, { label: 'Remove', value: true, cls: 'primary' }]); if (!ok) return; }
+      store(list().filter((x) => x.name !== n)); draw(); };
+    const roomRow = (r) => { const i = list().findIndex((x) => x.name === r.name);
+      const upd = (patch, again = false) => { const nl = list().map((x, j) => (j === i ? { ...x, ...patch } : x)); store(nl); if (again) draw(); };
+      const k = swKind(r);
+      const swCount = k === 'sw1' ? ['1-way switches', +r.sw1 || 1, (n) => upd({ sw1: n }), 1, 4] : k === 'sw2' ? ['2-way pairs', +r.sw2pairs || 1, (n) => upd({ sw2pairs: n }), 1, 3] : k === 'sw2i' ? ['Intermediates', +r.swi || 1, (n) => upd({ swi: n }), 1, 4] : null;
+      return h('div', { class: 'roomrow', style: 'border:1px solid var(--line);border-radius:10px;padding:8px 10px;margin:0 0 8px' },
+        h('b', { style: 'display:block;white-space:normal;word-break:break-word' }, r.name),
+        h('div', { style: 'display:flex;flex-wrap:wrap;gap:6px 14px;align-items:center;margin-top:4px' },
+          h('div', { style: 'display:flex;align-items:center;gap:6px' }, h('span', {}, 'Lights'), stepper(+r.lights || 0, r.name + ' lights', (n) => upd({ lights: n }), 0, 10)),
+          swCount ? h('div', { style: 'display:flex;align-items:center;gap:6px' }, h('span', { style: 'white-space:normal' }, swCount[0]), stepper(swCount[1], r.name + ' ' + swCount[0], swCount[2], swCount[3], swCount[4])) : null),
+        h('div', { class: 'segs', role: 'group', 'aria-label': r.name + ' switch type', style: 'display:flex;flex-wrap:wrap;gap:6px;margin-top:6px' },
+          [['sw1', '1-way'], ['sw2', '2-way'], ['sw2i', '2-way + int'], ['none', 'None']].map(([v, t]) => h('button', { type: 'button', class: 'btn ghost seg' + (v === k ? ' on' : ''), 'aria-pressed': String(v === k), style: chipCss(v === k), onclick: () => upd(v === 'sw1' ? { sw1: Math.max(1, +r.sw1 || 1), sw2pairs: 0, swi: 0 } : v === 'sw2' ? { sw1: 0, sw2pairs: Math.max(1, +r.sw2pairs || 1), swi: 0 } : v === 'sw2i' ? { sw1: 0, sw2pairs: Math.max(1, +r.sw2pairs || 1), swi: Math.max(1, +r.swi || 1) } : { sw1: 0, sw2pairs: 0, swi: 0 }, true) }, t))),
+        h('div', { class: 'segs', role: 'group', 'aria-label': r.name + ' wiring', style: 'display:flex;flex-wrap:wrap;gap:6px;margin-top:6px' },
+          [['loop-in', 'Loop-in'], ['junction box', 'JB'], ['jb-switch', 'JB to switch']].map(([v, t]) => { const cur = ['junction box', 'jb-switch'].includes(r.wiring) ? r.wiring : 'loop-in'; return h('button', { type: 'button', class: 'btn ghost seg' + (v === cur ? ' on' : ''), 'aria-pressed': String(v === cur), style: chipCss(v === cur), onclick: () => upd({ wiring: v }, true) }, t); }))); };
+    const tickRow = (n) => { const on = names.includes(n); const elsewhere = other[n];
+      return [h('label', { class: 'roomtick', style: 'display:flex;align-items:center;gap:10px;min-height:48px;padding:4px 2px;border-top:1px solid var(--line)' + (elsewhere && !on ? ';color:#9aa0aa' : '') },
+        h('input', { type: 'checkbox', checked: on ? true : null, 'aria-label': n, style: 'width:24px;height:24px;flex:none', onchange: (e) => { e.target.checked = on; tick(n); } }),
+        h('span', { style: 'flex:1;white-space:normal;word-break:break-word' + (on ? ';font-weight:700' : '') }, n),
+        elsewhere ? h('span', { class: 'note', style: 'margin:0;white-space:normal;text-align:right' }, 'on circuit ' + elsewhere) : null),
+      on ? roomRow(l[names.indexOf(n)]) : null]; };
+    const note = roomPointsNote(c);
     fill(box, [h('b', { style: 'display:block;margin:6px 0 2px' }, 'Rooms on this circuit'),
-      h('p', { class: 'note', style: 'margin:0 0 6px' }, l.length ? 'Each room is drawn in its own box, in this order, with the feed running room to room.' : 'Add each room to draw its lights and switches in their own box.'),
-      ...l.map((r, i) => {
-        const upd = (patch, again = false) => { const nl = list().map((x, j) => (j === i ? { ...x, ...patch } : x)); store(nl); if (again) draw(); };
-        const k = swKind(r);
-        const used = usedNames().filter((n) => !here.includes(n) || n === r.name);
-        const common = COMMON_ROOMS.filter((n) => !used.includes(n));
-        const choose = (n) => { openPicker = -1; otherFor = -1; upd({ name: n }, true); };
-        const btn = (n) => h('button', { type: 'button', class: 'btn ghost roomopt' + (n === r.name ? ' on' : ''), style: 'min-height:44px;padding:8px 10px;white-space:normal;text-align:left' + (n === r.name ? ';background:var(--brand,#2952ff);border-color:var(--brand,#2952ff);color:#fff' : ''), onclick: () => choose(n) }, n);
-        const picker = openPicker === i ? h('div', { class: 'roompick', style: 'border:1px solid var(--line);border-radius:10px;padding:8px;margin-top:6px' },
-          used.length ? h('div', { class: 'note', style: 'margin:0 0 4px;font-weight:700' }, 'Used in this job') : null,
-          used.length ? h('div', { style: 'display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px' }, used.map(btn)) : null,
-          h('div', { class: 'note', style: 'margin:0 0 4px;font-weight:700' }, 'Common rooms'),
-          h('div', { style: 'display:flex;flex-wrap:wrap;gap:6px' }, common.map(btn), h('button', { type: 'button', class: 'btn ghost', style: 'min-height:44px;padding:8px 10px', onclick: () => { openPicker = -1; otherFor = i; draw(); const t = box.querySelector('.roomother'); if (t) t.focus(); } }, 'Other\u2026'))) : null;
-        const isOther = otherFor === i || (r.name && !COMMON_ROOMS.includes(r.name) && !usedNames().includes(r.name));
-        return h('div', { class: 'roomrow', style: 'border:1px solid var(--line);border-radius:10px;padding:10px;margin:0 0 10px' },
-          h('div', { style: 'display:flex;justify-content:space-between;align-items:center;gap:8px' }, h('b', {}, 'Room ' + (i + 1)),
-            h('button', { class: 'btn ghost', type: 'button', 'aria-label': 'Remove room ' + (i + 1), style: 'padding:6px 10px', onclick: () => { store(list().filter((_, j) => j !== i)); openPicker = -1; draw(); } }, 'Remove')),
-          h('button', { type: 'button', class: 'btn ghost roomname', 'aria-expanded': String(openPicker === i), style: 'width:100%;margin-top:6px;min-height:48px;justify-content:space-between;display:flex;align-items:center;white-space:normal;text-align:left', onclick: () => { openPicker = openPicker === i ? -1 : i; draw(); } },
-            h('span', { style: r.name ? 'font-weight:700' : 'color:#9aa0aa' }, r.name || 'Choose room'), h('span', { 'aria-hidden': 'true' }, openPicker === i ? '\u25b4' : '\u25be')),
-          picker,
-          isOther && openPicker !== i ? h('label', { class: 'f', style: 'margin-top:6px' }, h('span', {}, 'Room name'), h('input', { class: 'roomother', value: r.name || '', placeholder: 'Type the room name', 'aria-label': 'Room name', onchange: (e) => { otherFor = -1; upd({ name: e.target.value.trim() }); } })) : null,
-          row('Lights', stepper(+r.lights || 0, 'Lights', (n) => { upd({ lights: n }); const nb = box.querySelector('.roomsnote'); const t = roomPointsNote(c); if (nb) { nb.textContent = t; nb.style.display = t ? '' : 'none'; } }, 0, 10)),
-          h('div', { style: 'margin-top:10px' }, h('span', { class: 'note', style: 'display:block;margin:0 0 4px' }, 'Switch'),
-            segs([['sw1', '1-way'], ['sw2', '2-way'], ['sw2i', '2-way + intermediate'], ['none', 'None']], k, 'Switch type', (v) => upd(v === 'sw1' ? { sw1: Math.max(1, +r.sw1 || 1), sw2pairs: 0, swi: 0 } : v === 'sw2' ? { sw1: 0, sw2pairs: Math.max(1, +r.sw2pairs || 1), swi: 0 } : v === 'sw2i' ? { sw1: 0, sw2pairs: Math.max(1, +r.sw2pairs || 1), swi: Math.max(1, +r.swi || 1) } : { sw1: 0, sw2pairs: 0, swi: 0 }, true))),
-          k === 'sw1' ? row('How many 1-way switches', stepper(+r.sw1 || 1, '1-way switches', (n) => upd({ sw1: n }), 1, 4)) : null,
-          k === 'sw2' || k === 'sw2i' ? row('2-way pairs (2 switches each)', stepper(+r.sw2pairs || 1, '2-way pairs', (n) => upd({ sw2pairs: n }), 1, 3)) : null,
-          k === 'sw2i' ? row('Intermediates', stepper(+r.swi || 1, 'Intermediates', (n) => upd({ swi: n }), 1, 4)) : null,
-          h('div', { style: 'margin-top:10px' }, h('span', { class: 'note', style: 'display:block;margin:0 0 4px' }, 'Wired with'),
-            segs([['loop-in', 'Loop-in (ceiling rose)'], ['junction box', 'Junction box'], ['jb-switch', 'JB to switch, then to the lights']], ['junction box', 'jb-switch'].includes(r.wiring) ? r.wiring : 'loop-in', 'Wiring method', (v) => upd({ wiring: v }, true))));
-      }),
-      h('p', { class: 'note roomsnote', style: 'margin:0 0 6px;color:#9aa0aa' + (note ? '' : ';display:none') }, note),
-      h('button', { class: 'btn', type: 'button', id: 'addroom-' + (c.num || ''), style: 'width:100%;min-height:52px;font-size:17px;font-weight:700', onclick: () => { store([...list(), nextRoom(list())]); openPicker = list().length - 1; draw(); const rows = box.querySelectorAll('.roomrow'); if (rows.length) rows[rows.length - 1].scrollIntoView({ block: 'start', behavior: 'smooth' }); } }, l.length ? '+ Add next room' : '+ Add a room')]);
+      h('p', { class: 'note', style: 'margin:0 0 6px' }, 'Tick each room on this circuit. The feed runs room to room in the order ticked.'),
+      job.length ? h('div', { class: 'note', style: 'margin:6px 0 2px;font-weight:700' }, 'Used in this job') : null,
+      ...[...job, ...extra].flatMap(tickRow),
+      h('div', { class: 'note', style: 'margin:10px 0 2px;font-weight:700' }, 'Common rooms'),
+      ...TICK_ROOMS.flatMap(tickRow),
+      typing ? h('label', { class: 'f', style: 'margin-top:6px' }, h('span', {}, 'Room name'), h('input', { class: 'roomother', placeholder: 'Type the room name', 'aria-label': 'Room name', onchange: (e) => { const n = e.target.value.trim(); typing = false; if (n && !list().some((x) => x.name === n)) store([...list(), defaultRoom(n, defW())]); draw(); } }))
+        : h('button', { class: 'btn ghost', type: 'button', id: 'roomother-' + (c.num || ''), style: 'width:100%;min-height:48px;margin-top:6px', onclick: () => { typing = true; draw(); const t = box.querySelector('.roomother'); if (t) t.focus(); } }, 'Other\u2026'),
+      h('p', { class: 'note roomsnote', style: 'margin:6px 0;color:#9aa0aa' + (note ? '' : ';display:none') }, note)]);
   };
   draw();
   return box;

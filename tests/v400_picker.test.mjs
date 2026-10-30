@@ -20,11 +20,11 @@ test('switch-fed room draws JB, switch, lights and adds the key entry', () => {
   assert.ok(t.some((x) => /Switch-fed: JB to switch/.test(x)));
   assert.ok(t.some((x) => /strappers/.test(x)));
 });
-test('picker: circuit dropdown, common rooms list, + Add next room', () => {
+test('picker: circuit dropdown, room tick-list', () => {
   const s = readFileSync(new URL('../js/certui.js', import.meta.url), 'utf8');
   assert.match(s, /id: 'extrascircuit'/);
-  for (const r of ['Kitchen', 'Bedroom 5', 'En-suite', 'Conservatory', 'Outside']) assert.ok(s.includes(`'${r}'`), r);
-  assert.match(s, /Other\\u2026/); assert.match(s, /\+ Add next room/); assert.match(s, /Used in this job/);
+  for (const r of ['Kitchen', 'Bedroom 4', 'En-suite', 'Loft', 'Outside']) assert.ok(s.includes(`'${r}'`), r);
+  assert.match(s, /Other\\u2026/); assert.match(s, /type: 'checkbox'/); assert.match(s, /'on circuit '/); assert.match(s, /Used in this job/);
 });
 test('jb-switch rooms share ONE junction box; other rooms still daisy-chain', () => {
   const c = diagramEICRooms(); const l = c.boards[0].circuits.find((x) => String(x.num) === '2');
