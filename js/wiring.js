@@ -525,8 +525,8 @@ export function layout(model, { W = 380, font = 12, screen = false, cableTable =
       const ci = controlVias(bdSrc(), val(c.num)); let cx = tx + F * 0.4; const cy = y - 2 + hh + 4; const cw = F * 2.2, chh = F * 1.6;
       if (ci.clock) { used.add('timeclock'); clockSym(sh, cx + F * 0.8, cy + chh / 2, F * 0.75); T(sh, cx + F * 0.8, cy + chh + small * 1.1, 'TC', { anchor: 'middle', bold: true, size: small * 0.85 }); L(sh, cx + F * 1.55, cy + chh / 2, cx + F * 2.4, cy + chh / 2, { w: 0.9, color: COL.grey }); cx += F * 2.4; }
       else if (ci.relay) { T(sh, cx, cy + chh / 2 + small * 0.35, 'Relay', { size: small * 0.85, bold: true }); L(sh, cx + F * 2.6, cy + chh / 2, cx + F * 3.2, cy + chh / 2, { w: 0.9, color: COL.grey }); cx += F * 3.2; }
-      for (const n of sw) { if (cx + cw + F * 2.5 > W - 6) break; used.add('coil'); coilSym(sh, cx, cy, cw, chh); T(sh, cx + cw / 2, cy + chh + small * 1.1, tags[n] || 'KM', { anchor: 'middle', bold: true, size: small * 0.85 }); cx += cw + F * 1.2; }
-      hh += chh + small * 1.4 + 6;
+      for (const n of sw) { if (cx + cw + F * 2.5 > W - 6) break; used.add('coil'); coilSym(sh, cx, cy, cw, chh); T(sh, cx + cw / 2 + small * 0.4, cy + chh + small * 1.7, tags[n] || 'KM', { anchor: 'middle', bold: true, size: small * 0.85 }); cx += cw + F * 1.2; }
+      hh += chh + small * 2 + 6;
     }
     // points
     const pc = pointCount(c); const kind0 = pointKind(c); const kind = iso && iso.fcu && (kind0 === 'fcu' || kind0 === 'point') ? 'appliance' : kind0; // v0.43.1: the FCU isolator IS the spur, the load is the heater itself
