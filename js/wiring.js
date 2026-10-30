@@ -115,7 +115,7 @@ export function socketSingles(c) {
   if (!Number.isFinite(n) || n <= 0) return 0;
   const pc = pointCount(c); return pc.known ? Math.min(n, pc.n) : n;
 }
-export const roomsOf = (c) => (roomListOf(c) ? '' : val(c && c.diagram && c.diagram.rooms));
+export const roomsOf = (c) => { if (roomListOf(c)) return ''; const v = val(c && c.diagram && c.diagram.rooms); return /[a-z]/i.test(v) ? v : ''; }; /* v0.43.3: old certs stored a room COUNT here */
 // v0.39 (test): rooms on a lighting circuit, each drawn in its own box.
 // circuit.diagram.roomList = [{ name, lights, sw1, sw2pairs, swi, wiring }]
 // (optional; when present it takes over from the rooms text and switch counts).
@@ -322,7 +322,7 @@ export function circuitLines(c, spd = '') {
   const k0 = pointKind(c); const io = isolatorOf(c); const k = io && io.fcu && (k0 === 'fcu' || k0 === 'point') ? 'appliance' : k0; const si = switchInfo(c);
   return { title: `${val(c.num) || '?'}  ${val(c.desc) || 'No description'}${room}`, spare: false, device, devShort: dev || NA, devKind: kind, noPoints: !pc.known,
     rooms: roomListOf(c), roomNote: roomPointsNote(c),
-    rows: [...pre, ['Cable', cable], ...(roomListOf(c) ? [['Rooms', roomListOf(c).length + (roomListOf(c).length === 1 ? ' room' : ' rooms')]] : []), ['Points', pc.known ? (roomFanTotal(c) && pc.n > roomFanTotal(c) ? `${pc.n - roomFanTotal(c)} \u00d7 ${pc.n - roomFanTotal(c) === 1 ? KIND_ONE[k] : KIND_PLURAL[k]} + ${roomFanTotal(c)} \u00d7 fan${roomFanTotal(c) === 1 ? '' : 's'}` : `${pc.n} \u00d7 ${pc.n === 1 ? KIND_ONE[k] : KIND_PLURAL[k]}`) : ''], ...(si ? [['Switches', si.text]] : [])] };
+    rows: [...pre, ['Cable', cable], ...(roomListOf(c) ? [['Rooms', roomListOf(c).length + (roomListOf(c).length === 1 ? ' room' : ' rooms')]] : []), ['Points', pc.known ? (roomFanTotal(c) && pc.n === roomFanTotal(c) + roomLightTotal(c) ? `${pc.n - roomFanTotal(c)} \u00d7 ${pc.n - roomFanTotal(c) === 1 ? KIND_ONE[k] : KIND_PLURAL[k]} + ${roomFanTotal(c)} \u00d7 fan${roomFanTotal(c) === 1 ? '' : 's'}` : roomFanTotal(c) ? `${pc.n} \u00d7 point${pc.n === 1 ? '' : 's'}` : `${pc.n} \u00d7 ${pc.n === 1 ? KIND_ONE[k] : KIND_PLURAL[k]}`) : ''], ...(si ? [['Switches', si.text]] : [])] };
 }
 
 export function layout(model, { W = 380, font = 12, screen = false, cableTable = false, legend = true } = {}) {
@@ -485,8 +485,8 @@ export function layout(model, { W = 380, font = 12, screen = false, cableTable =
     for (const [lab, v] of info.rows) hh += kv(sh, tx, y - 2 + hh, lab, lab === 'Cable' && v ? cl + '  ' + v : v, tw);
     const reds = info.spare ? [] : diagramFlags(c, ctx);
     if (reds.length) hh += textLines(sh, tx, y - 2 + hh, 'Check: ' + reds.join('; '), tw, { size: small, bold: true, color: COL.red });
-    if (!screen && !info.spare && !info.spd && info.noPoints && !info.rooms && !spur) hh += textLines(sh, tx, y - 2 + hh, 'Points served not recorded', tw, { size: small, bold: screen, color: COL.amber });
     const fed = !info.spare && feeds[String(val(c.num)).toLowerCase()];
+    if (!screen && !info.spare && !info.spd && info.noPoints && !info.rooms && !spur && !fed) hh += textLines(sh, tx, y - 2 + hh, 'Points served not recorded', tw, { size: small, bold: screen, color: COL.amber });
     if (fed) hh += textLines(sh, tx, y - 2 + hh, 'Feeds ' + fed.join(', ') + ' (see ' + fed.map((x) => x.split(' (')[0]).join(', ') + ')', tw, { size: small, bold: true, color: COL.brand });
     // contactor (or time clock) between the breaker and the load
     const fx0 = tx - gap / 2; let feedTop = y + F * 0.6; let kh0 = 0;
@@ -586,7 +586,7 @@ export function layout(model, { W = 380, font = 12, screen = false, cableTable =
       T(sh, cx + S, t + F * 1.1, info.spd, { bold: true, size: small });
       ph = sh0 + 6;
     }
-    if (screen && !info.spare && !info.spd && info.noPoints && !info.rooms) ph += textLines(sh, tx, y + hh + 2, 'Add points served to draw sockets/lights', tw, { size: small, color: COL.amber }) + 4;
+    if (screen && !info.spare && !info.spd && info.noPoints && !info.rooms && !fed) ph += textLines(sh, tx, y + hh + (ph ? 6 + ph : 2), 'Add points served to draw sockets/lights', tw, { size: small, color: COL.amber }) + 4;
     // minor works: new spur(s) branching off the ring, in bold brand colour
     if (spur && !info.spare && !info.spd) {
       const fx = tx - gap / 2, S = F * 1.5, step = S + 6;
@@ -625,7 +625,7 @@ export function layout(model, { W = 380, font = 12, screen = false, cableTable =
   function roomsSection(sh, info, tx, top, tw, feedTop, c) {
     const S = F * 1.5, step = S + 8, fx = tx - gap / 2, G = { w: 0.9, color: COL.grey };
     const shared = info.rooms.some((r) => r.wiring === 'jb-switch');
-    const nSw = info.rooms.filter((r) => r.wiring === 'jb-switch').length; const gut = shared ? Math.max(16, 8 + 5 * nSw) : 6; const bx = tx + gut, bw = tw - gut; let swK = 0; let y0 = top; let lastFeedY = feedTop;
+    const nSw = info.rooms.filter((r) => r.wiring === 'jb-switch').length; const gut = shared ? Math.max(16, 8 + 5 * nSw) + small * 1.3 : 6; /* v0.43.3: room for cable tags right of the JB lanes */ const bx = tx + gut, bw = tw - gut; let swK = 0; let y0 = top; let lastFeedY = feedTop;
     if (screen && info.roomNote) y0 += textLines(sh, tx, y0 - 4, info.roomNote, tw, { size: small, color: COL.na }) + 4;
     // switch-fed rooms: ONE junction box for the circuit, a separate cable from it to each such room's switch
     let jbX = 0, jbLastY = 0;
@@ -659,7 +659,7 @@ export function layout(model, { W = 380, font = 12, screen = false, cableTable =
       // the circuit feed: down the left, then into this room
       L(sh, fx, lastFeedY, fx, feedIn, { w: 1.2, color: COL.line });
       L(sh, fx, feedIn, jb ? ix : ix, feedIn, { w: 1.2, color: COL.line });
-      T(sh, fx + 3, feedIn - 3, cable('Circuit ' + (val(c.num) || '?'), nm + (jb ? ' JB' : ' first rose'), cableLabel(c).split(' \u00b7 ')[0]), { size: small * 0.75, bold: true, color: COL.brand });
+      T(sh, shared ? tx + 4 + 5 * nSw : fx + 3, feedIn - 3, cable('Circuit ' + (val(c.num) || '?'), nm + (jb ? ' JB' : ' first rose'), cableLabel(c).split(' \u00b7 ')[0]), { size: small * 0.75, bold: true, color: COL.brand });
       lastFeedY = feedIn;
       y0 += bh + 8;
     });
@@ -862,17 +862,29 @@ export function diagramSvg(cert, opts = {}) {
 export function drawDiagramPdf(k, cert, newPage, { bottom = 16 } = {}) {
   const L = layout(diagramModel(cert), { W: 560, font: 11, cableTable: true });
   const s = k.cw / L.W; const pt = s / 0.3528; const d = k.doc;
-  for (const b of L.blocks) {
-    if (k.y + b.h * s > k.H - bottom) newPage();
-    const ox = k.x0, oy = k.y;
+  // draw the shapes of one block whose layout y lies in [y0, y1), shifted up by y0; lines and boxes are clipped
+  const draw = (b, y0, y1) => { const ox = k.x0, oy = k.y - y0 * s; const cy = (v) => Math.max(y0, Math.min(y1, v));
     for (const z of b.shapes) {
-      if (z.t === 'line') k.line(ox + z.x1 * s, oy + z.y1 * s, ox + z.x2 * s, oy + z.y2 * s, { w: z.w * s, color: z.color, dash: z.dash ? z.dash.map((v) => v * s) : null });
-      else if (z.t === 'rect') { if (!z.lw) { d.setFillColor(...z.fill); d.rect(ox + z.x * s, oy + z.y * s, z.w * s, z.h * s, 'F'); } else k.rect(ox + z.x * s, oy + z.y * s, z.w * s, z.h * s, { lw: z.lw * s, color: z.color, fill: z.fill }); }
-      else if (z.t === 'circle') { d.setDrawColor(...z.color); d.setLineWidth(z.lw * s); if (z.fill) { d.setFillColor(...z.fill); d.circle(ox + z.cx * s, oy + z.cy * s, z.r * s, 'FD'); } else d.circle(ox + z.cx * s, oy + z.cy * s, z.r * s, 'S'); }
-      else { k.font(z.size * pt, z.bold, z.color); d.text(String(z.txt), ox + z.x * s, oy + z.y * s, { align: z.anchor === 'middle' ? 'center' : 'left', baseline: 'alphabetic' }); }
-    }
-    k.y += b.h * s;
-  }
+      if (z.t === 'line') { const lo = Math.min(z.y1, z.y2), hi = Math.max(z.y1, z.y2); if (hi < y0 || lo > y1) continue;
+        let { x1, y1: a1, x2, y2: a2 } = z; if (a1 !== a2) { const f = (v) => x1 + (x2 - x1) * ((v - a1) / (a2 - a1)); const n1 = cy(a1), n2 = cy(a2); [x1, x2] = [f(n1), f(n2)]; a1 = n1; a2 = n2; }
+        k.line(ox + x1 * s, oy + a1 * s, ox + x2 * s, oy + a2 * s, { w: z.w * s, color: z.color, dash: z.dash ? z.dash.map((v) => v * s) : null }); }
+      else if (z.t === 'rect') { if (z.y + z.h < y0 || z.y > y1) continue; const ry = cy(z.y), rh = cy(z.y + z.h) - ry;
+        if (!z.lw) { d.setFillColor(...z.fill); d.rect(ox + z.x * s, oy + ry * s, z.w * s, rh * s, 'F'); } else k.rect(ox + z.x * s, oy + ry * s, z.w * s, rh * s, { lw: z.lw * s, color: z.color, fill: z.fill }); }
+      else if (z.t === 'circle') { if (z.cy < y0 || z.cy >= y1) continue; d.setDrawColor(...z.color); d.setLineWidth(z.lw * s); if (z.fill) { d.setFillColor(...z.fill); d.circle(ox + z.cx * s, oy + z.cy * s, z.r * s, 'FD'); } else d.circle(ox + z.cx * s, oy + z.cy * s, z.r * s, 'S'); }
+      else { if (z.y < y0 || z.y >= y1) continue; k.font(z.size * pt, z.bold, z.color); d.text(String(z.txt), ox + z.x * s, oy + z.y * s, { align: z.anchor === 'middle' ? 'center' : 'left', baseline: 'alphabetic' }); }
+    } };
+  // v0.43.3: a block taller than a page (a lighting circuit with many rooms) is split at a clear gap, never clipped
+  const cutAt = (b, lim) => { const busy = []; for (const z of b.shapes) { if (z.t === 'text') busy.push([z.y - z.size, z.y + z.size * 0.3]); else if (z.t === 'circle') busy.push([z.cy - z.r - 1, z.cy + z.r + 1]); }
+    for (let y = lim; y > lim * 0.5; y -= 2) if (!busy.some(([a, c]) => y > a && y < c)) return y; return lim; };
+  L.blocks.forEach((b, i) => {
+    const nx = L.blocks[i + 1]; /* v0.43.3: keep a board / RCD heading with its first circuit */
+    if (!b.ref && nx && nx.ref && b.h < 120 && k.y + (b.h + Math.min(nx.h, 200)) * s > k.H - bottom) newPage();
+    const huge = b.h * s > (k.H - bottom) * 0.8; /* taller than a page: split here rather than leave a blank page */
+    if (k.y + b.h * s > k.H - bottom && !(huge && k.H - bottom - k.y > 60)) newPage();
+    let y0 = 0;
+    while ((b.h - y0) * s > k.H - bottom - k.y) { const y1 = cutAt(b, y0 + (k.H - bottom - k.y) / s); if (y1 <= y0 + 10) break; draw(b, y0, y1); y0 = y1; newPage(); }
+    draw(b, y0, b.h); k.y += (b.h - y0) * s;
+  });
 }
 // On by default; cert.diagramPdf === false leaves it out of the PDF.
 export const diagramInPdf = (cert) => Boolean(cert) && cert.diagramPdf !== false && diagramHasCircuits(cert);
