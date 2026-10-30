@@ -6,7 +6,7 @@ import { APP_VERSION } from '../js/config.js';
 import { maxDemand, kindBoxes, ccuSockets, setCcuSocket, migrateCcu } from '../js/maxdemand.js';
 const read = (f) => readFileSync(new URL('../' + f, import.meta.url), 'utf8');
 const C = [{ k: 'cooking', qty: 1, value: 7, name: 'Hob' }, { k: 'cooking', qty: 1, value: 3 }];
-test('version 0.28.1', () => { assert.match(APP_VERSION, /^0\.(28\.1|29\.|3\d\.)/); assert.match(read('sw.js'), /sparky-v0\.(28\.1|29\.|3\d\.)/); });
+test('version 0.28.1', () => { assert.match(APP_VERSION, /^0\.(28\.1|29\.|[34]\d\.)/); assert.match(read('sw.js'), /sparky-v0\.(28\.1|29\.|[34]\d\.)/); });
 test('tick adds 5 A after diversity, shown in the cooking box', () => {
   const off = maxDemand(C).total; const L = setCcuSocket(C, true);
   assert.equal(ccuSockets(L), 1); assert.equal(Math.round((maxDemand(L).total - off) * 10) / 10, 5);

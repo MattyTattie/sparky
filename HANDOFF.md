@@ -251,6 +251,9 @@ Open points
 - Runtime table at 100/75/50/25% inverter load (Results + PDF).
 - Tests: tests/v350.test.mjs; shots: tests/screens_v350.py → /workspace/sparky-shots/v0.35.0.
 
+## v0.40.0 — Room picker, switch-fed JB, arrange room boxes (live 30 Oct 2026)
+'Switches and rooms' now picks one circuit from a dropdown (defaults to the first lighting circuit). Each room: name from a list (used in this job first, common UK rooms, Other… to type), lights −/+, tap-to-choose switch type and count, wiring Loop-in / Junction box / JB to switch then lights; big '+ Add next room'. New optional roomList wiring value 'jb-switch': ONE shared circuit JB with a cable to each switch-fed room's first switch, switch to lights, light to light (other rooms still daisy-chain); key entry. Arrange room boxes (drag by handle or arrows, snaps into slots) saves optional circuit.diagram.layout.order; Reset layout removes it; screen and PDF follow. Room boxes are lighting only (socket circuits keep rooms text + singles). Cache sparky-v0.40.0. Version-pinned tests widened to 0.4x. 467/467 node tests.
+
 ## v0.39.0 — Lighting rooms, IEC-style symbols, twin/single sockets (live 30 Oct 2026)
 Lighting circuits can list rooms (optional circuit.diagram.roomList): each room drawn in its own box with lights, loop-in ceiling roses or JB, switch drops, 2-way strappers and intermediates, feed daisy-chained room to room; rooms editor in 'Switches and rooms'. Point symbols redrawn closer to BS EN 60617 (socket semicircle on bar, switch levers 1-way/2-way/intermediate, FCU fuse, immersion element, detector triangle, SPD box to earth, contactor key matches drawing). Sockets draw as twins by default; optional circuit.diagram.singles (−/+ in 'Switches and rooms') draws that many singles; key shows Twin socket / Socket (single). Cache sparky-v0.39.0. Version-pinned tests widened to 0.39.x. 462/462 node tests.
 

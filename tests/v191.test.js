@@ -4,7 +4,7 @@ import { CABLES, CABLE_TEMP, ARMOUR_MOHM_PER_M, ARMOUR_CSA } from '../js/cables.
 import { APP_VERSION } from '../js/config.js';
 
 test('v0.19.1 checked figures: H07RN-F 4F1A/4F3A, flex 60 °C, armour, 3-phase columns', () => {
-  assert.match(APP_VERSION, /^0\.(19\.1|2\d|3\d)/);
+  assert.match(APP_VERSION, /^0\.(19\.1|2\d|[34]\d)/);
   assert.equal(CABLES.h07.typical, undefined); assert.equal(CABLES.flex.typical, undefined);
   assert.ok(CABLES.tri.typical && CABLES.sycy.typical);
   assert.deepEqual([4, 25, 95].map((s) => CABLES.h07.methods.C.amps[s]), [30, 97, 192]);

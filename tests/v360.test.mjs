@@ -96,7 +96,7 @@ test('planRestore: newest wins, photos only replaced by a HIGHER version, damage
 
 test('v0.36 wiring: version, cache, update banner, job tags, landscape, check-private', () => {
   const r = (f) => fs.readFileSync(new URL('../' + f, import.meta.url), 'utf8');
-  assert.match(r('js/config.js'), /'0\.3[6789]\.\d beta'/); assert.match(r('sw.js'), /sparky-v0\.3[6789]\.\d/);
+  assert.match(r('js/config.js'), /'0\.(?:3[6789]|4\d)\.\d beta'/); assert.match(r('sw.js'), /sparky-v0\.(?:3[6789]|4\d)\.\d/);
   assert.match(r('sw.js'), /e\.data === 'skipWaiting'/);
   assert.match(r('js/main.js'), /Tap to update/); assert.match(r('js/main.js'), /controllerchange/);
   assert.match(r('js/app.js'), /rowtags/); assert.match(r('styles.css'), /orientation: landscape\) and \(max-height: 500px\)/);

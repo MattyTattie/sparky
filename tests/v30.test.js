@@ -55,7 +55,7 @@ test('T&E method A 2.5 mm² is 20 A (Table 4D5); 4E1A 2.5 mm² stays 26/31/34 A'
 });
 test('version 0.30.0 and reference files are cached offline', () => {
   assert.match(readFileSync('js/config.js', 'utf8'), /0\.(30\.[01]|3[1-9]\.\d)/);
-  const sw = readFileSync('sw.js', 'utf8'); assert.match(sw, /sparky-v0\.(30\.[01]|3[1-9]\.\d)/); assert.match(sw, /refui\.js/); assert.match(sw, /refdata\.js/);
+  const sw = readFileSync('sw.js', 'utf8'); assert.match(sw, /sparky-v0\.(30\.[01]|(?:3[1-9]|4\d)\.\d)/); assert.match(sw, /refui\.js/); assert.match(sw, /refdata\.js/);
   assert.match(readFileSync('js/main.js', 'utf8'), /refui\.js/);
 });
 
