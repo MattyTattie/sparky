@@ -79,7 +79,7 @@ const KIND_PLURAL = { socket: 'sockets', light: 'lights', cooker: 'cookers', sho
 const KIND_ONE = { socket: 'socket', light: 'light', cooker: 'cooker', shower: 'shower', alarm: 'alarm', immersion: 'immersion', ev: 'EV charger', fan: 'fan', fcu: 'FCU', appliance: 'fixed appliance', point: 'point' };
 // Optional per-circuit diagram extras: circuit.diagram = { rooms, sw1, sw2, swi }.
 // Old certs have none; a lighting circuit then gets one 1-way switch.
-const KEY_EXTRA = { jbsw: 'Switch-fed: JB to switch, looped switch to switch, each to its own lights', socket: 'Twin socket', socket1: 'Socket (single)', rose: 'Ceiling rose (loop-in)', jb: 'Junction box (JB)', strap: '2-way strappers (two wires)', iso: 'Local isolator: double pole switch-disconnector (// = 2 poles)', isofcu: 'Local isolator: fused connection unit (switched shows the blade)', isoccu: 'Cooker control unit: DP switch in a box, with its 13 A socket' };
+const KEY_EXTRA = { fanh: 'Humidistat (%RH) switching a fan', fant: 'Fan timer / overrun (T)', fani: 'Fan isolator', jbsw: 'Switch-fed: JB to switch, looped switch to switch, each to its own lights', socket: 'Twin socket', socket1: 'Socket (single)', rose: 'Ceiling rose (loop-in)', jb: 'Junction box (JB)', strap: '2-way strappers (two wires)', iso: 'Local isolator: double pole switch-disconnector (// = 2 poles)', isofcu: 'Local isolator: fused connection unit (switched shows the blade)', isoccu: 'Cooker control unit: DP switch in a box, with its 13 A socket' };
 // v0.43 (test): optional local isolator next to the load: circuit.diagram.isolator = { type, rating }.
 export const ISOLATORS = { dp20: '20 A DP switch', dp45: '45 A DP switch (cooker / shower)', sfcu: 'Switched FCU', ufcu: 'Unswitched FCU', rotary: 'Rotary isolator', ccu: 'Cooker control unit (CCU)' };
 const ISO_SHORT = { dp20: '20A DP', dp45: '45A DP', sfcu: 'SFCU', ufcu: 'FCU', rotary: 'Rotary isolator', ccu: '45A CCU' };
@@ -128,6 +128,7 @@ export function roomListOf(c) {
     const sw2pairs = cnt(r.sw2pairs, 3); const swi = sw2pairs ? cnt(r.swi, 4) : 0;
     const out = { i, name: val(r.name), lights: cnt(r.lights), sw1: cnt(r.sw1, 4), sw2pairs, swi, wiring: ROOM_WIRING[r.wiring] ? r.wiring : 'loop-in' };
     if (Array.isArray(r.split)) out.split = r.split; // v0.42: optional lights per switch
+    out.fans = cnt(r.fans, 2); out.fanCtl = FAN_CTL[r.fanCtl] ? r.fanCtl : 'humidistat'; /* v0.43.1: optional extractor fan(s) in the room */
     return out;
   });
 }
@@ -158,12 +159,16 @@ export function arrangedOrder(c) {
   return [...out, ...all.filter((i) => !seen.has(i))];
 }
 export const roomLightTotal = (c) => (roomListOf(c) || []).reduce((a, r) => a + r.lights, 0);
+// v0.43.1: optional room fan: room.fans (0-2), room.fanCtl (how it is switched)
+export const FAN_CTL = { humidistat: 'Humidistat', timer: 'Timer (overrun)', switch: 'Light switch', isolator: 'Isolator only' };
+export const roomFanTotal = (c) => (roomListOf(c) || []).reduce((a, r) => a + (r.fans || 0), 0);
+const ptsWord = (t, f) => (f ? `${t} point${t === 1 ? '' : 's'} (${t - f} light${t - f === 1 ? '' : 's'} + ${f} fan${f === 1 ? '' : 's'})` : `${t} light${t === 1 ? '' : 's'}`);
 // Screen-only note when the rooms' lights don't add up to Points served.
 export function roomPointsNote(c) {
   const rl = roomListOf(c); if (!rl) return '';
-  const t = roomLightTotal(c); const pc = pointCount(c);
-  if (!pc.known) return `Rooms add up to ${t} light${t === 1 ? '' : 's'}. Points served is not filled in.`;
-  return t === pc.n ? '' : `Rooms add up to ${t} light${t === 1 ? '' : 's'}, but Points served says ${pc.n}.`;
+  const f = roomFanTotal(c); const t = roomLightTotal(c) + f; const pc = pointCount(c);
+  if (!pc.known) return `Rooms add up to ${ptsWord(t, f)}. Points served is not filled in.`;
+  return t === pc.n ? '' : `Rooms add up to ${ptsWord(t, f)}, but Points served says ${pc.n}.`;
 }
 // How many symbols to draw: up to MAX_SYMBOLS, then "+ N more".
 export function pointCount(c) {
@@ -414,7 +419,7 @@ export function layout(model, { W = 380, font = 12, screen = false, cableTable =
   });
   // key: only the symbols this diagram uses
   if (used.size) {
-    const sh = []; const y = 10; const order = ['socket', 'socket1', 'light', 'rose', 'jb', 'jbsw', 'sw1', 'sw2', 'swi', 'strap', 'cooker', 'shower', 'alarm', 'immersion', 'ev', 'fan', 'fcu', 'appliance', 'point', 'contactor', 'coil', 'timeclock', 'iso', 'isofcu', 'isoccu', 'spd'];
+    const sh = []; const y = 10; const order = ['socket', 'socket1', 'light', 'rose', 'jb', 'jbsw', 'sw1', 'sw2', 'swi', 'strap', 'cooker', 'shower', 'alarm', 'immersion', 'ev', 'fan', 'fcu', 'appliance', 'point', 'contactor', 'coil', 'timeclock', 'iso', 'isofcu', 'isoccu', 'fanh', 'fant', 'fani', 'spd'];
     let hh = textLines(sh, 8, y, 'Key', W - 16, { bold: true });
     const S = F * 1.5; const colW = (W - 16) / 2; let col = 0, rowY = y + hh + 4, rowH = 0;
     for (const k of order.filter((k) => used.has(k))) {
@@ -425,6 +430,7 @@ export function layout(model, { W = 380, font = 12, screen = false, cableTable =
       else if (k === 'iso') { const yy = rowY + S / 2; rotH(sh, x - S * 0.1, yy, (o) => isoSym(o, x - S * 0.1, yy, S * 1.2, false)); }
       else if (k === 'isoccu') { const yy = rowY + S / 2; rotH(sh, x - S * 0.1, yy, (o) => isoSym(o, x - S * 0.1, yy, S * 1.2, false, true, true)); ccuSock(sh, x - S * 0.1 + S * 0.6, yy + S * 0.36, S * 0.8); }
       else if (k === 'isofcu') { const yy = rowY + S / 2; rotH(sh, x - S * 0.1, yy, (o) => isoSym(o, x - S * 0.1, yy, S * 1.2, true, true)); }
+      else if (k === 'fanh' || k === 'fant' || k === 'fani') { fanCtlSym(sh, x - S * 0.1, rowY + S / 2, S, k === 'fanh' ? '%RH' : k === 'fant' ? 'T' : 'ISO'); }
       else if (k === 'spd') { spdSym(sh, x + S / 2, rowY - 2, F * 0.75); }
       else if (k === 'rose') { L(sh, x + S / 2 - S * 0.6, rowY + S / 2, x + S / 2 + S * 0.6, rowY + S / 2, { w: 0.9, color: COL.grey }); C(sh, x + S / 2, rowY + S / 2, S * 0.17, { fill: COL.line, lw: 0.8 }); }
       else if (k === 'jb') { R(sh, x - S * 0.2, rowY + S * 0.05, S * 1.4, S * 0.9, { fill: [255, 255, 255] }); T(sh, x + S * 0.5, rowY + S * 0.5 + small * 0.3, 'JB', { anchor: 'middle', bold: true, size: small * 0.85 }); }
@@ -637,7 +643,7 @@ export function layout(model, { W = 380, font = 12, screen = false, cableTable =
       const how = ROOM_WIRING[r.wiring] || ROOM_WIRING['loop-in'];
       const sws = [r.sw1 && `${r.sw1} \u00d7 1-way`, r.sw2pairs && (r.sw2pairs === 1 ? '2-way' : `${r.sw2pairs} \u00d7 2-way`), r.swi && `${r.swi} \u00d7 intermediate`].filter(Boolean).join(' + ') || 'No switch';
       ry += textLines(rs, ix, ry, `${r.lights} light${r.lights === 1 ? '' : 's'} \u00b7 ${sws} \u00b7 ${how}`, iw, { size: small * 0.92, color: COL.grey });
-      if (r.wiring === 'jb-switch') { const fy = jbSwitchRoom(rs, r, ix, iw, ry, S, G); const bh = fy.bottom - y0 + 6;
+      if (r.wiring === 'jb-switch') { const fy = jbSwitchRoom(rs, r, ix, iw, ry, S, G); fy.bottom = fanRow(rs, r, ix, iw, fy.bottom, S, G); const bh = fy.bottom - y0 + 6;
         R(sh, bx, y0, bw, bh, { fill: COL.fill, color: [150, 160, 190] }); sh.push(...rs);
         // v0.43: its own cable from the JB to this room (no shared trunk)
         const lx = tx + 3 + (nSw - 1 - swK) * 5; swK++; /* v0.43.1: top room innermost lane, so tails never cross */ L(sh, lx, jbLastY, lx, fy.feedIn, { w: 1.2, color: COL.line }); L(sh, lx, fy.feedIn, fy.swX, fy.feedIn, { w: 1.2, color: COL.line });
@@ -646,7 +652,7 @@ export function layout(model, { W = 380, font = 12, screen = false, cableTable =
       // v0.42: each switch (or 2-way pair) controls its own lights; see roomBody
       const jb = r.wiring === 'junction box';
       const fb = roomBody(rs, r, ix, iw, ry, S, G, jb ? 'jb' : 'loop');
-      const feedIn = fb.feedIn; const bottom = fb.bottom;
+      const feedIn = fb.feedIn; const bottom = fanRow(rs, r, ix, iw, fb.bottom, S, G);
       const bh = bottom - y0 + 6;
       R(sh, bx, y0, bw, bh, { fill: COL.fill, color: [150, 160, 190] });
       sh.push(...rs);
@@ -661,6 +667,21 @@ export function layout(model, { W = 380, font = 12, screen = false, cableTable =
   }
   // Switch-fed room: circuit feed into a JB, a cable from the JB to the first
   // switch, then from that switch to the light(s), light to light.
+  // v0.43.1: a room's extractor fan(s): feed -> control -> fan. Light switch: tail from the switched live.
+  function fanRow(rs, r, ix, iw, bottom, S, G) {
+    if (!r.fans) return bottom;
+    const y = bottom + 8 + S / 2; const x0 = ix + 6; const sw = r.fanCtl === 'switch';
+    const ctl = { humidistat: ['fanh', '%RH'], timer: ['fant', 'T'], isolator: ['fani', 'ISO'] }[r.fanCtl];
+    L(rs, x0, bottom + 2, x0, y, sw ? { ...G, dash: [2, 2] } : { w: 1.1, color: COL.line });
+    let x = x0; const g = { w: 1.1, color: COL.line };
+    if (ctl) { used.add(ctl[0]); L(rs, x, y, x + 10, y, g); x += 10; fanCtlSym(rs, x, y, S, ctl[1]); x += S * 1.3; }
+    for (let i = 0; i < r.fans; i++) { L(rs, x, y, x + 8, y, sw ? { ...G, dash: [2, 2] } : g); x += 8; symbol(rs, 'fan', x + S / 2, y, S); x += S; }
+    used.add('fan');
+    const note = sw ? 'Fan from the switched live (runs with the light)' : ctl[0] === 'fanh' ? 'Fan on a humidistat' : ctl[0] === 'fant' ? 'Fan on a timer (overrun)' : 'Fan via isolator';
+    const nh = textLines(rs, x + 8, y - small * 0.4, note, ix + iw - x - 10, { size: small * 0.85, color: COL.grey });
+    return Math.max(y + S / 2, y - small * 0.4 + nh - 4);
+  }
+  function fanCtlSym(sh, x, cy, S, lab) { const w = S * 1.3, hgt = S * 0.9; R(sh, x, cy - hgt / 2, w, hgt, { fill: [255, 255, 255] }); T(sh, x + w / 2, cy + small * 0.3, lab, { anchor: 'middle', bold: true, size: small * 0.8 }); }
   function jbSwitchRoom(rs, r, ix, iw, ry, S, G) { return roomBody(rs, r, ix, iw, ry, S, G, 'jb-switch'); }
   // v0.43 (test): one room's lights and switches, drawn as rows. Each 1-way
   // switch, and each 2-way pair (with its intermediates), is a group with its

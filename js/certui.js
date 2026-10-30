@@ -226,7 +226,7 @@ export function diagramIssues(cert) {
   for (const c of all) { if (!c || isSpareC(c)) continue;
     const k = c.control; if (k && k.via && k.via !== 'none' && !String(k.controlCircuit || '').trim()) out.push({ c, kind: 'coil', text: 'Set the coil circuit in Controlled by', fixes: [] });
     const note = roomPointsNote(c); if (!note) continue;
-    const rl = roomListOf(c) || []; const t = rl.reduce((a, r) => a + (+r.lights || 0), 0); const n = parseInt(String(c.points ?? ''), 10);
+    const rl = roomListOf(c) || []; const t = rl.reduce((a, r) => a + (+r.lights || 0) + (+r.fans || 0), 0); const n = parseInt(String(c.points ?? ''), 10);
     const fixes = [{ label: `Set points to ${t}`, apply: () => { c.points = String(t); } }];
     const raw = c.diagram && Array.isArray(c.diagram.roomList) ? c.diagram.roomList : []; const last = raw[raw.length - 1];
     if (Number.isFinite(n) && n > t && last) { const d = n - t; fixes.push({ label: `Add ${d} light${d === 1 ? '' : 's'} to ${last.name || 'the last room'}`, apply: () => { last.lights = Math.min(10, (+last.lights || 0) + d); } }); }
@@ -413,7 +413,7 @@ export function roomsOnOtherCircuits(all, except) {
   return m;
 }
 export function defaultRoom(name, wiring = 'loop-in') { return { name, lights: 1, sw1: 1, sw2pairs: 0, swi: 0, wiring }; }
-export function roomIsDefault(r, wiring = 'loop-in') { const d = defaultRoom(r.name, wiring); return ['lights', 'sw1', 'sw2pairs', 'swi', 'wiring'].every((k) => String(r[k] ?? '') === String(d[k])); }
+export function roomIsDefault(r, wiring = 'loop-in') { const d = defaultRoom(r.name, wiring); return !(+r.fans > 0) && ['lights', 'sw1', 'sw2pairs', 'swi', 'wiring'].every((k) => String(r[k] ?? '') === String(d[k])); }
 function roomsEditor(c, redraw, usedNames = () => [], otherMap = () => ({})) {
   const box = h('div', { class: 'roomsed', style: 'margin:8px 0 4px' });
   const list = () => (c.diagram && Array.isArray(c.diagram.roomList) ? c.diagram.roomList : []);
@@ -446,9 +446,11 @@ function roomsEditor(c, redraw, usedNames = () => [], otherMap = () => ({})) {
       return h('div', { class: 'roomrow', style: 'border:1px solid var(--line);border-radius:10px;padding:6px 8px;margin:0 0 8px' },
         h('div', { style: 'display:flex;flex-wrap:wrap;gap:4px 12px;align-items:center;justify-content:space-between' },
           grp('Lights', mini(+r.lights || 0, r.name + ' lights', (n) => upd({ lights: n }), 0, 10)),
-          swCount ? grp(swCount[0], mini(swCount[2], r.name + ' ' + swCount[1], swCount[3], swCount[4], swCount[5])) : null),
+          swCount ? grp(swCount[0], mini(swCount[2], r.name + ' ' + swCount[1], swCount[3], swCount[4], swCount[5])) : null,
+          grp('Fan', mini(+r.fans || 0, r.name + ' fans', (n) => upd({ fans: n, ...(n && !r.fanCtl ? { fanCtl: 'humidistat' } : {}) }, true), 0, 2))),
         seg1([['sw1', '1-way'], ['sw2', '2-way'], ['sw2i', '2W+int', '2-way + intermediate'], ['none', 'None']], k, r.name + ' switch type', (v) => upd(v === 'sw1' ? { sw1: Math.max(1, +r.sw1 || 1), sw2pairs: 0, swi: 0 } : v === 'sw2' ? { sw1: 0, sw2pairs: Math.max(1, +r.sw2pairs || 1), swi: 0 } : v === 'sw2i' ? { sw1: 0, sw2pairs: Math.max(1, +r.sw2pairs || 1), swi: Math.max(1, +r.swi || 1) } : { sw1: 0, sw2pairs: 0, swi: 0 }, true)),
-        seg1([['loop-in', 'Loop-in'], ['junction box', 'JB', 'Junction box'], ['jb-switch', 'JB\u2192sw', 'JB to switch']], ['junction box', 'jb-switch'].includes(r.wiring) ? r.wiring : 'loop-in', r.name + ' wiring', (v) => upd({ wiring: v }, true))); };
+        seg1([['loop-in', 'Loop-in'], ['junction box', 'JB', 'Junction box'], ['jb-switch', 'JB\u2192sw', 'JB to switch']], ['junction box', 'jb-switch'].includes(r.wiring) ? r.wiring : 'loop-in', r.name + ' wiring', (v) => upd({ wiring: v }, true)),
+        +r.fans > 0 ? seg1([['humidistat', 'Humidistat'], ['timer', 'Timer', 'Timer (overrun)'], ['switch', 'Light sw', 'Light switch'], ['isolator', 'Isolator', 'Isolator only']], r.fanCtl || 'humidistat', r.name + ' fan control', (v) => upd({ fanCtl: v }, true)) : null); };
     const tickRow = (n) => { const on = names.includes(n); const elsewhere = other[n];
       return [h('label', { class: 'roomtick', style: 'display:flex;align-items:center;gap:10px;min-height:48px;padding:4px 2px;border-top:1px solid var(--line)' + (elsewhere && !on ? ';color:#9aa0aa' : '') },
         h('input', { type: 'checkbox', checked: on ? true : null, 'aria-label': n, style: 'width:24px;height:24px;flex:none', onchange: (e) => { e.target.checked = on; tick(n); } }),
