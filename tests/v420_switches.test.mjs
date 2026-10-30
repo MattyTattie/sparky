@@ -30,8 +30,8 @@ test('IEC contactor: KM1/KM2 labels, coil A1/A2, time clock, on-screen hint only
   const c = diagramEICSwitches();
   assert.deepEqual(controlTags(c.boards[0].circuits), { 8: 'KM1', 9: 'KM2' });
   const S = texts(layout(diagramModel(c), { W: 380, font: 12, screen: true }));
-  for (const t of ['KM1', 'KM2', 'A1', 'A2', 'TC', 'Set the coil circuit in Controlled by']) assert.ok(S.includes(t), t);
+  for (const t of ['KM1', 'KM2', 'A1', 'A2', 'TC', 'Choose which circuit feeds the coil']) assert.ok(S.includes(t), t);
   assert.ok(S.some((t) => /Time clock/.test(t)));
   const P = texts(layout(diagramModel(c), { W: 560, font: 11 }));
-  assert.ok(!P.includes('Set the coil circuit in Controlled by')); assert.ok(P.some((t) => t.includes('Coil supply: N/A')));
+  assert.ok(!P.includes('Choose which circuit feeds the coil')); assert.ok(P.some((t) => t.includes('Coil supply: N/A')));
 });

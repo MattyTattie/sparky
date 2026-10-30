@@ -186,7 +186,7 @@ route(/^\/cert\/([^/]+)\/diagram$/, async (id) => {
   const openRooms = (c) => { openFold('#extrascard'); const pk = document.querySelector('#extrascircuit');
     if (pk) { const o = [...pk.options].find((x) => x.textContent.trim().startsWith(String(c.num || '') + ' ')); if (o && pk.value !== o.value) { pk.value = o.value; pk.dispatchEvent(new Event('change')); } }
     setTimeout(() => { const r = document.querySelector('#extrascard .roomsed') || pk; if (r) r.scrollIntoView({ block: 'start' }); }, 50); };
-  const WARN = /^(Set the coil circuit|Rooms add up|Coil supply)/;
+  const WARN = /^(Choose which circuit feeds|Rooms add up|Coil supply)/;
   box.addEventListener('click', (e) => { const g = e.target.closest('.dgc'); if (!g) return;
     const t = e.target.closest('text'); const txt = t ? t.textContent : '';
     if (WARN.test(txt)) { const c = circ(+g.dataset.bi, +g.dataset.ci, !!g.dataset.mw); if (c) { if (/^Rooms/.test(txt)) openRooms(c); else openCoil(c); return; } }

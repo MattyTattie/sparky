@@ -506,7 +506,7 @@ export function layout(model, { W = 380, font = 12, screen = false, cableTable =
       const cy0 = Math.max(ky + nh + small * 0.55, ky + kh * 0.75); if (cy0 > ky + nh + small * 0.55) nh = cy0 - ky - small * 0.55;
       L(sh, fx0 + F * 0.3, cy0, nx + F * 1.4, cy0, { w: 1.5, color: COL.brand, dash: [4, 2] });
       nh += textLines(sh, nx + F * 1.6, ky - 2 + nh, coil, nw - F * 1.6, { size: small, color: ctl.from ? COL.brand : COL.na });
-      if (!ctl.from && screen) nh += textLines(sh, nx + F * 1.6, ky - 2 + nh, 'Set the coil circuit in Controlled by', nw - F * 1.6, { size: small, color: COL.amber });
+      if (!ctl.from && screen) nh += textLines(sh, nx + F * 1.6, ky - 2 + nh, 'Choose which circuit feeds the coil', nw - F * 1.6, { size: small, color: COL.amber });
       const out = ky + Math.max(kh, nh) + 4;
       L(sh, fx0, ky + kh, fx0, out, { w: 0.9, color: COL.grey });
       kh0 = Math.max(kh, nh) + 6; feedTop = out; hh += kh0;
@@ -563,7 +563,7 @@ export function layout(model, { W = 380, font = 12, screen = false, cableTable =
         let nh = textLines(sh, tx + nx0, ty, ctl.note, tw - nx0, { size: small, bold: true });
         if (coilAt) L(sh, coilAt.x, coilAt.y + S * 0.3, coilAt.x, ty + small * 0.6, { w: 1.5, color: COL.brand, dash: [4, 2] }), L(sh, coilAt.x, ty + small * 0.6, tx + nx0 - 3, ty + small * 0.6, { w: 1.5, color: COL.brand, dash: [4, 2] });
         nh += textLines(sh, tx + nx0, ty + nh, coil, tw - nx0, { size: small, color: ctl.from ? COL.brand : COL.na });
-        if (!ctl.from && screen) nh += textLines(sh, tx + nx0, ty + nh, 'Set the coil circuit in Controlled by', tw - nx0, { size: small, color: COL.amber });
+        if (!ctl.from && screen) nh += textLines(sh, tx + nx0, ty + nh, 'Choose which circuit feeds the coil', tw - nx0, { size: small, color: COL.amber });
         ph += nh + 4; }
       if (kind !== 'socket') used.add(kind);
       if (pc.more) { ph += textLines(sh, tx, y + hh + 6 + ph, `+ ${pc.more} more (${pc.n} in total)`, tw, { size: small, color: COL.grey }) + 2; }
