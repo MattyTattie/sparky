@@ -251,6 +251,9 @@ Open points
 - Runtime table at 100/75/50/25% inverter load (Results + PDF).
 - Tests: tests/v350.test.mjs; shots: tests/screens_v350.py → /workspace/sparky-shots/v0.35.0.
 
+## v0.43.4 — Diagram stress-test fixes (live 30 Oct 2026)
+Stress-tested with a made-up 4-board, 70-circuit cert (tests/stress-cert.json, tests/v20_stress.test.mjs). Fixes: one RCD heading per RCD per board (RCBOs/MCBs ungrouped), circuits in way order inside each RCD and groups ordered by lowest way; plain lighting circuits draw the switch in line before the lights; points "0" shows 0 (blank unchanged); diagram.singles drawn as a spur branch off the ring. No data format changes. Tests: tests/v4304_stressfix.test.mjs.
+
 ## v0.43.3 — Diagram deep review, easier rooms menu, board supply (live 30 Oct 2026)
 PDF: circuits taller than a page split at a clear gap (never clipped); board/RCD headings kept with their first circuit. Sub-mains no "Add points" note; legacy room counts ignored; Points split only when totals agree.
 Rooms menu: Prev/Next circuit, Copy last room, Needs attention count badge + top link. Light-switch fan dashed line starts at the switch. No wiring explanation sentences or room cable tags on the drawing (cable list keeps them).
