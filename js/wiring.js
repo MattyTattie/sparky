@@ -6,11 +6,55 @@
 // jsPDF lines/text for the PDF, so both always match.
 // =====================================================================
 import { isSpareCircuit } from './templates.js';
+import { checkCircuit } from './checks.js';
 
 const NA = 'N/A';
 const isNAv = (v) => /^\s*n\s*[\/.]?\s*a\s*\.?\s*$/i.test(String(v ?? ''));
 const val = (v) => { const s = String(v ?? '').trim(); return s && !isNAv(s) ? s : ''; };
-export const COL = { ink: [20, 20, 20], grey: [110, 110, 110], na: [170, 170, 170], line: [60, 60, 60], brand: [41, 82, 255], fill: [244, 246, 252] };
+export const COL = { ink: [20, 20, 20], grey: [110, 110, 110], na: [170, 170, 170], line: [60, 60, 60], brand: [41, 82, 255], fill: [244, 246, 252], red: [200, 30, 30], amber: [196, 120, 0] };
+// v0.41 (pro): type of wiring code (schedule column 3) to a short name for the cable label.
+export const WIRING_SHORT = { A: 'T&E', B: 'in metal conduit', C: 'in plastic conduit', D: 'in metal trunking', E: 'in plastic trunking', F: 'SWA (PVC)', G: 'SWA (XLPE)', H: 'MICC', O: '' };
+// '2.5/1.5mm² T&E · B32' from the schedule (cable, type of wiring, OCPD). '' when there's no cable size.
+export function cableLabel(c) {
+  if (!c) return '';
+  const live = val(c.live), cpc = val(c.cpc); const ty = WIRING_SHORT[String(val(c.wiring)).toUpperCase()] || '';
+  const ocpd = [val(c.type) && val(c.type) !== 'adj' ? val(c.type) : '', val(c.rating)].join('');
+  const size = live ? `${live}${cpc ? '/' + cpc : ''}mm\u00b2` : '';
+  const a = [size, ty].filter(Boolean).join(' ');
+  return size ? [a, ocpd].filter(Boolean).join(' \u00b7 ') : '';
+}
+// v0.41 (pro): which board/circuit a board is supplied from. Never guessed:
+// blank or not matching a board on this certificate comes back as a problem.
+const OUTBUILDING = /garage|shed|out ?building|garden|workshop|annexe?|cabin|barn|stable|summer ?house|studio|gym|office pod|pod\b/i;
+export function feedInfo(boards, bi) {
+  const b = boards[bi] || {}; const from = val(b.suppliedFrom);
+  if (bi === 0) return { state: 'origin', text: from };
+  if (!from) return { state: 'blank', text: '' };
+  if (/^(origin|main|supply|meter|cut.?out|intake|incomer)\b/i.test(from)) return { state: 'origin', text: from };
+  const m = from.match(/^(.*?)[\s,\-\u2013\u00b7/]*(?:(?:way|circuit|cct|ckt|c)\s*(?:no\.?)?\s*#?\s*(\d+[a-z]?))?\s*$/i);
+  const ref = (m ? m[1] : from).trim(); const cn = m && m[2] ? m[2] : '';
+  const si = boards.findIndex((x, i) => i !== bi && val(x.ref).toLowerCase() === ref.toLowerCase());
+  if (si < 0) return { state: 'mismatch', text: from, why: `\u2018${from}\u2019 doesn\u2019t match a board on this certificate` };
+  if (cn && !(boards[si].circuits || []).some((c) => val(c.num).toLowerCase() === cn.toLowerCase())) return { state: 'mismatch', text: from, why: `${val(boards[si].ref)} has no circuit ${cn}` };
+  return { state: 'ok', text: from, bi: si, ref: val(boards[si].ref), circuit: cn };
+}
+export const isOutbuilding = (b) => OUTBUILDING.test(val(b && b.location));
+// v0.41 (pro): red problems drawn on the diagram (Zs over max, low IR, slow RCD, polarity).
+const RED_FIELDS = { zs: 'Zs', irLL: 'IR L-L', irLE: 'IR L-E', rcdMs: 'RCD time', pol: 'Polarity', rcdBtn: 'RCD button' };
+export function diagramFlags(c, ctx = {}) {
+  if (!c || isSpareCircuit(c)) return [];
+  let r; try { r = checkCircuit(c, ctx); } catch { return []; }
+  const out = [];
+  for (const [f, name] of Object.entries(RED_FIELDS)) {
+    const fl = r.flags[f]; if (!fl || fl.level !== 'red') continue;
+    if (f === 'zs') out.push(`Zs ${val(c.zs)} \u03a9 over max ${r.maxZs} \u03a9`);
+    else if (f === 'irLL' || f === 'irLE') out.push(`${name} ${val(c[f])} M\u03a9 too low`);
+    else if (f === 'rcdMs') out.push(`RCD ${val(c.rcdMs)} ms too slow`);
+    else out.push(`${name} failed`);
+  }
+  return out;
+}
+
 export const MAX_SYMBOLS = 10;
 
 // ---------- what kind of point a circuit feeds ----------
@@ -172,7 +216,7 @@ export function diagramModel(cert) {
   if (cert.type === 'MW') {
     const M = cert.mw || {};
     return { type: 'MW', supply: { earthing: val(M.earthing), lines: [val(M.zdb) && `Zdb ${val(M.zdb)} Ω`].filter(Boolean) }, main: null,
-      boards: [{ ref: val(M.dbRef) || 'DB', location: val(M.dbLocation), from: '', items: groupCircuits(M.circuit ? [M.circuit] : [], null).map((it) => (it.kind === 'circuit' && spurInfo(M) ? { ...it, spur: spurInfo(M) } : it)), note: 'Only the circuit covered by this certificate is shown.' }] };
+      boards: [{ ref: val(M.dbRef) || 'DB', location: val(M.dbLocation), from: '', ctx: { earthing: M.earthing, zdb: M.zdb }, items: groupCircuits(M.circuit ? [M.circuit] : [], null).map((it) => (it.kind === 'circuit' && spurInfo(M) ? { ...it, spur: spurInfo(M) } : it)), note: 'Only the circuit covered by this certificate is shown.' }] };
   }
   const ms = [val(parts.msCurrent) && val(parts.msCurrent) + ' A', val(parts.msPoles) && val(parts.msPoles) + '-pole', val(parts.msBs) && 'BS EN ' + val(parts.msBs).replace(/^BS\s*(EN)?\s*/i, '')].filter(Boolean).join(', ');
   // A new cert pre-fills the supply fuse standard (BS 88-3). On its own that's
@@ -182,7 +226,9 @@ export function diagramModel(cert) {
     type: cert.type,
     supply: { earthing: val(sup.earthing), lines: [[val(sup.conductors), val(sup.u) && val(sup.u) + ' V', val(sup.f) && val(sup.f) + ' Hz'].filter(Boolean).join(', '), [val(sup.ze) && `Ze ${val(sup.ze)} Ω`, val(sup.ipf) && `Ipf ${val(sup.ipf)} kA`].filter(Boolean).join(', '), ].filter(Boolean), fuse },
     main: { label: 'Main switch', detail: ms },
-    boards: (cert.boards || []).map((b, bi) => ({ ref: val(b.ref) || 'DB', location: val(b.location), from: val(b.suppliedFrom), items: groupCircuits(b.circuits, b), links: controlLinks(b.circuits), bi, src: b.circuits || [] })),
+    boards: (cert.boards || []).map((b, bi) => ({ ref: val(b.ref) || 'DB', location: val(b.location), from: val(b.suppliedFrom), items: groupCircuits(b.circuits, b), links: controlLinks(b.circuits), bi, src: b.circuits || [],
+      feed: feedInfo(cert.boards, bi), outbuilding: bi > 0 && isOutbuilding(b), ctx: { earthing: sup.earthing, zdb: b.zdb },
+      feeds: (cert.boards || []).reduce((m, o, oi) => { const f = oi !== bi && feedInfo(cert.boards, oi); if (f && f.state === 'ok' && f.bi === bi && f.circuit) (m[f.circuit.toLowerCase()] = m[f.circuit.toLowerCase()] || []).push(val(o.ref) + (val(o.location) ? ' (' + val(o.location) + ')' : '')); return m; }, {}) })),
   };
 }
 
@@ -219,7 +265,7 @@ export function circuitLines(c, spd = '') {
   const dev = [val(c.type) && val(c.type) !== 'adj' ? val(c.type) : '', val(c.rating)].join('') ;
   const kind = isRcbo(c) ? 'RCBO' : c.device === 'mcb' ? 'MCB' : val(c.bs) ? 'BS ' + val(c.bs) : '';
   const device = [dev, kind].filter(Boolean).join(' ') + (isRcbo(c) && val(c.rcdIdn) ? `, ${val(c.rcdIdn)} mA` + (val(c.rcdType) ? ' Type ' + val(c.rcdType) : '') : '');
-  const cable = val(c.live) ? `${val(c.live)}${val(c.cpc) ? ' / ' + val(c.cpc) : ''} mm²` : '';
+  const cable = cableLabel(c);
   const pc = pointCount(c);
   // SPD way: a normal breaker in the box, the SPD drawn as its load
   // The breaker already shows in its box, so no "Breaker:" line. An RCBO's
@@ -234,9 +280,11 @@ export function circuitLines(c, spd = '') {
     rows: [...pre, ['Cable', cable], ...(roomListOf(c) ? [['Rooms', roomListOf(c).length + (roomListOf(c).length === 1 ? ' room' : ' rooms')]] : []), ['Points', pc.known ? `${pc.n} \u00d7 ${pc.n === 1 ? KIND_ONE[k] : KIND_PLURAL[k]}` : ''], ...(si ? [['Switches', si.text]] : [])] };
 }
 
-export function layout(model, { W = 380, font = 12, screen = false } = {}) {
+export function layout(model, { W = 380, font = 12, screen = false, cableTable = false, legend = true } = {}) {
   const F = font, small = F * 0.86, lh = (s) => s * 1.3;
-  const blocks = [];
+  const blocks = []; const cables = []; let ctx = {}; let feeds = {}; let curBoard = '';
+  // v0.41: C1, C2… one per cable run, listed in the PDF's cable table
+  const cable = (from, to, type, key) => { const label = 'C' + (cables.length + 1); cables.push({ label, from, to, type: type || '' }); if (key) cableOf[key] = cables[cables.length - 1]; return label; }; const cableOf = {};
   const busX = 14, devX = busX + 14, devW = F * 4.6, gap = 8;
   const T = (sh, x, y, txt, o = {}) => sh.push({ t: 'text', x, y, txt, size: o.size || F, bold: !!o.bold, color: o.color || COL.ink, anchor: o.anchor || 'start' });
   const L = (sh, x1, y1, x2, y2, o = {}) => sh.push({ t: 'line', x1, y1, x2, y2, w: o.w || 1.2, color: o.color || COL.line, ...(o.dash ? { dash: o.dash } : {}) });
@@ -277,16 +325,28 @@ export function layout(model, { W = 380, font = 12, screen = false } = {}) {
     blocks.push({ h: b.h, shapes: b.sh, kind: 'head' });
   });
 
+  const feedCable = (fd, bd) => { const dest = bd.ref + (bd.location ? ' (' + bd.location + ')' : ''); const got = fd.circuit && cableOf[fd.ref.toLowerCase() + '|' + String(fd.circuit).toLowerCase()]; if (got) { got.to += ', on to ' + dest; return got.label; }
+    return cable(fd.ref + (fd.circuit ? ' circuit ' + fd.circuit : ''), dest, cableLabel(((model.boards[fd.bi] || {}).src || []).find((c) => val(c.num).toLowerCase() === String(fd.circuit).toLowerCase()))); };
   let links = {}; const used = new Set();
   model.boards.forEach((bd, bi) => {
-    links = bd.links || {};
+    links = bd.links || {}; ctx = bd.ctx || {}; feeds = bd.feeds || {}; curBoard = bd.ref;
     // board header bar
-    { const sh = []; const y = 8; const tx = devX; const title = bd.ref + (bd.location ? ' \u00b7 ' + bd.location : '');
+    { const sh = []; const y = 8; const tx = devX; const title = bd.ref + (bd.location ? ' \u00b7 ' + bd.location : '') + (bd.outbuilding ? ' (outbuilding)' : '');
       let hh = textLines(sh, tx, y + 3, title, W - tx - 8, { bold: true, color: COL.brand });
-      if (bd.from && bi > 0) hh += textLines(sh, tx, y + 3 + hh, 'Supplied from: ' + bd.from, W - tx - 8, { size: small, color: COL.grey });
+      const fd = bd.feed;
+      if (fd && bi > 0) { // v0.41: sub-board link, drawn from 'Supplied from'; dashed when blank or not matching
+        const ok = fd.state === 'ok' || fd.state === 'origin';
+        const cl0 = fd.state === 'ok' ? feedCable(fd, bd) : '';
+        const lab = fd.state === 'ok' ? `Supplied from ${fd.ref}${fd.circuit ? ' circuit ' + fd.circuit : ''}${cl0 ? ' by cable ' + cl0 : ''} (see ${fd.ref}${fd.circuit ? ' circuit ' + fd.circuit : ''})` : fd.state === 'origin' ? 'Supplied from: ' + fd.text : fd.state === 'blank' ? 'Supplied from: not recorded, so the link is drawn dashed' : `Supplied from: ${fd.why}, so the link is drawn dashed`;
+        const ly = y + 3 + hh; const lh1 = textLines(sh, tx + F * 1.8, ly, lab, W - tx - 8 - F * 1.8, { size: small, color: ok ? COL.grey : COL.amber, bold: !ok });
+        L(sh, tx, ly + small * 0.7, tx + F * 1.4, ly + small * 0.7, ok ? { w: 1.4, color: COL.brand } : { w: 1.4, color: COL.amber, dash: [4, 2] });
+
+        hh += lh1;
+      } else if (bd.from && bi > 0) hh += textLines(sh, tx, y + 3 + hh, 'Supplied from: ' + bd.from, W - tx - 8, { size: small, color: COL.grey });
       if (bd.note) hh += textLines(sh, tx, y + 3 + hh, bd.note, W - tx - 8, { size: small, color: COL.grey });
       const h = y + hh + 10;
-      L(sh, busX, 0, busX, h, { w: 2.4, color: COL.brand }); L(sh, devX - 6, y - 2, devX - 6, y + hh + 6, { w: 3, color: COL.brand });
+      const brk = bi > 0 && bd.feed && (bd.feed.state === 'blank' || bd.feed.state === 'mismatch');
+      L(sh, busX, 0, busX, h, brk ? { w: 2.4, color: COL.amber, dash: [5, 4] } : { w: 2.4, color: COL.brand }); L(sh, devX - 6, y - 2, devX - 6, y + hh + 6, { w: 3, color: COL.brand });
       if (bi > 0) sh.push({ t: 'rect', x: 0, y: 0, w: W, h: 2, lw: 0, color: [255, 255, 255], fill: [225, 228, 240] });
       blocks.push({ h, shapes: sh, kind: 'board' }); }
     const items = bd.items;
@@ -334,7 +394,33 @@ export function layout(model, { W = 380, font = 12, screen = false } = {}) {
     sh.unshift({ t: 'rect', x: 0, y: 2, w: W, h: 1, lw: 0, color: [255, 255, 255], fill: [225, 228, 240] });
     blocks.push({ h, shapes: sh, kind: 'legend' });
   }
-  return { W, blocks, height: blocks.reduce((a, b) => a + b.h, 0) };
+  // v0.41: what the colours mean. Small on screen (at the top); subtle in the PDF (after the key).
+  if (legend) {
+    const sh = []; const sz = screen ? small : small * 0.85; const y = 4; let x = 8; const cy = y + sz * 0.9;
+    const item = (draw, text, color) => { draw(x, cy); x += F * 1.6; T(sh, x, y + sz * 1.2, text, { size: sz, color }); x += textW(text, sz) + F; };
+    const rows = []; let lineY = 0;
+    item((x0, yy) => R(sh, x0, yy - sz * 0.6, F * 1.2, sz * 1.2, { color: COL.red, lw: 2, fill: [255, 255, 255] }), 'Reading out of limits', screen ? COL.red : COL.grey);
+    item((x0, yy) => L(sh, x0, yy, x0 + F * 1.2, yy, { w: 3, color: COL.amber }), 'Missing info', screen ? COL.amber : COL.grey);
+    if (x + textW('Link not recorded', sz) + F * 2 > W) { lineY = sz * 1.8; x = 8; }
+    const yy2 = cy + lineY; const x0 = x; L(sh, x0, yy2, x0 + F * 1.2, yy2, { w: 2, color: COL.amber, dash: [4, 2] }); T(sh, x0 + F * 1.6, y + lineY + sz * 1.2, 'Link not recorded', { size: sz, color: screen ? COL.amber : COL.grey });
+    void rows;
+    const blk = { h: y + lineY + sz * 1.9 + 4, shapes: sh, kind: 'flags' };
+    if (screen) blocks.unshift(blk); else { const ki = blocks.findIndex((x) => x.kind === 'legend'); if (ki >= 0) blocks.splice(ki, 0, blk); else blocks.push(blk); }
+  }
+  // v0.41: cable list (PDF). Lengths aren't on the certificate, so none are shown.
+  if (cableTable && cables.length) {
+    const cols = [['Cable', 0.12], ['From', 0.28], ['To', 0.34], ['Type / size', 0.26]]; const x0 = 8, tw = W - 16;
+    const rowBlock = (cells, bold, first) => { const sh = []; let x = x0; let hmax = 0; const pos = [];
+      cells.forEach((t, i) => { const w = tw * cols[i][1]; pos.push(x); hmax = Math.max(hmax, textLines(sh, x + 3, 2, t || NA, w - 6, { size: small, bold: bold || i === 0, color: t ? (i === 0 && !bold ? COL.brand : COL.ink) : COL.na })); x += w; });
+      const h = hmax + 7; if (first) sh.unshift({ t: 'rect', x: x0, y: 0, w: tw, h, lw: 0, color: [255, 255, 255], fill: COL.fill });
+      L(sh, x0, h, x0 + tw, h, { w: 0.5, color: [200, 200, 210] }); return { h, shapes: sh, kind: 'cables' }; };
+    const sh = []; const th = textLines(sh, 8, 10, 'Cable list', W - 16, { bold: true }) + textLines(sh, 8, 10 + lh(F), 'One label per cable run on the drawing. Lengths aren\u2019t recorded on the certificate.', W - 16, { size: small, color: COL.grey });
+    sh.unshift({ t: 'rect', x: 0, y: 2, w: W, h: 1, lw: 0, color: [255, 255, 255], fill: [225, 228, 240] });
+    blocks.push({ h: th + 16, shapes: sh, kind: 'cables' });
+    blocks.push(rowBlock(cols.map((c) => c[0]), true, true));
+    for (const c of cables) blocks.push(rowBlock([c.label, c.from, c.to, c.type], false, false));
+  }
+  return { W, blocks, cables, height: blocks.reduce((a, b) => a + b.h, 0) };
 
   // which board and circuit a block draws, so the screen can link to its edit screen
   function tag(b, bd, c) { b.ref = { bi: bd.bi ?? 0, ci: bd.src ? bd.src.indexOf(c) : 0, mw: model.type === 'MW' }; return b; }
@@ -344,7 +430,13 @@ export function layout(model, { W = 380, font = 12, screen = false } = {}) {
     const dx = bus + 12; const tx = dx + devW + gap; const tw = W - tx - 6;
     // text
     let hh = textLines(sh, tx, y - 2, info.title, tw, { bold: true, color: info.spare ? COL.na : COL.ink });
-    for (const [lab, v] of info.rows) hh += kv(sh, tx, y - 2 + hh, lab, v, tw);
+    const cl = !info.spare ? cable(curBoard + ' circuit ' + (val(c.num) || '?'), (val(c.desc) || 'circuit') + (roomsOf(c) ? ' (' + roomsOf(c) + ')' : ''), info.rows.find((r) => r[0] === 'Cable')?.[1] || '', curBoard.toLowerCase() + '|' + String(val(c.num)).toLowerCase()) : '';
+    for (const [lab, v] of info.rows) hh += kv(sh, tx, y - 2 + hh, lab, lab === 'Cable' && v ? cl + '  ' + v : v, tw);
+    const reds = info.spare ? [] : diagramFlags(c, ctx);
+    if (reds.length) hh += textLines(sh, tx, y - 2 + hh, 'Check: ' + reds.join('; '), tw, { size: small, bold: true, color: COL.red });
+    if (!screen && !info.spare && !info.spd && info.noPoints && !info.rooms && !spur) hh += textLines(sh, tx, y - 2 + hh, 'Points served not recorded', tw, { size: small, bold: screen, color: COL.amber });
+    const fed = !info.spare && feeds[String(val(c.num)).toLowerCase()];
+    if (fed) hh += textLines(sh, tx, y - 2 + hh, 'Feeds ' + fed.join(', ') + ' (see ' + fed.map((x) => x.split(' (')[0]).join(', ') + ')', tw, { size: small, bold: true, color: COL.brand });
     // contactor (or time clock) between the breaker and the load
     const fx0 = tx - gap / 2; let feedTop = y + F * 0.6; let kh0 = 0;
     const ctl = info.spare ? null : controlInfo(c);
@@ -358,7 +450,7 @@ export function layout(model, { W = 380, font = 12, screen = false } = {}) {
       L(sh, fx0, y + F * 0.6, fx0, ky + kh / 2, { w: 0.9, color: COL.grey }); L(sh, fx0, ky + kh / 2, kx, ky + kh / 2, { w: 0.9, color: COL.grey });
       const nx = kx + kw + 6, nw = W - nx - 6;
       let nh = textLines(sh, nx, ky - 2, ctl.note, nw, { size: small, bold: true });
-      const coil = ctl.from ? 'Coil switched by circuit ' + ctl.from : 'Coil supply: ' + NA;
+      const coil = ctl.from ? `Coil switched by circuit ${ctl.from} (see circuit ${ctl.from})` : 'Coil supply: ' + NA;
       const cy0 = ky + nh + small * 0.55;
       L(sh, kx + kw, cy0, nx + F * 1.4, cy0, { w: 1.1, color: COL.brand, dash: [3, 2] });
       nh += textLines(sh, nx + F * 1.6, ky - 2 + nh, coil, nw - F * 1.6, { size: small, color: ctl.from ? COL.brand : COL.na });
@@ -371,7 +463,7 @@ export function layout(model, { W = 380, font = 12, screen = false } = {}) {
     // this circuit feeds the coil of contactors on other circuits
     const sw = !info.spare && links[val(c.num)];
     if (sw) {
-      const lab = 'Switches contactor on circuit' + (sw.length > 1 ? 's ' : ' ') + sw.join(', ');
+      const lab = 'Switches contactor on circuit' + (sw.length > 1 ? 's ' : ' ') + sw.join(', ') + ' (see circuit' + (sw.length > 1 ? 's ' : ' ') + sw.join(', ') + ')';
       const ly = y - 2 + hh + 2; const lh0 = textLines(sh, tx + F * 1.6, ly, lab, tw - F * 1.6, { size: small, bold: true, color: COL.brand });
       L(sh, tx, ly + small * 0.7, tx + F * 1.4, ly + small * 0.7, { w: 1.1, color: COL.brand, dash: [3, 2] });
       hh += lh0 + 4;
@@ -413,7 +505,7 @@ export function layout(model, { W = 380, font = 12, screen = false } = {}) {
       T(sh, cx + S, t + F * 1.1, info.spd, { bold: true, size: small });
       ph = sh0 + 6;
     }
-    if (screen && !info.spare && !info.spd && info.noPoints && !info.rooms) ph += textLines(sh, tx, y + hh + 2, 'Add points served to draw sockets/lights', tw, { size: small, color: COL.na }) + 4;
+    if (screen && !info.spare && !info.spd && info.noPoints && !info.rooms) ph += textLines(sh, tx, y + hh + 2, 'Add points served to draw sockets/lights', tw, { size: small, color: COL.amber }) + 4;
     // minor works: new spur(s) branching off the ring, in bold brand colour
     if (spur && !info.spare && !info.spd) {
       const fx = tx - gap / 2, S = F * 1.5, step = S + 6;
@@ -432,7 +524,7 @@ export function layout(model, { W = 380, font = 12, screen = false } = {}) {
     }
     // device box
     const bh = F * 3.2; const by = y;
-    R(sh, dx, by, devW, bh, { fill: info.spare ? [248, 248, 248] : [255, 255, 255] }); sh.unshift(sh.pop());
+    R(sh, dx, by, devW, bh, reds.length ? { fill: [255, 255, 255], color: COL.red, lw: screen ? 2.4 : 1.6 } : { fill: info.spare ? [248, 248, 248] : [255, 255, 255] }); sh.unshift(sh.pop());
     if (info.spare) T(sh, dx + devW / 2, by + bh / 2 + F * 0.35, 'Spare', { anchor: 'middle', color: COL.na, size: small });
     else {
       const d1 = wrapText(info.devShort, devW - 6, F, true); const d2 = info.devKind ? wrapText(info.devKind, devW - 6, small * 0.92) : [];
@@ -445,7 +537,7 @@ export function layout(model, { W = 380, font = 12, screen = false } = {}) {
     L(sh, bus, 0, bus, last ? by + bh / 2 : h, { w: 2.4, color: COL.brand });
     L(sh, bus, by + bh / 2, dx, by + bh / 2);
     if (outerBus != null) L(sh, outerBus, 0, outerBus, h, { w: 2.4, color: COL.brand });
-    return { h, shapes: sh, kind: 'circuit' };
+    return { h, shapes: sh, kind: 'circuit', reds: reds.length, num: val(c.num), links: [...(ctl && ctl.from ? [ctl.from] : []), ...(sw || [])] };
   }
   // Rooms: the feed runs room to room down the left; each room is a box with
   // its lights, switches and how they're wired. A clear schematic, not to scale.
@@ -473,6 +565,7 @@ export function layout(model, { W = 380, font = 12, screen = false } = {}) {
       if (r.wiring === 'jb-switch') { const fy = jbSwitchRoom(rs, r, ix, iw, ry, S, G); const bh = fy.bottom - y0 + 6;
         R(sh, bx, y0, bw, bh, { fill: COL.fill, color: [150, 160, 190] }); sh.push(...rs);
         L(sh, jbX, jbLastY, jbX, fy.feedIn, { w: 1.2, color: COL.line }); L(sh, jbX, fy.feedIn, fy.swX, fy.feedIn, { w: 1.2, color: COL.line });
+        T(sh, jbX + 3, fy.feedIn - 3, cable('JB, circuit ' + (val(c.num) || '?'), 'switch, ' + nm, cableLabel(c).split(' \u00b7 ')[0]), { size: small * 0.75, bold: true, color: COL.brand });
         jbLastY = fy.feedIn; y0 += bh + 8; return; }
       // wire row: JB (if any) then the lights hanging off it
       const jb = r.wiring === 'junction box';
@@ -557,6 +650,7 @@ export function layout(model, { W = 380, font = 12, screen = false } = {}) {
       // the circuit feed: down the left, then into this room
       L(sh, fx, lastFeedY, fx, feedIn, { w: 1.2, color: COL.line });
       L(sh, fx, feedIn, jb ? ix : ix, feedIn, { w: 1.2, color: COL.line });
+      T(sh, fx + 3, feedIn - 3, cable('Circuit ' + (val(c.num) || '?'), nm + (jb ? ' JB' : ' first rose'), cableLabel(c).split(' \u00b7 ')[0]), { size: small * 0.75, bold: true, color: COL.brand });
       lastFeedY = feedIn;
       y0 += bh + 8;
     });
@@ -657,7 +751,8 @@ export function diagramSvg(cert, opts = {}) {
   const href = opts.href || null;
   for (const b of L.blocks) {
     const g = shapesSvg(b.shapes, y);
-    if (href && b.ref) { const u = href(b.ref); parts.push(`<a href="${esc(u)}" class="dgc" aria-label="Edit this circuit"><rect x="0" y="${y}" width="${L.W}" height="${b.h}" fill="transparent"/>${g}</a>`); }
+    if (opts.tap && b.ref) parts.push(`<g class="dgc" role="button" tabindex="0" data-bi="${b.ref.bi}" data-ci="${b.ref.ci}" data-mw="${b.ref.mw ? 1 : ''}" aria-label="Readings for circuit ${esc(b.num || '')}" style="cursor:pointer"><rect x="0" y="${y}" width="${L.W}" height="${b.h}" fill="transparent"/>${g}</g>`);
+    else if (href && b.ref) { const u = href(b.ref); parts.push(`<a href="${esc(u)}" class="dgc" aria-label="Edit this circuit"><rect x="0" y="${y}" width="${L.W}" height="${b.h}" fill="transparent"/>${g}</a>`); }
     else parts.push(g);
     y += b.h;
   }
@@ -667,11 +762,11 @@ export function diagramSvg(cert, opts = {}) {
 // ---------- PDF ----------
 // k: pdfkit Kit. Draws the layout block by block, starting a new page
 // (via newPage) when a block won't fit. W units map to the content width.
-export function drawDiagramPdf(k, cert, newPage) {
-  const L = layout(diagramModel(cert), { W: 560, font: 11 });
+export function drawDiagramPdf(k, cert, newPage, { bottom = 16 } = {}) {
+  const L = layout(diagramModel(cert), { W: 560, font: 11, cableTable: true });
   const s = k.cw / L.W; const pt = s / 0.3528; const d = k.doc;
   for (const b of L.blocks) {
-    if (k.y + b.h * s > k.H - 16) newPage();
+    if (k.y + b.h * s > k.H - bottom) newPage();
     const ox = k.x0, oy = k.y;
     for (const z of b.shapes) {
       if (z.t === 'line') k.line(ox + z.x1 * s, oy + z.y1 * s, ox + z.x2 * s, oy + z.y2 * s, { w: z.w * s, color: z.color, dash: z.dash ? z.dash.map((v) => v * s) : null });

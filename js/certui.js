@@ -14,8 +14,9 @@ import { TYPES, newCert, sectionsFor, sectionDone, missingFields, visible, get, 
 import { INTAKE_NOTE_10, INTAKE_NOTES, INTAKE_NOTIFIED, migrateIntake, EIC_ITEMS, EIC_OUTCOMES, EICR_ITEMS, EICR_OUTCOMES, CODE_TEXT, OBSERVATIONS, OBS_CATS, EIC_HELP, EICR_HELP } from './inspections.js';
 import { checkCircuit, isSpare } from './checks.js';
 import { CHECK_NOTE } from './limits.js';
-import { diagramSvg, diagramInPdf, diagramHasCircuits, SPUR_FEEDS, CONTROL_VIA, switchInfo, roomListOf, roomPointsNote, pointKind, socketSingles, arrangedOrder } from './wiring.js';
+import { diagramSvg, diagramInPdf, diagramHasCircuits, SPUR_FEEDS, CONTROL_VIA, switchInfo, roomListOf, roomPointsNote, pointKind, socketSingles, arrangedOrder, feedInfo } from './wiring.js';
 import { limitOn, limitBar } from './limitbar.js';
+import { circuitReadings, makeTemplate, applyTemplate, nextRoom, tidyLayouts, BUILTIN_TEMPLATES, TEMPLATE_KEY } from './diagrampro.js';
 import { dangerCodes, noticeForObs, noticesOf, noticeMissing, noticeNo } from './dangermodel.js';
 
 export async function createCert(type, job, cust) {
@@ -158,14 +159,36 @@ route(/^\/cert\/([^/]+)\/diagram$/, async (id) => {
   const cert = await openCert(id); if (!cert) return go('#/');
   const box = h('div', { class: 'diagram', style: 'overflow-x:auto;background:#fff;border-radius:8px;color-scheme:light' }); // white paper in dark mode too
   const href = (r) => (r.mw ? `#/cert/${id}/mwc` : `#/cert/${id}/b/${r.bi}/c/${r.ci}`);
-  const draw = () => { box.innerHTML = diagramHasCircuits(cert) ? diagramSvg(cert, { W: 380, font: 12, screen: true, href }) : ''; };
+  const draw = () => { box.innerHTML = diagramHasCircuits(cert) ? diagramSvg(cert, { W: 380, font: 12, screen: true, tap: true }) : ''; };
   draw();
+  // v0.41 (test): tap a circuit (or a room box in it) for its readings, then Edit
+  const openReadings = async (bi, ci, mw) => {
+    const b = mw ? null : (cert.boards || [])[bi]; const c = mw ? cert.mw.circuit : b && b.circuits[ci]; if (!c) return;
+    const ctx = mw ? { earthing: cert.mw.earthing, zdb: cert.mw.zdb } : { earthing: cert.supply.earthing, zdb: b.zdb };
+    const COLR = { red: '#c81e1e', amber: '#b86e00' };
+    const rows = circuitReadings(c, ctx).map((r) => h('div', { class: 'rdrow', style: 'display:flex;justify-content:space-between;gap:10px;padding:8px 0;border-bottom:1px solid var(--line)' },
+      h('span', { style: 'color:#6b7280' }, r.label), h('span', { style: 'text-align:right;white-space:normal;word-break:break-word' }, h('b', { style: r.value ? (r.level ? 'color:' + COLR[r.level] : '') : 'color:#aaa' }, r.value || 'N/A'), r.note ? h('span', { class: 'note', style: 'display:block;margin:0' }, r.note) : null)));
+    const ctl = c.control && c.control.controlCircuit; const sw = (b ? b.circuits : []).filter((x) => x.control && String(x.control.controlCircuit) === String(c.num)).map((x) => x.num);
+    const fed = mw ? [] : (cert.boards || []).filter((o, oi) => { const f = oi !== bi && feedInfo(cert.boards, oi); return f && f.state === 'ok' && f.bi === bi && String(f.circuit).toLowerCase() === String(c.num).toLowerCase(); });
+    const jumps = [...(ctl ? [String(ctl)] : []), ...sw.map(String)];
+    const v = await modal(`Circuit ${c.num || '?'}  ${c.desc || ''}`, h('div', {}, ...rows, fed.length ? h('p', { class: 'note', style: 'margin:8px 0 0' }, 'Feeds ' + fed.map((o) => o.ref).join(', ')) : null),
+      [{ label: 'Close', value: null }, ...jumps.map((n) => ({ label: 'See circuit ' + n, value: 'go:' + n })), { label: 'Edit', value: 'edit', cls: 'primary' }]);
+    if (v === 'edit') go(href({ bi, ci, mw }));
+    else if (v && v.startsWith('go:')) { const n = v.slice(3); const tj = (b ? b.circuits : []).findIndex((x) => String(x.num) === n); const g = box.querySelector(`.dgc[data-bi="${bi}"][data-ci="${tj}"]`); if (g) { g.scrollIntoView({ block: 'center' }); openReadings(bi, tj, false); } }
+  };
+  box.addEventListener('click', (e) => { const g = e.target.closest('.dgc'); if (!g) return; openReadings(+g.dataset.bi, +g.dataset.ci, !!g.dataset.mw); });
+  box.addEventListener('keydown', (e) => { if (e.key !== 'Enter') return; const g = e.target.closest('.dgc'); if (g) openReadings(+g.dataset.bi, +g.dataset.ci, !!g.dataset.mw); });
+  const tidy = async () => {
+    const cb = h('input', { type: 'checkbox', id: 'tidyreset' });
+    const ok = await modal('Tidy up the diagram', h('div', {}, h('p', {}, 'Puts every room box back into neat slots and clears any odd moves. Your room order is kept.'), h('label', { style: 'display:flex;gap:10px;align-items:center' }, cb, h('span', {}, 'Also put rooms back in the order they were added'))), [{ label: 'Cancel', value: false }, { label: 'Tidy up', value: true, cls: 'primary' }]);
+    if (!ok) return; const n = tidyLayouts(cert, { resetOrder: cb.checked }); if (n) changed(); draw(); toast(n ? `Tidied ${n} circuit${n === 1 ? '' : 's'}` : 'Already tidy');
+  };
   const sw = h('button', { class: 'switch' + (cert.diagramPdf !== false ? ' on' : ''), type: 'button', role: 'switch', id: 'diagrampdf', 'aria-label': 'Include in the PDF', 'aria-checked': String(cert.diagramPdf !== false), onclick: () => { cert.diagramPdf = cert.diagramPdf === false; changed(); sw.classList.toggle('on', cert.diagramPdf !== false); sw.setAttribute('aria-checked', String(cert.diagramPdf !== false)); } }, h('span', {}));
   page('Wiring diagram', [
     h('p', { class: 'note' }, cert.type === 'MW' ? 'Drawn from the circuit on this certificate. It fills in as you add the details.' : 'Drawn from the supply, the board and each circuit. It fills in as you add the details. Number of points served sets how many sockets or lights are drawn.'),
     diagramHasCircuits(cert) ? h('div', { class: 'card', style: 'padding:10px 6px' }, box) : emptyState('zap', 'No circuits yet. Add circuits and the diagram draws itself.'),
     cert.type === 'MW' ? spurCard(cert, draw) : null,
-    diagramHasCircuits(cert) ? h('p', { class: 'note', style: 'margin:-4px 4px 10px' }, 'Tap a circuit to edit it.') : null,
+    diagramHasCircuits(cert) ? h('div', { style: 'display:flex;gap:8px;align-items:center;margin:-4px 4px 10px' }, h('p', { class: 'note', style: 'margin:0;flex:1' }, 'Tap a circuit or room for its readings.'), h('button', { class: 'btn ghost', type: 'button', id: 'tidybtn', style: 'min-height:44px;white-space:normal', onclick: tidy }, 'Tidy up')) : null,
     diagramHasCircuits(cert) ? extrasCard(cert, draw) : null,
     diagramHasCircuits(cert) ? controlCard(cert, draw) : null,
     h('div', { class: 'card' }, h('div', { class: 'switchrow', style: 'border-top:0;margin-top:0' }, h('span', {}, 'Include in the PDF (after the schedules)'), sw)),
@@ -234,6 +257,7 @@ function extrasCard(cert, redraw) {
     fill(one, [h('b', { class: 'pickname', style: 'display:block;margin:8px 0 4px;word-break:break-word;white-space:normal' }, name(c)),
       isLight && arranging ? arrangeRooms(c, redraw, () => { arranging = false; drawOne(); }) : null,
       isLight && !arranging ? roomsEditor(c, redraw, () => jobRoomNames(all, c)) : null,
+      isLight && !arranging ? templateRow(c, redraw, drawOne) : null,
       isLight && !arranging && (d.roomList || []).length > 1 ? h('button', { class: 'btn ghost', type: 'button', id: 'arrangebtn', style: 'width:100%;min-height:48px;margin-top:4px', onclick: () => { arranging = true; drawOne(); } }, 'Arrange room boxes') : null,
       isLight && !roomListOf(c) ? h('details', { class: 'fold', style: 'margin-top:6px' }, h('summary', {}, h('span', { class: 'foldt' }, 'Or just set switch counts', h('span', { class: 'folds' }, 'Without rooms')), h('span', { class: 'foldic' }, '\u203a')),
         h('div', { class: 'foldin' }, h('label', { class: 'f' }, h('span', {}, 'Rooms (text)'), h('input', { placeholder: 'e.g. Kitchen, Hall', 'aria-label': 'Rooms, circuit ' + (c.num || ''), value: d.rooms || '', onchange: (e) => save(c, 'rooms', e.target.value.trim()) })),
@@ -247,6 +271,25 @@ function extrasCard(cert, redraw) {
   fill(body, [h('p', { class: 'note', style: 'margin:4px 0 8px' }, 'Optional. Pick a circuit, then add its rooms. Lighting circuits get one 1-way switch unless you set them here.'),
     h('label', { class: 'f' }, h('span', {}, 'Circuit'), pick), one]);
   return h('div', { class: 'card', id: 'extrascard' }, h('details', { class: 'fold' }, h('summary', {}, h('span', { class: 'foldt' }, 'Switches and rooms', h('span', { class: 'folds' }, 'Light switches, room names, single sockets')), nset ? h('span', { class: 'fbadge' }, `${nset} set`) : null, h('span', { class: 'foldic' }, '\u203a')), h('div', { class: 'foldin' }, body)));
+}
+
+// v0.41 (test): saved diagram templates (app settings, not the certificate).
+function templateRow(c, redraw, again) {
+  const mine = async () => (await db.getMeta(TEMPLATE_KEY)) || [];
+  const saveT = async () => {
+    const inp = h('input', { id: 'tplname', placeholder: 'e.g. My usual lighting', value: c.desc ? c.desc : '' });
+    const ok = await modal('Save as my template', h('div', {}, h('p', { class: 'note' }, 'Saves these rooms, switches, wiring method and control (not readings) on this phone, to use on other jobs.'), h('label', { class: 'f' }, h('span', {}, 'Template name'), inp)), [{ label: 'Cancel', value: false }, { label: 'Save', value: true, cls: 'primary' }]);
+    if (!ok) return; const t = makeTemplate(c, inp.value); const list = (await mine()).filter((x) => x.name !== t.name); list.push(t); await saveSetting(TEMPLATE_KEY, list); toast('Template saved');
+  };
+  const applyT = async () => {
+    const list = [...BUILTIN_TEMPLATES, ...(await mine())];
+    const v = await modal('Apply template', h('p', { class: 'note' }, (c.diagram && (c.diagram.roomList || []).length) ? 'Your rooms stay; their wiring method and the control change to the template\u2019s.' : 'Adds the template\u2019s rooms to this circuit.'),
+      [...list.map((t, i) => ({ label: t.name + (t.builtin ? ' (built in)' : ''), value: String(i) })), { label: 'Cancel', value: null }]);
+    if (v == null) return; const r = applyTemplate(c, list[+v]); c.diagram = r.diagram; if (r.control) c.control = r.control; changed(); redraw(); again(); toast('Template applied');
+  };
+  return h('div', { class: 'tplrow', style: 'display:flex;gap:8px;flex-wrap:wrap;margin:6px 0' },
+    h('button', { class: 'btn ghost', type: 'button', id: 'tplsave', style: 'flex:1 1 auto;min-height:48px;white-space:normal', onclick: saveT }, 'Save as my template'),
+    h('button', { class: 'btn ghost', type: 'button', id: 'tplapply', style: 'flex:1 1 auto;min-height:48px;white-space:normal', onclick: applyT }, 'Apply template'));
 }
 
 // v0.39 (test): "Rooms on this circuit" for a lighting circuit. Saves an
@@ -351,7 +394,7 @@ function roomsEditor(c, redraw, usedNames = () => []) {
             segs([['loop-in', 'Loop-in (ceiling rose)'], ['junction box', 'Junction box'], ['jb-switch', 'JB to switch, then to the lights']], ['junction box', 'jb-switch'].includes(r.wiring) ? r.wiring : 'loop-in', 'Wiring method', (v) => upd({ wiring: v }, true))));
       }),
       h('p', { class: 'note roomsnote', style: 'margin:0 0 6px;color:#9aa0aa' + (note ? '' : ';display:none') }, note),
-      h('button', { class: 'btn', type: 'button', id: 'addroom-' + (c.num || ''), style: 'width:100%;min-height:52px;font-size:17px;font-weight:700', onclick: () => { store([...list(), { name: '', lights: 1, sw1: 1, sw2pairs: 0, swi: 0, wiring: 'loop-in' }]); openPicker = list().length - 1; draw(); const rows = box.querySelectorAll('.roomrow'); if (rows.length) rows[rows.length - 1].scrollIntoView({ block: 'start', behavior: 'smooth' }); } }, l.length ? '+ Add next room' : '+ Add a room')]);
+      h('button', { class: 'btn', type: 'button', id: 'addroom-' + (c.num || ''), style: 'width:100%;min-height:52px;font-size:17px;font-weight:700', onclick: () => { store([...list(), nextRoom(list())]); openPicker = list().length - 1; draw(); const rows = box.querySelectorAll('.roomrow'); if (rows.length) rows[rows.length - 1].scrollIntoView({ block: 'start', behavior: 'smooth' }); } }, l.length ? '+ Add next room' : '+ Add a room')]);
   };
   draw();
   return box;

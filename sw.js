@@ -95,6 +95,7 @@ const FILES = [
   "./js/usecore.js",
   "./js/voice.js",
   "./js/wiring.js",
+  "./js/diagrampro.js",
   "./manifest.json",
   "./styles.css",
   "./vendor/jspdf/jspdf.umd.min.js",

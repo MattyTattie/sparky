@@ -420,8 +420,38 @@ function schedules(k, cert, certNo) {
 export function diagramSheet(k, cert, certNo) {
   if (!diagramInPdf(cert)) return;
   const tag = 'Single-line diagram drawn from the schedule of circuit details. Not to scale; rooms are shown as boxes, not a floor plan.';
-  k.addPage('p'); contTitle(k, 'WIRING DIAGRAM', certNo, tag); k.y += 3;
-  drawDiagramPdf(k, cert, () => { k.addPage('p'); contTitle(k, 'WIRING DIAGRAM (continued)', certNo, tag); k.y += 3; });
+  const pages = [];
+  k.addPage('p'); pages.push(k.doc.getNumberOfPages()); contTitle(k, 'WIRING DIAGRAM', certNo, tag); k.y += 3;
+  drawDiagramPdf(k, cert, () => { k.addPage('p'); pages.push(k.doc.getNumberOfPages()); contTitle(k, 'WIRING DIAGRAM (continued)', certNo, tag); k.y += 3; }, { bottom: 13 + TB_H + 3 });
+  const here = k.doc.getNumberOfPages();
+  pages.forEach((pg, i) => { k.doc.setPage(pg); titleBlock(k, cert, certNo, i + 1, pages.length); });
+  k.doc.setPage(here);
+}
+// v0.41 (pro): drawing title block at the foot of each diagram sheet.
+const TB_H = 19;
+export function diagramTitleInfo(cert, profile = {}) {
+  const P = cert.people || {}; const S = cert.sigs || {}; const I = cert.install || {};
+  const who = (P.inspector && P.inspector.name) || (P.designer && P.designer.name) || (cert.mw && cert.mw.name) || profile.name || '';
+  const sig = S.inspector || S.designer || S.mw || {};
+  return { address: [I.address, I.postcode].filter(Boolean).join(', '), date: fmtDate(sig.date || (cert.mw && cert.mw.completed) || ''), drawnBy: who, rev: String(cert.diagramRev || 'A') };
+}
+function titleBlock(k, cert, certNo, n, of) {
+  const p = k.profile || {}; const t = diagramTitleInfo(cert, p); const y = k.H - 13 - TB_H; const x0 = k.x0, w = k.cw;
+  k.rect(x0, y, w, TB_H, { lw: 0.35, color: INK, fill: [255, 255, 255] });
+  let x = x0 + 2; const lw = 30;
+  if (p.logo) { const d = k.imageContain(p.logo, x, y + 2, lw - 4, TB_H - 4, p.logo.startsWith('data:image/png') ? 'PNG' : 'JPEG'); void d; }
+  else if (p.business || p.name) k.logoMark(p.business || p.name, x + 4, y + 4, 11);
+  x = x0 + lw; k.line(x, y, x, y + TB_H, { w: 0.25 });
+  const cells = [['Installation address', t.address, 0.42], ['Certificate No.', certNo || '', 0.18], ['Date', t.date, 0.14], ['Drawn by', t.drawnBy, 0.26]];
+  const row2 = [['Drawing', 'Single-line wiring diagram', 0.42], ['Revision', t.rev, 0.18], ['Sheet', `${n} of ${of}`, 0.14], ['Issued by', p.business || p.name || '', 0.26]];
+  const cw = w - lw; const rh = TB_H / 2;
+  [cells, row2].forEach((r, ri) => { let cx = x; const ry = y + ri * rh; if (ri) k.line(x, ry, x0 + w, ry, { w: 0.25 });
+    r.forEach(([lab, v, f], i) => { const ww = cw * f; if (i) k.line(cx, ry, cx, ry + rh, { w: 0.25 });
+      k.t(lab, cx + 1.5, ry + 2.8, { size: 5.5, color: GREY });
+      let fs = 7.5; let ls = k.wrap(v || 'N/A', ww - 3, fs, true); while (ls.length > 1 && fs > 6) { fs -= 0.25; ls = k.wrap(v || 'N/A', ww - 3, fs, true); } // shrinks, then wraps in full (never cut)
+      while (ls.length > 2 && fs > 3.2) { fs -= 0.2; ls = k.wrap(v || 'N/A', ww - 3, fs, true); }
+      const st = Math.min(2.6, (rh - 3.6) / ls.length); ls.forEach((l, li) => k.t(l, cx + 1.5, ry + 3.6 + st * 0.85 + li * st, { size: fs, bold: true, color: v ? VALUE : [170, 170, 170] }));
+      cx += ww; }); });
 }
 // v0.5: Schedule of supplementary bonding. The IET model forms record
 // supplementary bonding only as an inspection item, so this is printed as
@@ -901,6 +931,7 @@ export async function certificatePdf(cert, { profile = {}, photos = [] } = {}) {
   const { jsPDF } = await loadJsPDF();
   cert = normaliseCert(structuredClone(cert || {})); profile = profile || {}; // v0.36: old/damaged jobs never crash the PDF
   const k = new Kit(jsPDF, { orientation: 'p', footer: FOOT + (profile.business ? '  Issued by ' + profile.business + '.' : '') });
+  k.profile = profile;
   if (cert.type === 'EIC') { eic(k, cert, profile); guidancePage(k, 'EIC'); }
   else if (cert.type === 'EICR') { k.noLabel = 'Report No.'; eicr(k, cert, profile); guidancePage(k, 'EICR'); }
   else { mw(k, cert, profile); diagramSheet(k, cert, cert.number); guidancePage(k, 'MW'); }

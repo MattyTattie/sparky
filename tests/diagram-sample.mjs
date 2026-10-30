@@ -87,3 +87,29 @@ export function diagramEICRooms() {
   ] };
   return c;
 }
+// v0.41 (test): made-up EIC for the 'pro' diagram: a garage sub-board fed from
+// DB1 circuit 11, a loft board with no 'Supplied from', readings out of limits,
+// a circuit with no points and the contactor pair from above.
+export function diagramEICPro() {
+  const c = diagramEICContactors();
+  c.number = 'EIC-DIAG-06';
+  const b = c.boards[0];
+  const by = (n) => b.circuits.find((x) => String(x.num) === String(n));
+  for (const x of b.circuits) { x.wiring = x.wiring || 'A'; x.zs = '0.45'; x.r1r2 = '0.24'; x.irLL = '>200'; x.irLE = '>200'; x.pol = '\u2713'; }
+  by(1).zs = '2.10'; // over the 1.37 Ω max for a B32
+  by(5).irLE = '0.5'; by(5).irLL = '>200';
+  by(1).rcdMs = '450';
+  by(3).points = '';
+  by(2).points = '6';
+  by(2).diagram = { roomList: [
+    { name: 'Kitchen', lights: 4, sw1: 1, sw2pairs: 0, swi: 0, wiring: 'jb-switch' },
+    { name: 'Hall', lights: 2, sw1: 0, sw2pairs: 1, swi: 0, wiring: 'jb-switch' },
+  ] };
+  b.circuits.push(mcb(11, 'Radial 32', RCD2, { desc: 'Garage sub-main', points: '1', live: '6', cpc: '2.5', wiring: 'G' }));
+  const g = blankBoard(2); Object.assign(g, { ref: 'DB2', location: 'Garage', suppliedFrom: 'DB1 circuit 11' });
+  g.circuits = [mcb(1, 'Ring final', RCD1, { desc: 'Garage sockets', points: '4', wiring: 'B' }), mcb(2, 'Lighting', RCD1, { desc: 'Garage lights', points: '2', wiring: 'B' })];
+  const l = blankBoard(3); Object.assign(l, { ref: 'DB3', location: 'Loft', suppliedFrom: '' });
+  l.circuits = [mcb(1, 'Lighting', RCD1, { desc: 'Loft lights', points: '2', wiring: 'A' })];
+  c.boards.push(g, l);
+  return c;
+}
