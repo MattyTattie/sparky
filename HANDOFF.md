@@ -251,6 +251,11 @@ Open points
 - Runtime table at 100/75/50/25% inverter load (Results + PDF).
 - Tests: tests/v350.test.mjs; shots: tests/screens_v350.py → /workspace/sparky-shots/v0.35.0.
 
+## v0.43.3 — Diagram deep review, easier rooms menu, board supply (live 30 Oct 2026)
+PDF: circuits taller than a page split at a clear gap (never clipped); board/RCD headings kept with their first circuit. Sub-mains no "Add points" note; legacy room counts ignored; Points split only when totals agree.
+Rooms menu: Prev/Next circuit, Copy last room, Needs attention count badge + top link. Light-switch fan dashed line starts at the switch. No wiring explanation sentences or room cable tags on the drawing (cable list keeps them).
+Every board starts with a boxed heading; extra boards show their source: Meter tail connector block / Switch fuse / Sub-main (optional board.supplyKind, one-tap chips on board details; old "Henley"/"Origin" text maps). Heater/radiator/towel-rail symbol (Rad/Rail); FCU points on a named load drawn as 13A FCU isolator + load; isolator labels centred.
+
 ## v0.43.2 — Fan line, rooms menu tidy, plain coil wording (live 30 Oct 2026)
 - Room fan feed is one continuous line from the room feed (box margin), clear of the notes; circuit Points line reads e.g. '8 x lights + 1 x fan'.
 - Switches and rooms: this circuit's rooms first ('On this circuit (feed order)'), then 'Add a room', rooms on other circuits behind 'Show rooms on other circuits (n)'; junk room names (old room counts like '5') ignored.
