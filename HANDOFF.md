@@ -251,5 +251,8 @@ Open points
 - Runtime table at 100/75/50/25% inverter load (Results + PDF).
 - Tests: tests/v350.test.mjs; shots: tests/screens_v350.py → /workspace/sparky-shots/v0.35.0.
 
+## v0.39.0 — Lighting rooms, IEC-style symbols, twin/single sockets (live 30 Oct 2026)
+Lighting circuits can list rooms (optional circuit.diagram.roomList): each room drawn in its own box with lights, loop-in ceiling roses or JB, switch drops, 2-way strappers and intermediates, feed daisy-chained room to room; rooms editor in 'Switches and rooms'. Point symbols redrawn closer to BS EN 60617 (socket semicircle on bar, switch levers 1-way/2-way/intermediate, FCU fuse, immersion element, detector triangle, SPD box to earth, contactor key matches drawing). Sockets draw as twins by default; optional circuit.diagram.singles (−/+ in 'Switches and rooms') draws that many singles; key shows Twin socket / Socket (single). Cache sparky-v0.39.0. Version-pinned tests widened to 0.39.x. 462/462 node tests.
+
 ## v0.38.0 — Wiring diagram (live 30 Oct 2026)
 Auto single-line wiring diagram from the cert (EIC/EICR whole board, MWC just the circuit): supply/earthing, main switch, RCD grouping, breakers, cable, points-served symbols (sockets, lights, alarms, immersion, EV, fan, FCU, SPD as load off its MCB), spares squashed to one line, default supply fuse/location hidden. MWC "Spur added" (count, socket/FCU). Per-circuit "Controlled by" (contactor / time clock / relay, coil circuit, dashed links). Auto 1-way switches + optional 2-way/intermediate and rooms. Symbol key on PDF; optional PDF pages. Wiring diagram card on the job's main page; tap a circuit to edit; on-screen "Add points served" hint. Cache sparky-v0.38.0. Version-pinned tests widened to 0.38.x. 454/454 node tests.
