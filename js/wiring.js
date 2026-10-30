@@ -42,10 +42,28 @@ export function rcdLabel(c) {
 }
 // Circuits on MCBs that share the same RCD (same RCD details, next to each
 // other on the schedule) hang off one RCD; RCBOs and plain MCBs hang off the bus.
-export function groupCircuits(circuits) {
-  const items = []; let grp = null;
+// Spare ways are listed once, in one line: "Spare: 1, 4, 5, 9–14".
+export function spareRanges(nums) {
+  const ints = []; const other = [];
+  for (const n of nums) { const s = String(n ?? '').trim(); if (/^\d+$/.test(s)) ints.push(+s); else if (s) other.push(s); }
+  const u = [...new Set(ints)].sort((a, b) => a - b); const out = [];
+  for (let i = 0; i < u.length; i++) { let j = i; while (j + 1 < u.length && u[j + 1] === u[j] + 1) j++; out.push(j > i + 1 ? `${u[i]}\u2013${u[j]}` : j === i + 1 ? `${u[i]}, ${u[j]}` : `${u[i]}`); i = j; }
+  return [...out, ...other].join(', ');
+}
+// A surge protection device way: by its description, or the board's SPD
+// Type 2 tick together with a way described as SPD/surge.
+export const isSpd = (c) => !!c && !isSpareCircuit(c) && /\bspd\b|surge/i.test(String(c.desc || ''));
+export function spdLabel(c, board) {
+  const m = /type\s*([123](?:\s*[+&\/]\s*[123])?)|\bT([123])\b/i.exec(String(c.desc || ''));
+  const t = m ? (m[1] || m[2]).replace(/\s+/g, '') : board ? (board.spdT1 ? '1' : board.spdT2 ? '2' : board.spdT3 ? '3' : '') : '';
+  return 'SPD' + (t ? ' Type ' + t : '');
+}
+export function groupCircuits(circuits, board = null) {
+  const items = []; let grp = null; const spares = [];
   for (const c of circuits || []) {
     if (!c) continue;
+    if (isSpareCircuit(c)) { spares.push(val(c.num) || '?'); continue; }
+    if (isSpd(c)) { grp = null; items.push({ kind: 'circuit', c, spd: spdLabel(c, board) }); continue; }
     if (!isSpareCircuit(c) && !isRcbo(c) && hasRcd(c)) {
       const key = rcdKey(c);
       if (grp && grp.key === key) { grp.circuits.push(c); continue; }
@@ -53,6 +71,7 @@ export function groupCircuits(circuits) {
     }
     grp = null; items.push({ kind: 'circuit', c });
   }
+  if (spares.length) items.push({ kind: 'spares', text: 'Spare: ' + spareRanges(spares), count: spares.length });
   return items;
 }
 export function diagramModel(cert) {
@@ -60,15 +79,17 @@ export function diagramModel(cert) {
   if (cert.type === 'MW') {
     const M = cert.mw || {};
     return { type: 'MW', supply: { earthing: val(M.earthing), lines: [val(M.zdb) && `Zdb ${val(M.zdb)} Ω`].filter(Boolean) }, main: null,
-      boards: [{ ref: val(M.dbRef) || 'DB', location: val(M.dbLocation), from: '', items: groupCircuits(M.circuit ? [M.circuit] : []), note: 'Only the circuit covered by this certificate is shown.' }] };
+      boards: [{ ref: val(M.dbRef) || 'DB', location: val(M.dbLocation), from: '', items: groupCircuits(M.circuit ? [M.circuit] : [], null), note: 'Only the circuit covered by this certificate is shown.' }] };
   }
   const ms = [val(parts.msCurrent) && val(parts.msCurrent) + ' A', val(parts.msPoles) && val(parts.msPoles) + '-pole', val(parts.msBs) && 'BS EN ' + val(parts.msBs).replace(/^BS\s*(EN)?\s*/i, '')].filter(Boolean).join(', ');
-  const fuse = [val(sup.spBs), val(sup.spType), val(sup.spRating) && val(sup.spRating) + ' A'].filter(Boolean).join(' ');
+  // A new cert pre-fills the supply fuse standard (BS 88-3). On its own that's
+  // just the default, so the fuse is only shown once a type or rating is in.
+  const fuse = (val(sup.spType) || val(sup.spRating)) ? [val(sup.spBs), val(sup.spType), val(sup.spRating) && val(sup.spRating) + ' A'].filter(Boolean).join(' ') : '';
   return {
     type: cert.type,
-    supply: { earthing: val(sup.earthing), lines: [[val(sup.conductors), val(sup.u) && val(sup.u) + ' V', val(sup.f) && val(sup.f) + ' Hz'].filter(Boolean).join(', '), [val(sup.ze) && `Ze ${val(sup.ze)} Ω`, val(sup.ipf) && `Ipf ${val(sup.ipf)} kA`].filter(Boolean).join(', '), fuse && 'Supply fuse ' + fuse].filter(Boolean) },
+    supply: { earthing: val(sup.earthing), lines: [[val(sup.conductors), val(sup.u) && val(sup.u) + ' V', val(sup.f) && val(sup.f) + ' Hz'].filter(Boolean).join(', '), [val(sup.ze) && `Ze ${val(sup.ze)} Ω`, val(sup.ipf) && `Ipf ${val(sup.ipf)} kA`].filter(Boolean).join(', '), ].filter(Boolean), fuse },
     main: { label: 'Main switch', detail: ms },
-    boards: (cert.boards || []).map((b) => ({ ref: val(b.ref) || 'DB', location: val(b.location), from: val(b.suppliedFrom), items: groupCircuits(b.circuits) })),
+    boards: (cert.boards || []).map((b) => ({ ref: val(b.ref) || 'DB', location: val(b.location), from: val(b.suppliedFrom), items: groupCircuits(b.circuits, b) })),
   };
 }
 
@@ -100,13 +121,14 @@ export function wrapText(s, w, size, bold = false) {
 // ---------- layout ----------
 // Units are abstract; `W` is the drawing width. Returns blocks stacked
 // top to bottom: { h, shapes }. Shapes: line, rect, circle, text.
-export function circuitLines(c) {
+export function circuitLines(c, spd = '') {
   if (isSpareCircuit(c)) return { title: `${val(c.num) || '?'}  SPARE`, rows: [], spare: true };
   const dev = [val(c.type) && val(c.type) !== 'adj' ? val(c.type) : '', val(c.rating)].join('') ;
   const kind = isRcbo(c) ? 'RCBO' : c.device === 'mcb' ? 'MCB' : val(c.bs) ? 'BS ' + val(c.bs) : '';
   const device = [dev, kind].filter(Boolean).join(' ') + (isRcbo(c) && val(c.rcdIdn) ? `, ${val(c.rcdIdn)} mA` + (val(c.rcdType) ? ' Type ' + val(c.rcdType) : '') : '');
   const cable = val(c.live) ? `${val(c.live)}${val(c.cpc) ? ' / ' + val(c.cpc) : ''} mm²` : '';
   const pc = pointCount(c);
+  if (spd) return { title: `${val(c.num) || '?'}  ${val(c.desc) || 'SPD'}`, spare: false, spd: true, devShort: spd, devKind: '', rows: [['Device', spd], ['Breaker', device]] };
   return { title: `${val(c.num) || '?'}  ${val(c.desc) || 'No description'}`, spare: false, devShort: dev || NA, devKind: kind,
     rows: [['Breaker', device], ['Cable', cable], ['Points', pc.known ? `${pc.n} \u00d7 ${KIND_NAME[pointKind(c)].toLowerCase()}${pc.n === 1 ? '' : 's'}` : '']] };
 }
@@ -141,7 +163,7 @@ export function layout(model, { W = 380, font = 12 } = {}) {
   const head = [];
   if (model.type !== 'MW') {
     const e = model.supply.earthing;
-    head.push(chainBox('Supply' + (e ? ': ' + e : ''), [...model.supply.lines.map((t) => ({ text: t })), ...(e ? [] : [{ text: 'Earthing: ' + NA, na: true }])], { earth: e || ' ' }));
+    head.push(chainBox('Supply' + (e ? ': ' + e : ''), [...model.supply.lines.map((t) => ({ text: t })), { text: 'Supply fuse: ' + (model.supply.fuse || NA), na: !model.supply.fuse }, ...(e ? [] : [{ text: 'Earthing: ' + NA, na: true }])], { earth: e || ' ' }));
     head.push(chainBox('Meter', [{ text: 'kWh meter (supplier\u2019s)' }]));
     head.push(chainBox(model.main.label, [{ text: model.main.detail || NA, na: !model.main.detail }]));
   } else {
@@ -149,8 +171,8 @@ export function layout(model, { W = 380, font = 12 } = {}) {
     head.push(chainBox('Earthing: ' + (e || NA), model.supply.lines.map((t) => ({ text: t })), { earth: ' ' }));
   }
   head.forEach((b, i) => { // bus runs down through the chain
-    if (i > 0) L(b.sh, busX, 0, busX, b.mid); else L(b.sh, busX, b.mid, busX, b.h);
-    if (i > 0) L(b.sh, busX, b.mid, busX, b.h);
+    // same weight and colour as the board bus, so the chain reads as one line
+    L(b.sh, busX, i > 0 ? 0 : b.mid, busX, b.h, { w: 2.4, color: COL.brand });
     blocks.push({ h: b.h, shapes: b.sh, kind: 'head' });
   });
 
@@ -167,8 +189,13 @@ export function layout(model, { W = 380, font = 12 } = {}) {
     const items = bd.items;
     if (!items.length) { const sh = []; const h = textLines(sh, devX, 4, 'No circuits yet.', W - devX - 8, { color: COL.na }) + 10; blocks.push({ h, shapes: sh, kind: 'empty' }); }
     items.forEach((it, ii) => {
-      const lastMain = ii === items.length - 1;
-      if (it.kind === 'circuit') blocks.push(circuitBlock(it.c, busX, lastMain, null));
+      const lastMain = items.slice(ii + 1).every((x) => x.kind === 'spares');
+      if (it.kind === 'spares') {
+        const sh = []; const y = 6; const tx = devX;
+        const hh = textLines(sh, tx, y, it.text, W - tx - 8, { size: small, color: COL.grey });
+        const h = y + hh + 8;
+        blocks.push({ h, shapes: sh, kind: 'spares' });
+      } else if (it.kind === 'circuit') blocks.push(circuitBlock(it.c, busX, lastMain, null, it.spd));
       else {
         // RCD box on the main bus, its own bus below
         const sh = []; const y = 6; const subX = devX + 10; const bw = W - devX - 8;
@@ -184,8 +211,8 @@ export function layout(model, { W = 380, font = 12 } = {}) {
   });
   return { W, blocks, height: blocks.reduce((a, b) => a + b.h, 0) };
 
-  function circuitBlock(c, bus, last, outerBus) {
-    const sh = []; const info = circuitLines(c); const y = 8;
+  function circuitBlock(c, bus, last, outerBus, spd = '') {
+    const sh = []; const info = circuitLines(c, spd); const y = 8;
     const dx = bus + 12; const tx = dx + devW + gap; const tw = W - tx - 6;
     // text
     let hh = textLines(sh, tx, y - 2, info.title, tw, { bold: true, color: info.spare ? COL.na : COL.ink });
@@ -193,7 +220,7 @@ export function layout(model, { W = 380, font = 12 } = {}) {
     // points
     const pc = pointCount(c); const kind = pointKind(c);
     let ph = 0;
-    if (!info.spare && pc.shown) {
+    if (!info.spare && !info.spd && pc.shown) {
       const S = F * 1.5, step = S + 6; const per = Math.max(1, Math.floor((tw - 4) / step));
       const rows = Math.ceil(pc.shown / per); const py = y + hh + 6;
       for (let r = 0; r < rows; r++) {
@@ -209,6 +236,12 @@ export function layout(model, { W = 380, font = 12 } = {}) {
     const bh = F * 3.2; const by = y;
     R(sh, dx, by, devW, bh, { fill: info.spare ? [248, 248, 248] : [255, 255, 255] }); sh.unshift(sh.pop());
     if (info.spare) T(sh, dx + devW / 2, by + bh / 2 + F * 0.35, 'Spare', { anchor: 'middle', color: COL.na, size: small });
+    else if (info.spd) { // SPD: arrow to earth inside the box, "SPD" under it
+      const cx = dx + devW / 2, t = by + 5, a = F * 0.9;
+      L(sh, cx, t, cx, t + a); L(sh, cx - F * 0.3, t + a - F * 0.35, cx, t + a); L(sh, cx + F * 0.3, t + a - F * 0.35, cx, t + a);
+      earthSym(sh, cx, t + a, F * 0.7);
+      T(sh, cx, by + bh - 4, 'SPD', { anchor: 'middle', bold: true, size: small });
+    }
     else {
       const d1 = wrapText(info.devShort, devW - 6, F, true); const d2 = info.devKind ? wrapText(info.devKind, devW - 6, small * 0.92) : [];
       d1.forEach((l, i) => T(sh, dx + devW / 2, by + F * 1.15 + i * lh(F), l, { anchor: 'middle', bold: true, color: info.devShort === NA ? COL.na : COL.ink }));

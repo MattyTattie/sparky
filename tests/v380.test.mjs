@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
-import { pointKind, pointCount, groupCircuits, diagramModel, layout, diagramSvg, wrapText, textW, diagramInPdf, MAX_SYMBOLS } from '../js/wiring.js';
+import { spareRanges, isSpd, spdLabel, pointKind, pointCount, groupCircuits, diagramModel, layout, diagramSvg, wrapText, textW, diagramInPdf, MAX_SYMBOLS } from '../js/wiring.js';
 import { diagramEIC, diagramMW } from './diagram-sample.mjs';
 import { sampleEIC, sampleEICR, sampleMW, PROFILE } from './sample-data.mjs';
 const require = createRequire(import.meta.url);
@@ -29,7 +29,7 @@ test('split board: MCBs grouped under their RCDs; RCBOs hang off the bus', () =>
   assert.equal(g.length, 2); assert.equal(g[0].kind, 'rcd'); assert.equal(g[0].circuits.length, 4); assert.equal(g[1].circuits.length, 4);
   assert.match(g[0].label, /30 mA/); assert.match(g[1].label, /80 A/);
   const r = groupCircuits(sampleEIC().boards[0].circuits);
-  assert.ok(r.every((x) => x.kind === 'circuit'));
+  assert.ok(r.every((x) => x.kind === 'circuit' || x.kind === 'spares'));
 });
 test('EIC/EICR draw every board circuit; Minor Works only its circuit', () => {
   const e = diagramModel(diagramEIC()); assert.equal(e.boards.length, 1); assert.equal(e.supply.earthing, 'TN-C-S (PME)');
@@ -64,4 +64,32 @@ test('PDF: diagram sheet after the schedules (EIC) and after the form (MW), and 
   assert.ok(n1 >= n0 + 1 && n1 <= n0 + 3, `${n0} -> ${n1}`);
   const m = diagramMW(); const m1 = await pages(m); m.diagramPdf = false; assert.equal(await pages(m), m1 - 1);
   assert.equal(diagramInPdf(sampleMW()), true);
+});
+
+// v0.38 fixes (made-up data only)
+test('spare ways: one compact line with ranges, drawn once after the circuits', () => {
+  assert.equal(spareRanges(['1', '4', '5', '9', '10', '11', '12', '13', '14', '18', '20', '21', '22', '23', '25', '30']), '1, 4, 5, 9\u201314, 18, 20\u201323, 25, 30');
+  assert.equal(spareRanges(['3']), '3');
+  const circuits = [{ num: '1', desc: 'Spare' }, { num: '2', desc: 'Lights', type: 'B', rating: '6' }, { num: '3', desc: 'Spare' }, { num: '4', desc: 'Spare' }, { num: '5', desc: 'Spare' }];
+  const g = groupCircuits(circuits);
+  assert.equal(g.length, 2); assert.equal(g[1].kind, 'spares'); assert.equal(g[1].text, 'Spare: 1, 3\u20135');
+  const svg = diagramSvg({ type: 'EIC', supply: {}, parts: {}, boards: [{ ref: 'DB9', circuits }] });
+  assert.match(svg, /Spare: 1, 3\u20135/); assert.doesNotMatch(svg, /SPARE/);
+});
+test('SPD way: SPD symbol and type label, breaker shown, no Points line', () => {
+  const c = { num: '7', desc: 'SPD', type: 'B', rating: '32', device: 'mcb' };
+  assert.ok(isSpd(c)); assert.ok(isSpd({ desc: 'Surge protection' })); assert.ok(!isSpd({ desc: 'Sockets' }));
+  assert.equal(spdLabel(c, { spdT2: true }), 'SPD Type 2'); assert.equal(spdLabel({ desc: 'SPD Type 1+2' }, {}), 'SPD Type 1+2');
+  const svg = diagramSvg({ type: 'EIC', supply: {}, parts: {}, boards: [{ ref: 'DB9', spdT2: true, circuits: [c, { num: '8', desc: 'Sockets', type: 'B', rating: '32' }] }] });
+  assert.match(svg, /SPD Type 2/); assert.match(svg, /B32 MCB/);
+  const spdPart = svg.slice(svg.indexOf('7  SPD'), svg.indexOf('8  Sockets'));
+  assert.doesNotMatch(spdPart, /Points/);
+});
+test('untouched new-cert defaults are not printed as facts', async () => {
+  const { newCert, blankBoard } = await import('../js/certmodel.js');
+  const c = newCert('EIC', { profile: PROFILE, number: 'T-1', customer: { name: 'Test' }, job: {} });
+  const b = blankBoard(1); b.circuits = [{ num: '1', desc: 'Lights', type: 'B', rating: '6' }]; c.boards = [b];
+  const m = diagramModel(c); assert.equal(m.supply.fuse, ''); assert.equal(m.boards[0].location, '');
+  const svg = diagramSvg(c); assert.doesNotMatch(svg, /BS 88-3/); assert.match(svg, /Supply fuse: N\/A/);
+  c.supply.spRating = '100'; assert.match(diagramSvg(c), /Supply fuse: BS 88-3 100 A/);
 });
