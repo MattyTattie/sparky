@@ -2,7 +2,7 @@
 // Name: Zs Pro (v0.25; was Sparky). Change APP_NAME here and in
 // manifest.json / index.html <title>.
 export const APP_NAME = 'Zs Pro';
-export const APP_VERSION = '0.41.0 beta';
+export const APP_VERSION = '0.42.0 beta';
 export const APP_SLUG = 'sparky';
 // Same Google Cloud project as Hearth (not secret: only works from
 // https://mattytattie.github.io and for its test users). drive.file scope:

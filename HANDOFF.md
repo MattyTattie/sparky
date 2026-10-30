@@ -251,6 +251,16 @@ Open points
 - Runtime table at 100/75/50/25% inverter load (Results + PDF).
 - Tests: tests/v350.test.mjs; shots: tests/screens_v350.py → /workspace/sparky-shots/v0.35.0.
 
+## v0.42.0 — Diagram switches: each switch its own lights, level 2-way rows, IEC contactor (live 30 Oct 2026)
+- Rooms: each 1-way switch (or 2-way pair) controls its own lights, split evenly (3 on 2 = 2 + 1);
+  optional room `split` [n, ...] overrides. JB-to-switch feed loops switch to switch. Loop-in and JB
+  rooms drop to each group's switch. 2-way pairs + intermediates sit on one level row; switched live
+  comes from the far switch. `switchGroups()` in js/wiring.js.
+- Contactor: IEC 60617 NO contact in line on the feed, KM1/KM2 per board (`controlTags`); control
+  circuit draws time clock (TC) / relay and coil A1/A2. Key: contact, coil, time clock. Heavier coil link.
+- No coil supply: 'Coil supply: N/A' grey + on-screen hint 'Set the coil circuit in Controlled by'.
+- 'Hot water', HW, boost, cylinder guess immersion. Tests: tests/v420_switches.test.mjs.
+
 ## v0.41.0 — Diagram pro: cable/breaker labels, sub-boards, flags, readings popup, cable list, templates, title block, tidy-up, contactor refs (live 30 Oct 2026)
 - Every circuit shows cable size, type and breaker ('2.5/1.5mm² T&E · B32') with a cable label C1, C2…; the PDF adds a cable list (no lengths).
 - Sub-boards drawn from 'Supplied from' (feedInfo in wiring.js); blank or mismatched links are amber dashed, never guessed. Outbuildings marked.
