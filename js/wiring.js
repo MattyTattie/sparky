@@ -198,6 +198,7 @@ export function roomPointsNote(c) {
 // How many symbols to draw: up to MAX_SYMBOLS, then "+ N more".
 export function pointCount(c) {
   const n = parseInt(String((c && c.points) ?? '').trim(), 10);
+  if (n === 0 && /^0+$/.test(String(c.points).trim())) return { n: 0, shown: 0, more: 0, known: true }; // v0.43.4: a typed 0 is a value, not blank
   if (!Number.isFinite(n) || n <= 0) return { n: 0, shown: 0, more: 0, known: false };
   const shown = Math.min(n, MAX_SYMBOLS);
   return { n, shown, more: n - shown, known: true };
@@ -230,15 +231,15 @@ export function spdLabel(c, board) {
   return 'SPD' + (t ? ' Type ' + t : '');
 }
 export function groupCircuits(circuits, board = null) {
-  const items = []; let grp = null; const spares = [];
+  const items = []; let grp = null; const spares = []; const byKey = new Map(); // v0.43.4: one heading per RCD on the board
   for (const c of circuits || []) {
     if (!c) continue;
     if (isSpareCircuit(c)) { spares.push(val(c.num) || '?'); continue; }
     if (isSpd(c)) { grp = null; items.push({ kind: 'circuit', c, spd: spdLabel(c, board) }); continue; }
     if (!isSpareCircuit(c) && !isRcbo(c) && hasRcd(c)) {
       const key = rcdKey(c);
-      if (grp && grp.key === key) { grp.circuits.push(c); continue; }
-      grp = { kind: 'rcd', key, label: rcdLabel(c), circuits: [c] }; items.push(grp); continue;
+      if (byKey.has(key)) { byKey.get(key).circuits.push(c); continue; }
+      grp = { kind: 'rcd', key, label: rcdLabel(c), circuits: [c] }; byKey.set(key, grp); items.push(grp); continue;
     }
     grp = null; items.push({ kind: 'circuit', c });
   }
@@ -588,17 +589,32 @@ export function layout(model, { W = 380, font = 12, screen = false, cableTable =
       if (iso) { const ih = iso.ccu ? F * 3.2 : F * 2.4; const iw0 = Math.max(ih, textW(iso.label, small, true) + 4); items.push([iw0 + gapX, (x0, cy) => { /* v0.43.3: label centred over its symbol; leads fill the slot */ const pad = (iw0 - ih) / 2, x = x0 + pad; if (pad > 0) { L(sh, x0, cy, x, cy, g9); L(sh, x + ih, cy, x0 + iw0, cy, g9); }
         rotH(sh, x, cy, (o) => isoSym(o, x, cy, ih, iso.fcu, iso.switched, iso.ccu)); if (iso.ccu) ccuSock(sh, x + ih / 2, cy + ih * 0.3, F * 1.5); T(sh, x + ih / 2, cy - Math.max(S * 0.55, iso.ccu ? ih * 0.36 : 0), iso.label, { anchor: 'middle', bold: true, size: small }); }, false, iw0]); }
       heatLab = isTowel(c) ? 'Rail' : 'Rad';
-      for (let i = 0; i < pc.shown; i++) { const k1 = kindAt(i); items.push([lstep, (x, cy) => { heatLab = isTowel(c) ? 'Rail' : 'Rad'; symbol(sh, k1, x + S / 2, cy, S); used.add(k1); }, true]); }
+      // v0.43.4: a plain lighting circuit's switch(es) sit in line before its lights (feed -> switch -> lights)
+      const si0 = switchInfo(c); const swIn = si0 && si0.list.length && pc.shown && kind === 'light' ? si0.list : [];
+      for (const k0 of swIn) items.push([lstep, (x, cy) => { const r = S / 2, ax = x + S / 2 - r * 0.1; /* pivot on the line, lever lifted: an open switch in series */
+        symbol(sh, k0, x + S / 2, cy - r * 0.25, S); used.add(k0); L(sh, x, cy, ax - r * 0.2, cy, g9); L(sh, ax + r * 0.62, cy, x + S, cy, g9); }, false, S]);
+      const nSw = swIn.length; const ringN = kind === 'socket' ? pc.shown - sgl : pc.shown; // v0.43.4: single sockets hang off the ring as spurs
+      for (let i = 0; i < ringN; i++) { const k1 = kindAt(i); items.push([lstep, (x, cy) => { heatLab = isTowel(c) ? 'Rail' : 'Rad'; symbol(sh, k1, x + S / 2, cy, S); used.add(k1); }, true]); }
       const rowsX = []; let x = tx + F * 0.6, row = 0; const maxX = W - 6;
       for (const it of items) { if (x + it[0] > maxX + 6 && x > tx + F * 0.6) { row++; x = tx + F * 0.6; } rowsX.push([x, row]); x += it[0]; }
       const rows = row + 1; const rowH = S + lab0 + 8; let prevEnd = null;
       items.forEach((it, i) => { const [xx, r] = rowsX[i]; const cy = py + r * rowH + S / 2;
-        const inX = it[2] ? xx + S / 2 - loadR(kindAt(i - (items.length - pc.shown)), S) : xx;
+        const li = i - (items.length - ringN); const inX = it[2] ? xx + S / 2 - loadR(kindAt(li), S) : xx;
         if (i === 0) { L(sh, fx, feedTop, fx, cy, g9); L(sh, fx, cy, inX, cy, g9); }
         else if (rowsX[i - 1][1] !== r) { const pcy = cy - rowH; L(sh, prevEnd, pcy, prevEnd + 3, pcy, g9); L(sh, prevEnd + 3, pcy, prevEnd + 3, pcy + rowH / 2 + S * 0.2, g9); L(sh, prevEnd + 3, pcy + rowH / 2 + S * 0.2, fx, pcy + rowH / 2 + S * 0.2, g9); L(sh, fx, pcy + rowH / 2 + S * 0.2, fx, cy, g9); L(sh, fx, cy, inX, cy, g9); }
         else L(sh, prevEnd, cy, inX, cy, g9);
-        it[1](xx, cy); prevEnd = it[2] ? xx + S / 2 + loadR(kindAt(i - (items.length - pc.shown)), S) : xx + it[3]; });
+        it[1](xx, cy); prevEnd = it[2] ? xx + S / 2 + loadR(kindAt(li), S) : xx + it[3]; });
       ph = 6 + lab0 + rows * rowH - 8 + (iso && iso.ccu ? F * 1.8 : 0);
+      if (kind === 'socket' && sgl && items.length) { // spur(s): a branch dropping from the last ring socket, below everything else
+        used.add('socket1'); const [lx0, lr] = rowsX[items.length - 1]; const bx = lx0 + S / 2; const by = py + lr * rowH + S / 2 + S * 0.45;
+        const sy = py + rows * rowH + 4 + S / 2; const sper = Math.max(1, Math.floor((maxX - tx - F * 0.6) / lstep)); let px = null;
+        for (let j = 0; j < sgl; j++) { const rr = Math.floor(j / sper), xx = tx + F * 0.6 + (j % sper) * lstep, cy = sy + rr * rowH, cx = xx + S / 2, rad = loadR('socket1', S);
+          if (j === 0) { L(sh, bx, by, bx, cy - rowH / 2 + 2, g9); L(sh, bx, cy - rowH / 2 + 2, cx, cy - rowH / 2 + 2, g9); L(sh, cx, cy - rowH / 2 + 2, cx, cy - S * 0.45, g9); }
+          else if (j % sper === 0) { L(sh, px.x, px.y + S * 0.45, px.x, cy - rowH / 2 + 2, g9); L(sh, px.x, cy - rowH / 2 + 2, cx, cy - rowH / 2 + 2, g9); L(sh, cx, cy - rowH / 2 + 2, cx, cy - S * 0.45, g9); }
+          else L(sh, px.x + rad, cy, cx - rad, cy, g9);
+          symbol(sh, 'socket1', cx, cy, S); px = { x: cx, y: cy }; }
+        const srows = Math.ceil(sgl / sper); ph += srows * rowH + 4;
+        const lx = tx + F * 0.6 + Math.min(sgl, sper) * lstep; if (lx + textW('Spurs', small) < maxX) T(sh, lx, sy + (srows - 1) * rowH + small * 0.35, sgl === 1 ? 'Spur' : 'Spurs', { size: small, color: COL.grey }); }
       if (ctl) { // coil cross-reference under the row, joined by the dashed mechanical link
         const ty = y + hh + 6 + ph + 2; const nx0 = coilAt ? Math.max(F * 1.6, coilAt.x - tx + 6) : F * 1.6; const coil = ctl.from ? `Coil switched by circuit ${ctl.from} (see circuit ${ctl.from})` : 'Coil supply: ' + NA;
         let nh = textLines(sh, tx + nx0, ty, ctl.note, tw - nx0, { size: small, bold: true });
@@ -610,7 +626,7 @@ export function layout(model, { W = 380, font = 12, screen = false, cableTable =
       if (pc.more) { ph += textLines(sh, tx, y + hh + 6 + ph, `+ ${pc.more} more (${pc.n} in total)`, tw, { size: small, color: COL.grey }) + 2; }
       // light switches: their own row under the lights, on the same feed
       const si = switchInfo(c);
-      if (si && si.list.length) {
+      if (si && si.list.length && !nSw) {
         const sy = y + hh + 6 + ph + 8; const cy = sy + S / 2; const n = Math.min(si.list.length, per); const rws = Math.ceil(si.list.length / per);
         for (let r = 0; r < rws; r++) {
           const m = Math.min(per, si.list.length - r * per); const cyr = cy + r * (S + 10);
