@@ -157,7 +157,11 @@ route(/^\/cert\/([^/]+)\/diagram$/, async (id) => {
   const cert = await openCert(id); if (!cert) return go('#/');
   const box = h('div', { class: 'diagram', style: 'overflow-x:auto;background:#fff;border-radius:8px;color-scheme:light' }); // white paper in dark mode too
   const href = (r) => (r.mw ? `#/cert/${id}/mwc` : `#/cert/${id}/b/${r.bi}/c/${r.ci}`);
-  const draw = () => { box.innerHTML = diagramHasCircuits(cert) ? diagramSvg(cert, { W: 380, font: 12, screen: true, tap: true }) : ''; };
+  const draw = () => { box.innerHTML = diagramHasCircuits(cert) ? diagramSvg(cert, { W: diagW(), font: diagW() > 600 ? 14 : 12, screen: true, tap: true }) : ''; };
+  /* v0.43.1: desktop draws at the real width (1 unit = 1px) instead of a stretched phone column */
+  function diagW() { const w = box.clientWidth || 0; return w > 460 ? Math.min(1100, Math.round(w)) : 380; }
+  let rzT = 0; let lastW = box.clientWidth; window.addEventListener('resize', () => { clearTimeout(rzT); rzT = setTimeout(() => { if (!box.isConnected) return; if (Math.abs(box.clientWidth - lastW) > 40) { lastW = box.clientWidth; draw(); } }, 200); });
+  setTimeout(() => { if (box.isConnected && box.clientWidth > 460) { lastW = box.clientWidth; draw(); } }, 0);
   draw();
   // v0.41 (test): tap a circuit (or a room box in it) for its readings, then Edit
   const openReadings = async (bi, ci, mw) => {

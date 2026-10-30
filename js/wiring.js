@@ -64,6 +64,7 @@ export function pointKind(c) {
   if (/light|lamp|ltg|lighting/.test(d)) return 'light';
   if (/cooker|oven|hob|range/.test(d)) return 'cooker';
   if (/shower/.test(d)) return 'shower';
+  if (/intruder|burglar|security alarm|alarm panel|cctv|door ?bell|gate|motor|pump|inverter|battery|solar|\bpv\b|dish ?washer|washing|washer|dryer|fridge|freezer|boiler|underfloor|\bufh\b|air ?con|hot tub|sauna|garage door/.test(d) && !/\bfcu\b|fused|\bspur/.test(d)) return 'appliance'; /* v0.43.1: common fixed loads */
   if (/smoke|heat (alarm|det)|\balarms?\b|detector/.test(d)) return 'alarm';
   if (/immersion|hot water|\bhw\b|\bboost|cylinder/.test(d)) return 'immersion';
   if (/\bev\b|charger|car charg|charge ?point/.test(d)) return 'ev';
@@ -443,7 +444,7 @@ export function layout(model, { W = 380, font = 12, screen = false, cableTable =
     const sh = []; const sz = screen ? small : small * 0.85; const y = 4; let x = 8; const cy = y + sz * 0.9;
     const item = (draw, text, color) => { draw(x, cy); x += F * 1.6; T(sh, x, y + sz * 1.2, text, { size: sz, color }); x += textW(text, sz) + F; };
     const rows = []; let lineY = 0;
-    item((x0, yy) => R(sh, x0, yy - sz * 0.6, F * 1.2, sz * 1.2, { color: COL.red, lw: 2, fill: [255, 255, 255] }), 'Reading out of limits', screen ? COL.red : COL.grey);
+    item((x0, yy) => R(sh, x0, yy - sz * 0.6, F * 1.2, sz * 1.2, { color: COL.red, lw: screen ? 2 : 2.8, fill: [255, 255, 255] }), screen ? 'Reading out of limits' : 'Reading out of limits (thick box)', screen ? COL.red : COL.grey);
     item((x0, yy) => L(sh, x0, yy, x0 + F * 1.2, yy, { w: 3, color: COL.amber }), 'Missing info', screen ? COL.amber : COL.grey);
     if (x + textW('Link not recorded', sz) + F * 2 > W) { lineY = sz * 1.8; x = 8; }
     const yy2 = cy + lineY; const x0 = x; L(sh, x0, yy2, x0 + F * 1.2, yy2, { w: 2, color: COL.amber, dash: [4, 2] }); T(sh, x0 + F * 1.6, y + lineY + sz * 1.2, 'Link not recorded', { size: sz, color: screen ? COL.amber : COL.grey });
@@ -529,7 +530,7 @@ export function layout(model, { W = 380, font = 12, screen = false, cableTable =
       hh += chh + small * 2 + 6;
     }
     // points
-    const pc = pointCount(c); const kind0 = pointKind(c); const kind = iso && iso.fcu && (kind0 === 'fcu' || kind0 === 'point') ? 'appliance' : kind0; // v0.43.1: the FCU isolator IS the spur, the load is the heater itself
+    const pc0 = pointCount(c); const pc = fed && !ctl && !iso ? { ...pc0, shown: 0, more: 0 } : pc0; /* v0.43.1: a sub-main draws no load, it feeds the board */ const kind0 = pointKind(c); const kind = iso && iso.fcu && (kind0 === 'fcu' || kind0 === 'point') ? 'appliance' : kind0; // v0.43.1: the FCU isolator IS the spur, the load is the heater itself
     const sgl = Math.min(socketSingles(c), pc.shown); const kindAt = (i) => (kind === 'socket' && i >= pc.shown - sgl ? 'socket1' : kind);
     let ph = 0;
     if (!info.spare && !info.spd && info.rooms) {
@@ -598,7 +599,7 @@ export function layout(model, { W = 380, font = 12, screen = false, cableTable =
     }
     // device box
     const bh = F * 3.2; const by = y;
-    R(sh, dx, by, devW, bh, reds.length ? { fill: [255, 255, 255], color: COL.red, lw: screen ? 2.4 : 1.6 } : { fill: info.spare ? [248, 248, 248] : [255, 255, 255] }); sh.unshift(sh.pop());
+    R(sh, dx, by, devW, bh, reds.length ? { fill: [255, 255, 255], color: COL.red, lw: screen ? 2.4 : 2.8 /* v0.43.1: thick so it still reads in greyscale print */ } : { fill: info.spare ? [248, 248, 248] : [255, 255, 255] }); sh.unshift(sh.pop());
     if (info.spare) T(sh, dx + devW / 2, by + bh / 2 + F * 0.35, 'Spare', { anchor: 'middle', color: COL.na, size: small });
     else {
       const d1 = wrapText(info.devShort, devW - 6, F, true); const d2 = info.devKind ? wrapText(info.devKind, devW - 6, small * 0.92) : [];
