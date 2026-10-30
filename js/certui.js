@@ -14,7 +14,7 @@ import { TYPES, newCert, sectionsFor, sectionDone, missingFields, visible, get, 
 import { INTAKE_NOTE_10, INTAKE_NOTES, INTAKE_NOTIFIED, migrateIntake, EIC_ITEMS, EIC_OUTCOMES, EICR_ITEMS, EICR_OUTCOMES, CODE_TEXT, OBSERVATIONS, OBS_CATS, EIC_HELP, EICR_HELP } from './inspections.js';
 import { checkCircuit, isSpare } from './checks.js';
 import { CHECK_NOTE } from './limits.js';
-import { diagramSvg, diagramInPdf, diagramHasCircuits, SPUR_FEEDS, CONTROL_VIA, switchInfo, roomListOf, roomPointsNote, pointKind, socketSingles } from './wiring.js';
+import { diagramSvg, diagramInPdf, diagramHasCircuits, SPUR_FEEDS, CONTROL_VIA, switchInfo, roomListOf, roomPointsNote, pointKind, socketSingles, arrangedOrder } from './wiring.js';
 import { limitOn, limitBar } from './limitbar.js';
 import { dangerCodes, noticeForObs, noticesOf, noticeMissing, noticeNo } from './dangermodel.js';
 
@@ -200,8 +200,21 @@ function controlCard(cert, redraw) {
 const CTRL_RE = /control|clock|timer|time ?switch|relay|contactor|\bcoil/i;
 function coilOrder(list) { return [...list.filter((o) => CTRL_RE.test(o.desc || '')), ...list.filter((o) => !CTRL_RE.test(o.desc || ''))]; }
 
-// "Switches and rooms": a folded card, one row per circuit. Saves an optional
-// circuit.diagram = { rooms, sw1, sw2, swi }; circuit details stay as they are.
+// "Switches and rooms": a folded card. v0.40 (test): pick one circuit at the
+// top (defaults to the first lighting circuit) instead of a list of every
+// circuit. Saves the same optional circuit.diagram fields as before.
+const pickedCircuit = new Map(); // cert id -> chosen circuit index (this session)
+export const COMMON_ROOMS = ['Kitchen', 'Living room', 'Dining room', 'Hall', 'Stairs', 'Landing', 'Bedroom 1', 'Bedroom 2', 'Bedroom 3', 'Bedroom 4', 'Bedroom 5', 'Bathroom', 'En-suite', 'WC', 'Utility', 'Garage', 'Loft', 'Porch', 'Conservatory', 'Outside'];
+// Room names already used on other circuits of this job (roomList names and the rooms text).
+export function jobRoomNames(all, except) {
+  const out = [];
+  for (const c of all) {
+    if (!c || c === except || !c.diagram) continue;
+    for (const r of (Array.isArray(c.diagram.roomList) ? c.diagram.roomList : [])) if (r && r.name) out.push(String(r.name).trim());
+    if (c.diagram.rooms) out.push(...String(c.diagram.rooms).split(/,|\band\b/).map((x) => x.trim()));
+  }
+  return [...new Set(out.filter(Boolean))];
+}
 function extrasCard(cert, redraw) {
   const all = cert.type === 'MW' ? (cert.mw.circuit ? [cert.mw.circuit] : []) : (cert.boards || []).flatMap((b) => b.circuits || []);
   const live = all.filter((c) => c && !isSpareC(c));
@@ -209,18 +222,30 @@ function extrasCard(cert, redraw) {
   const nset = live.filter((c) => c.diagram && (c.diagram.rooms || (c.diagram.roomList || []).length || ['sw1', 'sw2', 'swi', 'singles'].some((k) => c.diagram[k] !== undefined && c.diagram[k] !== ''))).length;
   const body = h('div', { id: 'extrasrows' });
   const save = (c, k, v) => { const d = { ...(c.diagram || {}) }; if (v === '' || v == null) delete d[k]; else d[k] = v; if (Object.keys(d).length) c.diagram = d; else delete c.diagram; changed(); redraw(); };
-  fill(body, [h('p', { class: 'note', style: 'margin:4px 0 8px' }, 'Optional. Rooms print beside the circuit name. Lighting circuits get one 1-way switch unless you set the switches here, or add each room below.'),
-    ...live.map((c) => {
-      const d = c.diagram || {}; const isLight = switchInfo(c) !== null;
-      const si = isLight ? switchInfo(c) : null;
-      const ins = {}; const cur = { sw1: si ? String(si.list.filter((x) => x === 'sw1').length) : '1', sw2: si ? String(si.list.filter((x) => x === 'sw2').length / 2) : '0', swi: si ? String(si.list.filter((x) => x === 'swi').length) : '0' };
-      const numIn = (k, label) => h('label', { class: 'f', style: 'flex:1;min-width:0' }, h('span', {}, label), ins[k] = h('input', { type: 'number', min: '0', max: '10', inputmode: 'numeric', 'aria-label': label + ', circuit ' + (c.num || ''), value: cur[k], onchange: () => { for (const o of ['sw1', 'sw2', 'swi']) { const n = Math.max(0, Math.min(10, parseInt(ins[o].value, 10) || 0)); ins[o].value = String(n); save(c, o, String(n)); } } }));
-      return h('div', { style: 'border-top:1px solid var(--line);padding-top:6px' }, h('b', { style: 'display:block;margin:2px 0 4px;word-break:break-word' }, name(c)),
-        roomListOf(c) ? null : h('label', { class: 'f' }, h('span', {}, 'Rooms'), h('input', { placeholder: 'e.g. Kitchen, Hall', 'aria-label': 'Rooms, circuit ' + (c.num || ''), value: d.rooms || '', onchange: (e) => save(c, 'rooms', e.target.value.trim()) })),
-        isLight && !roomListOf(c) ? h('div', { style: 'display:flex;gap:8px' }, numIn('sw1', '1-way'), numIn('sw2', '2-way pairs'), numIn('swi', 'Intermediate')) : null,
-        isLight ? roomsEditor(c, redraw) : null,
-        pointKind(c) === 'socket' ? singlesRow(c, save) : null);
-    })]);
+  const key = cert.id || 'x';
+  if (!pickedCircuit.has(key) || !live[pickedCircuit.get(key)]) { const li = live.findIndex((c) => switchInfo(c) !== null); pickedCircuit.set(key, li >= 0 ? li : 0); }
+  const one = h('div', { id: 'extrasone' }); let arranging = false;
+  const drawOne = () => {
+    const c = live[pickedCircuit.get(key)]; if (!c) { fill(one, []); return; }
+    const d = c.diagram || {}; const isLight = switchInfo(c) !== null;
+    const si = isLight ? switchInfo(c) : null;
+    const ins = {}; const cur = { sw1: si ? String(si.list.filter((x) => x === 'sw1').length) : '1', sw2: si ? String(si.list.filter((x) => x === 'sw2').length / 2) : '0', swi: si ? String(si.list.filter((x) => x === 'swi').length) : '0' };
+    const numIn = (k, label) => h('label', { class: 'f', style: 'flex:1;min-width:0' }, h('span', {}, label), ins[k] = h('input', { type: 'number', min: '0', max: '10', inputmode: 'numeric', 'aria-label': label + ', circuit ' + (c.num || ''), value: cur[k], onchange: () => { for (const o of ['sw1', 'sw2', 'swi']) { const n = Math.max(0, Math.min(10, parseInt(ins[o].value, 10) || 0)); ins[o].value = String(n); save(c, o, String(n)); } } }));
+    fill(one, [h('b', { class: 'pickname', style: 'display:block;margin:8px 0 4px;word-break:break-word;white-space:normal' }, name(c)),
+      isLight && arranging ? arrangeRooms(c, redraw, () => { arranging = false; drawOne(); }) : null,
+      isLight && !arranging ? roomsEditor(c, redraw, () => jobRoomNames(all, c)) : null,
+      isLight && !arranging && (d.roomList || []).length > 1 ? h('button', { class: 'btn ghost', type: 'button', id: 'arrangebtn', style: 'width:100%;min-height:48px;margin-top:4px', onclick: () => { arranging = true; drawOne(); } }, 'Arrange room boxes') : null,
+      isLight && !roomListOf(c) ? h('details', { class: 'fold', style: 'margin-top:6px' }, h('summary', {}, h('span', { class: 'foldt' }, 'Or just set switch counts', h('span', { class: 'folds' }, 'Without rooms')), h('span', { class: 'foldic' }, '\u203a')),
+        h('div', { class: 'foldin' }, h('label', { class: 'f' }, h('span', {}, 'Rooms (text)'), h('input', { placeholder: 'e.g. Kitchen, Hall', 'aria-label': 'Rooms, circuit ' + (c.num || ''), value: d.rooms || '', onchange: (e) => save(c, 'rooms', e.target.value.trim()) })),
+          h('div', { style: 'display:flex;gap:8px' }, numIn('sw1', '1-way'), numIn('sw2', '2-way pairs'), numIn('swi', 'Intermediate')))) : null,
+      !isLight ? h('label', { class: 'f' }, h('span', {}, 'Rooms'), h('input', { placeholder: 'e.g. Kitchen, Hall', 'aria-label': 'Rooms, circuit ' + (c.num || ''), value: d.rooms || '', onchange: (e) => save(c, 'rooms', e.target.value.trim()) })) : null,
+      pointKind(c) === 'socket' ? singlesRow(c, save) : null]);
+  };
+  const pick = h('select', { id: 'extrascircuit', 'aria-label': 'Circuit', style: 'width:100%;white-space:normal', onchange: (e) => { pickedCircuit.set(key, +e.target.value); arranging = false; drawOne(); } },
+    live.map((c, i) => h('option', { value: String(i), selected: i === pickedCircuit.get(key) ? true : null }, name(c) + (c.diagram && (c.diagram.roomList || []).length ? ` (${c.diagram.roomList.length} room${c.diagram.roomList.length === 1 ? '' : 's'})` : ''))));
+  drawOne();
+  fill(body, [h('p', { class: 'note', style: 'margin:4px 0 8px' }, 'Optional. Pick a circuit, then add its rooms. Lighting circuits get one 1-way switch unless you set them here.'),
+    h('label', { class: 'f' }, h('span', {}, 'Circuit'), pick), one]);
   return h('div', { class: 'card', id: 'extrascard' }, h('details', { class: 'fold' }, h('summary', {}, h('span', { class: 'foldt' }, 'Switches and rooms', h('span', { class: 'folds' }, 'Light switches, room names, single sockets')), nset ? h('span', { class: 'fbadge' }, `${nset} set`) : null, h('span', { class: 'foldic' }, '\u203a')), h('div', { class: 'foldin' }, body)));
 }
 
@@ -239,31 +264,94 @@ function singlesRow(c, save) {
 }
 const SW_KIND = { sw1: '1-way', sw2: '2-way', sw2i: '2-way + intermediate', none: 'No switch' };
 const swKind = (r) => (+r.sw2pairs > 0 ? (+r.swi > 0 ? 'sw2i' : 'sw2') : +r.sw1 > 0 ? 'sw1' : 'none');
-function roomsEditor(c, redraw) {
+// v0.40 (test): Arrange mode. Drag a room box by its handle (touch or mouse);
+// it clicks into the nearest slot. Saves circuit.diagram.layout.order only;
+// the diagram (screen and PDF) redraws the feed and cables in the new order.
+function arrangeRooms(c, redraw, done) {
+  const box = h('div', { class: 'arrange', style: 'margin:8px 0' });
+  const names = () => (c.diagram.roomList || []).map((r, i) => (r && r.name) || 'Room ' + (i + 1));
+  const setOrder = (o) => { const d = { ...(c.diagram || {}) }; const plain = o.every((v, i) => v === i); if (plain) delete d.layout; else d.layout = { ...(d.layout || {}), order: o }; c.diagram = d; changed(); redraw(); };
+  const draw = () => {
+    const o = arrangedOrder(c); const nm = names();
+    const slots = o.map((ri, pos) => {
+      const r = c.diagram.roomList[ri] || {};
+      const card = h('div', { class: 'arrslot', 'data-pos': String(pos), style: 'display:flex;align-items:center;gap:10px;border:1px solid var(--line);border-radius:10px;padding:10px;margin:0 0 8px;background:var(--card,#fff);touch-action:none;user-select:none' },
+        h('span', { class: 'arrhandle', 'aria-hidden': 'true', style: 'font-size:22px;line-height:1;color:#7a8190;cursor:grab;padding:4px 6px' }, '☰'),
+        h('span', { style: 'flex:1;min-width:0;white-space:normal;word-break:break-word' }, h('b', {}, `${pos + 1}. ${nm[ri]}`), h('span', { class: 'note', style: 'display:block;margin:0' }, `${+r.lights || 0} light${+r.lights === 1 ? '' : 's'}`)),
+        h('button', { class: 'stepbtn', type: 'button', 'aria-label': 'Move ' + nm[ri] + ' up', disabled: pos === 0 ? true : null, style: 'border-radius:10px', onclick: () => { const n = [...o]; [n[pos - 1], n[pos]] = [n[pos], n[pos - 1]]; setOrder(n); draw(); } }, '↑'),
+        h('button', { class: 'stepbtn', type: 'button', 'aria-label': 'Move ' + nm[ri] + ' down', disabled: pos === o.length - 1 ? true : null, style: 'border-radius:10px', onclick: () => { const n = [...o]; [n[pos + 1], n[pos]] = [n[pos], n[pos + 1]]; setOrder(n); draw(); } }, '↓'));
+      // drag: follow the finger, then click into the nearest slot
+      card.addEventListener('pointerdown', (e) => {
+        if (e.target.closest('button')) return; e.preventDefault();
+        const y0 = e.clientY; const cards = [...box.querySelectorAll('.arrslot')]; const hgt = card.getBoundingClientRect().height + 8;
+        card.setPointerCapture(e.pointerId); card.style.boxShadow = '0 6px 18px rgba(0,0,0,.18)'; card.style.position = 'relative'; card.style.zIndex = '2';
+        let to = pos;
+        const mv = (ev) => { const dy = ev.clientY - y0; card.style.transform = `translateY(${dy}px)`; to = Math.max(0, Math.min(o.length - 1, pos + Math.round(dy / hgt)));
+          cards.forEach((k, j) => { if (k === card) return; k.style.transform = j > pos && j <= to ? `translateY(${-hgt}px)` : j < pos && j >= to ? `translateY(${hgt}px)` : ''; k.style.transition = 'transform .12s'; }); };
+        const up = () => { card.removeEventListener('pointermove', mv); card.removeEventListener('pointerup', up); card.removeEventListener('pointercancel', up);
+          if (to !== pos) { const n = [...o]; const [m] = n.splice(pos, 1); n.splice(to, 0, m); setOrder(n); } draw(); };
+        card.addEventListener('pointermove', mv); card.addEventListener('pointerup', up); card.addEventListener('pointercancel', up);
+      });
+      return card;
+    });
+    fill(box, [h('b', { style: 'display:block;margin:4px 0 2px' }, 'Arrange room boxes'),
+      h('p', { class: 'note', style: 'margin:0 0 8px' }, 'Drag a box by ☰ (or use the arrows). It clicks into place, and the diagram and PDF follow, with the cables redrawn.'),
+      ...slots,
+      h('div', { style: 'display:flex;gap:8px;flex-wrap:wrap' },
+        h('button', { class: 'btn ghost', type: 'button', id: 'resetlayout', style: 'flex:1 1 auto;min-height:48px', onclick: () => { const d = { ...(c.diagram || {}) }; delete d.layout; c.diagram = d; changed(); redraw(); draw(); } }, 'Reset layout'),
+        h('button', { class: 'btn', type: 'button', id: 'arrangedone', style: 'flex:1 1 auto;min-height:48px', onclick: done }, 'Done'))]);
+  };
+  draw();
+  return box;
+}
+// Simple tap-to-choose buttons (wrap onto new lines, no truncation).
+const segs = (opts, cur, label, onpick) => h('div', { class: 'segs', role: 'group', 'aria-label': label, style: 'display:flex;flex-wrap:wrap;gap:6px' },
+  opts.map(([v, t]) => h('button', { type: 'button', class: 'btn ghost seg' + (v === cur ? ' on' : ''), 'aria-pressed': String(v === cur), style: 'flex:1 1 auto;min-height:44px;padding:8px 10px;white-space:normal' + (v === cur ? ';background:var(--brand,#2952ff);border-color:var(--brand,#2952ff);color:#fff' : ''), onclick: () => onpick(v) }, t)));
+function roomsEditor(c, redraw, usedNames = () => []) {
   const box = h('div', { class: 'roomsed', style: 'margin:8px 0 4px' });
   const list = () => (c.diagram && Array.isArray(c.diagram.roomList) ? c.diagram.roomList : []);
   const store = (l) => { const d = { ...(c.diagram || {}) }; if (l.length) d.roomList = l; else delete d.roomList; if (Object.keys(d).length) c.diagram = d; else delete c.diagram; changed(); redraw(); };
   const stepper = (val, label, onset, min = 0, max = 10) => { const out = h('span', { class: 'stepval', style: 'min-width:1.6em;text-align:center;font-weight:700' }, String(val));
     const st = (dv) => () => { const n = Math.max(min, Math.min(max, (parseInt(out.textContent, 10) || 0) + dv)); out.textContent = String(n); onset(n); };
     return h('div', { class: 'rstep', style: 'display:flex;align-items:center;gap:6px' }, h('button', { class: 'stepbtn', type: 'button', 'aria-label': label + ', one fewer', onclick: st(-1) }, '\u2212'), out, h('button', { class: 'stepbtn', type: 'button', 'aria-label': label + ', one more', onclick: st(1) }, '+')); };
+  const row = (label, ctl) => h('div', { style: 'display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:10px' }, h('span', { style: 'white-space:normal' }, label), ctl);
+  let openPicker = -1; let otherFor = -1;
   const draw = () => {
     const l = list(); const note = roomPointsNote(c);
+    const here = l.map((r) => r.name).filter(Boolean);
     fill(box, [h('b', { style: 'display:block;margin:6px 0 2px' }, 'Rooms on this circuit'),
-      h('p', { class: 'note', style: 'margin:0 0 6px' }, l.length ? 'Each room is drawn in its own box, in this order, with the feed running room to room.' : 'Optional. Add each room to draw its lights and switches in their own box.'),
+      h('p', { class: 'note', style: 'margin:0 0 6px' }, l.length ? 'Each room is drawn in its own box, in this order, with the feed running room to room.' : 'Add each room to draw its lights and switches in their own box.'),
       ...l.map((r, i) => {
         const upd = (patch, again = false) => { const nl = list().map((x, j) => (j === i ? { ...x, ...patch } : x)); store(nl); if (again) draw(); };
         const k = swKind(r);
-        return h('div', { class: 'roomrow', style: 'border:1px solid var(--line);border-radius:8px;padding:8px;margin:0 0 8px' },
-          h('div', { style: 'display:flex;gap:8px;align-items:flex-end' },
-            h('label', { class: 'f', style: 'flex:1;min-width:0;margin:0' }, h('span', {}, 'Room ' + (i + 1)), h('input', { value: r.name || '', placeholder: 'e.g. Kitchen', 'aria-label': 'Room name', onchange: (e) => upd({ name: e.target.value.trim() }) })),
-            h('button', { class: 'btn ghost', type: 'button', 'aria-label': 'Remove room ' + (i + 1), style: 'padding:8px 10px', onclick: () => { store(list().filter((_, j) => j !== i)); draw(); } }, 'Remove')),
-          h('div', { style: 'display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:8px' }, h('span', {}, 'Lights'), stepper(+r.lights || 0, 'Lights', (n) => { upd({ lights: n }); const nb = box.querySelector('.roomsnote'); const t = roomPointsNote(c); if (nb) { nb.textContent = t; nb.style.display = t ? '' : 'none'; } }, 0, 10)),
-          h('label', { class: 'f', style: 'margin-top:8px' }, h('span', {}, 'Switch'), h('select', { 'aria-label': 'Switch type', onchange: (e) => { const v = e.target.value; upd(v === 'sw1' ? { sw1: 1, sw2pairs: 0, swi: 0 } : v === 'sw2' ? { sw1: 0, sw2pairs: 1, swi: 0 } : v === 'sw2i' ? { sw1: 0, sw2pairs: 1, swi: Math.max(1, +r.swi || 1) } : { sw1: 0, sw2pairs: 0, swi: 0 }, true); } }, Object.entries(SW_KIND).map(([v, t]) => h('option', { value: v, selected: v === k ? true : null }, t)))),
-          k === 'sw2i' ? h('div', { style: 'display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:8px' }, h('span', {}, 'Intermediates'), stepper(+r.swi || 1, 'Intermediates', (n) => upd({ swi: n }), 1, 4)) : null,
-          h('label', { class: 'f', style: 'margin-top:8px' }, h('span', {}, 'Wired with'), h('select', { 'aria-label': 'Wiring method', onchange: (e) => upd({ wiring: e.target.value }) }, [['loop-in', 'Loop-in at ceiling rose'], ['junction box', 'Junction box']].map(([v, t]) => h('option', { value: v, selected: (r.wiring || 'loop-in') === v ? true : null }, t)))));
+        const used = usedNames().filter((n) => !here.includes(n) || n === r.name);
+        const common = COMMON_ROOMS.filter((n) => !used.includes(n));
+        const choose = (n) => { openPicker = -1; otherFor = -1; upd({ name: n }, true); };
+        const btn = (n) => h('button', { type: 'button', class: 'btn ghost roomopt' + (n === r.name ? ' on' : ''), style: 'min-height:44px;padding:8px 10px;white-space:normal;text-align:left' + (n === r.name ? ';background:var(--brand,#2952ff);border-color:var(--brand,#2952ff);color:#fff' : ''), onclick: () => choose(n) }, n);
+        const picker = openPicker === i ? h('div', { class: 'roompick', style: 'border:1px solid var(--line);border-radius:10px;padding:8px;margin-top:6px' },
+          used.length ? h('div', { class: 'note', style: 'margin:0 0 4px;font-weight:700' }, 'Used in this job') : null,
+          used.length ? h('div', { style: 'display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px' }, used.map(btn)) : null,
+          h('div', { class: 'note', style: 'margin:0 0 4px;font-weight:700' }, 'Common rooms'),
+          h('div', { style: 'display:flex;flex-wrap:wrap;gap:6px' }, common.map(btn), h('button', { type: 'button', class: 'btn ghost', style: 'min-height:44px;padding:8px 10px', onclick: () => { openPicker = -1; otherFor = i; draw(); const t = box.querySelector('.roomother'); if (t) t.focus(); } }, 'Other\u2026'))) : null;
+        const isOther = otherFor === i || (r.name && !COMMON_ROOMS.includes(r.name) && !usedNames().includes(r.name));
+        return h('div', { class: 'roomrow', style: 'border:1px solid var(--line);border-radius:10px;padding:10px;margin:0 0 10px' },
+          h('div', { style: 'display:flex;justify-content:space-between;align-items:center;gap:8px' }, h('b', {}, 'Room ' + (i + 1)),
+            h('button', { class: 'btn ghost', type: 'button', 'aria-label': 'Remove room ' + (i + 1), style: 'padding:6px 10px', onclick: () => { store(list().filter((_, j) => j !== i)); openPicker = -1; draw(); } }, 'Remove')),
+          h('button', { type: 'button', class: 'btn ghost roomname', 'aria-expanded': String(openPicker === i), style: 'width:100%;margin-top:6px;min-height:48px;justify-content:space-between;display:flex;align-items:center;white-space:normal;text-align:left', onclick: () => { openPicker = openPicker === i ? -1 : i; draw(); } },
+            h('span', { style: r.name ? 'font-weight:700' : 'color:#9aa0aa' }, r.name || 'Choose room'), h('span', { 'aria-hidden': 'true' }, openPicker === i ? '\u25b4' : '\u25be')),
+          picker,
+          isOther && openPicker !== i ? h('label', { class: 'f', style: 'margin-top:6px' }, h('span', {}, 'Room name'), h('input', { class: 'roomother', value: r.name || '', placeholder: 'Type the room name', 'aria-label': 'Room name', onchange: (e) => { otherFor = -1; upd({ name: e.target.value.trim() }); } })) : null,
+          row('Lights', stepper(+r.lights || 0, 'Lights', (n) => { upd({ lights: n }); const nb = box.querySelector('.roomsnote'); const t = roomPointsNote(c); if (nb) { nb.textContent = t; nb.style.display = t ? '' : 'none'; } }, 0, 10)),
+          h('div', { style: 'margin-top:10px' }, h('span', { class: 'note', style: 'display:block;margin:0 0 4px' }, 'Switch'),
+            segs([['sw1', '1-way'], ['sw2', '2-way'], ['sw2i', '2-way + intermediate'], ['none', 'None']], k, 'Switch type', (v) => upd(v === 'sw1' ? { sw1: Math.max(1, +r.sw1 || 1), sw2pairs: 0, swi: 0 } : v === 'sw2' ? { sw1: 0, sw2pairs: Math.max(1, +r.sw2pairs || 1), swi: 0 } : v === 'sw2i' ? { sw1: 0, sw2pairs: Math.max(1, +r.sw2pairs || 1), swi: Math.max(1, +r.swi || 1) } : { sw1: 0, sw2pairs: 0, swi: 0 }, true))),
+          k === 'sw1' ? row('How many 1-way switches', stepper(+r.sw1 || 1, '1-way switches', (n) => upd({ sw1: n }), 1, 4)) : null,
+          k === 'sw2' || k === 'sw2i' ? row('2-way pairs (2 switches each)', stepper(+r.sw2pairs || 1, '2-way pairs', (n) => upd({ sw2pairs: n }), 1, 3)) : null,
+          k === 'sw2i' ? row('Intermediates', stepper(+r.swi || 1, 'Intermediates', (n) => upd({ swi: n }), 1, 4)) : null,
+          h('div', { style: 'margin-top:10px' }, h('span', { class: 'note', style: 'display:block;margin:0 0 4px' }, 'Wired with'),
+            segs([['loop-in', 'Loop-in (ceiling rose)'], ['junction box', 'Junction box'], ['jb-switch', 'JB to switch, then to the lights']], ['junction box', 'jb-switch'].includes(r.wiring) ? r.wiring : 'loop-in', 'Wiring method', (v) => upd({ wiring: v }, true))));
       }),
       h('p', { class: 'note roomsnote', style: 'margin:0 0 6px;color:#9aa0aa' + (note ? '' : ';display:none') }, note),
-      h('button', { class: 'btn ghost', type: 'button', id: 'addroom-' + (c.num || ''), onclick: () => { store([...list(), { name: '', lights: 1, sw1: 1, sw2pairs: 0, swi: 0, wiring: 'loop-in' }]); draw(); const ins = box.querySelectorAll('.roomrow input'); if (ins.length) ins[ins.length - 1].focus(); } }, '+ Add room')]);
+      h('button', { class: 'btn', type: 'button', id: 'addroom-' + (c.num || ''), style: 'width:100%;min-height:52px;font-size:17px;font-weight:700', onclick: () => { store([...list(), { name: '', lights: 1, sw1: 1, sw2pairs: 0, swi: 0, wiring: 'loop-in' }]); openPicker = list().length - 1; draw(); const rows = box.querySelectorAll('.roomrow'); if (rows.length) rows[rows.length - 1].scrollIntoView({ block: 'start', behavior: 'smooth' }); } }, l.length ? '+ Add next room' : '+ Add a room')]);
   };
   draw();
   return box;

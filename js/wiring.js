@@ -34,7 +34,7 @@ const KIND_PLURAL = { socket: 'sockets', light: 'lights', cooker: 'cookers', sho
 const KIND_ONE = { socket: 'socket', light: 'light', cooker: 'cooker', shower: 'shower', alarm: 'alarm', immersion: 'immersion', ev: 'EV charger', fan: 'fan', fcu: 'FCU', appliance: 'fixed appliance', point: 'point' };
 // Optional per-circuit diagram extras: circuit.diagram = { rooms, sw1, sw2, swi }.
 // Old certs have none; a lighting circuit then gets one 1-way switch.
-const KEY_EXTRA = { socket: 'Twin socket', socket1: 'Socket (single)', rose: 'Ceiling rose (loop-in)', jb: 'Junction box (JB)', strap: '2-way strappers (two wires)' };
+const KEY_EXTRA = { jbsw: 'Switch-fed: JB to switch, then to the lights', socket: 'Twin socket', socket1: 'Socket (single)', rose: 'Ceiling rose (loop-in)', jb: 'Junction box (JB)', strap: '2-way strappers (two wires)' };
 export const SWITCH_NAME = { sw1: '1-way switch', sw2: '2-way switch', swi: 'Intermediate switch' };
 const num0 = (v) => { const n = parseInt(String(v ?? ''), 10); return Number.isFinite(n) && n > 0 ? Math.min(n, MAX_SYMBOLS) : 0; };
 export function switchInfo(c) {
@@ -64,15 +64,26 @@ export const roomsOf = (c) => (roomListOf(c) ? '' : val(c && c.diagram && c.diag
 // v0.39 (test): rooms on a lighting circuit, each drawn in its own box.
 // circuit.diagram.roomList = [{ name, lights, sw1, sw2pairs, swi, wiring }]
 // (optional; when present it takes over from the rooms text and switch counts).
-export const ROOM_WIRING = { 'loop-in': 'Loop-in at ceiling rose', 'junction box': 'Junction box' };
+export const ROOM_WIRING = { 'loop-in': 'Loop-in at ceiling rose', 'junction box': 'Junction box', 'jb-switch': 'JB to switch, then to the lights' };
 const cnt = (v, max = MAX_SYMBOLS) => { const n = parseInt(String(v ?? ''), 10); return Number.isFinite(n) && n > 0 ? Math.min(n, max) : 0; };
 export function roomListOf(c) {
   const l = c && c.diagram && c.diagram.roomList;
   if (!Array.isArray(l) || !l.length || pointKind(c) !== 'light') return null;
-  return l.filter(Boolean).map((r, i) => {
+  return arrangedOrder(c).map((i) => [l[i], i]).filter(([r]) => r).map(([r, i]) => {
     const sw2pairs = cnt(r.sw2pairs, 3); const swi = sw2pairs ? cnt(r.swi, 4) : 0;
-    return { i, name: val(r.name), lights: cnt(r.lights), sw1: cnt(r.sw1, 4), sw2pairs, swi, wiring: r.wiring === 'junction box' ? 'junction box' : 'loop-in' };
+    return { i, name: val(r.name), lights: cnt(r.lights), sw1: cnt(r.sw1, 4), sw2pairs, swi, wiring: ROOM_WIRING[r.wiring] ? r.wiring : 'loop-in' };
   });
+}
+// v0.40 (test): optional circuit.diagram.layout = { order: [roomList index, ...] }
+// set in Arrange mode. Missing/stale -> the normal order. Screen and PDF both use it.
+export function arrangedOrder(c) {
+  const l = (c && c.diagram && Array.isArray(c.diagram.roomList)) ? c.diagram.roomList : [];
+  const o = c && c.diagram && c.diagram.layout && Array.isArray(c.diagram.layout.order) ? c.diagram.layout.order : null;
+  const all = l.map((_, i) => i);
+  if (!o) return all;
+  const seen = new Set(); const out = [];
+  for (const v of o) { const i = parseInt(v, 10); if (Number.isInteger(i) && i >= 0 && i < l.length && !seen.has(i)) { seen.add(i); out.push(i); } }
+  return [...out, ...all.filter((i) => !seen.has(i))];
 }
 export const roomLightTotal = (c) => (roomListOf(c) || []).reduce((a, r) => a + r.lights, 0);
 // Screen-only note when the rooms' lights don't add up to Points served.
@@ -303,7 +314,7 @@ export function layout(model, { W = 380, font = 12, screen = false } = {}) {
   });
   // key: only the symbols this diagram uses
   if (used.size) {
-    const sh = []; const y = 10; const order = ['socket', 'socket1', 'light', 'rose', 'jb', 'sw1', 'sw2', 'swi', 'strap', 'cooker', 'shower', 'alarm', 'immersion', 'ev', 'fan', 'fcu', 'appliance', 'point', 'contactor', 'spd'];
+    const sh = []; const y = 10; const order = ['socket', 'socket1', 'light', 'rose', 'jb', 'jbsw', 'sw1', 'sw2', 'swi', 'strap', 'cooker', 'shower', 'alarm', 'immersion', 'ev', 'fan', 'fcu', 'appliance', 'point', 'contactor', 'spd'];
     let hh = textLines(sh, 8, y, 'Key', W - 16, { bold: true });
     const S = F * 1.5; const colW = (W - 16) / 2; let col = 0, rowY = y + hh + 4, rowH = 0;
     for (const k of order.filter((k) => used.has(k))) {
@@ -312,6 +323,7 @@ export function layout(model, { W = 380, font = 12, screen = false } = {}) {
       else if (k === 'spd') { spdSym(sh, x + S / 2, rowY - 2, F * 0.75); }
       else if (k === 'rose') { L(sh, x + S / 2 - S * 0.6, rowY + S / 2, x + S / 2 + S * 0.6, rowY + S / 2, { w: 0.9, color: COL.grey }); C(sh, x + S / 2, rowY + S / 2, S * 0.17, { fill: COL.line, lw: 0.8 }); }
       else if (k === 'jb') { R(sh, x - S * 0.2, rowY + S * 0.05, S * 1.4, S * 0.9, { fill: [255, 255, 255] }); T(sh, x + S * 0.5, rowY + S * 0.5 + small * 0.3, 'JB', { anchor: 'middle', bold: true, size: small * 0.85 }); }
+      else if (k === 'jbsw') { const yy = rowY + S / 2; R(sh, x - S * 0.2, yy - S * 0.3, S * 0.7, S * 0.6, { fill: [255, 255, 255] }); L(sh, x + S * 0.5, yy, x + S * 0.75, yy, { w: 0.9, color: COL.grey }); symbol(sh, 'sw1', x + S * 1.05, yy, S * 0.7); }
       else if (k === 'strap') { L(sh, x - S * 0.1, rowY + S * 0.38, x + S * 1.1, rowY + S * 0.38, { w: 1, color: COL.brand }); L(sh, x - S * 0.1, rowY + S * 0.66, x + S * 1.1, rowY + S * 0.66, { w: 1, color: COL.brand }); }
       else symbol(sh, k, x + S / 2, rowY + S / 2, S);
       const th = textLines(sh, x + S + 8, rowY + S / 2 - small * 0.95, name, colW - S - 14, { size: small });
@@ -439,16 +451,29 @@ export function layout(model, { W = 380, font = 12, screen = false } = {}) {
   // its lights, switches and how they're wired. A clear schematic, not to scale.
   function roomsSection(sh, info, tx, top, tw, feedTop, c) {
     const S = F * 1.5, step = S + 8, fx = tx - gap / 2, G = { w: 0.9, color: COL.grey };
-    const bx = tx + 6, bw = tw - 6; let y0 = top; let lastFeedY = feedTop;
+    const shared = info.rooms.some((r) => r.wiring === 'jb-switch');
+    const bx = tx + (shared ? 16 : 6), bw = tw - (shared ? 16 : 6); let y0 = top; let lastFeedY = feedTop;
     if (screen && info.roomNote) y0 += textLines(sh, tx, y0 - 4, info.roomNote, tw, { size: small, color: COL.na }) + 4;
+    // switch-fed rooms: ONE junction box for the circuit, a separate cable from it to each such room's switch
+    let jbX = 0, jbLastY = 0;
+    if (shared) { used.add('jb'); used.add('jbsw');
+      const jw = S * 1.4, jh = S * 0.9, jy = y0 + 2; jbX = tx + 8;
+      L(sh, fx, lastFeedY, fx, jy + jh / 2, { w: 1.2, color: COL.line }); L(sh, fx, jy + jh / 2, tx, jy + jh / 2, { w: 1.2, color: COL.line });
+      R(sh, tx, jy, jw, jh, { fill: [255, 255, 255] }); T(sh, tx + jw / 2, jy + jh / 2 + small * 0.35, 'JB', { anchor: 'middle', bold: true, size: small * 0.85 });
+      const nh = textLines(sh, tx + jw + 8, jy - 2, 'Junction box: a cable to the switch in each switch-fed room', tw - jw - 8, { size: small * 0.9, color: COL.grey });
+      lastFeedY = jy + jh / 2; jbLastY = jy + jh; y0 = jy + Math.max(jh, nh) + 8; }
     info.rooms.forEach((r) => {
       const rs = []; const ix = bx + 8, iw = bw - 16;
       let ry = y0 + 4;
       const nm = r.name || 'Room ' + (r.i + 1);
       ry += textLines(rs, ix, ry, nm, iw, { bold: true, size: small });
-      const how = r.wiring === 'junction box' ? 'Junction box' : 'Loop-in at ceiling rose';
+      const how = ROOM_WIRING[r.wiring] || ROOM_WIRING['loop-in'];
       const sws = [r.sw1 && `${r.sw1} \u00d7 1-way`, r.sw2pairs && (r.sw2pairs === 1 ? '2-way' : `${r.sw2pairs} \u00d7 2-way`), r.swi && `${r.swi} \u00d7 intermediate`].filter(Boolean).join(' + ') || 'No switch';
       ry += textLines(rs, ix, ry, `${r.lights} light${r.lights === 1 ? '' : 's'} \u00b7 ${sws} \u00b7 ${how}`, iw, { size: small * 0.92, color: COL.grey });
+      if (r.wiring === 'jb-switch') { const fy = jbSwitchRoom(rs, r, ix, iw, ry, S, G); const bh = fy.bottom - y0 + 6;
+        R(sh, bx, y0, bw, bh, { fill: COL.fill, color: [150, 160, 190] }); sh.push(...rs);
+        L(sh, jbX, jbLastY, jbX, fy.feedIn, { w: 1.2, color: COL.line }); L(sh, jbX, fy.feedIn, fy.swX, fy.feedIn, { w: 1.2, color: COL.line });
+        jbLastY = fy.feedIn; y0 += bh + 8; return; }
       // wire row: JB (if any) then the lights hanging off it
       const jb = r.wiring === 'junction box';
       const jbW = S * 1.4; const lx0 = ix + (jb ? jbW + 10 : 10);
@@ -536,6 +561,39 @@ export function layout(model, { W = 380, font = 12, screen = false } = {}) {
       y0 += bh + 8;
     });
     return y0 - top + 2;
+  }
+  // Switch-fed room: circuit feed into a JB, a cable from the JB to the first
+  // switch, then from that switch to the light(s), light to light.
+  function jbSwitchRoom(rs, r, ix, iw, ry, S, G) {
+    const jbW = 0, wy = ry + 10 + S * 0.2, sstep = S + 14;
+    const list = [...Array(r.sw1).fill('sw1')]; for (let i = 0; i < r.sw2pairs; i++) list.push('sw2', ...Array(i === 0 ? r.swi : 0).fill('swi'), 'sw2');
+    const x0 = ix + jbW + 10 + S / 2; const per = Math.max(1, Math.floor((ix + iw - x0 + S / 2) / sstep));
+    const placed = list.map((k0, i) => [k0, x0 + (i % per) * sstep, wy + Math.floor(i / per) * (S + 16)]);
+    let bottom = wy + S * 0.45;
+    let srcX = ix + 10, srcY = wy; // where the cable to the lights starts
+    if (placed.length) {
+      const f = placed[0];
+      // more 1-way switches share the same feed from the first
+      placed.forEach(([k0, px, py], i) => { if (i && k0 === 'sw1' && placed[i - 1][0] === 'sw1' && py === placed[i - 1][2]) L(rs, placed[i - 1][1] + S * 0.45, py + S * 0.3, px - S * 0.45, py + S * 0.3, { ...G, dash: [2, 2] }); });
+      // strappers between each 2-way pair (through intermediates)
+      let i = r.sw1;
+      for (let g = 0; g < r.sw2pairs; g++) { const len = 2 + (g === 0 ? r.swi : 0); const seg = placed.slice(i, i + len); i += len; used.add('strap');
+        if (r.sw1 && g === 0) L(rs, placed[r.sw1 - 1][1] + S * 0.45, placed[r.sw1 - 1][2] + S * 0.3, seg[0][1] - S * 0.45, seg[0][2] + S * 0.3, { ...G, dash: [2, 2] });
+        for (let j = 1; j < seg.length; j++) { const a = seg[j - 1], b = seg[j]; L(rs, a[1] + S * 0.45, a[2] - S * 0.08, b[1] - S * 0.45, b[2] - S * 0.08, { w: 1, color: COL.brand }); L(rs, a[1] + S * 0.45, a[2] + S * 0.2, b[1] - S * 0.45, b[2] + S * 0.2, { w: 1, color: COL.brand }); } }
+      for (const [k0, px, py] of placed) { symbol(rs, k0, px, py, S); used.add(k0); }
+      bottom = placed[placed.length - 1][2] + S / 2; srcX = f[1]; srcY = f[2] + S * 0.45;
+    }
+    if (r.lights) { used.add('light');
+      const lx0 = x0, step = S + 8, lper = Math.max(1, Math.floor((ix + iw - lx0 + S / 2) / step));
+      const rows = Math.ceil(r.lights / lper); const ly0 = bottom + S * 0.9;
+      L(rs, srcX, srcY, srcX, ly0 - S * 0.4, G); // switch (or JB) down to the first light
+      for (let k = 0; k < rows; k++) { const n = Math.min(lper, r.lights - k * lper); const ly = ly0 + k * (S + 10);
+        L(rs, lx0, ly, lx0 + (n - 1) * step, ly, G); if (k) L(rs, lx0, ly - (S + 10), lx0, ly, G);
+        for (let q = 0; q < n; q++) symbol(rs, 'light', lx0 + q * step, ly, S); }
+      bottom = ly0 + (rows - 1) * (S + 10) + S / 2;
+    } else bottom += textLines(rs, x0, bottom + 4, 'No lights set', iw - (x0 - ix), { size: small, color: COL.na }) + 4;
+    bottom += textLines(rs, ix, bottom + 4, 'Cable from the circuit JB to the switch, switch to the lights' + (r.sw2pairs ? '; blue lines are the 2-way strappers' : ''), iw, { size: small * 0.85, color: COL.grey }) + 4;
+    return { bottom, feedIn: wy, swX: placed.length ? placed[0][1] - S * 0.45 : srcX };
   }
   // Point symbols, after BS EN 60617 / usual UK drawing style.
   // Only lines, rects, circles and text, so SVG and jsPDF match exactly.
