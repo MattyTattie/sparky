@@ -17,7 +17,7 @@ test('v353: schedule table is wired to auto-fit; no clipping ellipsis', () => {
   assert.doesNotMatch(css, /table\.sched[^{]*\{[^}]*text-overflow:\s*ellipsis/);
 });
 test('v353: version and cache bumped', () => {
-  assert.match(readFileSync(new URL('../js/config.js', import.meta.url), 'utf8'), /0\.3(5\.3|6\.\d) beta/);
+  assert.match(readFileSync(new URL('../js/config.js', import.meta.url), 'utf8'), /0\.3(5\.3|[67]\.\d) beta/);
   const sw = readFileSync(new URL('../sw.js', import.meta.url), 'utf8');
-  assert.match(sw, /sparky-v0\.3(5\.3|6\.\d)/); assert.match(sw, /js\/fitbox\.js/);
+  assert.match(sw, /sparky-v0\.3(5\.3|[67]\.\d)/); assert.match(sw, /js\/fitbox\.js/);
 });

@@ -10,7 +10,7 @@ test('colour cycle, reduced motion, print hidden', () => {
 });
 test('settings preview + version', () => {
   assert.match(src('js/limitbar.js'), /export function limitDemo/); assert.match(src('js/app.js'), /limitDemo\(\)/);
-  assert.match(src('js/config.js'), /APP_VERSION = '0\.36\.5 beta'/); assert.match(src('sw.js'), /'sparky-v0\.36\.5'/);
+  assert.match(src('js/config.js'), /APP_VERSION = '0\.3(6\.5|7\.\d) beta'/); assert.match(src('sw.js'), /'sparky-v0\.3(6\.5|7\.\d)'/);
 });
 
 test('v0.36.5b: FF7-measured 8-colour, 0.267s stepped cycle', () => {
