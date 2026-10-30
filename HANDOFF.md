@@ -251,6 +251,12 @@ Open points
 - Runtime table at 100/75/50/25% inverter load (Results + PDF).
 - Tests: tests/v350.test.mjs; shots: tests/screens_v350.py → /workspace/sparky-shots/v0.35.0.
 
+## v0.43.2 — Fan line, rooms menu tidy, plain coil wording (live 30 Oct 2026)
+- Room fan feed is one continuous line from the room feed (box margin), clear of the notes; circuit Points line reads e.g. '8 x lights + 1 x fan'.
+- Switches and rooms: this circuit's rooms first ('On this circuit (feed order)'), then 'Add a room', rooms on other circuits behind 'Show rooms on other circuits (n)'; junk room names (old room counts like '5') ignored.
+- Plain wording: Needs attention 'Circuit N: choose which circuit feeds the contactor coil'; diagram note 'Choose which circuit feeds the coil'.
+- No data format changes.
+
 ## v0.43.1 — JB lanes, CCU/FCU, job-page diagram, Needs attention, room fans (live 30 Oct 2026)
 - Switch-fed rooms get nested JB lanes (no crossing tails); cooker control unit (CCU) isolator; FCU isolators drawn in line with short labels (13A SFCU / FCU), heaters as the load.
 - Wiring diagram opens from a row on the job page (card removed from the cert page).
