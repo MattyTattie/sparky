@@ -533,27 +533,27 @@ export function layout(model, { W = 380, font = 12, screen = false, cableTable =
     if (!info.spare && !info.spd && info.rooms) {
       ph = roomsSection(sh, info, tx, y + hh + 6, tw, feedTop, c);
     } else if (horiz && (pc.shown || ctl || iso)) {
-      const S = F * 1.5, step = S + 6; const per = Math.max(1, Math.floor((tw - 4) / step)); const lab0 = (ctl || iso) ? small * 1.3 : 0; const py = y + hh + 6 + lab0; const fx = tx - gap / 2; const g9 = { w: 0.9, color: COL.grey };
+      const S = F * 1.5, step = S + 6, lstep = S + 11, gapX = F * 1.6; const per = Math.max(1, Math.floor((tw - 4) / step)); const lab0 = (ctl || iso) ? small * 1.3 : 0; const py = y + hh + 6 + lab0; const fx = tx - gap / 2; const g9 = { w: 0.9, color: COL.grey };
       // items along the row: [width, draw(x, cy)]
       const items = []; let coilAt = null;
-      if (ctl) { const kw = F * 2.4; items.push([kw + 6, (x, cy) => { rotH(sh, x, cy, (o) => nocSym(o, x, cy, kw)); T(sh, x + kw / 2, cy - S * 0.55, tags[val(c.num) || '?'] || ctl.tag, { anchor: 'middle', bold: true, size: small }); coilAt = { x: x + kw * 0.5, y: cy }; }]); }
-      if (iso) { const iw0 = Math.max(F * 2.4, textW(iso.label, small, true) + 4); items.push([iw0 + 6, (x, cy) => { rotH(sh, x, cy, (o) => isoSym(o, x, cy, F * 2.4, iso.fcu, iso.switched)); T(sh, x + F * 1.2, cy - S * 0.55, iso.label, { anchor: 'middle', bold: true, size: small }); }]); }
-      for (let i = 0; i < pc.shown; i++) { const k1 = kindAt(i); items.push([step, (x, cy) => { symbol(sh, k1, x + S / 2, cy, S); used.add(k1); }, true]); }
-      const rowsX = []; let x = tx, row = 0; const maxX = W - 6;
-      for (const it of items) { if (x + it[0] > maxX + 6 && x > tx) { row++; x = tx; } rowsX.push([x, row]); x += it[0]; }
+      if (ctl) { const kw = F * 2.4; items.push([kw + gapX, (x, cy) => { rotH(sh, x, cy, (o) => nocSym(o, x, cy, kw)); T(sh, x + kw / 2, cy - S * 0.55, tags[val(c.num) || '?'] || ctl.tag, { anchor: 'middle', bold: true, size: small }); coilAt = { x: x + kw * 0.5, y: cy }; }]); }
+      if (iso) { const iw0 = Math.max(F * 2.4, textW(iso.label, small, true) + 4); items.push([iw0 + gapX, (x, cy) => { rotH(sh, x, cy, (o) => isoSym(o, x, cy, F * 2.4, iso.fcu, iso.switched)); T(sh, x + F * 1.2, cy - S * 0.55, iso.label, { anchor: 'middle', bold: true, size: small }); }]); }
+      for (let i = 0; i < pc.shown; i++) { const k1 = kindAt(i); items.push([lstep, (x, cy) => { symbol(sh, k1, x + S / 2, cy, S); used.add(k1); }, true]); }
+      const rowsX = []; let x = tx + F * 0.6, row = 0; const maxX = W - 6;
+      for (const it of items) { if (x + it[0] > maxX + 6 && x > tx + F * 0.6) { row++; x = tx + F * 0.6; } rowsX.push([x, row]); x += it[0]; }
       const rows = row + 1; const rowH = S + lab0 + 8; let prevEnd = null;
       items.forEach((it, i) => { const [xx, r] = rowsX[i]; const cy = py + r * rowH + S / 2;
         if (i === 0) { L(sh, fx, feedTop, fx, cy, g9); L(sh, fx, cy, xx, cy, g9); }
         else if (rowsX[i - 1][1] !== r) { const pcy = cy - rowH; L(sh, prevEnd, pcy, prevEnd + 3, pcy, g9); L(sh, prevEnd + 3, pcy, prevEnd + 3, pcy + rowH / 2 + S * 0.2, g9); L(sh, prevEnd + 3, pcy + rowH / 2 + S * 0.2, fx, pcy + rowH / 2 + S * 0.2, g9); L(sh, fx, pcy + rowH / 2 + S * 0.2, fx, cy, g9); L(sh, fx, cy, xx, cy, g9); }
         else L(sh, prevEnd, cy, xx, cy, g9);
-        it[1](xx, cy); prevEnd = it[2] ? xx + S : xx + it[0] - 6; if (it[2] && i + 1 < items.length && rowsX[i + 1][1] === r) prevEnd = xx + S; });
+        it[1](xx, cy); prevEnd = it[2] ? xx + S : xx + it[0] - gapX; if (it[2] && i + 1 < items.length && rowsX[i + 1][1] === r) prevEnd = xx + S; });
       ph = 6 + lab0 + rows * rowH - 8;
       if (ctl) { // coil cross-reference under the row, joined by the dashed mechanical link
-        const ty = y + hh + 6 + ph + 2; const coil = ctl.from ? `Coil switched by circuit ${ctl.from} (see circuit ${ctl.from})` : 'Coil supply: ' + NA;
-        let nh = textLines(sh, tx + F * 1.6, ty, ctl.note, tw - F * 1.6, { size: small, bold: true });
-        if (coilAt) L(sh, coilAt.x, coilAt.y + S * 0.3, coilAt.x, ty + small * 0.6, { w: 1.5, color: COL.brand, dash: [4, 2] }), L(sh, coilAt.x, ty + small * 0.6, tx + F * 1.4, ty + small * 0.6, { w: 1.5, color: COL.brand, dash: [4, 2] });
-        nh += textLines(sh, tx + F * 1.6, ty + nh, coil, tw - F * 1.6, { size: small, color: ctl.from ? COL.brand : COL.na });
-        if (!ctl.from && screen) nh += textLines(sh, tx + F * 1.6, ty + nh, 'Set the coil circuit in Controlled by', tw - F * 1.6, { size: small, color: COL.amber });
+        const ty = y + hh + 6 + ph + 2; const nx0 = coilAt ? Math.max(F * 1.6, coilAt.x - tx + 6) : F * 1.6; const coil = ctl.from ? `Coil switched by circuit ${ctl.from} (see circuit ${ctl.from})` : 'Coil supply: ' + NA;
+        let nh = textLines(sh, tx + nx0, ty, ctl.note, tw - nx0, { size: small, bold: true });
+        if (coilAt) L(sh, coilAt.x, coilAt.y + S * 0.3, coilAt.x, ty + small * 0.6, { w: 1.5, color: COL.brand, dash: [4, 2] }), L(sh, coilAt.x, ty + small * 0.6, tx + nx0 - 3, ty + small * 0.6, { w: 1.5, color: COL.brand, dash: [4, 2] });
+        nh += textLines(sh, tx + nx0, ty + nh, coil, tw - nx0, { size: small, color: ctl.from ? COL.brand : COL.na });
+        if (!ctl.from && screen) nh += textLines(sh, tx + nx0, ty + nh, 'Set the coil circuit in Controlled by', tw - nx0, { size: small, color: COL.amber });
         ph += nh + 4; }
       if (kind !== 'socket') used.add(kind);
       if (pc.more) { ph += textLines(sh, tx, y + hh + 6 + ph, `+ ${pc.more} more (${pc.n} in total)`, tw, { size: small, color: COL.grey }) + 2; }
