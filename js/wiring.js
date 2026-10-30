@@ -533,7 +533,7 @@ export function layout(model, { W = 380, font = 12, screen = false, cableTable =
     if (!info.spare && !info.spd && info.rooms) {
       ph = roomsSection(sh, info, tx, y + hh + 6, tw, feedTop, c);
     } else if (horiz && (pc.shown || ctl || iso)) {
-      const S = F * 1.5, step = S + 6, lstep = S + 15, gapX = F * 2.3; const per = Math.max(1, Math.floor((tw - 4) / step)); const lab0 = (ctl || iso) ? small * 1.3 : 0; const py = y + hh + 6 + lab0; const fx = tx - gap / 2; const g9 = { w: 0.9, color: COL.grey };
+      const S = F * 1.5, step = S + 6, lstep = S + 15, gapX = F * 2.3; const per = Math.max(1, Math.floor((tw - 4) / step)); const lab0 = (ctl || iso) ? small * 1.3 : 0; const py = y + hh + 6 + lab0; const fx = tx - gap / 2; const g9 = { w: 1.1, color: COL.line }; // v0.43: run conductor, same weight as the symbols so it reads as one line
       // items along the row: [width, draw(x, cy)]
       const items = []; let coilAt = null;
       if (ctl) { const kw = F * 2.4; items.push([kw + gapX, (x, cy) => { rotH(sh, x, cy, (o) => nocSym(o, x, cy, kw)); T(sh, x + kw / 2, cy - S * 0.55, tags[val(c.num) || '?'] || ctl.tag, { anchor: 'middle', bold: true, size: small }); coilAt = { x: x + kw * 0.5, y: cy }; }, false, kw]); }
