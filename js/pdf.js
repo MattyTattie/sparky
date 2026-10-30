@@ -419,7 +419,7 @@ function schedules(k, cert, certNo) {
 // v0.38 (prototype): single-line wiring diagram, after the schedules.
 export function diagramSheet(k, cert, certNo) {
   if (!diagramInPdf(cert)) return;
-  const tag = 'Single-line diagram drawn from the schedule of circuit details. Not to scale; no room layout.';
+  const tag = 'Single-line diagram drawn from the schedule of circuit details. Not to scale; rooms are shown as boxes, not a floor plan.';
   k.addPage('p'); contTitle(k, 'WIRING DIAGRAM', certNo, tag); k.y += 3;
   drawDiagramPdf(k, cert, () => { k.addPage('p'); contTitle(k, 'WIRING DIAGRAM (continued)', certNo, tag); k.y += 3; });
 }

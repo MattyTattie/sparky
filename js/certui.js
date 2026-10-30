@@ -14,7 +14,7 @@ import { TYPES, newCert, sectionsFor, sectionDone, missingFields, visible, get, 
 import { INTAKE_NOTE_10, INTAKE_NOTES, INTAKE_NOTIFIED, migrateIntake, EIC_ITEMS, EIC_OUTCOMES, EICR_ITEMS, EICR_OUTCOMES, CODE_TEXT, OBSERVATIONS, OBS_CATS, EIC_HELP, EICR_HELP } from './inspections.js';
 import { checkCircuit, isSpare } from './checks.js';
 import { CHECK_NOTE } from './limits.js';
-import { diagramSvg, diagramInPdf, diagramHasCircuits, SPUR_FEEDS, CONTROL_VIA, switchInfo } from './wiring.js';
+import { diagramSvg, diagramInPdf, diagramHasCircuits, SPUR_FEEDS, CONTROL_VIA, switchInfo, roomListOf, roomPointsNote } from './wiring.js';
 import { limitOn, limitBar } from './limitbar.js';
 import { dangerCodes, noticeForObs, noticesOf, noticeMissing, noticeNo } from './dangermodel.js';
 
@@ -206,20 +206,56 @@ function extrasCard(cert, redraw) {
   const all = cert.type === 'MW' ? (cert.mw.circuit ? [cert.mw.circuit] : []) : (cert.boards || []).flatMap((b) => b.circuits || []);
   const live = all.filter((c) => c && !isSpareC(c));
   const name = (c) => `${c.num || '?'}  ${c.desc || 'No description'}`;
-  const nset = live.filter((c) => c.diagram && (c.diagram.rooms || ['sw1', 'sw2', 'swi'].some((k) => c.diagram[k] !== undefined && c.diagram[k] !== ''))).length;
+  const nset = live.filter((c) => c.diagram && (c.diagram.rooms || (c.diagram.roomList || []).length || ['sw1', 'sw2', 'swi'].some((k) => c.diagram[k] !== undefined && c.diagram[k] !== ''))).length;
   const body = h('div', { id: 'extrasrows' });
   const save = (c, k, v) => { const d = { ...(c.diagram || {}) }; if (v === '' || v == null) delete d[k]; else d[k] = v; if (Object.keys(d).length) c.diagram = d; else delete c.diagram; changed(); redraw(); };
-  fill(body, [h('p', { class: 'note', style: 'margin:4px 0 8px' }, 'Optional. Rooms print beside the circuit name. Lighting circuits get one 1-way switch unless you set the switches here.'),
+  fill(body, [h('p', { class: 'note', style: 'margin:4px 0 8px' }, 'Optional. Rooms print beside the circuit name. Lighting circuits get one 1-way switch unless you set the switches here, or add each room below.'),
     ...live.map((c) => {
       const d = c.diagram || {}; const isLight = switchInfo(c) !== null;
       const si = isLight ? switchInfo(c) : null;
       const ins = {}; const cur = { sw1: si ? String(si.list.filter((x) => x === 'sw1').length) : '1', sw2: si ? String(si.list.filter((x) => x === 'sw2').length / 2) : '0', swi: si ? String(si.list.filter((x) => x === 'swi').length) : '0' };
       const numIn = (k, label) => h('label', { class: 'f', style: 'flex:1;min-width:0' }, h('span', {}, label), ins[k] = h('input', { type: 'number', min: '0', max: '10', inputmode: 'numeric', 'aria-label': label + ', circuit ' + (c.num || ''), value: cur[k], onchange: () => { for (const o of ['sw1', 'sw2', 'swi']) { const n = Math.max(0, Math.min(10, parseInt(ins[o].value, 10) || 0)); ins[o].value = String(n); save(c, o, String(n)); } } }));
       return h('div', { style: 'border-top:1px solid var(--line);padding-top:6px' }, h('b', { style: 'display:block;margin:2px 0 4px;word-break:break-word' }, name(c)),
-        h('label', { class: 'f' }, h('span', {}, 'Rooms'), h('input', { placeholder: 'e.g. Kitchen, Hall', 'aria-label': 'Rooms, circuit ' + (c.num || ''), value: d.rooms || '', onchange: (e) => save(c, 'rooms', e.target.value.trim()) })),
-        isLight ? h('div', { style: 'display:flex;gap:8px' }, numIn('sw1', '1-way'), numIn('sw2', '2-way pairs'), numIn('swi', 'Intermediate')) : null);
+        roomListOf(c) ? null : h('label', { class: 'f' }, h('span', {}, 'Rooms'), h('input', { placeholder: 'e.g. Kitchen, Hall', 'aria-label': 'Rooms, circuit ' + (c.num || ''), value: d.rooms || '', onchange: (e) => save(c, 'rooms', e.target.value.trim()) })),
+        isLight && !roomListOf(c) ? h('div', { style: 'display:flex;gap:8px' }, numIn('sw1', '1-way'), numIn('sw2', '2-way pairs'), numIn('swi', 'Intermediate')) : null,
+        isLight ? roomsEditor(c, redraw) : null);
     })]);
   return h('div', { class: 'card', id: 'extrascard' }, h('details', { class: 'fold' }, h('summary', {}, h('span', { class: 'foldt' }, 'Switches and rooms', h('span', { class: 'folds' }, 'Light switches, room names')), nset ? h('span', { class: 'fbadge' }, `${nset} set`) : null, h('span', { class: 'foldic' }, '\u203a')), h('div', { class: 'foldin' }, body)));
+}
+
+// v0.39 (test): "Rooms on this circuit" for a lighting circuit. Saves an
+// optional circuit.diagram.roomList; with rooms set, the diagram draws each
+// room in its own box and the plain rooms text / switch counts step aside.
+const SW_KIND = { sw1: '1-way', sw2: '2-way', sw2i: '2-way + intermediate', none: 'No switch' };
+const swKind = (r) => (+r.sw2pairs > 0 ? (+r.swi > 0 ? 'sw2i' : 'sw2') : +r.sw1 > 0 ? 'sw1' : 'none');
+function roomsEditor(c, redraw) {
+  const box = h('div', { class: 'roomsed', style: 'margin:8px 0 4px' });
+  const list = () => (c.diagram && Array.isArray(c.diagram.roomList) ? c.diagram.roomList : []);
+  const store = (l) => { const d = { ...(c.diagram || {}) }; if (l.length) d.roomList = l; else delete d.roomList; if (Object.keys(d).length) c.diagram = d; else delete c.diagram; changed(); redraw(); };
+  const stepper = (val, label, onset, min = 0, max = 10) => { const out = h('span', { class: 'stepval', style: 'min-width:1.6em;text-align:center;font-weight:700' }, String(val));
+    const st = (dv) => () => { const n = Math.max(min, Math.min(max, (parseInt(out.textContent, 10) || 0) + dv)); out.textContent = String(n); onset(n); };
+    return h('div', { class: 'rstep', style: 'display:flex;align-items:center;gap:6px' }, h('button', { class: 'stepbtn', type: 'button', 'aria-label': label + ', one fewer', onclick: st(-1) }, '\u2212'), out, h('button', { class: 'stepbtn', type: 'button', 'aria-label': label + ', one more', onclick: st(1) }, '+')); };
+  const draw = () => {
+    const l = list(); const note = roomPointsNote(c);
+    fill(box, [h('b', { style: 'display:block;margin:6px 0 2px' }, 'Rooms on this circuit'),
+      h('p', { class: 'note', style: 'margin:0 0 6px' }, l.length ? 'Each room is drawn in its own box, in this order, with the feed running room to room.' : 'Optional. Add each room to draw its lights and switches in their own box.'),
+      ...l.map((r, i) => {
+        const upd = (patch, again = false) => { const nl = list().map((x, j) => (j === i ? { ...x, ...patch } : x)); store(nl); if (again) draw(); };
+        const k = swKind(r);
+        return h('div', { class: 'roomrow', style: 'border:1px solid var(--line);border-radius:8px;padding:8px;margin:0 0 8px' },
+          h('div', { style: 'display:flex;gap:8px;align-items:flex-end' },
+            h('label', { class: 'f', style: 'flex:1;min-width:0;margin:0' }, h('span', {}, 'Room ' + (i + 1)), h('input', { value: r.name || '', placeholder: 'e.g. Kitchen', 'aria-label': 'Room name', onchange: (e) => upd({ name: e.target.value.trim() }) })),
+            h('button', { class: 'btn ghost', type: 'button', 'aria-label': 'Remove room ' + (i + 1), style: 'padding:8px 10px', onclick: () => { store(list().filter((_, j) => j !== i)); draw(); } }, 'Remove')),
+          h('div', { style: 'display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:8px' }, h('span', {}, 'Lights'), stepper(+r.lights || 0, 'Lights', (n) => { upd({ lights: n }); const nb = box.querySelector('.roomsnote'); const t = roomPointsNote(c); if (nb) { nb.textContent = t; nb.style.display = t ? '' : 'none'; } }, 0, 10)),
+          h('label', { class: 'f', style: 'margin-top:8px' }, h('span', {}, 'Switch'), h('select', { 'aria-label': 'Switch type', onchange: (e) => { const v = e.target.value; upd(v === 'sw1' ? { sw1: 1, sw2pairs: 0, swi: 0 } : v === 'sw2' ? { sw1: 0, sw2pairs: 1, swi: 0 } : v === 'sw2i' ? { sw1: 0, sw2pairs: 1, swi: Math.max(1, +r.swi || 1) } : { sw1: 0, sw2pairs: 0, swi: 0 }, true); } }, Object.entries(SW_KIND).map(([v, t]) => h('option', { value: v, selected: v === k ? true : null }, t)))),
+          k === 'sw2i' ? h('div', { style: 'display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:8px' }, h('span', {}, 'Intermediates'), stepper(+r.swi || 1, 'Intermediates', (n) => upd({ swi: n }), 1, 4)) : null,
+          h('label', { class: 'f', style: 'margin-top:8px' }, h('span', {}, 'Wired with'), h('select', { 'aria-label': 'Wiring method', onchange: (e) => upd({ wiring: e.target.value }) }, [['loop-in', 'Loop-in at ceiling rose'], ['junction box', 'Junction box']].map(([v, t]) => h('option', { value: v, selected: (r.wiring || 'loop-in') === v ? true : null }, t)))));
+      }),
+      h('p', { class: 'note roomsnote', style: 'margin:0 0 6px;color:#9aa0aa' + (note ? '' : ';display:none') }, note),
+      h('button', { class: 'btn ghost', type: 'button', id: 'addroom-' + (c.num || ''), onclick: () => { store([...list(), { name: '', lights: 1, sw1: 1, sw2pairs: 0, swi: 0, wiring: 'loop-in' }]); draw(); const ins = box.querySelectorAll('.roomrow input'); if (ins.length) ins[ins.length - 1].focus(); } }, '+ Add room')]);
+  };
+  draw();
+  return box;
 }
 
 // Minor works: "Spur added\" — draws the new spur(s) off the ring, marked New.

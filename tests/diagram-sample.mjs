@@ -73,3 +73,17 @@ export function diagramEICExtras() {
   );
   return c;
 }
+// v0.39 (test): made-up lighting circuit with rooms, each drawn in its own box.
+export function diagramEICRooms() {
+  const c = diagramEIC();
+  c.number = 'EIC-DIAG-05';
+  const b = c.boards[0];
+  const l = b.circuits.find((x) => String(x.num) === '2');
+  l.points = '8';
+  l.diagram = { roomList: [
+    { name: 'Kitchen', lights: 4, sw1: 1, sw2pairs: 0, swi: 0, wiring: 'loop-in' },
+    { name: 'Hall / Stairs / Landing', lights: 3, sw1: 0, sw2pairs: 1, swi: 1, wiring: 'loop-in' },
+    { name: 'Bathroom (pull cord)', lights: 1, sw1: 1, sw2pairs: 0, swi: 0, wiring: 'junction box' },
+  ] };
+  return c;
+}
