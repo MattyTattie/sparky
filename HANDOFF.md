@@ -250,3 +250,6 @@ Open points
 - No loads: no null days; inverter-only prompts for use. acKwh (÷0.9), inverter idle (invIdle, default 0.8% of rating min 8 W, invHours default 24; van example 4 h).
 - Runtime table at 100/75/50/25% inverter load (Results + PDF).
 - Tests: tests/v350.test.mjs; shots: tests/screens_v350.py → /workspace/sparky-shots/v0.35.0.
+
+## v0.38.0 — Wiring diagram (live 30 Oct 2026)
+Auto single-line wiring diagram from the cert (EIC/EICR whole board, MWC just the circuit): supply/earthing, main switch, RCD grouping, breakers, cable, points-served symbols (sockets, lights, alarms, immersion, EV, fan, FCU, SPD as load off its MCB), spares squashed to one line, default supply fuse/location hidden. MWC "Spur added" (count, socket/FCU). Per-circuit "Controlled by" (contactor / time clock / relay, coil circuit, dashed links). Auto 1-way switches + optional 2-way/intermediate and rooms. Symbol key on PDF; optional PDF pages. Wiring diagram card on the job's main page; tap a circuit to edit; on-screen "Add points served" hint. Cache sparky-v0.38.0. Version-pinned tests widened to 0.38.x. 454/454 node tests.
