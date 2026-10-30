@@ -12,10 +12,10 @@ test('diagram.singles draws that many singles and adds both to the key', () => {
   assert.equal(socketSingles(ring), 2);
   const L = layout(diagramModel(c), { W: 560, font: 11 });
   const k = keyNames(L); assert.ok(k.includes('Twin socket')); assert.ok(k.includes('Socket (single)'));
-  // twin = two full-width bars, single = one: count bars (horizontal lines w 1.4) in the ring block
+  // v0.43: twin = two short strokes across the lead, single = none; every socket has its earth line (w 1.2)
   const blk = L.blocks.find((b) => b.shapes.some((z) => z.txt && /Sockets ground floor/.test(z.txt)));
-  const bars = blk.shapes.filter((z) => z.t === 'line' && z.w === 1.4 && z.y1 === z.y2).length;
-  assert.equal(bars, 4 * 2 + 2);
+  const strokes = blk.shapes.filter((z) => z.t === 'line' && z.w === 1 && z.y1 !== z.y2 && z.x1 !== z.x2 && Math.abs(z.x2 - z.x1) < 12).length;
+  assert.equal(strokes, 4 * 2);
   ring.diagram = { singles: '99' }; assert.equal(socketSingles(ring), 6);
   const light = c.boards[0].circuits[1]; light.diagram = { singles: '2' }; assert.equal(socketSingles(light), 0);
 });

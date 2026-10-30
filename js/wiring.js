@@ -68,7 +68,7 @@ export function pointKind(c) {
   if (/immersion|hot water|\bhw\b|\bboost|cylinder/.test(d)) return 'immersion';
   if (/\bev\b|charger|car charg|charge ?point/.test(d)) return 'ev';
   if (/\bfan|extract/.test(d)) return 'fan';
-  if (/\bfcu\b|fused spur|fused conn/.test(d)) return 'fcu';
+  if (/\bfcu\b|fused|\bspur|towel|\bheaters?\b/.test(d)) return 'fcu'; // v0.43: heaters, towel rails, spurs are fed from an FCU
   if (/boiler|heater|heating|ev\b|charger|fan|extract|alarm|smoke|heat det|pump|inverter|garage|sub-?main|towel|spur|fcu|fused/.test(d)) return 'appliance';
   return 'point';
 }
@@ -578,7 +578,7 @@ export function layout(model, { W = 380, font = 12, screen = false, cableTable =
   function roomsSection(sh, info, tx, top, tw, feedTop, c) {
     const S = F * 1.5, step = S + 8, fx = tx - gap / 2, G = { w: 0.9, color: COL.grey };
     const shared = info.rooms.some((r) => r.wiring === 'jb-switch');
-    const bx = tx + (shared ? 16 : 6), bw = tw - (shared ? 16 : 6); let y0 = top; let lastFeedY = feedTop;
+    const nSw = info.rooms.filter((r) => r.wiring === 'jb-switch').length; const gut = shared ? Math.max(16, 8 + 5 * nSw) : 6; const bx = tx + gut, bw = tw - gut; let swK = 0; let y0 = top; let lastFeedY = feedTop;
     if (screen && info.roomNote) y0 += textLines(sh, tx, y0 - 4, info.roomNote, tw, { size: small, color: COL.na }) + 4;
     // switch-fed rooms: ONE junction box for the circuit, a separate cable from it to each such room's switch
     let jbX = 0, jbLastY = 0;
@@ -598,9 +598,10 @@ export function layout(model, { W = 380, font = 12, screen = false, cableTable =
       ry += textLines(rs, ix, ry, `${r.lights} light${r.lights === 1 ? '' : 's'} \u00b7 ${sws} \u00b7 ${how}`, iw, { size: small * 0.92, color: COL.grey });
       if (r.wiring === 'jb-switch') { const fy = jbSwitchRoom(rs, r, ix, iw, ry, S, G); const bh = fy.bottom - y0 + 6;
         R(sh, bx, y0, bw, bh, { fill: COL.fill, color: [150, 160, 190] }); sh.push(...rs);
-        L(sh, jbX, jbLastY, jbX, fy.feedIn, { w: 1.2, color: COL.line }); L(sh, jbX, fy.feedIn, fy.swX, fy.feedIn, { w: 1.2, color: COL.line });
-        T(sh, jbX + 3, fy.feedIn - 3, cable('JB, circuit ' + (val(c.num) || '?'), 'switch, ' + nm, cableLabel(c).split(' \u00b7 ')[0]), { size: small * 0.75, bold: true, color: COL.brand });
-        jbLastY = fy.feedIn; y0 += bh + 8; return; }
+        // v0.43: its own cable from the JB to this room (no shared trunk)
+        const lx = tx + 3 + swK * 5; swK++; L(sh, lx, jbLastY, lx, fy.feedIn, { w: 1.2, color: COL.line }); L(sh, lx, fy.feedIn, fy.swX, fy.feedIn, { w: 1.2, color: COL.line });
+        T(sh, lx + 3, fy.feedIn - 3, cable('JB, circuit ' + (val(c.num) || '?'), 'switch, ' + nm, cableLabel(c).split(' \u00b7 ')[0]), { size: small * 0.75, bold: true, color: COL.brand });
+        y0 += bh + 8; return; }
       // v0.42: each switch (or 2-way pair) controls its own lights; see roomBody
       const jb = r.wiring === 'junction box';
       const fb = roomBody(rs, r, ix, iw, ry, S, G, jb ? 'jb' : 'loop');
@@ -620,101 +621,62 @@ export function layout(model, { W = 380, font = 12, screen = false, cableTable =
   // Switch-fed room: circuit feed into a JB, a cable from the JB to the first
   // switch, then from that switch to the light(s), light to light.
   function jbSwitchRoom(rs, r, ix, iw, ry, S, G) { return roomBody(rs, r, ix, iw, ry, S, G, 'jb-switch'); }
-  // v0.42: one room's lights and switches. Each 1-way switch, and each 2-way
-  // pair (with its intermediates), is a group with its own lights (split evenly
-  // unless room.split says otherwise). All switches sit on one level row.
-  //  - jb-switch: the feed from the circuit JB loops switch to switch (a line
-  //    above the row, dropping into each switch); each switch (the far switch
-  //    of a 2-way pair) goes down to its own lights.
-  //  - loop-in / jb: lights on top (roses or the JB), switch drops down to each
-  //    group's first switch; switched live back up from its far switch.
+  // v0.43 (test): one room's lights and switches, drawn as rows. Each 1-way
+  // switch, and each 2-way pair (with its intermediates), is a group with its
+  // own lights (split evenly unless room.split says otherwise). Each group is
+  // one horizontal row: switch(es) on the left, its lights to the right on the
+  // same line; lights wrap onto a second line if they run out of width.
+  //  - jb-switch: feed from the circuit JB into the first switch, then loops
+  //    switch to switch down the left edge.
+  //  - loop-in: permanent live loops rose to rose along a line above the row;
+  //    the switch wire runs along the row to the lights.
+  //  - jb: room JB on the left of the first row; switch drop to each group.
   function roomBody(rs, r, ix, iw, ry, S, G, mode) {
-    const groups = switchGroups(r); const sstep = S + 14, step = S + 8, gapG = S * 0.9;
-    const x0 = ix + (mode === 'jb' ? S * 1.4 + 12 : mode === 'loop' ? 10 : 12); const maxX = ix + iw - 4;
+    const groups = switchGroups(r); const sstep = S + 14, step = S + 8, rowH = S + 10;
+    const jbW = S * 1.4; const x0 = ix + (mode === 'jb' ? jbW + 12 : 12) + S / 2; const maxX = ix + iw - S / 2 - 2;
     const D = { ...G, dash: [2, 2] };
-    // place groups left to right, wrapping whole groups into bands
-    const bands = []; let cur = []; let x = x0;
-    for (const g of groups) {
-      const avail = maxX - x0; const lper = Math.max(1, Math.floor(avail / step));
-      const wS = g.sw.length * sstep, wL = Math.min(g.lights, lper) * step; const w = Math.max(wS, wL, step);
-      if (cur.length && x + w > maxX) { bands.push(cur); cur = []; x = x0; }
-      g.x = x; g.w = w; g.lper = Math.max(1, Math.floor(Math.max(w, wL) / step)); cur.push(g); x += w + gapG;
-    }
-    if (cur.length) bands.push(cur);
-    const swAt = (g, i) => g.x + S / 2 + i * sstep; const ltAt = (g, q) => g.x + S / 2 + (q % g.lper) * step;
-    const lrows = (g) => Math.ceil(g.lights / g.lper) || 0;
-    let y = ry + 10; let feedIn = y; let swX = ix + 6; let bottom = y; let prevWire = null; let prevWireY = 0;
+    let y = ry + (mode === 'loop' ? S * 0.9 + 6 : S * 0.6 + 4); let feedIn = y; const swX = ix + 6; let bottom = y;
     const allLights = groups.reduce((a, g) => a + g.lights, 0);
     if (allLights) used.add('light'); if (mode === 'loop' && allLights) used.add('rose');
-    let jbBox = null;
-    if (mode === 'jb') { used.add('jb'); const jbW = S * 1.4; jbBox = { x: ix, y: y - S * 0.45, w: jbW, h: S * 0.9 }; R(rs, ix, jbBox.y, jbW, jbBox.h, { fill: [255, 255, 255] }); T(rs, ix + jbW / 2, y + small * 0.35, 'JB', { anchor: 'middle', bold: true, size: small * 0.85 }); }
-    bands.forEach((band, bi) => {
-      const nL = Math.max(0, ...band.map(lrows)); const hasSw = band.some((g) => g.sw.length);
-      if (mode === 'jb-switch') {
-        const bus = y; const sy = y + S * 0.75; if (bi === 0) feedIn = bus;
-        // feed loops switch to switch along the bus, dropping into each group's first switch
-        const drops = band.filter((g) => g.sw.length).map((g) => swAt(g, 0));
-        const busStart = bi === 0 ? swX : prevWire; if (drops.length) { L(rs, busStart, bus, drops[drops.length - 1], bus, { w: 1.2, color: COL.line }); if (bi > 0) L(rs, ix + 6, prevWireY, ix + 6, bus, { w: 1.2, color: COL.line }); }
-        for (const dx of drops) L(rs, dx, bus, dx, sy - S * 0.45, { w: 1.2, color: COL.line });
-        prevWire = ix + 6; prevWireY = bus;
-        drawSwitchRow(band, sy);
-        const ly0 = sy + S * 1.6;
-        for (const g of band) { if (!g.lights) continue; const out = g.sw.length ? swAt(g, g.sw.length - 1) : null;
-          drawLights(g, ly0, out != null ? { x: out, y: sy + S * 0.45 } : null); }
-        bottom = Math.max(sy + S / 2, nL ? ly0 + (nL - 1) * (S + 10) + S / 2 : 0); y = bottom + 14;
-        return;
-      }
-      // loop / jb: lights on top
-      const wy = y; const ly0 = mode === 'loop' ? wy + S * 0.9 : wy + S * 0.9;
-      if (bi === 0) feedIn = wy;
-      if (mode === 'loop') {
-        const lastX = Math.max(ix + 4, ...band.filter((g) => g.lights).map((g) => ltAt(g, Math.min(g.lights, g.lper) - 1)));
-        L(rs, bi === 0 ? ix : ix + 4, wy, lastX, wy, G); if (bi > 0) L(rs, ix + 4, prevWireY, ix + 4, wy, G); prevWireY = wy;
-      }
-      for (const g of band) if (g.lights) drawLights(g, ly0, null, mode === 'loop' ? wy : null);
-      const lb = nL ? ly0 + (nL - 1) * (S + 10) + S / 2 : wy + S * 0.45;
-      if (!hasSw) { bottom = lb; y = bottom + 14; return; }
-      const sy = lb + 16 + S / 2; const yM = lb + 8;
-      drawSwitchRow(band, sy);
-      for (const g of band) { if (!g.sw.length) continue;
-        const inX = swAt(g, 0), outX = swAt(g, g.sw.length - 1);
-        if (mode === 'jb') { // switch drop from the JB, along a line above the switches
-          const jx = jbBox.x + jbBox.w / 2; L(rs, jx, jbBox.y + jbBox.h, jx, yM, D); L(rs, jx, yM, inX, yM, D); L(rs, inX, yM, inX, sy - S * 0.45, D);
-        } else if (g.lights) { L(rs, inX, ly0 + S * 0.4, inX, sy - S * 0.45, D); }
-        else { L(rs, inX, wy, inX, sy - S * 0.45, D); }
-        if (g.sw.length > 1 && g.lights) { // switched live from the far switch back up to its lights
-          const lx = ltAt(g, Math.min(g.lights, g.lper) - 1) + S * 0.25; const y2 = yM + 4;
-          L(rs, outX, sy - S * 0.45, outX, y2, D); L(rs, outX, y2, lx, y2, D); L(rs, lx, y2, lx, ly0 + S * 0.38, D); }
-        else if (mode === 'jb' && g.lights) { const lx = ltAt(g, 0) + S * 0.25; L(rs, inX + S * 0.25, sy - S * 0.45, lx, ly0 + S * 0.38, D); }
-      }
-      bottom = sy + S / 2; y = bottom + 14;
+    let jbBox = null; let prevY = null;
+    if (mode === 'jb') { used.add('jb'); jbBox = { x: ix, y: y - S * 0.45, w: jbW, h: S * 0.9 }; R(rs, ix, jbBox.y, jbW, jbBox.h, { fill: [255, 255, 255] }); T(rs, ix + jbW / 2, y + small * 0.35, 'JB', { anchor: 'middle', bold: true, size: small * 0.85 }); }
+    groups.forEach((g, gi) => {
+      const sy = y; const sx = g.sw.map((_, i) => x0 + i * sstep);
+      g.sw.forEach((k0, i) => { symbol(rs, k0, sx[i], sy, S); used.add(k0); });
+      if (g.sw.length > 1) { used.add('strap');
+        for (let j = 1; j < g.sw.length; j++) { const a = sx[j - 1], b = sx[j];
+          L(rs, a + S * 0.45, sy - S * 0.08, b - S * 0.45, sy - S * 0.08, { w: 1, color: COL.brand }); L(rs, a + S * 0.45, sy + S * 0.2, b - S * 0.45, sy + S * 0.2, { w: 1, color: COL.brand }); } }
+      const outX = sx.length ? sx[sx.length - 1] : null;
+      let lx0 = outX != null ? outX + sstep : x0; if (lx0 > maxX) lx0 = x0;
+      const lper = Math.max(1, Math.floor((maxX - lx0) / step) + 1);
+      let lrow = 0; let lastLy = sy;
+      if (g.lights && lx0 === x0 && outX != null) lrow = 1; // no room on the switch line: lights start underneath
+      const pts = [];
+      for (let q = 0; q < g.lights; q++) { const k = lrow + Math.floor(q / lper); pts.push({ x: lx0 + (q % lper) * step, y: sy + k * rowH }); }
+      // feed into this row
+      if (mode === 'jb-switch' && sx.length) { const fx0 = swX; if (gi === 0) feedIn = sy; else L(rs, fx0, prevY, fx0, sy, { w: 1.2, color: COL.line }); L(rs, fx0, sy, sx[0] - S * 0.45, sy, { w: 1.2, color: COL.line }); prevY = sy; }
+      if (mode === 'jb' && sx.length) { const jx = jbBox.x + jbBox.w; if (gi === 0) L(rs, jx, sy, sx[0] - S * 0.45, sy, D); else { const vx = jbBox.x + jbBox.w / 2; L(rs, vx, jbBox.y + jbBox.h, vx, sy, D); L(rs, vx, sy, sx[0] - S * 0.45, sy, D); } }
+      if (mode === 'loop' && pts.length) { const wy = pts[0].y - S * 0.9; // permanent live above the lights, roses as dots
+        if (gi === 0) { feedIn = wy; L(rs, ix, wy, pts[pts.length - 1].x, wy, G); } else { L(rs, ix + 4, prevY, ix + 4, wy, G); L(rs, ix + 4, wy, pts[Math.min(pts.length, lper) - 1].x, wy, G); }
+        prevY = wy;
+        for (const pt of pts) if (pt.y === pts[0].y) { L(rs, pt.x, wy, pt.x, pt.y - S * 0.45, G); C(rs, pt.x, wy, S * 0.17, { fill: COL.line, lw: 0.8 }); }
+        if (sx.length) L(rs, sx[0], wy, sx[0], sy - S * 0.45, D); }
+      if (mode === 'loop' && !pts.length && sx.length) { const wy = sy - S * 0.9; if (gi === 0) { feedIn = wy; L(rs, ix, wy, sx[0], wy, G); } else L(rs, ix + 4, prevY, ix + 4, wy, G); prevY = wy; L(rs, sx[0], wy, sx[0], sy - S * 0.45, D); }
+      // switched live along the row from the (far) switch to its lights, light to light
+      if (pts.length) {
+        if (outX != null) { const first = pts[0]; if (first.y === sy) L(rs, outX + S * 0.45, sy, first.x - S * 0.45, sy, mode === 'jb-switch' ? G : D);
+          else { L(rs, outX, sy + S * 0.45, outX, first.y, G); L(rs, outX, first.y, first.x - S * 0.45, first.y, G); } }
+        for (let q = 1; q < pts.length; q++) { const a = pts[q - 1], b = pts[q];
+          if (a.y === b.y) L(rs, a.x + S * 0.45, a.y, b.x - S * 0.45, b.y, G); else { const ex = lx0 - S * 0.75; L(rs, a.x, a.y + S * 0.45, a.x, a.y + rowH / 2, G); L(rs, a.x, a.y + rowH / 2, ex, a.y + rowH / 2, G); L(rs, ex, a.y + rowH / 2, ex, b.y, G); L(rs, ex, b.y, b.x - S * 0.45, b.y, G); } }
+        for (const pt of pts) symbol(rs, 'light', pt.x, pt.y, S);
+        lastLy = pts[pts.length - 1].y; }
+      bottom = Math.max(sy, lastLy) + S / 2; y = bottom + (mode === 'loop' ? S * 0.9 + 10 : 12) + S / 2;
     });
     if (!groups.some((g) => g.lights)) bottom += textLines(rs, x0, bottom + 2, 'No lights set', iw - (x0 - ix), { size: small, color: COL.na }) + 2;
     const pairs = r.sw2pairs ? '; blue lines are the 2-way strappers' : '';
-    const lab = mode === 'jb-switch' ? 'Cable from the circuit JB loops switch to switch; each switch feeds its own light(s)' : mode === 'jb' ? 'Switch drops from the JB; each switch controls its own light(s)' : 'Switch drops from the ceiling roses; each switch controls its own light(s)';
+    const lab = mode === 'jb-switch' ? 'Cable from the circuit JB loops switch to switch, a separate cable from the JB to each room; each switch feeds its own light(s)' : mode === 'jb' ? 'Switch drops from the JB; each switch controls its own light(s)' : 'Switch drops from the ceiling roses; each switch controls its own light(s)';
     bottom += textLines(rs, ix, bottom + 4, lab + pairs, iw, { size: small * 0.85, color: COL.grey }) + 4;
     return { bottom, feedIn, swX };
-
-    function drawSwitchRow(band, sy) {
-      for (const g of band) {
-        g.sw.forEach((k0, i) => { symbol(rs, k0, swAt(g, i), sy, S); used.add(k0); });
-        if (g.sw.length > 1) { used.add('strap');
-          for (let j = 1; j < g.sw.length; j++) { const a = swAt(g, j - 1), b = swAt(g, j);
-            L(rs, a + S * 0.45, sy - S * 0.08, b - S * 0.45, sy - S * 0.08, { w: 1, color: COL.brand }); L(rs, a + S * 0.45, sy + S * 0.2, b - S * 0.45, sy + S * 0.2, { w: 1, color: COL.brand }); } }
-      }
-    }
-    function drawLights(g, ly0, from, wireY) {
-      const n = g.lights; const rows = Math.ceil(n / g.lper);
-      for (let k = 0; k < rows; k++) { const m = Math.min(g.lper, n - k * g.lper); const ly = ly0 + k * (S + 10);
-        const xa = ltAt(g, 0), xb = ltAt(g, m - 1);
-        if (wireY == null && mode !== 'jb') { let xe = xb; if (k === 0 && from && from.x > xb) xe = from.x; L(rs, xa, ly, xe, ly, G); if (k) L(rs, xa, ly - (S + 10), xa, ly, G); }
-        for (let q = 0; q < m; q++) { const lx = ltAt(g, q);
-          if (mode === 'loop' && wireY != null) { L(rs, lx, wireY, lx, ly - S * 0.45, G); C(rs, lx, wireY, S * 0.17, { fill: COL.line, lw: 0.8 }); }
-          if (mode === 'jb') L(rs, jbBox.x + jbBox.w, jbBox.y + jbBox.h / 2, lx, ly - S * 0.45, G);
-          symbol(rs, 'light', lx, ly, S); }
-      }
-      if (from) L(rs, from.x, from.y, from.x, ly0, G);
-    }
   }
   // v0.42 IEC 60617 contactor NO contact, vertical, top at (x, y0), height h:
   // fixed contact with a small semicircle, blade hinged at the bottom.
@@ -740,11 +702,15 @@ export function layout(model, { W = 380, font = 12, screen = false, cableTable =
     const r = S / 2; const W0 = [255, 255, 255];
     if (kind === 'light') { // outlet for lighting: circle with a cross
       C(sh, cx, cy, r * 0.8, { fill: W0 }); const d = r * 0.8 * 0.707; L(sh, cx - d, cy - d, cx + d, cy + d, { w: 1 }); L(sh, cx - d, cy + d, cx + d, cy - d, { w: 1 }); }
-    else if (kind === 'socket' || kind === 'socket1') { // socket outlet: semicircle on a bar; twin (the default) gets a second bar
-      const by = cy + r * 0.3; C(sh, cx, by, r * 0.85, { fill: W0, lw: 0 }); sh[sh.length - 1].color = W0;
-      arc(sh, cx, by, r * 0.85, Math.PI, 2 * Math.PI, { w: 1.2 });
-      L(sh, cx - r * 0.95, by, cx + r * 0.95, by, { w: 1.4 });
-      if (kind === 'socket') L(sh, cx - r * 0.95, by + r * 0.22, cx + r * 0.95, by + r * 0.22, { w: 1.4 });
+    else if (kind === 'socket' || kind === 'socket1') { // v0.43 BS EN 60617 11-13-02: socket outlet with protective (earth) contact:
+      // dome (semicircle) open side down on its lead, earth contact = straight line across the top of the dome.
+      // Twin (multiple outlet, 11-13-03 style) = two short strokes across the lead.
+      const by = cy + r * 0.35, rr = r * 0.75; C(sh, cx, by, rr, { fill: W0, lw: 0 }); sh[sh.length - 1].color = W0;
+      arc(sh, cx, by, rr, Math.PI, 2 * Math.PI, { w: 1.2 });
+      L(sh, cx - rr, by, cx + rr, by, { w: 1.1 });
+      L(sh, cx - rr * 0.8, by - rr - r * 0.12, cx + rr * 0.8, by - rr - r * 0.12, { w: 1.2 });
+      L(sh, cx, by, cx, cy + r * 0.95, { w: 1 });
+      if (kind === 'socket') for (const o of [-0.14, 0.14]) L(sh, cx - r * 0.28, cy + r * (0.78 + o) + r * 0.1, cx + r * 0.28, cy + r * (0.78 + o) - r * 0.1, { w: 1 });
     }
     else if (kind === 'cooker') { // cooker: box with four hob rings
       box(sh, cx, cy, r); for (const [a, b] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) C(sh, cx + a * r * 0.45, cy + b * r * 0.45, r * 0.25, { lw: 0.8 }); }
@@ -755,8 +721,9 @@ export function layout(model, { W = 380, font = 12, screen = false, cableTable =
       box(sh, cx, cy, r); for (const a of [-0.5, 0, 0.5]) L(sh, cx + (a - 0.3) * r, cy + r * 0.6, cx + (a + 0.3) * r, cy - r * 0.6, { w: 1 }); }
     else if (kind === 'ev') { box(sh, cx, cy, r); T(sh, cx, cy + r * 0.32, 'EV', { anchor: 'middle', bold: true, size: r * 0.9 }); }
     else if (kind === 'fan') { C(sh, cx, cy, r * 0.85, { fill: W0 }); for (const a of [0, 2.094, 4.189]) L(sh, cx, cy, cx + Math.cos(a) * r * 0.65, cy + Math.sin(a) * r * 0.65, { w: 1.4 }); C(sh, cx, cy, r * 0.15, { fill: COL.line }); }
-    else if (kind === 'fcu') { // fused connection unit: box with the fuse symbol (small rectangle, line through)
-      box(sh, cx, cy, r); R(sh, cx - r * 0.55, cy - r * 0.22, r * 1.1, r * 0.44, { lw: 0.9, fill: W0 }); L(sh, cx - r * 0.85, cy, cx + r * 0.85, cy, { w: 0.9 }); }
+    else if (kind === 'fcu') { // fused connection unit / spur outlet: box with the fuse symbol (rectangle, line through), flex outlet tail
+      box(sh, cx, cy, r * 0.85); R(sh, cx - r * 0.5, cy - r * 0.2, r * 1.0, r * 0.4, { lw: 0.9, fill: W0 }); L(sh, cx - r * 0.75, cy, cx + r * 0.75, cy, { w: 0.9 });
+      L(sh, cx + r * 0.85, cy + r * 0.45, cx + r * 1.15, cy + r * 0.45, { w: 1 }); C(sh, cx + r * 1.2, cy + r * 0.45, r * 0.08, { fill: COL.line, lw: 0.5 }); }
     else if (kind === 'sw1' || kind === 'sw2' || kind === 'swi') { // switch: small open circle with lever(s)
       const ax = cx - r * 0.1, ay = cy + r * 0.25; const s2 = 0.707;
       swLever(sh, ax, ay, s2, -s2, r * 0.85);
