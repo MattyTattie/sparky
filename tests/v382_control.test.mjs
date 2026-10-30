@@ -23,7 +23,7 @@ test('links: control circuit knows which contactors it switches', () => {
   assert.ok(svg.includes('Switches contactor on circuits 8, 9'));
   assert.ok(svg.includes('Coil switched by circuit 10'));
   assert.ok(svg.includes('via contactor, time clock controlled'));
-  assert.ok(svg.includes('>KM<'));
+  assert.ok(/>KM1</.test(svg));
   assert.ok(svg.includes('stroke-dasharray'));
 });
 test('coil not set prints N/A in light grey', () => {

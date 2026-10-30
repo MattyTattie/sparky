@@ -65,7 +65,7 @@ export function pointKind(c) {
   if (/cooker|oven|hob|range/.test(d)) return 'cooker';
   if (/shower/.test(d)) return 'shower';
   if (/smoke|heat (alarm|det)|\balarms?\b|detector/.test(d)) return 'alarm';
-  if (/immersion/.test(d)) return 'immersion';
+  if (/immersion|hot water|\bhw\b|\bboost|cylinder/.test(d)) return 'immersion';
   if (/\bev\b|charger|car charg|charge ?point/.test(d)) return 'ev';
   if (/\bfan|extract/.test(d)) return 'fan';
   if (/\bfcu\b|fused spur|fused conn/.test(d)) return 'fcu';
@@ -78,7 +78,7 @@ const KIND_PLURAL = { socket: 'sockets', light: 'lights', cooker: 'cookers', sho
 const KIND_ONE = { socket: 'socket', light: 'light', cooker: 'cooker', shower: 'shower', alarm: 'alarm', immersion: 'immersion', ev: 'EV charger', fan: 'fan', fcu: 'FCU', appliance: 'fixed appliance', point: 'point' };
 // Optional per-circuit diagram extras: circuit.diagram = { rooms, sw1, sw2, swi }.
 // Old certs have none; a lighting circuit then gets one 1-way switch.
-const KEY_EXTRA = { jbsw: 'Switch-fed: JB to switch, then to the lights', socket: 'Twin socket', socket1: 'Socket (single)', rose: 'Ceiling rose (loop-in)', jb: 'Junction box (JB)', strap: '2-way strappers (two wires)' };
+const KEY_EXTRA = { jbsw: 'Switch-fed: JB to switch, looped switch to switch, each to its own lights', socket: 'Twin socket', socket1: 'Socket (single)', rose: 'Ceiling rose (loop-in)', jb: 'Junction box (JB)', strap: '2-way strappers (two wires)' };
 export const SWITCH_NAME = { sw1: '1-way switch', sw2: '2-way switch', swi: 'Intermediate switch' };
 const num0 = (v) => { const n = parseInt(String(v ?? ''), 10); return Number.isFinite(n) && n > 0 ? Math.min(n, MAX_SYMBOLS) : 0; };
 export function switchInfo(c) {
@@ -115,8 +115,25 @@ export function roomListOf(c) {
   if (!Array.isArray(l) || !l.length || pointKind(c) !== 'light') return null;
   return arrangedOrder(c).map((i) => [l[i], i]).filter(([r]) => r).map(([r, i]) => {
     const sw2pairs = cnt(r.sw2pairs, 3); const swi = sw2pairs ? cnt(r.swi, 4) : 0;
-    return { i, name: val(r.name), lights: cnt(r.lights), sw1: cnt(r.sw1, 4), sw2pairs, swi, wiring: ROOM_WIRING[r.wiring] ? r.wiring : 'loop-in' };
+    const out = { i, name: val(r.name), lights: cnt(r.lights), sw1: cnt(r.sw1, 4), sw2pairs, swi, wiring: ROOM_WIRING[r.wiring] ? r.wiring : 'loop-in' };
+    if (Array.isArray(r.split)) out.split = r.split; // v0.42: optional lights per switch
+    return out;
   });
+}
+// v0.42 (test): a room's switch groups. Each 1-way switch is a group; each 2-way
+// pair (the first with the room's intermediates) is a group. Lights are shared
+// out evenly (3 lights, 2 switches -> 2 + 1) unless room.split (optional,
+// lights per group) adds up to the room's lights.
+export function switchGroups(r) {
+  const g = [];
+  for (let i = 0; i < (+r.sw1 || 0); i++) g.push({ sw: ['sw1'] });
+  for (let p = 0; p < (+r.sw2pairs || 0); p++) g.push({ sw: ['sw2', ...Array(p === 0 ? (+r.swi || 0) : 0).fill('swi'), 'sw2'] });
+  const L = +r.lights || 0;
+  if (!g.length) return [{ sw: [], lights: L }];
+  const sp = r.split;
+  if (Array.isArray(sp) && sp.length === g.length && sp.every((n) => Number.isInteger(+n) && +n >= 0) && sp.reduce((a, n) => a + +n, 0) === L) g.forEach((x, i) => { x.lights = +sp[i]; });
+  else { const base = Math.floor(L / g.length), extra = L % g.length; g.forEach((x, i) => { x.lights = base + (i < extra ? 1 : 0); }); }
+  return g;
 }
 // v0.40 (test): optional circuit.diagram.layout = { order: [roomList index, ...] }
 // set in Arrange mode. Missing/stale -> the normal order. Screen and PDF both use it.
@@ -211,6 +228,18 @@ export function controlLinks(circuits) {
   for (const c of circuits || []) { const ci = controlInfo(c); if (ci && ci.from) (m[ci.from] ||= []).push(val(c.num) || '?'); }
   return m;
 }
+// v0.42: how a control circuit drives its contactors (for drawing a time clock / relay)
+export function controlVias(circuits, num) {
+  const o = { clock: false, relay: false };
+  for (const c of circuits || []) { const ci = controlInfo(c); if (ci && ci.from === num) { if (/timeclock/.test(ci.via)) o.clock = true; if (/relay/.test(ci.via)) o.relay = true; } }
+  return o;
+}
+// v0.42: contactor labels per board, in circuit order: { '7': 'KM1', '8': 'KM2' }
+export function controlTags(circuits) {
+  const m = {}; const n = { KM: 0, TC: 0 };
+  for (const c of circuits || []) { const ci = controlInfo(c); if (ci) m[val(c.num) || '?'] = ci.tag + (++n[ci.tag]); }
+  return m;
+}
 export function diagramModel(cert) {
   cert = cert || {}; const sup = cert.supply || {}; const parts = cert.parts || {};
   if (cert.type === 'MW') {
@@ -226,7 +255,7 @@ export function diagramModel(cert) {
     type: cert.type,
     supply: { earthing: val(sup.earthing), lines: [[val(sup.conductors), val(sup.u) && val(sup.u) + ' V', val(sup.f) && val(sup.f) + ' Hz'].filter(Boolean).join(', '), [val(sup.ze) && `Ze ${val(sup.ze)} Ω`, val(sup.ipf) && `Ipf ${val(sup.ipf)} kA`].filter(Boolean).join(', '), ].filter(Boolean), fuse },
     main: { label: 'Main switch', detail: ms },
-    boards: (cert.boards || []).map((b, bi) => ({ ref: val(b.ref) || 'DB', location: val(b.location), from: val(b.suppliedFrom), items: groupCircuits(b.circuits, b), links: controlLinks(b.circuits), bi, src: b.circuits || [],
+    boards: (cert.boards || []).map((b, bi) => ({ ref: val(b.ref) || 'DB', location: val(b.location), from: val(b.suppliedFrom), items: groupCircuits(b.circuits, b), links: controlLinks(b.circuits), tags: controlTags(b.circuits), bi, src: b.circuits || [],
       feed: feedInfo(cert.boards, bi), outbuilding: bi > 0 && isOutbuilding(b), ctx: { earthing: sup.earthing, zdb: b.zdb },
       feeds: (cert.boards || []).reduce((m, o, oi) => { const f = oi !== bi && feedInfo(cert.boards, oi); if (f && f.state === 'ok' && f.bi === bi && f.circuit) (m[f.circuit.toLowerCase()] = m[f.circuit.toLowerCase()] || []).push(val(o.ref) + (val(o.location) ? ' (' + val(o.location) + ')' : '')); return m; }, {}) })),
   };
@@ -327,9 +356,9 @@ export function layout(model, { W = 380, font = 12, screen = false, cableTable =
 
   const feedCable = (fd, bd) => { const dest = bd.ref + (bd.location ? ' (' + bd.location + ')' : ''); const got = fd.circuit && cableOf[fd.ref.toLowerCase() + '|' + String(fd.circuit).toLowerCase()]; if (got) { got.to += ', on to ' + dest; return got.label; }
     return cable(fd.ref + (fd.circuit ? ' circuit ' + fd.circuit : ''), dest, cableLabel(((model.boards[fd.bi] || {}).src || []).find((c) => val(c.num).toLowerCase() === String(fd.circuit).toLowerCase()))); };
-  let links = {}; const used = new Set();
+  let links = {}; let tags = {}; let curSrc = []; const bdSrc = () => curSrc; const used = new Set();
   model.boards.forEach((bd, bi) => {
-    links = bd.links || {}; ctx = bd.ctx || {}; feeds = bd.feeds || {}; curBoard = bd.ref;
+    links = bd.links || {}; tags = bd.tags || {}; ctx = bd.ctx || {}; feeds = bd.feeds || {}; curBoard = bd.ref; curSrc = bd.src || [];
     // board header bar
     { const sh = []; const y = 8; const tx = devX; const title = bd.ref + (bd.location ? ' \u00b7 ' + bd.location : '') + (bd.outbuilding ? ' (outbuilding)' : '');
       let hh = textLines(sh, tx, y + 3, title, W - tx - 8, { bold: true, color: COL.brand });
@@ -374,12 +403,14 @@ export function layout(model, { W = 380, font = 12, screen = false, cableTable =
   });
   // key: only the symbols this diagram uses
   if (used.size) {
-    const sh = []; const y = 10; const order = ['socket', 'socket1', 'light', 'rose', 'jb', 'jbsw', 'sw1', 'sw2', 'swi', 'strap', 'cooker', 'shower', 'alarm', 'immersion', 'ev', 'fan', 'fcu', 'appliance', 'point', 'contactor', 'spd'];
+    const sh = []; const y = 10; const order = ['socket', 'socket1', 'light', 'rose', 'jb', 'jbsw', 'sw1', 'sw2', 'swi', 'strap', 'cooker', 'shower', 'alarm', 'immersion', 'ev', 'fan', 'fcu', 'appliance', 'point', 'contactor', 'coil', 'timeclock', 'spd'];
     let hh = textLines(sh, 8, y, 'Key', W - 16, { bold: true });
     const S = F * 1.5; const colW = (W - 16) / 2; let col = 0, rowY = y + hh + 4, rowH = 0;
     for (const k of order.filter((k) => used.has(k))) {
-      const x = 8 + col * colW; const name = SWITCH_NAME[k] || KEY_EXTRA[k] || (k === 'contactor' ? 'Contactor (KM) / time clock (TC)' : k === 'spd' ? 'Surge protection (SPD)' : KIND_NAME[k]);
-      if (k === 'contactor') { const kw = S * 1.5, kh = S, kx = x - S * 0.15, ky = rowY; R(sh, kx, ky, kw, kh, { fill: [255, 255, 255] }); const ccx = kx + kw * 0.3, cT = ky + kh * 0.22, cB = ky + kh * 0.78; L(sh, ccx, ky, ccx, cT); L(sh, ccx, cB, ccx, ky + kh); L(sh, ccx, cB, ccx - S * 0.3, cT + S * 0.05); T(sh, kx + kw * 0.7, ky + kh / 2 + small * 0.3, 'KM', { anchor: 'middle', bold: true, size: small * 0.8 }); }
+      const x = 8 + col * colW; const name = SWITCH_NAME[k] || KEY_EXTRA[k] || (k === 'contactor' ? 'Contactor contact (KM, normally open)' : k === 'coil' ? 'Contactor coil (A1/A2)' : k === 'timeclock' ? 'Time clock' : k === 'spd' ? 'Surge protection (SPD)' : KIND_NAME[k]);
+      if (k === 'contactor') { nocSym(sh, x + S * 0.5, rowY - 2, S * 1.1); }
+      else if (k === 'coil') { coilSym(sh, x + S * 0.2, rowY + S * 0.1, S * 0.8, S * 0.75); }
+      else if (k === 'timeclock') { clockSym(sh, x + S / 2, rowY + S / 2, S * 0.42); }
       else if (k === 'spd') { spdSym(sh, x + S / 2, rowY - 2, F * 0.75); }
       else if (k === 'rose') { L(sh, x + S / 2 - S * 0.6, rowY + S / 2, x + S / 2 + S * 0.6, rowY + S / 2, { w: 0.9, color: COL.grey }); C(sh, x + S / 2, rowY + S / 2, S * 0.17, { fill: COL.line, lw: 0.8 }); }
       else if (k === 'jb') { R(sh, x - S * 0.2, rowY + S * 0.05, S * 1.4, S * 0.9, { fill: [255, 255, 255] }); T(sh, x + S * 0.5, rowY + S * 0.5 + small * 0.3, 'JB', { anchor: 'middle', bold: true, size: small * 0.85 }); }
@@ -441,32 +472,35 @@ export function layout(model, { W = 380, font = 12, screen = false, cableTable =
     const fx0 = tx - gap / 2; let feedTop = y + F * 0.6; let kh0 = 0;
     const ctl = info.spare ? null : controlInfo(c);
     if (ctl) { used.add('contactor');
-      const kw = F * 2.6, kh = F * 1.9, ky = y + hh + 6, kx = tx;
-      R(sh, kx, ky, kw, kh, { fill: [255, 255, 255] });
-      // normally-open contact: two stubs and a slanted blade
-      const cx = kx + kw * 0.32, cyT = ky + kh * 0.22, cyB = ky + kh * 0.78;
-      L(sh, cx, ky, cx, cyT); L(sh, cx, cyB, cx, ky + kh); L(sh, cx, cyB, cx - F * 0.45, cyT + F * 0.1);
-      T(sh, kx + kw * 0.7, ky + kh / 2 + F * 0.35, ctl.tag, { anchor: 'middle', bold: true, size: small });
-      L(sh, fx0, y + F * 0.6, fx0, ky + kh / 2, { w: 0.9, color: COL.grey }); L(sh, fx0, ky + kh / 2, kx, ky + kh / 2, { w: 0.9, color: COL.grey });
-      const nx = kx + kw + 6, nw = W - nx - 6;
+      // v0.42: IEC 60617 normally-open contactor contact, in line with the feed
+      const tag = tags[val(c.num) || '?'] || ctl.tag; const ky = y + hh + 6, kh = F * 2.4;
+      L(sh, fx0, y + F * 0.6, fx0, ky, { w: 0.9, color: COL.grey });
+      nocSym(sh, fx0, ky, kh);
+      T(sh, fx0 + F * 0.55, ky + small * 0.9, tag, { bold: true, size: small });
+      const nx = fx0 + F * 3.2, nw = W - nx - 6;
       let nh = textLines(sh, nx, ky - 2, ctl.note, nw, { size: small, bold: true });
       const coil = ctl.from ? `Coil switched by circuit ${ctl.from} (see circuit ${ctl.from})` : 'Coil supply: ' + NA;
-      const cy0 = ky + nh + small * 0.55;
-      L(sh, kx + kw, cy0, nx + F * 1.4, cy0, { w: 1.1, color: COL.brand, dash: [3, 2] });
+      const cy0 = Math.max(ky + nh + small * 0.55, ky + kh * 0.75); if (cy0 > ky + nh + small * 0.55) nh = cy0 - ky - small * 0.55;
+      L(sh, fx0 + F * 0.3, cy0, nx + F * 1.4, cy0, { w: 1.5, color: COL.brand, dash: [4, 2] });
       nh += textLines(sh, nx + F * 1.6, ky - 2 + nh, coil, nw - F * 1.6, { size: small, color: ctl.from ? COL.brand : COL.na });
-      kh0 = Math.max(kh, nh) + 6;
-      // out of the contactor, down to the load
+      if (!ctl.from && screen) nh += textLines(sh, nx + F * 1.6, ky - 2 + nh, 'Set the coil circuit in Controlled by', nw - F * 1.6, { size: small, color: COL.amber });
       const out = ky + Math.max(kh, nh) + 4;
-      L(sh, kx + kw * 0.32, ky + kh, kx + kw * 0.32, out, { w: 0.9, color: COL.grey }); L(sh, fx0, out, kx + kw * 0.32, out, { w: 0.9, color: COL.grey });
-      feedTop = out; hh += kh0;
+      L(sh, fx0, ky + kh, fx0, out, { w: 0.9, color: COL.grey });
+      kh0 = Math.max(kh, nh) + 6; feedTop = out; hh += kh0;
     }
     // this circuit feeds the coil of contactors on other circuits
     const sw = !info.spare && links[val(c.num)];
     if (sw) {
       const lab = 'Switches contactor on circuit' + (sw.length > 1 ? 's ' : ' ') + sw.join(', ') + ' (see circuit' + (sw.length > 1 ? 's ' : ' ') + sw.join(', ') + ')';
       const ly = y - 2 + hh + 2; const lh0 = textLines(sh, tx + F * 1.6, ly, lab, tw - F * 1.6, { size: small, bold: true, color: COL.brand });
-      L(sh, tx, ly + small * 0.7, tx + F * 1.4, ly + small * 0.7, { w: 1.1, color: COL.brand, dash: [3, 2] });
+      L(sh, tx, ly + small * 0.7, tx + F * 1.4, ly + small * 0.7, { w: 1.5, color: COL.brand, dash: [4, 2] });
       hh += lh0 + 4;
+      // v0.42: the coils (A1/A2) this circuit drives, and the time clock / relay before them
+      const ci = controlVias(bdSrc(), val(c.num)); let cx = tx + F * 0.4; const cy = y - 2 + hh + 4; const cw = F * 2.2, chh = F * 1.6;
+      if (ci.clock) { used.add('timeclock'); clockSym(sh, cx + F * 0.8, cy + chh / 2, F * 0.75); T(sh, cx + F * 0.8, cy + chh + small * 1.1, 'TC', { anchor: 'middle', bold: true, size: small * 0.85 }); L(sh, cx + F * 1.55, cy + chh / 2, cx + F * 2.4, cy + chh / 2, { w: 0.9, color: COL.grey }); cx += F * 2.4; }
+      else if (ci.relay) { T(sh, cx, cy + chh / 2 + small * 0.35, 'Relay', { size: small * 0.85, bold: true }); L(sh, cx + F * 2.6, cy + chh / 2, cx + F * 3.2, cy + chh / 2, { w: 0.9, color: COL.grey }); cx += F * 3.2; }
+      for (const n of sw) { if (cx + cw + F * 2.5 > W - 6) break; used.add('coil'); coilSym(sh, cx, cy, cw, chh); T(sh, cx + cw / 2, cy + chh + small * 1.1, tags[n] || 'KM', { anchor: 'middle', bold: true, size: small * 0.85 }); cx += cw + F * 1.2; }
+      hh += chh + small * 1.4 + 6;
     }
     // points
     const pc = pointCount(c); const kind = pointKind(c);
@@ -567,83 +601,10 @@ export function layout(model, { W = 380, font = 12, screen = false, cableTable =
         L(sh, jbX, jbLastY, jbX, fy.feedIn, { w: 1.2, color: COL.line }); L(sh, jbX, fy.feedIn, fy.swX, fy.feedIn, { w: 1.2, color: COL.line });
         T(sh, jbX + 3, fy.feedIn - 3, cable('JB, circuit ' + (val(c.num) || '?'), 'switch, ' + nm, cableLabel(c).split(' \u00b7 ')[0]), { size: small * 0.75, bold: true, color: COL.brand });
         jbLastY = fy.feedIn; y0 += bh + 8; return; }
-      // wire row: JB (if any) then the lights hanging off it
+      // v0.42: each switch (or 2-way pair) controls its own lights; see roomBody
       const jb = r.wiring === 'junction box';
-      const jbW = S * 1.4; const lx0 = ix + (jb ? jbW + 10 : 10);
-      const per = Math.max(1, Math.floor((ix + iw - lx0) / step));
-      const wy = ry + 10; let feedIn = wy; let dropX = 0; let dropY = 0;
-      if (jb) { used.add('jb'); R(rs, ix, wy - S * 0.45, jbW, S * 0.9, { fill: [255, 255, 255] }); T(rs, ix + jbW / 2, wy + small * 0.35, 'JB', { anchor: 'middle', bold: true, size: small * 0.85 }); dropX = ix + jbW / 2; dropY = wy + S * 0.45; }
-      let bottom = wy + S * 0.45;
-      if (r.lights) {
-        used.add('light'); if (!jb) used.add('rose');
-        const rows = Math.ceil(r.lights / per);
-        for (let k = 0; k < rows; k++) {
-          const n = Math.min(per, r.lights - k * per); const wyk = wy + k * (S * 2 + 6);
-          const x1 = lx0 + S / 2, x2 = lx0 + (n - 1) * step + S / 2;
-          if (jb) { // separate feeds from the JB to each light
-            for (let i = 0; i < n; i++) { const lx = lx0 + i * step + S / 2; L(rs, ix + jbW, wy, lx, wy + S * 0.9 + k * (S * 2 + 6) - S * 0.45 - 1, G); }
-          } else { // loop-in: rose to rose along the wire
-            L(rs, k ? x1 : ix, wyk, x2, wyk, G);
-            if (k) L(rs, lx0 + (per - 1) * step + S / 2, wyk - (S * 2 + 6), x1, wyk, G);
-          }
-          for (let i = 0; i < n; i++) {
-            const lx = lx0 + i * step + S / 2;
-            if (!jb) { L(rs, lx, wyk, lx, wyk + S * 0.45, G); C(rs, lx, wyk, S * 0.17, { fill: COL.line, lw: 0.8 }); }
-            symbol(rs, 'light', lx, wyk + S * 0.9, S);
-          }
-          bottom = wyk + S * 0.9 + S / 2;
-        }
-        if (!jb) { dropX = lx0 + S / 2; dropY = wy; }
-      } else { bottom = Math.max(bottom, wy + small) ; textLines(rs, lx0, wy - small * 0.9, 'No lights set', iw - (lx0 - ix), { size: small, color: COL.na }); if (!jb) { dropX = ix + 4; dropY = wy; } }
-      // switches: drop from the first rose (or the JB) to the switch row
-      const list = [...Array(r.sw1).fill('sw1')]; const groups = [];
-      for (let i = 0; i < r.sw2pairs; i++) groups.push(['sw2', ...Array(i === 0 ? r.swi : 0).fill('swi'), 'sw2']);
-      const nSw = list.length + groups.reduce((a, g) => a + g.length, 0);
-      if (nSw) {
-        const sy = bottom + 14 + S / 2; const sstep = S + 14; let sx = ix + 10 + S / 2;
-        const positions = [];
-        for (const k0 of list) { positions.push([k0, sx]); sx += sstep; }
-        for (const g of groups) { g.forEach((k0) => { positions.push([k0, sx]); sx += sstep; }); }
-        // wrap if wider than the box
-        const maxX = ix + iw - S / 2; let rowY = sy; let firstRow = true; const placed = [];
-        let shift = 0;
-        for (const [k0, x] of positions) { let px = x - shift; if (px > maxX) { shift = x - (ix + 10 + S / 2); px = x - shift; rowY += S + 16; firstRow = false; } placed.push([k0, px, rowY]); }
-        void firstRow;
-        // switch drop (dashed: switch line)
-        const first = placed[0];
-        const dx0 = jb ? dropX : ix + 3; if (!jb) L(rs, dropX, dropY, dx0, dropY + S * 0.35, { ...G, dash: [2, 2] });
-        L(rs, dx0, jb ? dropY : dropY + S * 0.35, dx0, first[2] - S * 0.8, { ...G, dash: [2, 2] }); L(rs, dx0, first[2] - S * 0.8, first[1], first[2] - S * 0.8, { ...G, dash: [2, 2] }); L(rs, first[1], first[2] - S * 0.8, first[1], first[2] - S * 0.4, { ...G, dash: [2, 2] });
-        // 1-way switches all on the same switch drop
-        let prev = null;
-        placed.forEach(([k0, px, py], idx) => {
-          if (k0 === 'sw1' && prev && prev[0] === 'sw1') L(rs, prev[1], py - S * 0.8, px, py - S * 0.8, { ...G, dash: [2, 2] });
-          if (k0 === 'sw1' && idx > 0) L(rs, px, py - S * 0.8, px, py - S * 0.4, { ...G, dash: [2, 2] });
-          prev = [k0, px, py];
-        });
-        // 2-way: strappers (two lines) between the pair, through any intermediates
-        let gi = list.length;
-        for (const g of groups) {
-          const seg = placed.slice(gi, gi + g.length); gi += g.length;
-          if (list.length && seg[0] === placed[list.length]) L(rs, placed[list.length - 1][1], seg[0][2] - S * 0.8, seg[0][1], seg[0][2] - S * 0.8, { ...G, dash: [2, 2] });
-          if (list.length || seg !== placed.slice(0, g.length)) L(rs, seg[0][1], seg[0][2] - S * 0.8, seg[0][1], seg[0][2] - S * 0.4, { ...G, dash: [2, 2] });
-          used.add('strap');
-          for (let j = 1; j < seg.length; j++) {
-            const a = seg[j - 1], b = seg[j];
-            if (a[2] === b[2]) { L(rs, a[1] + S * 0.45, a[2] - S * 0.08, b[1] - S * 0.45, b[2] - S * 0.08, { w: 1, color: COL.brand }); L(rs, a[1] + S * 0.45, a[2] + S * 0.2, b[1] - S * 0.45, b[2] + S * 0.2, { w: 1, color: COL.brand }); }
-            else { // pair wrapped onto a new row: strappers go down and round
-              const ex = ix + iw - 2; L(rs, a[1] + S * 0.45, a[2] - S * 0.08, ex, a[2] - S * 0.08, { w: 1, color: COL.brand }); L(rs, a[1] + S * 0.45, a[2] + S * 0.2, ex - 4, a[2] + S * 0.2, { w: 1, color: COL.brand });
-              L(rs, ex, a[2] - S * 0.08, ex, b[2] - S * 0.08, { w: 1, color: COL.brand }); L(rs, ex - 4, a[2] + S * 0.2, ex - 4, b[2] + S * 0.2, { w: 1, color: COL.brand });
-              L(rs, ex, b[2] - S * 0.08, b[1] + S * 0.45, b[2] - S * 0.08, { w: 1, color: COL.brand }); L(rs, ex - 4, b[2] + S * 0.2, b[1] + S * 0.45, b[2] + S * 0.2, { w: 1, color: COL.brand });
-            }
-          }
-          // switched live back up to the lights from the far 2-way
-          void 0;
-        }
-        for (const [k0, px, py] of placed) { symbol(rs, k0, px, py, S); used.add(k0); }
-        bottom = placed[placed.length - 1][2] + S / 2 + 2;
-        const lab = jb ? 'Switch drop from the JB' : 'Switch drop from the first ceiling rose';
-        bottom += textLines(rs, ix, bottom + 2, lab + (groups.length ? '; blue lines are the 2-way strappers' : ''), iw, { size: small * 0.85, color: COL.grey }) + 2;
-      }
+      const fb = roomBody(rs, r, ix, iw, ry, S, G, jb ? 'jb' : 'loop');
+      const feedIn = fb.feedIn; const bottom = fb.bottom;
       const bh = bottom - y0 + 6;
       R(sh, bx, y0, bw, bh, { fill: COL.fill, color: [150, 160, 190] });
       sh.push(...rs);
@@ -658,36 +619,116 @@ export function layout(model, { W = 380, font = 12, screen = false, cableTable =
   }
   // Switch-fed room: circuit feed into a JB, a cable from the JB to the first
   // switch, then from that switch to the light(s), light to light.
-  function jbSwitchRoom(rs, r, ix, iw, ry, S, G) {
-    const jbW = 0, wy = ry + 10 + S * 0.2, sstep = S + 14;
-    const list = [...Array(r.sw1).fill('sw1')]; for (let i = 0; i < r.sw2pairs; i++) list.push('sw2', ...Array(i === 0 ? r.swi : 0).fill('swi'), 'sw2');
-    const x0 = ix + jbW + 10 + S / 2; const per = Math.max(1, Math.floor((ix + iw - x0 + S / 2) / sstep));
-    const placed = list.map((k0, i) => [k0, x0 + (i % per) * sstep, wy + Math.floor(i / per) * (S + 16)]);
-    let bottom = wy + S * 0.45;
-    let srcX = ix + 10, srcY = wy; // where the cable to the lights starts
-    if (placed.length) {
-      const f = placed[0];
-      // more 1-way switches share the same feed from the first
-      placed.forEach(([k0, px, py], i) => { if (i && k0 === 'sw1' && placed[i - 1][0] === 'sw1' && py === placed[i - 1][2]) L(rs, placed[i - 1][1] + S * 0.45, py + S * 0.3, px - S * 0.45, py + S * 0.3, { ...G, dash: [2, 2] }); });
-      // strappers between each 2-way pair (through intermediates)
-      let i = r.sw1;
-      for (let g = 0; g < r.sw2pairs; g++) { const len = 2 + (g === 0 ? r.swi : 0); const seg = placed.slice(i, i + len); i += len; used.add('strap');
-        if (r.sw1 && g === 0) L(rs, placed[r.sw1 - 1][1] + S * 0.45, placed[r.sw1 - 1][2] + S * 0.3, seg[0][1] - S * 0.45, seg[0][2] + S * 0.3, { ...G, dash: [2, 2] });
-        for (let j = 1; j < seg.length; j++) { const a = seg[j - 1], b = seg[j]; L(rs, a[1] + S * 0.45, a[2] - S * 0.08, b[1] - S * 0.45, b[2] - S * 0.08, { w: 1, color: COL.brand }); L(rs, a[1] + S * 0.45, a[2] + S * 0.2, b[1] - S * 0.45, b[2] + S * 0.2, { w: 1, color: COL.brand }); } }
-      for (const [k0, px, py] of placed) { symbol(rs, k0, px, py, S); used.add(k0); }
-      bottom = placed[placed.length - 1][2] + S / 2; srcX = f[1]; srcY = f[2] + S * 0.45;
+  function jbSwitchRoom(rs, r, ix, iw, ry, S, G) { return roomBody(rs, r, ix, iw, ry, S, G, 'jb-switch'); }
+  // v0.42: one room's lights and switches. Each 1-way switch, and each 2-way
+  // pair (with its intermediates), is a group with its own lights (split evenly
+  // unless room.split says otherwise). All switches sit on one level row.
+  //  - jb-switch: the feed from the circuit JB loops switch to switch (a line
+  //    above the row, dropping into each switch); each switch (the far switch
+  //    of a 2-way pair) goes down to its own lights.
+  //  - loop-in / jb: lights on top (roses or the JB), switch drops down to each
+  //    group's first switch; switched live back up from its far switch.
+  function roomBody(rs, r, ix, iw, ry, S, G, mode) {
+    const groups = switchGroups(r); const sstep = S + 14, step = S + 8, gapG = S * 0.9;
+    const x0 = ix + (mode === 'jb' ? S * 1.4 + 12 : mode === 'loop' ? 10 : 12); const maxX = ix + iw - 4;
+    const D = { ...G, dash: [2, 2] };
+    // place groups left to right, wrapping whole groups into bands
+    const bands = []; let cur = []; let x = x0;
+    for (const g of groups) {
+      const avail = maxX - x0; const lper = Math.max(1, Math.floor(avail / step));
+      const wS = g.sw.length * sstep, wL = Math.min(g.lights, lper) * step; const w = Math.max(wS, wL, step);
+      if (cur.length && x + w > maxX) { bands.push(cur); cur = []; x = x0; }
+      g.x = x; g.w = w; g.lper = Math.max(1, Math.floor(Math.max(w, wL) / step)); cur.push(g); x += w + gapG;
     }
-    if (r.lights) { used.add('light');
-      const lx0 = x0, step = S + 8, lper = Math.max(1, Math.floor((ix + iw - lx0 + S / 2) / step));
-      const rows = Math.ceil(r.lights / lper); const ly0 = bottom + S * 0.9;
-      L(rs, srcX, srcY, srcX, ly0 - S * 0.4, G); // switch (or JB) down to the first light
-      for (let k = 0; k < rows; k++) { const n = Math.min(lper, r.lights - k * lper); const ly = ly0 + k * (S + 10);
-        L(rs, lx0, ly, lx0 + (n - 1) * step, ly, G); if (k) L(rs, lx0, ly - (S + 10), lx0, ly, G);
-        for (let q = 0; q < n; q++) symbol(rs, 'light', lx0 + q * step, ly, S); }
-      bottom = ly0 + (rows - 1) * (S + 10) + S / 2;
-    } else bottom += textLines(rs, x0, bottom + 4, 'No lights set', iw - (x0 - ix), { size: small, color: COL.na }) + 4;
-    bottom += textLines(rs, ix, bottom + 4, 'Cable from the circuit JB to the switch, switch to the lights' + (r.sw2pairs ? '; blue lines are the 2-way strappers' : ''), iw, { size: small * 0.85, color: COL.grey }) + 4;
-    return { bottom, feedIn: wy, swX: placed.length ? placed[0][1] - S * 0.45 : srcX };
+    if (cur.length) bands.push(cur);
+    const swAt = (g, i) => g.x + S / 2 + i * sstep; const ltAt = (g, q) => g.x + S / 2 + (q % g.lper) * step;
+    const lrows = (g) => Math.ceil(g.lights / g.lper) || 0;
+    let y = ry + 10; let feedIn = y; let swX = ix + 6; let bottom = y; let prevWire = null; let prevWireY = 0;
+    const allLights = groups.reduce((a, g) => a + g.lights, 0);
+    if (allLights) used.add('light'); if (mode === 'loop' && allLights) used.add('rose');
+    let jbBox = null;
+    if (mode === 'jb') { used.add('jb'); const jbW = S * 1.4; jbBox = { x: ix, y: y - S * 0.45, w: jbW, h: S * 0.9 }; R(rs, ix, jbBox.y, jbW, jbBox.h, { fill: [255, 255, 255] }); T(rs, ix + jbW / 2, y + small * 0.35, 'JB', { anchor: 'middle', bold: true, size: small * 0.85 }); }
+    bands.forEach((band, bi) => {
+      const nL = Math.max(0, ...band.map(lrows)); const hasSw = band.some((g) => g.sw.length);
+      if (mode === 'jb-switch') {
+        const bus = y; const sy = y + S * 0.75; if (bi === 0) feedIn = bus;
+        // feed loops switch to switch along the bus, dropping into each group's first switch
+        const drops = band.filter((g) => g.sw.length).map((g) => swAt(g, 0));
+        const busStart = bi === 0 ? swX : prevWire; if (drops.length) { L(rs, busStart, bus, drops[drops.length - 1], bus, { w: 1.2, color: COL.line }); if (bi > 0) L(rs, ix + 6, prevWireY, ix + 6, bus, { w: 1.2, color: COL.line }); }
+        for (const dx of drops) L(rs, dx, bus, dx, sy - S * 0.45, { w: 1.2, color: COL.line });
+        prevWire = ix + 6; prevWireY = bus;
+        drawSwitchRow(band, sy);
+        const ly0 = sy + S * 1.6;
+        for (const g of band) { if (!g.lights) continue; const out = g.sw.length ? swAt(g, g.sw.length - 1) : null;
+          drawLights(g, ly0, out != null ? { x: out, y: sy + S * 0.45 } : null); }
+        bottom = Math.max(sy + S / 2, nL ? ly0 + (nL - 1) * (S + 10) + S / 2 : 0); y = bottom + 14;
+        return;
+      }
+      // loop / jb: lights on top
+      const wy = y; const ly0 = mode === 'loop' ? wy + S * 0.9 : wy + S * 0.9;
+      if (bi === 0) feedIn = wy;
+      if (mode === 'loop') {
+        const lastX = Math.max(ix + 4, ...band.filter((g) => g.lights).map((g) => ltAt(g, Math.min(g.lights, g.lper) - 1)));
+        L(rs, bi === 0 ? ix : ix + 4, wy, lastX, wy, G); if (bi > 0) L(rs, ix + 4, prevWireY, ix + 4, wy, G); prevWireY = wy;
+      }
+      for (const g of band) if (g.lights) drawLights(g, ly0, null, mode === 'loop' ? wy : null);
+      const lb = nL ? ly0 + (nL - 1) * (S + 10) + S / 2 : wy + S * 0.45;
+      if (!hasSw) { bottom = lb; y = bottom + 14; return; }
+      const sy = lb + 16 + S / 2; const yM = lb + 8;
+      drawSwitchRow(band, sy);
+      for (const g of band) { if (!g.sw.length) continue;
+        const inX = swAt(g, 0), outX = swAt(g, g.sw.length - 1);
+        if (mode === 'jb') { // switch drop from the JB, along a line above the switches
+          const jx = jbBox.x + jbBox.w / 2; L(rs, jx, jbBox.y + jbBox.h, jx, yM, D); L(rs, jx, yM, inX, yM, D); L(rs, inX, yM, inX, sy - S * 0.45, D);
+        } else if (g.lights) { L(rs, inX, ly0 + S * 0.4, inX, sy - S * 0.45, D); }
+        else { L(rs, inX, wy, inX, sy - S * 0.45, D); }
+        if (g.sw.length > 1 && g.lights) { // switched live from the far switch back up to its lights
+          const lx = ltAt(g, Math.min(g.lights, g.lper) - 1) + S * 0.25; const y2 = yM + 4;
+          L(rs, outX, sy - S * 0.45, outX, y2, D); L(rs, outX, y2, lx, y2, D); L(rs, lx, y2, lx, ly0 + S * 0.38, D); }
+        else if (mode === 'jb' && g.lights) { const lx = ltAt(g, 0) + S * 0.25; L(rs, inX + S * 0.25, sy - S * 0.45, lx, ly0 + S * 0.38, D); }
+      }
+      bottom = sy + S / 2; y = bottom + 14;
+    });
+    if (!groups.some((g) => g.lights)) bottom += textLines(rs, x0, bottom + 2, 'No lights set', iw - (x0 - ix), { size: small, color: COL.na }) + 2;
+    const pairs = r.sw2pairs ? '; blue lines are the 2-way strappers' : '';
+    const lab = mode === 'jb-switch' ? 'Cable from the circuit JB loops switch to switch; each switch feeds its own light(s)' : mode === 'jb' ? 'Switch drops from the JB; each switch controls its own light(s)' : 'Switch drops from the ceiling roses; each switch controls its own light(s)';
+    bottom += textLines(rs, ix, bottom + 4, lab + pairs, iw, { size: small * 0.85, color: COL.grey }) + 4;
+    return { bottom, feedIn, swX };
+
+    function drawSwitchRow(band, sy) {
+      for (const g of band) {
+        g.sw.forEach((k0, i) => { symbol(rs, k0, swAt(g, i), sy, S); used.add(k0); });
+        if (g.sw.length > 1) { used.add('strap');
+          for (let j = 1; j < g.sw.length; j++) { const a = swAt(g, j - 1), b = swAt(g, j);
+            L(rs, a + S * 0.45, sy - S * 0.08, b - S * 0.45, sy - S * 0.08, { w: 1, color: COL.brand }); L(rs, a + S * 0.45, sy + S * 0.2, b - S * 0.45, sy + S * 0.2, { w: 1, color: COL.brand }); } }
+      }
+    }
+    function drawLights(g, ly0, from, wireY) {
+      const n = g.lights; const rows = Math.ceil(n / g.lper);
+      for (let k = 0; k < rows; k++) { const m = Math.min(g.lper, n - k * g.lper); const ly = ly0 + k * (S + 10);
+        const xa = ltAt(g, 0), xb = ltAt(g, m - 1);
+        if (wireY == null && mode !== 'jb') { let xe = xb; if (k === 0 && from && from.x > xb) xe = from.x; L(rs, xa, ly, xe, ly, G); if (k) L(rs, xa, ly - (S + 10), xa, ly, G); }
+        for (let q = 0; q < m; q++) { const lx = ltAt(g, q);
+          if (mode === 'loop' && wireY != null) { L(rs, lx, wireY, lx, ly - S * 0.45, G); C(rs, lx, wireY, S * 0.17, { fill: COL.line, lw: 0.8 }); }
+          if (mode === 'jb') L(rs, jbBox.x + jbBox.w, jbBox.y + jbBox.h / 2, lx, ly - S * 0.45, G);
+          symbol(rs, 'light', lx, ly, S); }
+      }
+      if (from) L(rs, from.x, from.y, from.x, ly0, G);
+    }
+  }
+  // v0.42 IEC 60617 contactor NO contact, vertical, top at (x, y0), height h:
+  // fixed contact with a small semicircle, blade hinged at the bottom.
+  function nocSym(o, x, y0, h) {
+    const t = y0 + h * 0.3, b = y0 + h * 0.7, r = h * 0.08, g = { w: 1.2, color: COL.line };
+    L(o, x, y0, x, t, g); L(o, x, b, x, y0 + h, g); L(o, x, b, x - h * 0.28, t + h * 0.02, g);
+    for (let i = 0; i < 6; i++) { const a1 = Math.PI * i / 6, a2 = Math.PI * (i + 1) / 6; L(o, x - r * Math.cos(a1), t + r * Math.sin(a1), x - r * Math.cos(a2), t + r * Math.sin(a2), g); }
+  }
+  function coilSym(o, x, y0, w, h) {
+    R(o, x, y0, w, h, { fill: [255, 255, 255] });
+    T(o, x - 1, y0 - 1, 'A1', { anchor: 'end', size: small * 0.7 }); T(o, x - 1, y0 + h + small * 0.6, 'A2', { anchor: 'end', size: small * 0.7 });
+  }
+  function clockSym(o, x, y0, r) {
+    C(o, x, y0, r, { lw: 1 }); L(o, x, y0, x, y0 - r * 0.7, { w: 1, color: COL.line }); L(o, x, y0, x + r * 0.5, y0, { w: 1, color: COL.line });
   }
   // Point symbols, after BS EN 60617 / usual UK drawing style.
   // Only lines, rects, circles and text, so SVG and jsPDF match exactly.

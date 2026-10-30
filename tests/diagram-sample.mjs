@@ -113,3 +113,22 @@ export function diagramEICPro() {
   c.boards.push(g, l);
   return c;
 }
+// v0.42 (test): made-up EIC for per-switch lights, level 2-way rows and the
+// IEC contactor: an en-suite with 2 lights on 2 x 1-way, a 2-way hall, a 2-way
+// + intermediate landing, hot water / boost through contactors on a time clock.
+export function diagramEICSwitches() {
+  const c = diagramEICContactors();
+  c.number = 'EIC-DIAG-07';
+  const b = c.boards[0];
+  const l = b.circuits.find((x) => String(x.num) === '2');
+  l.points = '8';
+  l.diagram = { roomList: [
+    { name: 'En-suite', lights: 2, sw1: 2, sw2pairs: 0, swi: 0, wiring: 'jb-switch' },
+    { name: 'Hall', lights: 2, sw1: 0, sw2pairs: 1, swi: 0, wiring: 'loop-in' },
+    { name: 'Landing', lights: 3, sw1: 0, sw2pairs: 1, swi: 1, wiring: 'jb-switch' },
+    { name: 'Bedroom', lights: 1, sw1: 1, sw2pairs: 0, swi: 0, wiring: 'junction box' },
+  ] };
+  const h8 = b.circuits.find((x) => String(x.num) === '8'); h8.desc = 'Hot water';
+  const h9 = b.circuits.find((x) => String(x.num) === '9'); h9.desc = 'Boost hot water'; h9.control = { via: 'contactor' };
+  return c;
+}
