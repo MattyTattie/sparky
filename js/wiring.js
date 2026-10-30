@@ -83,6 +83,21 @@ export function spurInfo(M) {
   const what = feeds === 'fcu' ? (n === 1 ? 'fused spur (FCU)' : 'fused spurs (FCU)') : (n === 1 ? 'socket' : 'sockets');
   return { n, feeds, kind: feeds === 'fcu' ? 'appliance' : 'socket', label: `Spur added (new): ${n} \u00d7 ${what}` };
 }
+// "Controlled by": circuit.control = { via, controlCircuit } (optional, new
+// field only; old certs without it draw exactly as before).
+export const CONTROL_VIA = { none: 'Direct (no control)', contactor: 'Contactor', 'contactor+timeclock': 'Contactor on a time clock', 'contactor+relay': 'Contactor on a relay', timeclock: 'Time clock' };
+const VIA_NOTE = { contactor: 'via contactor', 'contactor+timeclock': 'via contactor, time clock controlled', 'contactor+relay': 'via contactor, relay controlled', timeclock: 'via time clock' };
+export function controlInfo(c) {
+  const k = c && c.control; const via = k && VIA_NOTE[k.via] ? k.via : '';
+  if (!via) return null;
+  return { via, note: VIA_NOTE[via], tag: via === 'timeclock' ? 'TC' : 'KM', from: val(k.controlCircuit) };
+}
+// which circuits each control circuit switches: { '9': ['7', '8'] }
+export function controlLinks(circuits) {
+  const m = {};
+  for (const c of circuits || []) { const ci = controlInfo(c); if (ci && ci.from) (m[ci.from] ||= []).push(val(c.num) || '?'); }
+  return m;
+}
 export function diagramModel(cert) {
   cert = cert || {}; const sup = cert.supply || {}; const parts = cert.parts || {};
   if (cert.type === 'MW') {
@@ -98,7 +113,7 @@ export function diagramModel(cert) {
     type: cert.type,
     supply: { earthing: val(sup.earthing), lines: [[val(sup.conductors), val(sup.u) && val(sup.u) + ' V', val(sup.f) && val(sup.f) + ' Hz'].filter(Boolean).join(', '), [val(sup.ze) && `Ze ${val(sup.ze)} Ω`, val(sup.ipf) && `Ipf ${val(sup.ipf)} kA`].filter(Boolean).join(', '), ].filter(Boolean), fuse },
     main: { label: 'Main switch', detail: ms },
-    boards: (cert.boards || []).map((b) => ({ ref: val(b.ref) || 'DB', location: val(b.location), from: val(b.suppliedFrom), items: groupCircuits(b.circuits, b) })),
+    boards: (cert.boards || []).map((b) => ({ ref: val(b.ref) || 'DB', location: val(b.location), from: val(b.suppliedFrom), items: groupCircuits(b.circuits, b), links: controlLinks(b.circuits) })),
   };
 }
 
@@ -148,7 +163,7 @@ export function layout(model, { W = 380, font = 12 } = {}) {
   const blocks = [];
   const busX = 14, devX = busX + 14, devW = F * 4.6, gap = 8;
   const T = (sh, x, y, txt, o = {}) => sh.push({ t: 'text', x, y, txt, size: o.size || F, bold: !!o.bold, color: o.color || COL.ink, anchor: o.anchor || 'start' });
-  const L = (sh, x1, y1, x2, y2, o = {}) => sh.push({ t: 'line', x1, y1, x2, y2, w: o.w || 1.2, color: o.color || COL.line });
+  const L = (sh, x1, y1, x2, y2, o = {}) => sh.push({ t: 'line', x1, y1, x2, y2, w: o.w || 1.2, color: o.color || COL.line, ...(o.dash ? { dash: o.dash } : {}) });
   const R = (sh, x, y, w, h, o = {}) => sh.push({ t: 'rect', x, y, w, h, lw: o.lw || 1.2, color: o.color || COL.line, fill: o.fill || null });
   const C = (sh, cx, cy, r, o = {}) => sh.push({ t: 'circle', cx, cy, r, lw: o.lw || 1.1, color: o.color || COL.line, fill: o.fill || null });
   const textLines = (sh, x, y, text, w, o = {}) => { const s = o.size || F; const ls = wrapText(text, w, s, o.bold); ls.forEach((l, i) => T(sh, x, y + s + i * lh(s), l, o)); return ls.length * lh(s); };
@@ -186,7 +201,9 @@ export function layout(model, { W = 380, font = 12 } = {}) {
     blocks.push({ h: b.h, shapes: b.sh, kind: 'head' });
   });
 
+  let links = {};
   model.boards.forEach((bd, bi) => {
+    links = bd.links || {};
     // board header bar
     { const sh = []; const y = 8; const tx = devX; const title = bd.ref + (bd.location ? ' \u00b7 ' + bd.location : '');
       let hh = textLines(sh, tx, y + 3, title, W - tx - 8, { bold: true, color: COL.brand });
@@ -227,6 +244,37 @@ export function layout(model, { W = 380, font = 12 } = {}) {
     // text
     let hh = textLines(sh, tx, y - 2, info.title, tw, { bold: true, color: info.spare ? COL.na : COL.ink });
     for (const [lab, v] of info.rows) hh += kv(sh, tx, y - 2 + hh, lab, v, tw);
+    // contactor (or time clock) between the breaker and the load
+    const fx0 = tx - gap / 2; let feedTop = y + F * 0.6; let kh0 = 0;
+    const ctl = info.spare ? null : controlInfo(c);
+    if (ctl) {
+      const kw = F * 2.6, kh = F * 1.9, ky = y + hh + 6, kx = tx;
+      R(sh, kx, ky, kw, kh, { fill: [255, 255, 255] });
+      // normally-open contact: two stubs and a slanted blade
+      const cx = kx + kw * 0.32, cyT = ky + kh * 0.22, cyB = ky + kh * 0.78;
+      L(sh, cx, ky, cx, cyT); L(sh, cx, cyB, cx, ky + kh); L(sh, cx, cyB, cx - F * 0.45, cyT + F * 0.1);
+      T(sh, kx + kw * 0.7, ky + kh / 2 + F * 0.35, ctl.tag, { anchor: 'middle', bold: true, size: small });
+      L(sh, fx0, y + F * 0.6, fx0, ky + kh / 2, { w: 0.9, color: COL.grey }); L(sh, fx0, ky + kh / 2, kx, ky + kh / 2, { w: 0.9, color: COL.grey });
+      const nx = kx + kw + 6, nw = W - nx - 6;
+      let nh = textLines(sh, nx, ky - 2, ctl.note, nw, { size: small, bold: true });
+      const coil = ctl.from ? 'Coil switched by circuit ' + ctl.from : 'Coil supply: ' + NA;
+      const cy0 = ky + nh + small * 0.55;
+      L(sh, kx + kw, cy0, nx + F * 1.4, cy0, { w: 1.1, color: COL.brand, dash: [3, 2] });
+      nh += textLines(sh, nx + F * 1.6, ky - 2 + nh, coil, nw - F * 1.6, { size: small, color: ctl.from ? COL.brand : COL.na });
+      kh0 = Math.max(kh, nh) + 6;
+      // out of the contactor, down to the load
+      const out = ky + Math.max(kh, nh) + 4;
+      L(sh, kx + kw * 0.32, ky + kh, kx + kw * 0.32, out, { w: 0.9, color: COL.grey }); L(sh, fx0, out, kx + kw * 0.32, out, { w: 0.9, color: COL.grey });
+      feedTop = out; hh += kh0;
+    }
+    // this circuit feeds the coil of contactors on other circuits
+    const sw = !info.spare && links[val(c.num)];
+    if (sw) {
+      const lab = 'Switches contactor on circuit' + (sw.length > 1 ? 's ' : ' ') + sw.join(', ');
+      const ly = y - 2 + hh + 2; const lh0 = textLines(sh, tx + F * 1.6, ly, lab, tw - F * 1.6, { size: small, bold: true, color: COL.brand });
+      L(sh, tx, ly + small * 0.7, tx + F * 1.4, ly + small * 0.7, { w: 1.1, color: COL.brand, dash: [3, 2] });
+      hh += lh0 + 4;
+    }
     // points
     const pc = pointCount(c); const kind = pointKind(c);
     let ph = 0;
@@ -236,7 +284,7 @@ export function layout(model, { W = 380, font = 12 } = {}) {
       for (let r = 0; r < rows; r++) {
         const n = Math.min(per, pc.shown - r * per); const cy = py + r * (S + 10) + S / 2;
         L(sh, tx - gap / 2, cy, tx + (n - 1) * step + S / 2, cy, { w: 0.9, color: COL.grey });
-        if (r === 0) L(sh, tx - gap / 2, y + F * 0.6, tx - gap / 2, cy, { w: 0.9, color: COL.grey }); else L(sh, tx - gap / 2, cy - (S + 10), tx - gap / 2, cy, { w: 0.9, color: COL.grey });
+        if (r === 0) L(sh, tx - gap / 2, feedTop, tx - gap / 2, cy, { w: 0.9, color: COL.grey }); else L(sh, tx - gap / 2, cy - (S + 10), tx - gap / 2, cy, { w: 0.9, color: COL.grey });
         for (let i = 0; i < n; i++) symbol(sh, kind, tx + i * step + S / 2, cy, S);
       }
       ph = 6 + rows * (S + 10) - 10;
@@ -261,7 +309,7 @@ export function layout(model, { W = 380, font = 12 } = {}) {
         L(sh, fx, cy, tx + (n - 1) * step + S / 2, cy, { w: 2.2, color: COL.brand });
         for (let i = 0; i < n; i++) { const k0 = sh.length; symbol(sh, spur.kind, tx + i * step + S / 2, cy, S); for (let j = k0; j < sh.length; j++) { sh[j].color = COL.brand; if (sh[j].t === 'line') sh[j].w = 1.6; else sh[j].lw = 1.6; } }
       }
-      L(sh, fx, pc.shown ? y + hh + 6 + S / 2 : y + F * 0.6, fx, lastCy, { w: 2.2, color: COL.brand });
+      L(sh, fx, pc.shown ? y + hh + 6 + S / 2 : feedTop, fx, lastCy, { w: 2.2, color: COL.brand });
       ph += 8 + lab + 4 + rows * (S + 10) - 10;
     }
     // device box
@@ -297,7 +345,7 @@ const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replac
 const rgb = (c) => `rgb(${c.join(',')})`;
 export function shapesSvg(shapes, dy = 0) {
   return shapes.map((s) => {
-    if (s.t === 'line') return `<line x1="${s.x1}" y1="${s.y1 + dy}" x2="${s.x2}" y2="${s.y2 + dy}" stroke="${rgb(s.color)}" stroke-width="${s.w}" stroke-linecap="round"/>`;
+    if (s.t === 'line') return `<line x1="${s.x1}" y1="${s.y1 + dy}" x2="${s.x2}" y2="${s.y2 + dy}" stroke="${rgb(s.color)}" stroke-width="${s.w}" stroke-linecap="round"${s.dash ? ` stroke-dasharray="${s.dash.join(' ')}"` : ''}/>`;
     if (s.t === 'rect') return `<rect x="${s.x}" y="${s.y + dy}" width="${s.w}" height="${s.h}" rx="${s.lw ? 3 : 0}" fill="${s.fill ? rgb(s.fill) : 'none'}" stroke="${s.lw ? rgb(s.color) : 'none'}" stroke-width="${s.lw}"/>`;
     if (s.t === 'circle') return `<circle cx="${s.cx}" cy="${s.cy + dy}" r="${s.r}" fill="${s.fill ? rgb(s.fill) : 'none'}" stroke="${rgb(s.color)}" stroke-width="${s.lw}"/>`;
     return `<text x="${s.x}" y="${s.y + dy}" font-size="${s.size}" font-weight="${s.bold ? 700 : 400}" fill="${rgb(s.color)}" text-anchor="${s.anchor}">${esc(s.txt)}</text>`;
@@ -319,7 +367,7 @@ export function drawDiagramPdf(k, cert, newPage) {
     if (k.y + b.h * s > k.H - 16) newPage();
     const ox = k.x0, oy = k.y;
     for (const z of b.shapes) {
-      if (z.t === 'line') k.line(ox + z.x1 * s, oy + z.y1 * s, ox + z.x2 * s, oy + z.y2 * s, { w: z.w * s, color: z.color });
+      if (z.t === 'line') k.line(ox + z.x1 * s, oy + z.y1 * s, ox + z.x2 * s, oy + z.y2 * s, { w: z.w * s, color: z.color, dash: z.dash ? z.dash.map((v) => v * s) : null });
       else if (z.t === 'rect') { if (!z.lw) { d.setFillColor(...z.fill); d.rect(ox + z.x * s, oy + z.y * s, z.w * s, z.h * s, 'F'); } else k.rect(ox + z.x * s, oy + z.y * s, z.w * s, z.h * s, { lw: z.lw * s, color: z.color, fill: z.fill }); }
       else if (z.t === 'circle') { d.setDrawColor(...z.color); d.setLineWidth(z.lw * s); if (z.fill) { d.setFillColor(...z.fill); d.circle(ox + z.cx * s, oy + z.cy * s, z.r * s, 'FD'); } else d.circle(ox + z.cx * s, oy + z.cy * s, z.r * s, 'S'); }
       else { k.font(z.size * pt, z.bold, z.color); d.text(String(z.txt), ox + z.x * s, oy + z.y * s, { align: z.anchor === 'middle' ? 'center' : 'left', baseline: 'alphabetic' }); }

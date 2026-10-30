@@ -42,3 +42,17 @@ export function diagramMWSpur() {
   c.mw.spur = { on: true, count: '1', feeds: 'socket' };
   return c;
 }
+// Made-up EIC: two immersion heaters on contactors whose coils are fed
+// from a time clock / relay control circuit (way 9).
+export function diagramEICContactors() {
+  const c = diagramEIC();
+  c.number = 'EIC-DIAG-03';
+  const b = c.boards[0];
+  b.circuits = b.circuits.filter((x) => x.num !== 8 && x.num !== '8');
+  b.circuits.push(
+    mcb(8, 'Immersion', RCD2, { desc: 'Immersion heater (top)', points: '1', control: { via: 'contactor+timeclock', controlCircuit: '10' } }),
+    mcb(9, 'Immersion', RCD2, { desc: 'Immersion heater (bottom)', points: '1', control: { via: 'contactor+relay', controlCircuit: '10' } }),
+    mcb(10, 'Lighting', RCD2, { desc: 'Time clock and relay (control)', points: '1', type: 'B', rating: '6', live: '1.5', cpc: '1.0' }),
+  );
+  return c;
+}

@@ -4,6 +4,7 @@
 // =====================================================================
 import { findOldPdf } from './filerules.js';
 import * as db from './db.js';
+import { isSpareCircuit as isSpareC } from './templates.js';
 import { h, fill, toast, modal, confirmBox, fmtDate, shareOrDownload, blobToDataUrl, emptyState, icon, withIcon } from './ui.js';
 import { route, page, go, render } from './app.js';
 import { S, openCert, changed, flush, getProfile, defaultInstruments, defaultInstrumentIds, getInstruments, instrumentsFor, instrumentText, calibrationWarnings, INSTRUMENT_KINDS, saveSetting } from './state.js';
@@ -13,7 +14,7 @@ import { TYPES, newCert, sectionsFor, sectionDone, missingFields, visible, get, 
 import { INTAKE_NOTE_10, INTAKE_NOTES, INTAKE_NOTIFIED, migrateIntake, EIC_ITEMS, EIC_OUTCOMES, EICR_ITEMS, EICR_OUTCOMES, CODE_TEXT, OBSERVATIONS, OBS_CATS, EIC_HELP, EICR_HELP } from './inspections.js';
 import { checkCircuit, isSpare } from './checks.js';
 import { CHECK_NOTE } from './limits.js';
-import { diagramSvg, diagramInPdf, diagramHasCircuits, SPUR_FEEDS } from './wiring.js';
+import { diagramSvg, diagramInPdf, diagramHasCircuits, SPUR_FEEDS, CONTROL_VIA } from './wiring.js';
 import { limitOn, limitBar } from './limitbar.js';
 import { dangerCodes, noticeForObs, noticesOf, noticeMissing, noticeNo } from './dangermodel.js';
 
@@ -162,11 +163,36 @@ route(/^\/cert\/([^/]+)\/diagram$/, async (id) => {
     h('p', { class: 'note' }, cert.type === 'MW' ? 'Drawn from the circuit on this certificate. It fills in as you add the details.' : 'Drawn from the supply, the board and each circuit. It fills in as you add the details. Number of points served sets how many sockets or lights are drawn.'),
     diagramHasCircuits(cert) ? h('div', { class: 'card', style: 'padding:10px 6px' }, box) : emptyState('zap', 'No circuits yet. Add circuits and the diagram draws itself.'),
     cert.type === 'MW' ? spurCard(cert, draw) : null,
+    diagramHasCircuits(cert) ? controlCard(cert, draw) : null,
     h('div', { class: 'card' }, h('div', { class: 'switchrow', style: 'border-top:0;margin-top:0' }, h('span', {}, 'Include in the PDF (after the schedules)'), sw)),
   ], { back: '#/cert/' + id, sub: cert.number });
 });
 
-// Minor works: "Spur added" — draws the new spur(s) off the ring, marked New.
+// "Controlled by": a folded card, one pick per circuit. Only circuits
+// switched through a contactor or time clock need touching. Saves an
+// optional circuit.control; nothing else in the cert changes.
+function controlCard(cert, redraw) {
+  const all = cert.type === 'MW' ? (cert.mw.circuit ? [cert.mw.circuit] : []) : (cert.boards || []).flatMap((b) => b.circuits || []);
+  const live = all.filter((c) => c && !isSpareC(c));
+  const name = (c) => `${c.num || '?'}  ${c.desc || 'No description'}`;
+  const set = cert.type === 'MW' ? 0 : live.filter((c) => c.control && c.control.via && c.control.via !== 'none').length;
+  const body = h('div', { id: 'controlrows' });
+  const draw = () => {
+    fill(body, [h('p', { class: 'note', style: 'margin:4px 0 8px' }, 'For loads switched through a contactor, e.g. an immersion on a time clock. Pick what switches it and which circuit feeds the coil.'),
+      ...live.map((c) => {
+        const k = c.control || {}; const via = CONTROL_VIA[k.via] ? k.via : 'none';
+        const upd = (patch) => { c.control = { via, controlCircuit: k.controlCircuit || '', ...patch }; if (c.control.via === 'none') delete c.control; changed(); redraw(); draw(); };
+        const row = [h('label', { class: 'f' }, h('span', {}, name(c)), h('select', { 'aria-label': 'Controlled by, circuit ' + (c.num || ''), onchange: (e) => upd({ via: e.target.value }) }, Object.entries(CONTROL_VIA).map(([v, t]) => h('option', { value: v, selected: v === via ? true : null }, t))))];
+        if (via !== 'none' && cert.type !== 'MW') row.push(h('label', { class: 'f' }, h('span', {}, 'Coil fed from'), h('select', { 'aria-label': 'Coil fed from, circuit ' + (c.num || ''), onchange: (e) => upd({ controlCircuit: e.target.value }) }, [h('option', { value: '' }, 'Not set'), ...live.filter((o) => o !== c).map((o) => h('option', { value: String(o.num), selected: String(k.controlCircuit || '') === String(o.num) ? true : null }, name(o)))])));
+        else if (via !== 'none') row.push(h('label', { class: 'f' }, h('span', {}, 'Coil fed from circuit'), h('input', { value: k.controlCircuit || '', inputmode: 'numeric', onchange: (e) => upd({ controlCircuit: e.target.value.trim() }) })));
+        return h('div', { style: 'border-top:1px solid var(--line);padding-top:6px' }, row);
+      })]);
+  };
+  draw();
+  return h('div', { class: 'card', id: 'controlcard' }, h('details', { class: 'fold' }, h('summary', {}, h('span', { class: 'foldt' }, 'Controlled by', h('span', { class: 'folds' }, 'Contactors, time clocks, relays')), set ? h('span', { class: 'fbadge' }, `${set} set`) : null, h('span', { class: 'foldic' }, '›')), h('div', { class: 'foldin' }, body)));
+}
+
+// Minor works: "Spur added\" — draws the new spur(s) off the ring, marked New.
 function spurCard(cert, redraw) {
   const box = h('div', { class: 'card', id: 'spurcard' });
   const draw = () => {
