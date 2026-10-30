@@ -417,11 +417,11 @@ export function layout(model, { W = 380, font = 12, screen = false, cableTable =
     const S = F * 1.5; const colW = (W - 16) / 2; let col = 0, rowY = y + hh + 4, rowH = 0;
     for (const k of order.filter((k) => used.has(k))) {
       const x = 8 + col * colW; const name = SWITCH_NAME[k] || KEY_EXTRA[k] || (k === 'contactor' ? 'Contactor contact (KM, normally open)' : k === 'coil' ? 'Contactor coil (A1/A2)' : k === 'timeclock' ? 'Time clock' : k === 'spd' ? 'Surge protection (SPD)' : KIND_NAME[k]);
-      if (k === 'contactor') { nocSym(sh, x + S * 0.5, rowY - 2, S * 1.1); }
+      if (k === 'contactor') { const yy = rowY + S / 2; rotH(sh, x - S * 0.1, yy, (o) => nocSym(o, x - S * 0.1, yy, S * 1.2)); }
       else if (k === 'coil') { coilSym(sh, x + S * 0.2, rowY + S * 0.1, S * 0.8, S * 0.75); }
       else if (k === 'timeclock') { clockSym(sh, x + S / 2, rowY + S / 2, S * 0.42); }
-      else if (k === 'iso') { isoSym(sh, x + S * 0.4, rowY - 2, S * 1.2, false); }
-      else if (k === 'isofcu') { isoSym(sh, x + S * 0.4, rowY - 2, S * 1.2, true, true); }
+      else if (k === 'iso') { const yy = rowY + S / 2; rotH(sh, x - S * 0.1, yy, (o) => isoSym(o, x - S * 0.1, yy, S * 1.2, false)); }
+      else if (k === 'isofcu') { const yy = rowY + S / 2; rotH(sh, x - S * 0.1, yy, (o) => isoSym(o, x - S * 0.1, yy, S * 1.2, true, true)); }
       else if (k === 'spd') { spdSym(sh, x + S / 2, rowY - 2, F * 0.75); }
       else if (k === 'rose') { L(sh, x + S / 2 - S * 0.6, rowY + S / 2, x + S / 2 + S * 0.6, rowY + S / 2, { w: 0.9, color: COL.grey }); C(sh, x + S / 2, rowY + S / 2, S * 0.17, { fill: COL.line, lw: 0.8 }); }
       else if (k === 'jb') { R(sh, x - S * 0.2, rowY + S * 0.05, S * 1.4, S * 0.9, { fill: [255, 255, 255] }); T(sh, x + S * 0.5, rowY + S * 0.5 + small * 0.3, 'JB', { anchor: 'middle', bold: true, size: small * 0.85 }); }
@@ -482,7 +482,10 @@ export function layout(model, { W = 380, font = 12, screen = false, cableTable =
     // contactor (or time clock) between the breaker and the load
     const fx0 = tx - gap / 2; let feedTop = y + F * 0.6; let kh0 = 0;
     const ctl = info.spare ? null : controlInfo(c);
-    if (ctl) { used.add('contactor');
+    // v0.43: non-room circuits run left to right: contactor, isolator, then the load(s)
+    const horiz = !info.spare && !info.spd && !info.rooms;
+    if (ctl && horiz) used.add('contactor');
+    if (ctl && !horiz) { used.add('contactor');
       // v0.42: IEC 60617 normally-open contactor contact, in line with the feed
       const tag = tags[val(c.num) || '?'] || ctl.tag; const ky = y + hh + 6, kh = F * 2.4;
       L(sh, fx0, y + F * 0.6, fx0, ky, { w: 0.9, color: COL.grey });
@@ -501,7 +504,8 @@ export function layout(model, { W = 380, font = 12, screen = false, cableTable =
     }
     // v0.43: local isolator (DP switch, FCU, rotary) in line, just before the load
     const iso = info.spare ? null : isolatorOf(c);
-    if (iso) { used.add(iso.fcu ? 'isofcu' : 'iso');
+    if (iso && horiz) used.add(iso.fcu ? 'isofcu' : 'iso');
+    if (iso && !horiz) { used.add(iso.fcu ? 'isofcu' : 'iso');
       const iy = Math.max(feedTop, y + hh) + 4, ih = F * 2.4;
       L(sh, fx0, feedTop, fx0, iy, { w: 0.9, color: COL.grey });
       isoSym(sh, fx0, iy, ih, iso.fcu, iso.switched);
@@ -528,25 +532,38 @@ export function layout(model, { W = 380, font = 12, screen = false, cableTable =
     let ph = 0;
     if (!info.spare && !info.spd && info.rooms) {
       ph = roomsSection(sh, info, tx, y + hh + 6, tw, feedTop, c);
-    } else if (!info.spare && !info.spd && pc.shown) {
-      const S = F * 1.5, step = S + 6; const per = Math.max(1, Math.floor((tw - 4) / step));
-      const rows = Math.ceil(pc.shown / per); const py = y + hh + 6;
-      for (let r = 0; r < rows; r++) {
-        const n = Math.min(per, pc.shown - r * per); const cy = py + r * (S + 10) + S / 2;
-        L(sh, tx - gap / 2, cy, tx + (n - 1) * step + S / 2, cy, { w: 0.9, color: COL.grey });
-        if (r === 0) L(sh, tx - gap / 2, feedTop, tx - gap / 2, cy, { w: 0.9, color: COL.grey }); else L(sh, tx - gap / 2, cy - (S + 10), tx - gap / 2, cy, { w: 0.9, color: COL.grey });
-        for (let i = 0; i < n; i++) { const k1 = kindAt(r * per + i); symbol(sh, k1, tx + i * step + S / 2, cy, S); used.add(k1); }
-      }
+    } else if (horiz && (pc.shown || ctl || iso)) {
+      const S = F * 1.5, step = S + 6; const per = Math.max(1, Math.floor((tw - 4) / step)); const lab0 = (ctl || iso) ? small * 1.3 : 0; const py = y + hh + 6 + lab0; const fx = tx - gap / 2; const g9 = { w: 0.9, color: COL.grey };
+      // items along the row: [width, draw(x, cy)]
+      const items = []; let coilAt = null;
+      if (ctl) { const kw = F * 2.4; items.push([kw + 6, (x, cy) => { rotH(sh, x, cy, (o) => nocSym(o, x, cy, kw)); T(sh, x + kw / 2, cy - S * 0.55, tags[val(c.num) || '?'] || ctl.tag, { anchor: 'middle', bold: true, size: small }); coilAt = { x: x + kw * 0.5, y: cy }; }]); }
+      if (iso) { const iw0 = Math.max(F * 2.4, textW(iso.label, small, true) + 4); items.push([iw0 + 6, (x, cy) => { rotH(sh, x, cy, (o) => isoSym(o, x, cy, F * 2.4, iso.fcu, iso.switched)); T(sh, x + F * 1.2, cy - S * 0.55, iso.label, { anchor: 'middle', bold: true, size: small }); }]); }
+      for (let i = 0; i < pc.shown; i++) { const k1 = kindAt(i); items.push([step, (x, cy) => { symbol(sh, k1, x + S / 2, cy, S); used.add(k1); }, true]); }
+      const rowsX = []; let x = tx, row = 0; const maxX = W - 6;
+      for (const it of items) { if (x + it[0] > maxX + 6 && x > tx) { row++; x = tx; } rowsX.push([x, row]); x += it[0]; }
+      const rows = row + 1; const rowH = S + lab0 + 8; let prevEnd = null;
+      items.forEach((it, i) => { const [xx, r] = rowsX[i]; const cy = py + r * rowH + S / 2;
+        if (i === 0) { L(sh, fx, feedTop, fx, cy, g9); L(sh, fx, cy, xx, cy, g9); }
+        else if (rowsX[i - 1][1] !== r) { const pcy = cy - rowH; L(sh, prevEnd, pcy, prevEnd + 3, pcy, g9); L(sh, prevEnd + 3, pcy, prevEnd + 3, pcy + rowH / 2 + S * 0.2, g9); L(sh, prevEnd + 3, pcy + rowH / 2 + S * 0.2, fx, pcy + rowH / 2 + S * 0.2, g9); L(sh, fx, pcy + rowH / 2 + S * 0.2, fx, cy, g9); L(sh, fx, cy, xx, cy, g9); }
+        else L(sh, prevEnd, cy, xx, cy, g9);
+        it[1](xx, cy); prevEnd = it[2] ? xx + S : xx + it[0] - 6; if (it[2] && i + 1 < items.length && rowsX[i + 1][1] === r) prevEnd = xx + S; });
+      ph = 6 + lab0 + rows * rowH - 8;
+      if (ctl) { // coil cross-reference under the row, joined by the dashed mechanical link
+        const ty = y + hh + 6 + ph + 2; const coil = ctl.from ? `Coil switched by circuit ${ctl.from} (see circuit ${ctl.from})` : 'Coil supply: ' + NA;
+        let nh = textLines(sh, tx + F * 1.6, ty, ctl.note, tw - F * 1.6, { size: small, bold: true });
+        if (coilAt) L(sh, coilAt.x, coilAt.y + S * 0.3, coilAt.x, ty + small * 0.6, { w: 1.5, color: COL.brand, dash: [4, 2] }), L(sh, coilAt.x, ty + small * 0.6, tx + F * 1.4, ty + small * 0.6, { w: 1.5, color: COL.brand, dash: [4, 2] });
+        nh += textLines(sh, tx + F * 1.6, ty + nh, coil, tw - F * 1.6, { size: small, color: ctl.from ? COL.brand : COL.na });
+        if (!ctl.from && screen) nh += textLines(sh, tx + F * 1.6, ty + nh, 'Set the coil circuit in Controlled by', tw - F * 1.6, { size: small, color: COL.amber });
+        ph += nh + 4; }
       if (kind !== 'socket') used.add(kind);
-      ph = 6 + rows * (S + 10) - 10;
-      if (pc.more) { ph += textLines(sh, tx, py + ph, `+ ${pc.more} more (${pc.n} in total)`, tw, { size: small, color: COL.grey }) + 2; }
+      if (pc.more) { ph += textLines(sh, tx, y + hh + 6 + ph, `+ ${pc.more} more (${pc.n} in total)`, tw, { size: small, color: COL.grey }) + 2; }
       // light switches: their own row under the lights, on the same feed
       const si = switchInfo(c);
       if (si && si.list.length) {
-        const sy = py + ph + 8; const cy = sy + S / 2; const n = Math.min(si.list.length, per); const rws = Math.ceil(si.list.length / per);
+        const sy = y + hh + 6 + ph + 8; const cy = sy + S / 2; const n = Math.min(si.list.length, per); const rws = Math.ceil(si.list.length / per);
         for (let r = 0; r < rws; r++) {
           const m = Math.min(per, si.list.length - r * per); const cyr = cy + r * (S + 10);
-          L(sh, tx - gap / 2, r ? cyr - (S + 10) : py + (rows - 1) * (S + 10) + S / 2, tx - gap / 2, cyr, { w: 0.9, color: COL.grey, dash: [2, 2] });
+          L(sh, tx - gap / 2, r ? cyr - (S + 10) : sy - 8, tx - gap / 2, cyr, { w: 0.9, color: COL.grey, dash: [2, 2] });
           L(sh, tx - gap / 2, cyr, tx + (m - 1) * step + S / 2, cyr, { w: 0.9, color: COL.grey, dash: [2, 2] });
           for (let i = 0; i < m; i++) { const k0 = si.list[r * per + i]; symbol(sh, k0, tx + i * step + S / 2, cyr, S); used.add(k0); }
         }
@@ -715,6 +732,12 @@ export function layout(model, { W = 380, font = 12, screen = false, cableTable =
     L(o, x, bot, x - h * 0.26, top + h * 0.04, g); L(o, x, bot, x, y0 + h, g); // open blade, hinged at the bottom
     for (const d of [-0.06, 0.06]) L(o, x - h * 0.1, y0 + h * (0.86 + d) + h * 0.05, x + h * 0.1, y0 + h * (0.86 + d) - h * 0.05, { w: 1 });
   }
+  // v0.43: draw a vertical in-line symbol (top at x,y0) turned to run left to right from (x, y0).
+  function rotH(o, x0, y0, fn) { const tmp = []; fn(tmp); const P = (x, y) => [x0 + (y - y0), y0 - (x - x0)];
+    for (const z of tmp) { if (z.t === 'line') { const [a, b] = P(z.x1, z.y1), [c2, d] = P(z.x2, z.y2); o.push({ ...z, x1: a, y1: b, x2: c2, y2: d }); }
+      else if (z.t === 'rect') { const [a, b] = P(z.x, z.y + z.h); o.push({ ...z, x: a, y: b, w: z.h, h: z.w }); }
+      else if (z.t === 'circle') { const [a, b] = P(z.x != null ? z.x : z.cx, z.y != null ? z.y : z.cy); o.push(z.cx != null ? { ...z, cx: a, cy: b } : { ...z, x: a, y: b }); }
+      else o.push(z); } }
   function nocSym(o, x, y0, h) {
     const t = y0 + h * 0.3, b = y0 + h * 0.7, r = h * 0.08, g = { w: 1.2, color: COL.line };
     L(o, x, y0, x, t, g); L(o, x, b, x, y0 + h, g); L(o, x, b, x - h * 0.28, t + h * 0.02, g);
