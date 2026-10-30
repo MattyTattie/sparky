@@ -10,6 +10,7 @@ import { route, page, go, render } from './app.js';
 import { openCert, changed, flush, touchJob } from './state.js';
 import { field, stateLine } from './certui.js';
 import { sectionsFor, get, set } from './certmodel.js';
+import { supplyKindOf, feedInfo } from './wiring.js';
 const boardsLine = (cert) => { const sec = sectionsFor(cert.type).find((x) => x.special === 'boards'); if (!sec) return null; const [c, t] = stateLine(cert, sec); return h('div', { class: 'notice ' + c + ' secstate' }, t); };
 import { blankBoard } from './certmodel.js';
 import * as presets from './presets.js';
@@ -132,6 +133,7 @@ function boardDetails(cert, b) {
     h('summary', { style: 'font-weight:700' }, 'Board details', b.zdb ? h('span', { class: 'note' }, `  Zdb ${b.zdb} Ω · Ipf ${b.ipf || '–'} kA`) : null),
     h('div', { style: 'margin-top:10px' },
       F('ref', 'DB reference'), F('location', 'Location'),
+      cert.boards.indexOf(b) > 0 ? supplyChips(cert, b) : null,
       F('suppliedFrom', 'Supplied from'),
       h('div', { class: 'grid3' }, F('ocpdBs', 'Supplying device BS (EN)'), F('ocpdType', 'Type'), F('ocpdRating', 'Rating (A)', 'num')),
       h('div', { class: 'grid3' }, F('zdb', 'Zdb (Ω)', 'num'), F('ipf', 'Ipf (kA)', 'num'), F('maxDemand', 'Max demand (A)', 'num')),
@@ -139,6 +141,20 @@ function boardDetails(cert, b) {
       h('div', { class: 'note', style: 'margin-top:12px' }, 'Other sources'), bidiTick(cert, b),
       spdGrid(cert, b),
       h('div', { class: 'note' }, 'Main RCD of the board (if any)'), rcdGrid(b)));
+}
+
+// v0.43.3: one-tap 'Supplied from' for an extra board (optional board.supplyKind; the text field still works)
+function supplyChips(cert, b) {
+  const box = h('div', { class: 'supplychips', style: 'margin:4px 0 8px' });
+  const setText = (t) => { b.suppliedFrom = t; const lab = box.nextElementSibling; const inp = lab && lab.querySelector('input'); if (inp) inp.value = t; };
+  const draw = () => { const k = supplyKindOf(b) || (feedInfo(cert.boards, cert.boards.indexOf(b)).state === 'ok' ? 'submain' : '');
+    const chip = (v, t) => h('button', { type: 'button', class: 'segb' + (k === v ? ' on' : ''), 'aria-pressed': String(k === v), style: 'flex:1 1 0;min-width:0;min-height:44px;padding:4px 4px;font-size:14px;font-weight:600;white-space:normal;line-height:1.15;border:0;' + (v !== 'tails' ? 'border-left:1px solid var(--line);' : '') + (k === v ? 'background:var(--brand,#2952ff);color:#fff' : 'background:transparent;color:inherit'),
+      onclick: () => { b.supplyKind = v; if (v === 'tails') setText('Meter tail connector block'); else if (v === 'switchfuse') setText('Switch fuse / isolator'); else if (supplyKindOf({ suppliedFrom: b.suppliedFrom }) || !b.suppliedFrom) setText(''); changed(); draw(); } }, t);
+    const others = cert.boards.filter((x) => x !== b).flatMap((x) => (x.circuits || []).filter((c) => c && c.num).map((c) => [`${x.ref} circuit ${c.num}`, `${x.ref} \u00b7 ${c.num} ${c.desc || ''}`.trim()]));
+    fill(box, [h('div', { class: 'note', style: 'margin:0 0 4px' }, 'Supplied from'),
+      h('div', { role: 'group', 'aria-label': 'Supplied from', style: 'display:flex;align-items:stretch;padding:0;border:1px solid var(--line);border-radius:10px;overflow:hidden' }, chip('tails', 'Connector block'), chip('switchfuse', 'Switch fuse'), chip('submain', 'Sub-main')),
+      k === 'submain' ? h('label', { class: 'f', style: 'margin-top:6px' }, h('span', {}, 'Which circuit feeds it'), h('select', { 'aria-label': 'Which circuit feeds this board', onchange: (e) => { setText(e.target.value); changed(); draw(); } }, [h('option', { value: '' }, 'Choose\u2026'), ...others.map(([v, t]) => h('option', { value: v, selected: String(b.suppliedFrom || '').toLowerCase() === v.toLowerCase() ? true : null }, t))])) : null]); };
+  draw(); return box;
 }
 
 // v0.32: "Fed by battery / PV / generator" on the board, and the bidirectional reminder.

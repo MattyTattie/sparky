@@ -192,9 +192,11 @@ route(/^\/cert\/([^/]+)\/diagram$/, async (id) => {
     if (WARN.test(txt)) { const c = circ(+g.dataset.bi, +g.dataset.ci, !!g.dataset.mw); if (c) { if (/^Rooms/.test(txt)) openRooms(c); else openCoil(c); return; } }
     openReadings(+g.dataset.bi, +g.dataset.ci, !!g.dataset.mw); });
   // v0.43.1: "Needs attention" card: each problem opens its fix; points mismatches get one-tap fixes
-  const issuesBox = h('div', { id: 'diagissues' });
+  const issuesBox = h('div', { id: 'diagissues' }); const topIssues = h('div', { id: 'diagissuestop' });
   const drawIssues = () => { const items = diagramIssues(cert);
-    fill(issuesBox, items.length ? [h('div', { class: 'card', style: 'padding:10px 12px' }, h('b', { style: 'display:block;margin-bottom:4px' }, 'Needs attention'),
+    // v0.43.3: count badge, and a small link at the top of the page that scrolls down to the card
+    fill(topIssues, items.length ? [h('button', { type: 'button', class: 'linkbtn', id: 'issueslink', style: 'background:none;border:0;padding:6px 0;min-height:40px;color:#b45309;font-weight:700;font-size:14px;text-align:left', onclick: () => issuesBox.scrollIntoView({ behavior: 'smooth', block: 'start' }) }, `\u26a0 ${items.length} need${items.length === 1 ? 's' : ''} attention \u203a`)] : []);
+    fill(issuesBox, items.length ? [h('div', { class: 'card', style: 'padding:10px 12px' }, h('b', { style: 'display:flex;align-items:center;gap:8px;margin-bottom:4px' }, 'Needs attention', h('span', { class: 'fbadge issuecount' }, String(items.length))),
       ...items.map((it) => h('div', { class: 'issue', style: 'border-top:1px solid var(--line);padding:8px 0' },
         h('button', { type: 'button', class: 'btn ghost issuego', style: 'width:100%;min-height:44px;white-space:normal;text-align:left;justify-content:space-between;display:flex;gap:8px', onclick: () => (it.kind === 'coil' ? openCoil(it.c) : openRooms(it.c)) }, h('span', {}, `Circuit ${it.c.num || '?'}: ${it.text}`), h('span', { 'aria-hidden': 'true' }, '\u203a')),
         it.fixes.length ? h('div', { style: 'display:flex;flex-wrap:wrap;gap:6px;margin-top:6px' }, it.fixes.map((f) => h('button', { type: 'button', class: 'btn issuefix', style: 'flex:1 1 auto;min-height:44px;white-space:normal', onclick: () => { f.apply(); changed(); refresh(); toast('Done'); } }, f.label))) : null)))] : []); };
@@ -209,6 +211,7 @@ route(/^\/cert\/([^/]+)\/diagram$/, async (id) => {
   const sw = h('button', { class: 'switch' + (cert.diagramPdf !== false ? ' on' : ''), type: 'button', role: 'switch', id: 'diagrampdf', 'aria-label': 'Include in the PDF', 'aria-checked': String(cert.diagramPdf !== false), onclick: () => { cert.diagramPdf = cert.diagramPdf === false; changed(); sw.classList.toggle('on', cert.diagramPdf !== false); sw.setAttribute('aria-checked', String(cert.diagramPdf !== false)); } }, h('span', {}));
   page('Wiring diagram', [
     h('p', { class: 'note' }, cert.type === 'MW' ? 'Drawn from the circuit on this certificate. It fills in as you add the details.' : 'Drawn from the supply, the board and each circuit. It fills in as you add the details. Number of points served sets how many sockets or lights are drawn.'),
+    topIssues,
     diagramHasCircuits(cert) ? h('div', { class: 'card', style: 'padding:10px 6px' }, box) : emptyState('zap', 'No circuits yet. Add circuits and the diagram draws itself.'),
     issuesBox,
     cert.type === 'MW' ? spurCard(cert, draw) : null,
@@ -310,9 +313,16 @@ function extrasCard(cert, redraw) {
   };
   const pick = h('select', { id: 'extrascircuit', 'aria-label': 'Circuit', style: 'width:100%;white-space:normal', onchange: (e) => { pickedCircuit.set(key, +e.target.value); arranging = false; drawOne(); } },
     live.map((c, i) => h('option', { value: String(i), selected: i === pickedCircuit.get(key) ? true : null }, name(c) + (c.diagram && (c.diagram.roomList || []).length ? ` (${c.diagram.roomList.length} room${c.diagram.roomList.length === 1 ? '' : 's'})` : ''))));
+  // v0.43.3: step to the previous / next circuit without the dropdown; from a lighting circuit it skips to the next lighting one
+  const stepTo = (dir) => { const cur = pickedCircuit.get(key) || 0; const light = pointKind(live[cur]) === 'light';
+    for (let j = cur + dir; j >= 0 && j < live.length; j += dir) if (!light || pointKind(live[j]) === 'light') { pickedCircuit.set(key, j); pick.value = String(j); arranging = false; drawOne(); syncNav(); return; }
+    toast(dir > 0 ? 'That\u2019s the last one' : 'That\u2019s the first one'); };
+  const navB = (t, dir, id) => h('button', { class: 'btn ghost', type: 'button', id, style: 'flex:1;min-height:44px', onclick: () => stepTo(dir) }, t);
+  const navRow = h('div', { class: 'circnav', style: 'display:flex;gap:8px;margin:-2px 0 6px' }, navB('\u2039 Prev circuit', -1, 'circprev'), navB('Next circuit \u203a', 1, 'circnext'));
+  const syncNav = () => {}; pick.addEventListener('change', syncNav);
   drawOne();
   fill(body, [h('p', { class: 'note', style: 'margin:4px 0 8px' }, 'Optional. Pick a circuit, then add its rooms. Lighting circuits get one 1-way switch unless you set them here.'),
-    h('label', { class: 'f' }, h('span', {}, 'Circuit'), pick), one]);
+    h('label', { class: 'f' }, h('span', {}, 'Circuit'), pick), navRow, one]);
   return h('div', { class: 'card', id: 'extrascard' }, h('details', { class: 'fold' }, h('summary', {}, h('span', { class: 'foldt' }, 'Switches and rooms', h('span', { class: 'folds' }, 'Light switches, rooms, sockets, isolators')), nset ? h('span', { class: 'fbadge' }, `${nset} set`) : null, h('span', { class: 'foldic' }, '\u203a')), h('div', { class: 'foldin' }, body)));
 }
 
@@ -450,7 +460,9 @@ function roomsEditor(c, redraw, usedNames = () => [], otherMap = () => ({})) {
         h('div', { style: 'display:flex;flex-wrap:wrap;gap:4px 12px;align-items:center;justify-content:space-between' },
           grp('Lights', mini(+r.lights || 0, r.name + ' lights', (n) => upd({ lights: n }), 0, 10)),
           swCount ? grp(swCount[0], mini(swCount[2], r.name + ' ' + swCount[1], swCount[3], swCount[4], swCount[5])) : null,
-          grp('Fan', mini(+r.fans || 0, r.name + ' fans', (n) => upd({ fans: n, ...(n && !r.fanCtl ? { fanCtl: 'humidistat' } : {}) }, true), 0, 2))),
+          grp('Fan', mini(+r.fans || 0, r.name + ' fans', (n) => upd({ fans: n, ...(n && !r.fanCtl ? { fanCtl: 'humidistat' } : {}) }, true), 0, 2)),
+          // v0.43.3: one tap to repeat the room above (lights, switches, wiring, fan); the name stays
+          i > 0 ? h('button', { type: 'button', class: 'linkbtn copylast', 'aria-label': 'Copy last room into ' + r.name, style: 'background:none;border:0;padding:8px 2px;min-height:40px;color:var(--brand,#2952ff);font-weight:600;font-size:14px', onclick: () => { const p = list()[i - 1]; const cp = {}; for (const f of ['lights', 'sw1', 'sw2pairs', 'swi', 'wiring', 'fans', 'fanCtl', 'split']) if (p[f] !== undefined) cp[f] = Array.isArray(p[f]) ? [...p[f]] : p[f]; else cp[f] = undefined; upd(cp, true); toast('Copied from ' + p.name); } }, 'Copy last room') : null),
         seg1([['sw1', '1-way'], ['sw2', '2-way'], ['sw2i', '2W+int', '2-way + intermediate'], ['none', 'None']], k, r.name + ' switch type', (v) => upd(v === 'sw1' ? { sw1: Math.max(1, +r.sw1 || 1), sw2pairs: 0, swi: 0 } : v === 'sw2' ? { sw1: 0, sw2pairs: Math.max(1, +r.sw2pairs || 1), swi: 0 } : v === 'sw2i' ? { sw1: 0, sw2pairs: Math.max(1, +r.sw2pairs || 1), swi: Math.max(1, +r.swi || 1) } : { sw1: 0, sw2pairs: 0, swi: 0 }, true)),
         seg1([['loop-in', 'Loop-in'], ['junction box', 'JB', 'Junction box'], ['jb-switch', 'JB\u2192sw', 'JB to switch']], ['junction box', 'jb-switch'].includes(r.wiring) ? r.wiring : 'loop-in', r.name + ' wiring', (v) => upd({ wiring: v }, true)),
         +r.fans > 0 ? seg1([['humidistat', 'Humidistat'], ['timer', 'Timer', 'Timer (overrun)'], ['switch', 'Light sw', 'Light switch'], ['isolator', 'Isolator', 'Isolator only']], r.fanCtl || 'humidistat', r.name + ' fan control', (v) => upd({ fanCtl: v }, true)) : null); };

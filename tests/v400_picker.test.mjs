@@ -16,7 +16,7 @@ test('switch-fed room draws JB, switch, lights and adds the key entry', () => {
   l.diagram.roomList.forEach((r) => { r.wiring = 'jb-switch'; });
   const L = layout(diagramModel(c), { W: 380, font: 12 }); const t = texts(L);
   assert.ok(t.includes('JB'));
-  assert.match(t.join(' '), /Cable from the circuit JB loops\s+switch\s+to\s+switch|Cable from the circuit JB loops switch to\s+switch/);
+  assert.ok(!t.some((x) => /Cable from the circuit JB|Switch drops from|Junction box: a cable/.test(x))); // v0.43.3: no explanation sentences
   assert.ok(t.some((x) => /Switch-fed: JB to switch/.test(x)));
   assert.ok(t.some((x) => /strappers/.test(x)));
 });
