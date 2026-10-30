@@ -251,6 +251,15 @@ Open points
 - Runtime table at 100/75/50/25% inverter load (Results + PDF).
 - Tests: tests/v350.test.mjs; shots: tests/screens_v350.py → /workspace/sparky-shots/v0.35.0.
 
+## v0.43.1 — JB lanes, CCU/FCU, job-page diagram, Needs attention, room fans (live 30 Oct 2026)
+- Switch-fed rooms get nested JB lanes (no crossing tails); cooker control unit (CCU) isolator; FCU isolators drawn in line with short labels (13A SFCU / FCU), heaters as the load.
+- Wiring diagram opens from a row on the job page (card removed from the cert page).
+- Needs attention card on the diagram page: tappable warnings (coil circuit, rooms vs points) and one-tap points fixes.
+- Symbol guesser covers common fixed loads (dishwasher, washer/dryer, solar PV, battery/inverter, gate motor, heat pump, intruder alarm, boiler, UFH...); a sub-main draws no load, only "Feeds DBx".
+- Desktop draws the diagram at the real page width; out-of-limits breaker box is thick in print so it reads in greyscale; time-clock KM tag clear of A2.
+- Optional room extractor fans (roomList item fans 0-2, fanCtl humidistat|timer|switch|isolator), drawn feed -> %RH/T/ISO box -> fan; fans count as points.
+- No data format changes (new fields optional).
+
 ## v0.43.0 — Diagram rows, isolators, horizontal runs, room tick-list (live 30 Oct 2026)
 - Room boxes: each switch group is one row (switches left, its lights to the right, wrapping).
 - JB-to-switch rooms each get their own cable lane and C label from the circuit JB.
