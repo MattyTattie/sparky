@@ -5,7 +5,7 @@ import { diagramEIC, diagramEICContactors } from './diagram-sample.mjs';
 
 test('no control field: old certs draw as before', () => {
   const svg = diagramSvg(diagramEIC());
-  assert.ok(!svg.includes('contactor') && !svg.includes('stroke-dasharray'));
+  assert.ok(!svg.includes('contactor') && !svg.includes('>KM<') && !svg.includes('3 2"')); // switch rows use a 2 2 dash
   assert.equal(controlInfo({}), null);
   assert.equal(controlInfo({ control: { via: 'none' } }), null);
   assert.equal(controlInfo({ control: { via: 'rubbish' } }), null);

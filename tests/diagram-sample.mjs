@@ -56,3 +56,20 @@ export function diagramEICContactors() {
   );
   return c;
 }
+// Made-up EIC showing switches, rooms, the new symbols and a circuit with no points.
+export function diagramEICExtras() {
+  const c = diagramEICContactors();
+  c.number = 'EIC-DIAG-04';
+  const b = c.boards[0];
+  const by = (n) => b.circuits.find((x) => String(x.num) === String(n));
+  by(1).diagram = { rooms: 'Kitchen, Living room, Hall' };
+  by(2).diagram = { rooms: 'Kitchen, Hall, Stairs', sw1: '2', sw2: '1', swi: '1' };
+  by(6).diagram = { rooms: 'Bedrooms 1 to 3, Landing' };
+  by(5).points = '';
+  b.circuits.push(
+    Object.assign(applyTemplate(blankCircuit(11), T('Radial')), { device: 'rcbo', bs: '61009', rcdIdn: '30', rcdType: 'A', desc: 'EV charger (driveway)', points: '1', type: 'B', rating: '32', live: '6.0', cpc: '6.0' }),
+    Object.assign(applyTemplate(blankCircuit(12), T('Lighting')), { device: 'rcbo', bs: '61009', rcdIdn: '30', rcdType: 'A', desc: 'Bathroom extract fan', points: '2', type: 'B', rating: '6', diagram: { rooms: 'Bathroom, En-suite' } }),
+    Object.assign(applyTemplate(blankCircuit(13), T('Radial')), { device: 'rcbo', bs: '61009', rcdIdn: '30', rcdType: 'A', desc: 'Fused spur (FCU) boiler', points: '1', type: 'B', rating: '16' }),
+  );
+  return c;
+}

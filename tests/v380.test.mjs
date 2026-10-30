@@ -13,7 +13,7 @@ test('point symbol follows the circuit type', () => {
   assert.equal(pointKind({ desc: 'Lights upstairs' }), 'light');
   assert.equal(pointKind({ desc: 'Cooker' }), 'cooker');
   assert.equal(pointKind({ desc: 'Electric shower' }), 'shower');
-  assert.equal(pointKind({ desc: 'Immersion heater' }), 'appliance');
+  assert.equal(pointKind({ desc: 'Immersion heater' }), 'immersion'); // v0.38 own symbol (approved)
   assert.equal(pointKind({ desc: 'Garden thing' }), 'point');
 });
 test('point count: up to 10 symbols, then "+ N more"', () => {
@@ -81,11 +81,12 @@ test('SPD way: breaker in its box, SPD drawn as the load, no Points line', () =>
   assert.ok(isSpd(c)); assert.ok(isSpd({ desc: 'Surge protection' })); assert.ok(!isSpd({ desc: 'Sockets' }));
   assert.equal(spdLabel(c, { spdT2: true }), 'SPD Type 2'); assert.equal(spdLabel({ desc: 'SPD Type 1+2' }, {}), 'SPD Type 1+2');
   const svg = diagramSvg({ type: 'EIC', supply: {}, parts: {}, boards: [{ ref: 'DB9', spdT2: true, circuits: [c, { num: '8', desc: 'Sockets', type: 'B', rating: '32' }] }] });
-  assert.match(svg, /SPD Type 2/); assert.match(svg, /B32 MCB/);
+  assert.match(svg, />B32</); assert.match(svg, />MCB</); assert.match(svg, /SPD Type 2/);
   const L = layout(diagramModel({ type: 'EIC', supply: {}, parts: {}, boards: [{ ref: 'DB9', spdT2: true, circuits: [c] }] }));
   const txt = L.blocks.filter((b) => b.kind === 'circuit').flatMap((b) => b.shapes.filter((z) => z.t === 'text').map((z) => z.txt));
   assert.ok(!txt.some((t) => /Points/.test(t)));
-  for (const t of ['Breaker: ', 'Cable: ', 'Load: ', 'B32', 'MCB', 'SPD Type 2']) assert.ok(txt.includes(t), t + ' in ' + txt.join('|'));
+  assert.ok(!txt.includes('Breaker: ')); // breaker shows in its box only (approved)
+  for (const t of ['Cable: ', 'Load: ', 'B32', 'MCB', 'SPD Type 2']) assert.ok(txt.includes(t), t + ' in ' + txt.join('|'));
   assert.ok(!txt.includes('SPD') || txt.indexOf('SPD') !== txt.indexOf('B32'));
 });
 test('untouched new-cert defaults are not printed as facts', async () => {

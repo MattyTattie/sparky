@@ -20,10 +20,32 @@ export function pointKind(c) {
   if (/light|lamp|ltg|lighting/.test(d)) return 'light';
   if (/cooker|oven|hob|range/.test(d)) return 'cooker';
   if (/shower/.test(d)) return 'shower';
-  if (/immersion|boiler|heater|heating|ev\b|charger|fan|extract|alarm|smoke|heat det|pump|inverter|garage|sub-?main|towel|spur|fcu|fused/.test(d)) return 'appliance';
+  if (/smoke|heat (alarm|det)|\balarms?\b|detector/.test(d)) return 'alarm';
+  if (/immersion/.test(d)) return 'immersion';
+  if (/\bev\b|charger|car charg|charge ?point/.test(d)) return 'ev';
+  if (/\bfan|extract/.test(d)) return 'fan';
+  if (/\bfcu\b|fused spur|fused conn/.test(d)) return 'fcu';
+  if (/boiler|heater|heating|ev\b|charger|fan|extract|alarm|smoke|heat det|pump|inverter|garage|sub-?main|towel|spur|fcu|fused/.test(d)) return 'appliance';
   return 'point';
 }
-export const KIND_NAME = { socket: 'Socket', light: 'Light', cooker: 'Cooker', shower: 'Shower', appliance: 'Fixed appliance', point: 'Point' };
+export const KIND_NAME = { socket: 'Socket', light: 'Light', cooker: 'Cooker', shower: 'Shower', alarm: 'Smoke / heat alarm', immersion: 'Immersion heater', ev: 'EV charger', fan: 'Fan', fcu: 'Fused spur (FCU)', appliance: 'Fixed appliance', point: 'Point' };
+// Plural words for the "Points:" line.
+const KIND_PLURAL = { socket: 'sockets', light: 'lights', cooker: 'cookers', shower: 'showers', alarm: 'alarms', immersion: 'immersions', ev: 'EV chargers', fan: 'fans', fcu: 'FCUs', appliance: 'fixed appliances', point: 'points' };
+const KIND_ONE = { socket: 'socket', light: 'light', cooker: 'cooker', shower: 'shower', alarm: 'alarm', immersion: 'immersion', ev: 'EV charger', fan: 'fan', fcu: 'FCU', appliance: 'fixed appliance', point: 'point' };
+// Optional per-circuit diagram extras: circuit.diagram = { rooms, sw1, sw2, swi }.
+// Old certs have none; a lighting circuit then gets one 1-way switch.
+export const SWITCH_NAME = { sw1: '1-way switch', sw2: '2-way switch', swi: 'Intermediate switch' };
+const num0 = (v) => { const n = parseInt(String(v ?? ''), 10); return Number.isFinite(n) && n > 0 ? Math.min(n, MAX_SYMBOLS) : 0; };
+export function switchInfo(c) {
+  if (pointKind(c) !== 'light') return null;
+  const d = (c && c.diagram) || {};
+  const set = ['sw1', 'sw2', 'swi'].some((k) => d[k] !== undefined && d[k] !== '');
+  const sw1 = set ? num0(d.sw1) : 1, sw2 = set ? num0(d.sw2) : 0, swi = set ? num0(d.swi) : 0;
+  const list = [...Array(sw1).fill('sw1'), ...Array(sw2 * 2).fill('sw2'), ...Array(swi).fill('swi')];
+  const words = [sw1 && `${sw1} \u00d7 1-way`, sw2 && `${sw2} \u00d7 2-way pair`, swi && `${swi} \u00d7 intermediate`].filter(Boolean);
+  return { list, text: words.length ? words.join(', ') : 'None', set };
+}
+export const roomsOf = (c) => val(c && c.diagram && c.diagram.rooms);
 // How many symbols to draw: up to MAX_SYMBOLS, then "+ N more".
 export function pointCount(c) {
   const n = parseInt(String((c && c.points) ?? '').trim(), 10);
@@ -113,7 +135,7 @@ export function diagramModel(cert) {
     type: cert.type,
     supply: { earthing: val(sup.earthing), lines: [[val(sup.conductors), val(sup.u) && val(sup.u) + ' V', val(sup.f) && val(sup.f) + ' Hz'].filter(Boolean).join(', '), [val(sup.ze) && `Ze ${val(sup.ze)} Ω`, val(sup.ipf) && `Ipf ${val(sup.ipf)} kA`].filter(Boolean).join(', '), ].filter(Boolean), fuse },
     main: { label: 'Main switch', detail: ms },
-    boards: (cert.boards || []).map((b) => ({ ref: val(b.ref) || 'DB', location: val(b.location), from: val(b.suppliedFrom), items: groupCircuits(b.circuits, b), links: controlLinks(b.circuits) })),
+    boards: (cert.boards || []).map((b, bi) => ({ ref: val(b.ref) || 'DB', location: val(b.location), from: val(b.suppliedFrom), items: groupCircuits(b.circuits, b), links: controlLinks(b.circuits), bi, src: b.circuits || [] })),
   };
 }
 
@@ -153,12 +175,18 @@ export function circuitLines(c, spd = '') {
   const cable = val(c.live) ? `${val(c.live)}${val(c.cpc) ? ' / ' + val(c.cpc) : ''} mm²` : '';
   const pc = pointCount(c);
   // SPD way: a normal breaker in the box, the SPD drawn as its load
-  if (spd) return { title: `${val(c.num) || '?'}  ${val(c.desc) || 'SPD'}`, spare: false, spd, devShort: dev || NA, devKind: kind, rows: [['Breaker', device], ['Cable', cable], ['Load', spd]] };
-  return { title: `${val(c.num) || '?'}  ${val(c.desc) || 'No description'}`, spare: false, devShort: dev || NA, devKind: kind,
-    rows: [['Breaker', device], ['Cable', cable], ['Points', pc.known ? `${pc.n} \u00d7 ${KIND_NAME[pointKind(c)].toLowerCase()}${pc.n === 1 ? '' : 's'}` : '']] };
+  // The breaker already shows in its box, so no "Breaker:" line. An RCBO's
+  // RCD details would be lost, so they get their own "RCD:" line.
+  const rcd = isRcbo(c) && (val(c.rcdIdn) || val(c.rcdType)) ? [val(c.rcdIdn) && val(c.rcdIdn) + ' mA', val(c.rcdType) && 'Type ' + val(c.rcdType)].filter(Boolean).join(' ') : '';
+  const pre = rcd ? [['RCD', rcd]] : [];
+  const rooms = roomsOf(c); const room = rooms ? ' \u00b7 ' + rooms : '';
+  if (spd) return { title: `${val(c.num) || '?'}  ${val(c.desc) || 'SPD'}${room}`, spare: false, spd, device, devShort: dev || NA, devKind: kind, rows: [...pre, ['Cable', cable], ['Load', spd]] };
+  const k = pointKind(c); const si = switchInfo(c);
+  return { title: `${val(c.num) || '?'}  ${val(c.desc) || 'No description'}${room}`, spare: false, device, devShort: dev || NA, devKind: kind, noPoints: !pc.known,
+    rows: [...pre, ['Cable', cable], ['Points', pc.known ? `${pc.n} \u00d7 ${pc.n === 1 ? KIND_ONE[k] : KIND_PLURAL[k]}` : ''], ...(si ? [['Switches', si.text]] : [])] };
 }
 
-export function layout(model, { W = 380, font = 12 } = {}) {
+export function layout(model, { W = 380, font = 12, screen = false } = {}) {
   const F = font, small = F * 0.86, lh = (s) => s * 1.3;
   const blocks = [];
   const busX = 14, devX = busX + 14, devW = F * 4.6, gap = 8;
@@ -168,7 +196,7 @@ export function layout(model, { W = 380, font = 12 } = {}) {
   const C = (sh, cx, cy, r, o = {}) => sh.push({ t: 'circle', cx, cy, r, lw: o.lw || 1.1, color: o.color || COL.line, fill: o.fill || null });
   const textLines = (sh, x, y, text, w, o = {}) => { const s = o.size || F; const ls = wrapText(text, w, s, o.bold); ls.forEach((l, i) => T(sh, x, y + s + i * lh(s), l, o)); return ls.length * lh(s); };
   // label + value; a missing value prints N/A in light grey
-  const kv = (sh, x, y, label, v, w) => { const lab = label + ': '; const lw = textW(lab, small); T(sh, x, y + small, lab, { size: small, color: COL.grey }); return textLines(sh, x + lw, y, v || NA, w - lw, { size: small, color: v ? COL.ink : COL.na }); };
+  const kv = (sh, x, y, label, v, w) => { const lab = label + ': '; const lw = Math.max(textW(lab, small), textW('Cable: ', small)); T(sh, x, y + small, lab, { size: small, color: COL.grey }); return textLines(sh, x + lw, y, v || NA, w - lw, { size: small, color: v ? COL.ink : COL.na }); };
 
   // head box (supply / meter / main switch)
   const chainBox = (title, lines, { earth = '' } = {}) => {
@@ -201,7 +229,7 @@ export function layout(model, { W = 380, font = 12 } = {}) {
     blocks.push({ h: b.h, shapes: b.sh, kind: 'head' });
   });
 
-  let links = {};
+  let links = {}; const used = new Set();
   model.boards.forEach((bd, bi) => {
     links = bd.links || {};
     // board header bar
@@ -222,7 +250,7 @@ export function layout(model, { W = 380, font = 12 } = {}) {
         const hh = textLines(sh, tx, y, it.text, W - tx - 8, { size: small, color: COL.grey });
         const h = y + hh + 8;
         blocks.push({ h, shapes: sh, kind: 'spares' });
-      } else if (it.kind === 'circuit') blocks.push(circuitBlock(it.c, busX, lastMain, null, it.spd, it.spur));
+      } else if (it.kind === 'circuit') blocks.push(tag(circuitBlock(it.c, busX, lastMain, null, it.spd, it.spur), bd, it.c));
       else {
         // RCD box on the main bus, its own bus below
         const sh = []; const y = 6; const subX = devX + 10; const bw = W - devX - 8;
@@ -232,11 +260,32 @@ export function layout(model, { W = 380, font = 12 } = {}) {
         L(sh, busX, y + h / 2, devX, y + h / 2); L(sh, busX, 0, busX, lastMain ? y + h / 2 : y + h + 6, { w: 2.4, color: COL.brand });
         L(sh, subX, y + h, subX, y + h + 6);
         blocks.push({ h: y + h + 6, shapes: sh, kind: 'rcd' });
-        it.circuits.forEach((c, ci) => blocks.push(circuitBlock(c, subX, ci === it.circuits.length - 1, lastMain ? null : busX)));
+        it.circuits.forEach((c, ci) => blocks.push(tag(circuitBlock(c, subX, ci === it.circuits.length - 1, lastMain ? null : busX), bd, c)));
       }
     });
   });
+  // key: only the symbols this diagram uses
+  if (used.size) {
+    const sh = []; const y = 10; const order = ['socket', 'light', 'sw1', 'sw2', 'swi', 'cooker', 'shower', 'alarm', 'immersion', 'ev', 'fan', 'fcu', 'appliance', 'point', 'contactor', 'spd'];
+    let hh = textLines(sh, 8, y, 'Key', W - 16, { bold: true });
+    const S = F * 1.5; const colW = (W - 16) / 2; let col = 0, rowY = y + hh + 4, rowH = 0;
+    for (const k of order.filter((k) => used.has(k))) {
+      const x = 8 + col * colW; const name = SWITCH_NAME[k] || (k === 'contactor' ? 'Contactor (KM) / time clock (TC)' : k === 'spd' ? 'Surge protection (SPD)' : KIND_NAME[k]);
+      if (k === 'contactor') { R(sh, x, rowY + S * 0.1, S * 1.3, S * 0.8, { fill: [255, 255, 255] }); T(sh, x + S * 0.65, rowY + S * 0.68, 'KM', { anchor: 'middle', bold: true, size: small * 0.8 }); }
+      else if (k === 'spd') { const cx = x + S / 2; L(sh, cx, rowY, cx, rowY + S * 0.55); L(sh, cx - F * 0.3, rowY + S * 0.3, cx, rowY + S * 0.55); L(sh, cx + F * 0.3, rowY + S * 0.3, cx, rowY + S * 0.55); earthSym(sh, cx, rowY + S * 0.55, F * 0.5); }
+      else symbol(sh, k, x + S / 2, rowY + S / 2, S);
+      const th = textLines(sh, x + S + 8, rowY + S / 2 - small * 0.95, name, colW - S - 14, { size: small });
+      rowH = Math.max(rowH, S, th + (S / 2 - small * 0.95) ); col++;
+      if (col === 2) { col = 0; rowY += rowH + 8; rowH = 0; }
+    }
+    const h = rowY + (col ? rowH + 8 : 0) + 4;
+    sh.unshift({ t: 'rect', x: 0, y: 2, w: W, h: 1, lw: 0, color: [255, 255, 255], fill: [225, 228, 240] });
+    blocks.push({ h, shapes: sh, kind: 'legend' });
+  }
   return { W, blocks, height: blocks.reduce((a, b) => a + b.h, 0) };
+
+  // which board and circuit a block draws, so the screen can link to its edit screen
+  function tag(b, bd, c) { b.ref = { bi: bd.bi ?? 0, ci: bd.src ? bd.src.indexOf(c) : 0, mw: model.type === 'MW' }; return b; }
 
   function circuitBlock(c, bus, last, outerBus, spd = '', spur = null) {
     const sh = []; const info = circuitLines(c, spd); const y = 8;
@@ -247,7 +296,7 @@ export function layout(model, { W = 380, font = 12 } = {}) {
     // contactor (or time clock) between the breaker and the load
     const fx0 = tx - gap / 2; let feedTop = y + F * 0.6; let kh0 = 0;
     const ctl = info.spare ? null : controlInfo(c);
-    if (ctl) {
+    if (ctl) { used.add('contactor');
       const kw = F * 2.6, kh = F * 1.9, ky = y + hh + 6, kx = tx;
       R(sh, kx, ky, kw, kh, { fill: [255, 255, 255] });
       // normally-open contact: two stubs and a slanted blade
@@ -287,9 +336,22 @@ export function layout(model, { W = 380, font = 12 } = {}) {
         if (r === 0) L(sh, tx - gap / 2, feedTop, tx - gap / 2, cy, { w: 0.9, color: COL.grey }); else L(sh, tx - gap / 2, cy - (S + 10), tx - gap / 2, cy, { w: 0.9, color: COL.grey });
         for (let i = 0; i < n; i++) symbol(sh, kind, tx + i * step + S / 2, cy, S);
       }
+      used.add(kind);
       ph = 6 + rows * (S + 10) - 10;
       if (pc.more) { ph += textLines(sh, tx, py + ph, `+ ${pc.more} more (${pc.n} in total)`, tw, { size: small, color: COL.grey }) + 2; }
-    } else if (info.spd) { // SPD as the load: arrow to earth, its type label beside it
+      // light switches: their own row under the lights, on the same feed
+      const si = switchInfo(c);
+      if (si && si.list.length) {
+        const sy = py + ph + 8; const cy = sy + S / 2; const n = Math.min(si.list.length, per); const rws = Math.ceil(si.list.length / per);
+        for (let r = 0; r < rws; r++) {
+          const m = Math.min(per, si.list.length - r * per); const cyr = cy + r * (S + 10);
+          L(sh, tx - gap / 2, r ? cyr - (S + 10) : py + (rows - 1) * (S + 10) + S / 2, tx - gap / 2, cyr, { w: 0.9, color: COL.grey, dash: [2, 2] });
+          L(sh, tx - gap / 2, cyr, tx + (m - 1) * step + S / 2, cyr, { w: 0.9, color: COL.grey, dash: [2, 2] });
+          for (let i = 0; i < m; i++) { const k0 = si.list[r * per + i]; symbol(sh, k0, tx + i * step + S / 2, cyr, S); used.add(k0); }
+        }
+        void n; ph += 8 + rws * (S + 10) - 10;
+      }
+    } else if (info.spd) { used.add('spd'); // SPD as the load: arrow to earth, its type label beside it
       const S = F * 1.5, py = y + hh + 6, cx = tx + S / 2, t = py, a = F * 0.9;
       L(sh, tx - gap / 2, y + F * 0.6, tx - gap / 2, t + F * 0.3, { w: 0.9, color: COL.grey }); L(sh, tx - gap / 2, t + F * 0.3, cx, t + F * 0.3, { w: 0.9, color: COL.grey });
       L(sh, cx, t, cx, t + a); L(sh, cx - F * 0.3, t + a - F * 0.35, cx, t + a); L(sh, cx + F * 0.3, t + a - F * 0.35, cx, t + a);
@@ -297,6 +359,7 @@ export function layout(model, { W = 380, font = 12 } = {}) {
       T(sh, cx + S, t + F * 1.1, info.spd, { bold: true, size: small });
       ph = a + F * 1.3 + 6;
     }
+    if (screen && !info.spare && !info.spd && info.noPoints) ph += textLines(sh, tx, y + hh + 2, 'Add points served to draw sockets/lights', tw, { size: small, color: COL.na }) + 4;
     // minor works: new spur(s) branching off the ring, in bold brand colour
     if (spur && !info.spare && !info.spd) {
       const fx = tx - gap / 2, S = F * 1.5, step = S + 6;
@@ -307,7 +370,8 @@ export function layout(model, { W = 380, font = 12 } = {}) {
       for (let r = 0; r < rows; r++) {
         const n = Math.min(per, spur.n - r * per); const cy = sy + r * (S + 10) + S / 2; lastCy = cy;
         L(sh, fx, cy, tx + (n - 1) * step + S / 2, cy, { w: 2.2, color: COL.brand });
-        for (let i = 0; i < n; i++) { const k0 = sh.length; symbol(sh, spur.kind, tx + i * step + S / 2, cy, S); for (let j = k0; j < sh.length; j++) { sh[j].color = COL.brand; if (sh[j].t === 'line') sh[j].w = 1.6; else sh[j].lw = 1.6; } }
+        used.add(spur.kind === 'appliance' ? 'fcu' : spur.kind);
+        for (let i = 0; i < n; i++) { const k0 = sh.length; symbol(sh, spur.kind === 'appliance' ? 'fcu' : spur.kind, tx + i * step + S / 2, cy, S); for (let j = k0; j < sh.length; j++) { sh[j].color = COL.brand; if (sh[j].t === 'line') sh[j].w = 1.6; else sh[j].lw = 1.6; } }
       }
       L(sh, fx, pc.shown ? y + hh + 6 + S / 2 : feedTop, fx, lastCy, { w: 2.2, color: COL.brand });
       ph += 8 + lab + 4 + rows * (S + 10) - 10;
@@ -335,6 +399,17 @@ export function layout(model, { W = 380, font = 12 } = {}) {
     else if (kind === 'socket') { R(sh, cx - r, cy - r * 0.75, S, r * 1.5, { lw: 1, fill: [255, 255, 255] }); L(sh, cx - r * 0.45, cy - r * 0.35, cx - r * 0.45, cy + r * 0.05, { w: 1.3 }); L(sh, cx + r * 0.45, cy - r * 0.35, cx + r * 0.45, cy + r * 0.05, { w: 1.3 }); L(sh, cx, cy + r * 0.15, cx, cy + r * 0.5, { w: 1.3 }); }
     else if (kind === 'cooker') { R(sh, cx - r, cy - r, S, S, { lw: 1, fill: [255, 255, 255] }); for (const [a, b] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) C(sh, cx + a * r * 0.45, cy + b * r * 0.45, r * 0.25, { lw: 0.8 }); }
     else if (kind === 'shower') { R(sh, cx - r, cy - r, S, S, { lw: 1, fill: [255, 255, 255] }); L(sh, cx - r * 0.6, cy - r * 0.45, cx + r * 0.6, cy - r * 0.45, { w: 1.3 }); for (const a of [-0.45, 0, 0.45]) L(sh, cx + a * r, cy - r * 0.15, cx + a * r, cy + r * 0.6, { w: 0.8 }); }
+    else if (kind === 'alarm') { C(sh, cx, cy, r * 0.85, { fill: [255, 255, 255] }); C(sh, cx, cy, r * 0.45, { lw: 0.8 }); T(sh, cx, cy + r * 0.28, 'S', { anchor: 'middle', bold: true, size: r * 0.75 }); }
+    else if (kind === 'immersion') { R(sh, cx - r, cy - r, S, S, { lw: 1, fill: [255, 255, 255] }); const z = [[-0.6, 0.55], [-0.35, -0.45], [-0.1, 0.55], [0.15, -0.45], [0.4, 0.55], [0.6, -0.1]]; for (let i = 1; i < z.length; i++) L(sh, cx + z[i - 1][0] * r, cy + z[i - 1][1] * r, cx + z[i][0] * r, cy + z[i][1] * r, { w: 1 }); }
+    else if (kind === 'ev') { R(sh, cx - r, cy - r, S, S, { lw: 1, fill: [255, 255, 255] }); T(sh, cx, cy + r * 0.32, 'EV', { anchor: 'middle', bold: true, size: r * 0.9 }); }
+    else if (kind === 'fan') { C(sh, cx, cy, r * 0.85, { fill: [255, 255, 255] }); for (const a of [0, 2.094, 4.189]) L(sh, cx, cy, cx + Math.cos(a) * r * 0.65, cy + Math.sin(a) * r * 0.65, { w: 1.4 }); C(sh, cx, cy, r * 0.15, { fill: COL.line }); }
+    else if (kind === 'fcu') { R(sh, cx - r, cy - r * 0.75, S, r * 1.5, { lw: 1, fill: [255, 255, 255] }); R(sh, cx - r * 0.5, cy - r * 0.2, r, r * 0.4, { lw: 0.8, fill: [255, 255, 255] }); L(sh, cx - r * 0.5, cy, cx + r * 0.5, cy, { w: 0.8 }); }
+    else if (kind === 'sw1' || kind === 'sw2' || kind === 'swi') { // switch: small dot with lever(s)
+      C(sh, cx - r * 0.35, cy + r * 0.3, r * 0.22, { fill: COL.line, lw: 0.8 }); const ax = cx - r * 0.35, ay = cy + r * 0.3;
+      L(sh, ax, ay, ax + r * 0.75, ay - r * 0.75, { w: 1.2 }); L(sh, ax + r * 0.75, ay - r * 0.75, ax + r * 0.95, ay - r * 0.55, { w: 1.2 });
+      if (kind !== 'sw1') { L(sh, ax, ay, ax - r * 0.55, ay - r * 0.75, { w: 1.2 }); L(sh, ax - r * 0.55, ay - r * 0.75, ax - r * 0.75, ay - r * 0.55, { w: 1.2 }); }
+      if (kind === 'swi') L(sh, ax - r * 0.5, ay - r * 0.1, ax + r * 0.9, ay - r * 0.1, { w: 1.2 });
+    }
     else if (kind === 'appliance') { R(sh, cx - r, cy - r, S, S, { lw: 1, fill: [255, 255, 255] }); L(sh, cx - r, cy + r, cx + r, cy - r, { w: 1 }); }
     else { C(sh, cx, cy, r * 0.7, { fill: [255, 255, 255] }); C(sh, cx, cy, r * 0.18, { fill: COL.line }); }
   }
@@ -353,7 +428,13 @@ export function shapesSvg(shapes, dy = 0) {
 }
 export function diagramSvg(cert, opts = {}) {
   const L = layout(diagramModel(cert), opts); let y = 0; const parts = [];
-  for (const b of L.blocks) { parts.push(shapesSvg(b.shapes, y)); y += b.h; }
+  const href = opts.href || null;
+  for (const b of L.blocks) {
+    const g = shapesSvg(b.shapes, y);
+    if (href && b.ref) { const u = href(b.ref); parts.push(`<a href="${esc(u)}" class="dgc" aria-label="Edit this circuit"><rect x="0" y="${y}" width="${L.W}" height="${b.h}" fill="transparent"/>${g}</a>`); }
+    else parts.push(g);
+    y += b.h;
+  }
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${L.W} ${Math.ceil(y + 6)}" width="100%" font-family="Arimo, Arial, Helvetica, sans-serif" role="img" aria-label="Single-line wiring diagram">${parts.join('')}</svg>`;
 }
 
