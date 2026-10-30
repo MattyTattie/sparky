@@ -392,19 +392,23 @@ function roomsEditor(c, redraw, usedNames = () => [], otherMap = () => ({})) {
       if (i < 0) { store([...list(), defaultRoom(n, defW())]); draw(); return; }
       const r = l[i]; if (!roomIsDefault(r, defW())) { const ok = await modal('Remove ' + n + '?', h('p', { class: 'note' }, 'Its lights, switches and wiring will be cleared.'), [{ label: 'Keep', value: false }, { label: 'Remove', value: true, cls: 'primary' }]); if (!ok) return; }
       store(list().filter((x) => x.name !== n)); draw(); };
+    const seg1 = (opts, cur, label, pick) => h('div', { class: 'seg1', role: 'group', 'aria-label': label, style: 'display:flex;align-items:stretch;margin-top:6px;padding:0;border:1px solid var(--line);border-radius:10px;overflow:hidden' },
+      opts.map(([v, t, aria], j) => h('button', { type: 'button', class: 'segb' + (v === cur ? ' on' : ''), 'aria-pressed': String(v === cur), 'aria-label': aria || t, style: 'flex:1 1 0;min-width:0;min-height:40px;padding:4px 2px;font-size:14px;font-weight:600;white-space:normal;line-height:1.1;border:0;' + (j ? 'border-left:1px solid var(--line);' : '') + (v === cur ? 'background:var(--brand,#2952ff);color:#fff' : 'background:transparent;color:inherit'), onclick: () => pick(v) }, t)));
+    const mini = (val, label, onset, min, max) => { const out = h('span', { class: 'stepval', style: 'min-width:1.4em;text-align:center;font-weight:700' }, String(val));
+      const st = (dv) => () => { const n = Math.max(min, Math.min(max, (parseInt(out.textContent, 10) || 0) + dv)); out.textContent = String(n); onset(n); };
+      const b = (t, dv, a) => h('button', { class: 'stepbtn', type: 'button', style: 'width:40px;height:40px;min-width:40px;padding:0', 'aria-label': label + ', one ' + a, onclick: st(dv) }, t);
+      return h('div', { class: 'rstep', style: 'display:flex;align-items:center;gap:4px' }, b('\u2212', -1, 'fewer'), out, b('+', 1, 'more')); };
     const roomRow = (r) => { const i = list().findIndex((x) => x.name === r.name);
       const upd = (patch, again = false) => { const nl = list().map((x, j) => (j === i ? { ...x, ...patch } : x)); store(nl); if (again) draw(); };
       const k = swKind(r);
-      const swCount = k === 'sw1' ? ['1-way switches', +r.sw1 || 1, (n) => upd({ sw1: n }), 1, 4] : k === 'sw2' ? ['2-way pairs', +r.sw2pairs || 1, (n) => upd({ sw2pairs: n }), 1, 3] : k === 'sw2i' ? ['Intermediates', +r.swi || 1, (n) => upd({ swi: n }), 1, 4] : null;
-      return h('div', { class: 'roomrow', style: 'border:1px solid var(--line);border-radius:10px;padding:8px 10px;margin:0 0 8px' },
-        h('b', { style: 'display:block;white-space:normal;word-break:break-word' }, r.name),
-        h('div', { style: 'display:flex;flex-wrap:wrap;gap:6px 14px;align-items:center;margin-top:4px' },
-          h('div', { style: 'display:flex;align-items:center;gap:6px' }, h('span', {}, 'Lights'), stepper(+r.lights || 0, r.name + ' lights', (n) => upd({ lights: n }), 0, 10)),
-          swCount ? h('div', { style: 'display:flex;align-items:center;gap:6px' }, h('span', { style: 'white-space:normal' }, swCount[0]), stepper(swCount[1], r.name + ' ' + swCount[0], swCount[2], swCount[3], swCount[4])) : null),
-        h('div', { class: 'segs', role: 'group', 'aria-label': r.name + ' switch type', style: 'display:flex;flex-wrap:wrap;gap:6px;margin-top:6px' },
-          [['sw1', '1-way'], ['sw2', '2-way'], ['sw2i', '2-way + int'], ['none', 'None']].map(([v, t]) => h('button', { type: 'button', class: 'btn ghost seg' + (v === k ? ' on' : ''), 'aria-pressed': String(v === k), style: chipCss(v === k), onclick: () => upd(v === 'sw1' ? { sw1: Math.max(1, +r.sw1 || 1), sw2pairs: 0, swi: 0 } : v === 'sw2' ? { sw1: 0, sw2pairs: Math.max(1, +r.sw2pairs || 1), swi: 0 } : v === 'sw2i' ? { sw1: 0, sw2pairs: Math.max(1, +r.sw2pairs || 1), swi: Math.max(1, +r.swi || 1) } : { sw1: 0, sw2pairs: 0, swi: 0 }, true) }, t))),
-        h('div', { class: 'segs', role: 'group', 'aria-label': r.name + ' wiring', style: 'display:flex;flex-wrap:wrap;gap:6px;margin-top:6px' },
-          [['loop-in', 'Loop-in'], ['junction box', 'JB'], ['jb-switch', 'JB to switch']].map(([v, t]) => { const cur = ['junction box', 'jb-switch'].includes(r.wiring) ? r.wiring : 'loop-in'; return h('button', { type: 'button', class: 'btn ghost seg' + (v === cur ? ' on' : ''), 'aria-pressed': String(v === cur), style: chipCss(v === cur), onclick: () => upd({ wiring: v }, true) }, t); }))); };
+      const swCount = k === 'sw1' ? ['1-way', '1-way switches', +r.sw1 || 1, (n) => upd({ sw1: n }), 1, 4] : k === 'sw2' ? ['Pairs', '2-way pairs', +r.sw2pairs || 1, (n) => upd({ sw2pairs: n }), 1, 3] : k === 'sw2i' ? ['Int', 'Intermediates', +r.swi || 1, (n) => upd({ swi: n }), 1, 4] : null;
+      const grp = (t, el) => h('div', { style: 'display:flex;align-items:center;gap:6px' }, h('span', { style: 'font-size:14px' }, t), el);
+      return h('div', { class: 'roomrow', style: 'border:1px solid var(--line);border-radius:10px;padding:6px 8px;margin:0 0 8px' },
+        h('div', { style: 'display:flex;flex-wrap:wrap;gap:4px 12px;align-items:center;justify-content:space-between' },
+          grp('Lights', mini(+r.lights || 0, r.name + ' lights', (n) => upd({ lights: n }), 0, 10)),
+          swCount ? grp(swCount[0], mini(swCount[2], r.name + ' ' + swCount[1], swCount[3], swCount[4], swCount[5])) : null),
+        seg1([['sw1', '1-way'], ['sw2', '2-way'], ['sw2i', '2W+int', '2-way + intermediate'], ['none', 'None']], k, r.name + ' switch type', (v) => upd(v === 'sw1' ? { sw1: Math.max(1, +r.sw1 || 1), sw2pairs: 0, swi: 0 } : v === 'sw2' ? { sw1: 0, sw2pairs: Math.max(1, +r.sw2pairs || 1), swi: 0 } : v === 'sw2i' ? { sw1: 0, sw2pairs: Math.max(1, +r.sw2pairs || 1), swi: Math.max(1, +r.swi || 1) } : { sw1: 0, sw2pairs: 0, swi: 0 }, true)),
+        seg1([['loop-in', 'Loop-in'], ['junction box', 'JB', 'Junction box'], ['jb-switch', 'JB\u2192sw', 'JB to switch']], ['junction box', 'jb-switch'].includes(r.wiring) ? r.wiring : 'loop-in', r.name + ' wiring', (v) => upd({ wiring: v }, true))); };
     const tickRow = (n) => { const on = names.includes(n); const elsewhere = other[n];
       return [h('label', { class: 'roomtick', style: 'display:flex;align-items:center;gap:10px;min-height:48px;padding:4px 2px;border-top:1px solid var(--line)' + (elsewhere && !on ? ';color:#9aa0aa' : '') },
         h('input', { type: 'checkbox', checked: on ? true : null, 'aria-label': n, style: 'width:24px;height:24px;flex:none', onchange: (e) => { e.target.checked = on; tick(n); } }),

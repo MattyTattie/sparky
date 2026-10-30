@@ -4,7 +4,7 @@ const s = readFileSync(new URL('../js/certui.js', import.meta.url), 'utf8');
 test('tick-list replaces the one-at-a-time picker', () => {
   assert.ok(!/Add next room/.test(s)); assert.match(s, /class: 'roomtick'/);
   for (const r of ['Living room', 'Dining room', 'Hall', 'Landing', 'Stairs', 'Bedroom 1', 'Bathroom', 'WC', 'Utility', 'Garage', 'Loft']) assert.ok(s.includes(`'${r}'`), r);
-  assert.match(s, /'2-way \+ int'/); assert.match(s, /'on circuit ' \+ elsewhere/);
+  assert.match(s, /'2W\+int'/); assert.match(s, /JB\\u2192sw/); assert.match(s, /'on circuit ' \+ elsewhere/);
 });
 test('helpers keep the roomList format', async () => {
   globalThis.window = globalThis.window || undefined;
