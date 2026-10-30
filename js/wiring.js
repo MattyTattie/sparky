@@ -78,15 +78,16 @@ const KIND_PLURAL = { socket: 'sockets', light: 'lights', cooker: 'cookers', sho
 const KIND_ONE = { socket: 'socket', light: 'light', cooker: 'cooker', shower: 'shower', alarm: 'alarm', immersion: 'immersion', ev: 'EV charger', fan: 'fan', fcu: 'FCU', appliance: 'fixed appliance', point: 'point' };
 // Optional per-circuit diagram extras: circuit.diagram = { rooms, sw1, sw2, swi }.
 // Old certs have none; a lighting circuit then gets one 1-way switch.
-const KEY_EXTRA = { jbsw: 'Switch-fed: JB to switch, looped switch to switch, each to its own lights', socket: 'Twin socket', socket1: 'Socket (single)', rose: 'Ceiling rose (loop-in)', jb: 'Junction box (JB)', strap: '2-way strappers (two wires)', iso: 'Local isolator: double pole switch-disconnector (// = 2 poles)', isofcu: 'Local isolator: fused connection unit (switched shows the blade)' };
+const KEY_EXTRA = { jbsw: 'Switch-fed: JB to switch, looped switch to switch, each to its own lights', socket: 'Twin socket', socket1: 'Socket (single)', rose: 'Ceiling rose (loop-in)', jb: 'Junction box (JB)', strap: '2-way strappers (two wires)', iso: 'Local isolator: double pole switch-disconnector (// = 2 poles)', isofcu: 'Local isolator: fused connection unit (switched shows the blade)', isoccu: 'Cooker control unit: DP switch in a box, with its 13 A socket' };
 // v0.43 (test): optional local isolator next to the load: circuit.diagram.isolator = { type, rating }.
-export const ISOLATORS = { dp20: '20 A DP switch', dp45: '45 A DP switch (cooker / shower)', sfcu: 'Switched FCU', ufcu: 'Unswitched FCU', rotary: 'Rotary isolator' };
-const ISO_SHORT = { dp20: '20A DP', dp45: '45A DP', sfcu: 'Switched FCU', ufcu: 'Unswitched FCU', rotary: 'Rotary isolator' };
+export const ISOLATORS = { dp20: '20 A DP switch', dp45: '45 A DP switch (cooker / shower)', sfcu: 'Switched FCU', ufcu: 'Unswitched FCU', rotary: 'Rotary isolator', ccu: 'Cooker control unit (CCU)' };
+const ISO_SHORT = { dp20: '20A DP', dp45: '45A DP', sfcu: 'Switched FCU', ufcu: 'Unswitched FCU', rotary: 'Rotary isolator', ccu: '45A CCU' };
 export function isolatorOf(c) {
   const i = c && c.diagram && c.diagram.isolator; if (!i || !ISOLATORS[i.type]) return null;
   const rating = val(i.rating).trim(); const fcu = i.type === 'sfcu' || i.type === 'ufcu';
-  const label = fcu ? ISO_SHORT[i.type] + (rating ? ' ' + rating : '') : (rating ? (/dp/.test(i.type) ? rating + (/DP/i.test(rating) ? '' : ' DP') : rating + ' rotary') : ISO_SHORT[i.type]);
-  return { type: i.type, rating, fcu, switched: i.type !== 'ufcu', label, name: ISOLATORS[i.type] };
+  const ccu = i.type === 'ccu';
+  const label = ccu ? (rating ? rating.replace(/\s*CCU$/i, '') + ' CCU' : ISO_SHORT.ccu) : fcu ? ISO_SHORT[i.type] + (rating ? ' ' + rating : '') : (rating ? (/dp/.test(i.type) ? rating + (/DP/i.test(rating) ? '' : ' DP') : rating + ' rotary') : ISO_SHORT[i.type]);
+  return { type: i.type, rating, fcu, ccu, switched: i.type !== 'ufcu', label, name: ISOLATORS[i.type] };
 }
 export const SWITCH_NAME = { sw1: '1-way switch', sw2: '2-way switch', swi: 'Intermediate switch' };
 const num0 = (v) => { const n = parseInt(String(v ?? ''), 10); return Number.isFinite(n) && n > 0 ? Math.min(n, MAX_SYMBOLS) : 0; };
@@ -412,7 +413,7 @@ export function layout(model, { W = 380, font = 12, screen = false, cableTable =
   });
   // key: only the symbols this diagram uses
   if (used.size) {
-    const sh = []; const y = 10; const order = ['socket', 'socket1', 'light', 'rose', 'jb', 'jbsw', 'sw1', 'sw2', 'swi', 'strap', 'cooker', 'shower', 'alarm', 'immersion', 'ev', 'fan', 'fcu', 'appliance', 'point', 'contactor', 'coil', 'timeclock', 'iso', 'isofcu', 'spd'];
+    const sh = []; const y = 10; const order = ['socket', 'socket1', 'light', 'rose', 'jb', 'jbsw', 'sw1', 'sw2', 'swi', 'strap', 'cooker', 'shower', 'alarm', 'immersion', 'ev', 'fan', 'fcu', 'appliance', 'point', 'contactor', 'coil', 'timeclock', 'iso', 'isofcu', 'isoccu', 'spd'];
     let hh = textLines(sh, 8, y, 'Key', W - 16, { bold: true });
     const S = F * 1.5; const colW = (W - 16) / 2; let col = 0, rowY = y + hh + 4, rowH = 0;
     for (const k of order.filter((k) => used.has(k))) {
@@ -421,6 +422,7 @@ export function layout(model, { W = 380, font = 12, screen = false, cableTable =
       else if (k === 'coil') { coilSym(sh, x + S * 0.2, rowY + S * 0.1, S * 0.8, S * 0.75); }
       else if (k === 'timeclock') { clockSym(sh, x + S / 2, rowY + S / 2, S * 0.42); }
       else if (k === 'iso') { const yy = rowY + S / 2; rotH(sh, x - S * 0.1, yy, (o) => isoSym(o, x - S * 0.1, yy, S * 1.2, false)); }
+      else if (k === 'isoccu') { const yy = rowY + S / 2; rotH(sh, x - S * 0.1, yy, (o) => isoSym(o, x - S * 0.1, yy, S * 1.2, false, true, true)); ccuSock(sh, x - S * 0.1 + S * 0.6, yy + S * 0.36, S * 0.8); }
       else if (k === 'isofcu') { const yy = rowY + S / 2; rotH(sh, x - S * 0.1, yy, (o) => isoSym(o, x - S * 0.1, yy, S * 1.2, true, true)); }
       else if (k === 'spd') { spdSym(sh, x + S / 2, rowY - 2, F * 0.75); }
       else if (k === 'rose') { L(sh, x + S / 2 - S * 0.6, rowY + S / 2, x + S / 2 + S * 0.6, rowY + S / 2, { w: 0.9, color: COL.grey }); C(sh, x + S / 2, rowY + S / 2, S * 0.17, { fill: COL.line, lw: 0.8 }); }
@@ -504,11 +506,11 @@ export function layout(model, { W = 380, font = 12, screen = false, cableTable =
     }
     // v0.43: local isolator (DP switch, FCU, rotary) in line, just before the load
     const iso = info.spare ? null : isolatorOf(c);
-    if (iso && horiz) used.add(iso.fcu ? 'isofcu' : 'iso');
-    if (iso && !horiz) { used.add(iso.fcu ? 'isofcu' : 'iso');
+    if (iso && horiz) used.add(iso.ccu ? 'isoccu' : iso.fcu ? 'isofcu' : 'iso');
+    if (iso && !horiz) { used.add(iso.ccu ? 'isoccu' : iso.fcu ? 'isofcu' : 'iso');
       const iy = Math.max(feedTop, y + hh) + 4, ih = F * 2.4;
       L(sh, fx0, feedTop, fx0, iy, { w: 0.9, color: COL.grey });
-      isoSym(sh, fx0, iy, ih, iso.fcu, iso.switched);
+      isoSym(sh, fx0, iy, ih, iso.fcu, iso.switched, iso.ccu); if (iso.ccu) ccuSock(sh, fx0 - ih * 0.62, iy + ih * 0.5, S0());
       const nh = textLines(sh, fx0 + F * 1.3, iy + ih * 0.3 - small, iso.label, W - fx0 - F * 1.3 - 6, { size: small, bold: true });
       const out = iy + Math.max(ih, nh) + 2; L(sh, fx0, iy + ih, fx0, out, { w: 0.9, color: COL.grey });
       hh = out - y + 2; feedTop = out; }
@@ -537,7 +539,7 @@ export function layout(model, { W = 380, font = 12, screen = false, cableTable =
       // items along the row: [width, draw(x, cy)]
       const items = []; let coilAt = null;
       if (ctl) { const kw = F * 2.4; items.push([kw + gapX, (x, cy) => { rotH(sh, x, cy, (o) => nocSym(o, x, cy, kw)); T(sh, x + kw / 2, cy - S * 0.55, tags[val(c.num) || '?'] || ctl.tag, { anchor: 'middle', bold: true, size: small }); coilAt = { x: x + kw * 0.5, y: cy }; }, false, kw]); }
-      if (iso) { const iw0 = Math.max(F * 2.4, textW(iso.label, small, true) + 4); items.push([iw0 + gapX, (x, cy) => { rotH(sh, x, cy, (o) => isoSym(o, x, cy, F * 2.4, iso.fcu, iso.switched)); T(sh, x + F * 1.2, cy - S * 0.55, iso.label, { anchor: 'middle', bold: true, size: small }); }, false, F * 2.4]); }
+      if (iso) { const iw0 = Math.max(F * 2.4, textW(iso.label, small, true) + 4); items.push([iw0 + gapX, (x, cy) => { rotH(sh, x, cy, (o) => isoSym(o, x, cy, F * 2.4, iso.fcu, iso.switched, iso.ccu)); if (iso.ccu) ccuSock(sh, x + F * 1.2, cy + F * 0.72, F * 1.1); T(sh, x + F * 1.2, cy - S * 0.55, iso.label, { anchor: 'middle', bold: true, size: small }); }, false, F * 2.4]); }
       for (let i = 0; i < pc.shown; i++) { const k1 = kindAt(i); items.push([lstep, (x, cy) => { symbol(sh, k1, x + S / 2, cy, S); used.add(k1); }, true]); }
       const rowsX = []; let x = tx + F * 0.6, row = 0; const maxX = W - 6;
       for (const it of items) { if (x + it[0] > maxX + 6 && x > tx + F * 0.6) { row++; x = tx + F * 0.6; } rowsX.push([x, row]); x += it[0]; }
@@ -637,7 +639,7 @@ export function layout(model, { W = 380, font = 12, screen = false, cableTable =
       if (r.wiring === 'jb-switch') { const fy = jbSwitchRoom(rs, r, ix, iw, ry, S, G); const bh = fy.bottom - y0 + 6;
         R(sh, bx, y0, bw, bh, { fill: COL.fill, color: [150, 160, 190] }); sh.push(...rs);
         // v0.43: its own cable from the JB to this room (no shared trunk)
-        const lx = tx + 3 + swK * 5; swK++; L(sh, lx, jbLastY, lx, fy.feedIn, { w: 1.2, color: COL.line }); L(sh, lx, fy.feedIn, fy.swX, fy.feedIn, { w: 1.2, color: COL.line });
+        const lx = tx + 3 + (nSw - 1 - swK) * 5; swK++; /* v0.43.1: top room innermost lane, so tails never cross */ L(sh, lx, jbLastY, lx, fy.feedIn, { w: 1.2, color: COL.line }); L(sh, lx, fy.feedIn, fy.swX, fy.feedIn, { w: 1.2, color: COL.line });
         T(sh, lx + 3, fy.feedIn - 3, cable('JB, circuit ' + (val(c.num) || '?'), 'switch, ' + nm, cableLabel(c).split(' \u00b7 ')[0]), { size: small * 0.75, bold: true, color: COL.brand });
         y0 += bh + 8; return; }
       // v0.42: each switch (or 2-way pair) controls its own lights; see roomBody
@@ -721,8 +723,12 @@ export function layout(model, { W = 380, font = 12, screen = false, cableTable =
   // v0.43 BS EN 60617 single-line: switch-disconnector (blade, isolating bar at
   // the fixed contact) with two strokes on the lead for 2 poles. FCU: box with
   // the fuse symbol, plus the blade above it when switched.
-  function isoSym(o, x, y0, h, fcu = false, switched = true) {
+  // v0.43.1: the CCU's 13 A outlet: a small socket hanging below the CCU box on a short lead
+  function S0() { return F * 1.1; }
+  function ccuSock(o, cx, top, S) { L(o, cx, top, cx, top + S * 0.18, { w: 0.9 }); symbol(o, 'socket1', cx, top + S * 0.18 + S * 0.42, S * 0.9); }
+  function isoSym(o, x, y0, h, fcu = false, switched = true, ccu = false) {
     const g = { w: 1.2, color: COL.line };
+    if (ccu) R(o, x - h * 0.3, y0 + h * 0.16, h * 0.6, h * 0.68, { lw: 0.9 });
     if (fcu) { const b = h * 0.55; let t = y0;
       if (switched) { const sb = y0 + h * 0.4; L(o, x, y0, x, y0 + h * 0.1, g); L(o, x, sb, x - h * 0.22, y0 + h * 0.12, g); t = sb; } else L(o, x, y0, x, y0 + h * 0.4, g);
       const by = y0 + h * 0.42, bh = h * 0.5, bw = h * 0.5; R(o, x - bw / 2, by, bw, bh, { lw: 1, fill: [255, 255, 255] });
@@ -738,7 +744,7 @@ export function layout(model, { W = 380, font = 12, screen = false, cableTable =
   function loadR(k, S) { const r = S / 2; return k === 'light' ? r * 0.8 : k === 'fan' ? r * 0.85 : (k === 'socket' || k === 'socket1') ? r * 0.75 : k === 'fcu' ? r * 0.85 : k === 'point' ? r * 0.7 : r; }
   function rotH(o, x0, y0, fn) { const tmp = []; fn(tmp); const P = (x, y) => [x0 + (y - y0), y0 - (x - x0)];
     for (const z of tmp) { if (z.t === 'line') { const [a, b] = P(z.x1, z.y1), [c2, d] = P(z.x2, z.y2); o.push({ ...z, x1: a, y1: b, x2: c2, y2: d }); }
-      else if (z.t === 'rect') { const [a, b] = P(z.x, z.y + z.h); o.push({ ...z, x: a, y: b, w: z.h, h: z.w }); }
+      else if (z.t === 'rect') { const [a, b] = P(z.x + z.w, z.y); o.push({ ...z, x: a, y: b, w: z.h, h: z.w }); }
       else if (z.t === 'circle') { const [a, b] = P(z.x != null ? z.x : z.cx, z.y != null ? z.y : z.cy); o.push(z.cx != null ? { ...z, cx: a, cy: b } : { ...z, x: a, y: b }); }
       else o.push(z); } }
   function nocSym(o, x, y0, h) {
