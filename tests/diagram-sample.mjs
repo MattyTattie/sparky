@@ -33,3 +33,12 @@ export function diagramMW() {
   c.mw.circuit = Object.assign(applyTemplate(blankCircuit(4), T('Ring final')), { desc: 'Kitchen sockets (ring)', points: '8' });
   return c;
 }
+// Made-up minor works: one new socket spurred off an existing kitchen ring.
+export function diagramMWSpur() {
+  const c = diagramMW();
+  c.number = 'MW-DIAG-02';
+  c.mw.description = 'Spur added to the kitchen ring for a new double socket';
+  c.mw.circuit.points = '8';
+  c.mw.spur = { on: true, count: '1', feeds: 'socket' };
+  return c;
+}

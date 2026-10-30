@@ -74,12 +74,21 @@ export function groupCircuits(circuits, board = null) {
   if (spares.length) items.push({ kind: 'spares', text: 'Spare: ' + spareRanges(spares), count: spares.length });
   return items;
 }
+// Minor works "Spur added": cert.mw.spur = { on, count, feeds: 'socket' | 'fcu' }.
+export const SPUR_FEEDS = { socket: 'Socket', fcu: 'Fused spur (FCU)' };
+export function spurInfo(M) {
+  const sp = M && M.spur; if (!sp || !sp.on) return null;
+  const n = Math.max(1, Math.min(MAX_SYMBOLS, parseInt(String(sp.count ?? '1'), 10) || 1));
+  const feeds = sp.feeds === 'fcu' ? 'fcu' : 'socket';
+  const what = feeds === 'fcu' ? (n === 1 ? 'fused spur (FCU)' : 'fused spurs (FCU)') : (n === 1 ? 'socket' : 'sockets');
+  return { n, feeds, kind: feeds === 'fcu' ? 'appliance' : 'socket', label: `Spur added (new): ${n} \u00d7 ${what}` };
+}
 export function diagramModel(cert) {
   cert = cert || {}; const sup = cert.supply || {}; const parts = cert.parts || {};
   if (cert.type === 'MW') {
     const M = cert.mw || {};
     return { type: 'MW', supply: { earthing: val(M.earthing), lines: [val(M.zdb) && `Zdb ${val(M.zdb)} Ω`].filter(Boolean) }, main: null,
-      boards: [{ ref: val(M.dbRef) || 'DB', location: val(M.dbLocation), from: '', items: groupCircuits(M.circuit ? [M.circuit] : [], null), note: 'Only the circuit covered by this certificate is shown.' }] };
+      boards: [{ ref: val(M.dbRef) || 'DB', location: val(M.dbLocation), from: '', items: groupCircuits(M.circuit ? [M.circuit] : [], null).map((it) => (it.kind === 'circuit' && spurInfo(M) ? { ...it, spur: spurInfo(M) } : it)), note: 'Only the circuit covered by this certificate is shown.' }] };
   }
   const ms = [val(parts.msCurrent) && val(parts.msCurrent) + ' A', val(parts.msPoles) && val(parts.msPoles) + '-pole', val(parts.msBs) && 'BS EN ' + val(parts.msBs).replace(/^BS\s*(EN)?\s*/i, '')].filter(Boolean).join(', ');
   // A new cert pre-fills the supply fuse standard (BS 88-3). On its own that's
@@ -196,7 +205,7 @@ export function layout(model, { W = 380, font = 12 } = {}) {
         const hh = textLines(sh, tx, y, it.text, W - tx - 8, { size: small, color: COL.grey });
         const h = y + hh + 8;
         blocks.push({ h, shapes: sh, kind: 'spares' });
-      } else if (it.kind === 'circuit') blocks.push(circuitBlock(it.c, busX, lastMain, null, it.spd));
+      } else if (it.kind === 'circuit') blocks.push(circuitBlock(it.c, busX, lastMain, null, it.spd, it.spur));
       else {
         // RCD box on the main bus, its own bus below
         const sh = []; const y = 6; const subX = devX + 10; const bw = W - devX - 8;
@@ -212,7 +221,7 @@ export function layout(model, { W = 380, font = 12 } = {}) {
   });
   return { W, blocks, height: blocks.reduce((a, b) => a + b.h, 0) };
 
-  function circuitBlock(c, bus, last, outerBus, spd = '') {
+  function circuitBlock(c, bus, last, outerBus, spd = '', spur = null) {
     const sh = []; const info = circuitLines(c, spd); const y = 8;
     const dx = bus + 12; const tx = dx + devW + gap; const tw = W - tx - 6;
     // text
@@ -239,6 +248,21 @@ export function layout(model, { W = 380, font = 12 } = {}) {
       earthSym(sh, cx, t + a, F * 0.7);
       T(sh, cx + S, t + F * 1.1, info.spd, { bold: true, size: small });
       ph = a + F * 1.3 + 6;
+    }
+    // minor works: new spur(s) branching off the ring, in bold brand colour
+    if (spur && !info.spare && !info.spd) {
+      const fx = tx - gap / 2, S = F * 1.5, step = S + 6;
+      const top = y + hh + ph + 8;
+      const lab = textLines(sh, tx, top, spur.label, tw, { bold: true, color: COL.brand });
+      const per = Math.max(1, Math.floor((tw - 4) / step)); const rows = Math.ceil(spur.n / per);
+      const sy = top + lab + 4; let lastCy = 0;
+      for (let r = 0; r < rows; r++) {
+        const n = Math.min(per, spur.n - r * per); const cy = sy + r * (S + 10) + S / 2; lastCy = cy;
+        L(sh, fx, cy, tx + (n - 1) * step + S / 2, cy, { w: 2.2, color: COL.brand });
+        for (let i = 0; i < n; i++) { const k0 = sh.length; symbol(sh, spur.kind, tx + i * step + S / 2, cy, S); for (let j = k0; j < sh.length; j++) { sh[j].color = COL.brand; if (sh[j].t === 'line') sh[j].w = 1.6; else sh[j].lw = 1.6; } }
+      }
+      L(sh, fx, pc.shown ? y + hh + 6 + S / 2 : y + F * 0.6, fx, lastCy, { w: 2.2, color: COL.brand });
+      ph += 8 + lab + 4 + rows * (S + 10) - 10;
     }
     // device box
     const bh = F * 3.2; const by = y;

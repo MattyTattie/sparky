@@ -13,7 +13,7 @@ import { TYPES, newCert, sectionsFor, sectionDone, missingFields, visible, get, 
 import { INTAKE_NOTE_10, INTAKE_NOTES, INTAKE_NOTIFIED, migrateIntake, EIC_ITEMS, EIC_OUTCOMES, EICR_ITEMS, EICR_OUTCOMES, CODE_TEXT, OBSERVATIONS, OBS_CATS, EIC_HELP, EICR_HELP } from './inspections.js';
 import { checkCircuit, isSpare } from './checks.js';
 import { CHECK_NOTE } from './limits.js';
-import { diagramSvg, diagramInPdf, diagramHasCircuits } from './wiring.js';
+import { diagramSvg, diagramInPdf, diagramHasCircuits, SPUR_FEEDS } from './wiring.js';
 import { limitOn, limitBar } from './limitbar.js';
 import { dangerCodes, noticeForObs, noticesOf, noticeMissing, noticeNo } from './dangermodel.js';
 
@@ -161,9 +161,30 @@ route(/^\/cert\/([^/]+)\/diagram$/, async (id) => {
   page('Wiring diagram', [
     h('p', { class: 'note' }, cert.type === 'MW' ? 'Drawn from the circuit on this certificate. It fills in as you add the details.' : 'Drawn from the supply, the board and each circuit. It fills in as you add the details. Number of points served sets how many sockets or lights are drawn.'),
     diagramHasCircuits(cert) ? h('div', { class: 'card', style: 'padding:10px 6px' }, box) : emptyState('zap', 'No circuits yet. Add circuits and the diagram draws itself.'),
+    cert.type === 'MW' ? spurCard(cert, draw) : null,
     h('div', { class: 'card' }, h('div', { class: 'switchrow', style: 'border-top:0;margin-top:0' }, h('span', {}, 'Include in the PDF (after the schedules)'), sw)),
   ], { back: '#/cert/' + id, sub: cert.number });
 });
+
+// Minor works: "Spur added" — draws the new spur(s) off the ring, marked New.
+function spurCard(cert, redraw) {
+  const box = h('div', { class: 'card', id: 'spurcard' });
+  const draw = () => {
+    const sp = cert.mw.spur || (cert.mw.spur = { on: false, count: '1', feeds: 'socket' });
+    const sw = h('button', { class: 'switch' + (sp.on ? ' on' : ''), type: 'button', role: 'switch', id: 'spuron', 'aria-label': 'Spur added to the ring', 'aria-checked': String(!!sp.on), onclick: () => { sp.on = !sp.on; changed(); redraw(); draw(); } }, h('span', {}));
+    const rows = [h('div', { class: 'switchrow', style: 'border-top:0;margin-top:0' }, h('span', {}, 'Work done: spur added to the ring'), sw)];
+    if (sp.on) {
+      const n = Math.max(1, parseInt(sp.count, 10) || 1);
+      const step = (d) => { sp.count = String(Math.max(1, Math.min(10, n + d))); changed(); redraw(); draw(); };
+      rows.push(h('div', { class: 'switchrow' }, h('span', {}, 'Number of spurs'),
+        h('div', { style: 'display:flex;gap:8px;align-items:center' }, h('button', { class: 'btn', type: 'button', 'aria-label': 'One fewer', onclick: () => step(-1) }, '−'), h('b', { id: 'spurcount', style: 'min-width:1.5em;text-align:center' }, String(n)), h('button', { class: 'btn', type: 'button', 'aria-label': 'One more', onclick: () => step(1) }, '+'))));
+      rows.push(h('p', { class: 'note', style: 'margin:10px 0 6px' }, 'What it feeds'),
+        h('div', { class: 'chips seg2', role: 'radiogroup', 'aria-label': 'What the spur feeds' }, Object.entries(SPUR_FEEDS).map(([k, t]) => h('button', { class: 'chip' + ((sp.feeds || 'socket') === k ? ' on' : ''), type: 'button', role: 'radio', 'aria-checked': String((sp.feeds || 'socket') === k), onclick: () => { sp.feeds = k; changed(); redraw(); draw(); } }, t))));
+    }
+    fill(box, rows);
+  };
+  draw(); return box;
+}
 
 // ---------- A form section ----------
 route(/^\/cert\/([^/]+)\/s\/([^/]+)$/, async (id, sid) => {
