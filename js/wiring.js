@@ -128,7 +128,8 @@ export function circuitLines(c, spd = '') {
   const device = [dev, kind].filter(Boolean).join(' ') + (isRcbo(c) && val(c.rcdIdn) ? `, ${val(c.rcdIdn)} mA` + (val(c.rcdType) ? ' Type ' + val(c.rcdType) : '') : '');
   const cable = val(c.live) ? `${val(c.live)}${val(c.cpc) ? ' / ' + val(c.cpc) : ''} mm²` : '';
   const pc = pointCount(c);
-  if (spd) return { title: `${val(c.num) || '?'}  ${val(c.desc) || 'SPD'}`, spare: false, spd: true, devShort: spd, devKind: '', rows: [['Device', spd], ['Breaker', device]] };
+  // SPD way: a normal breaker in the box, the SPD drawn as its load
+  if (spd) return { title: `${val(c.num) || '?'}  ${val(c.desc) || 'SPD'}`, spare: false, spd, devShort: dev || NA, devKind: kind, rows: [['Breaker', device], ['Cable', cable], ['Load', spd]] };
   return { title: `${val(c.num) || '?'}  ${val(c.desc) || 'No description'}`, spare: false, devShort: dev || NA, devKind: kind,
     rows: [['Breaker', device], ['Cable', cable], ['Points', pc.known ? `${pc.n} \u00d7 ${KIND_NAME[pointKind(c)].toLowerCase()}${pc.n === 1 ? '' : 's'}` : '']] };
 }
@@ -231,17 +232,18 @@ export function layout(model, { W = 380, font = 12 } = {}) {
       }
       ph = 6 + rows * (S + 10) - 10;
       if (pc.more) { ph += textLines(sh, tx, py + ph, `+ ${pc.more} more (${pc.n} in total)`, tw, { size: small, color: COL.grey }) + 2; }
+    } else if (info.spd) { // SPD as the load: arrow to earth, its type label beside it
+      const S = F * 1.5, py = y + hh + 6, cx = tx + S / 2, t = py, a = F * 0.9;
+      L(sh, tx - gap / 2, y + F * 0.6, tx - gap / 2, t + F * 0.3, { w: 0.9, color: COL.grey }); L(sh, tx - gap / 2, t + F * 0.3, cx, t + F * 0.3, { w: 0.9, color: COL.grey });
+      L(sh, cx, t, cx, t + a); L(sh, cx - F * 0.3, t + a - F * 0.35, cx, t + a); L(sh, cx + F * 0.3, t + a - F * 0.35, cx, t + a);
+      earthSym(sh, cx, t + a, F * 0.7);
+      T(sh, cx + S, t + F * 1.1, info.spd, { bold: true, size: small });
+      ph = a + F * 1.3 + 6;
     }
     // device box
     const bh = F * 3.2; const by = y;
     R(sh, dx, by, devW, bh, { fill: info.spare ? [248, 248, 248] : [255, 255, 255] }); sh.unshift(sh.pop());
     if (info.spare) T(sh, dx + devW / 2, by + bh / 2 + F * 0.35, 'Spare', { anchor: 'middle', color: COL.na, size: small });
-    else if (info.spd) { // SPD: arrow to earth inside the box, "SPD" under it
-      const cx = dx + devW / 2, t = by + 5, a = F * 0.9;
-      L(sh, cx, t, cx, t + a); L(sh, cx - F * 0.3, t + a - F * 0.35, cx, t + a); L(sh, cx + F * 0.3, t + a - F * 0.35, cx, t + a);
-      earthSym(sh, cx, t + a, F * 0.7);
-      T(sh, cx, by + bh - 4, 'SPD', { anchor: 'middle', bold: true, size: small });
-    }
     else {
       const d1 = wrapText(info.devShort, devW - 6, F, true); const d2 = info.devKind ? wrapText(info.devKind, devW - 6, small * 0.92) : [];
       d1.forEach((l, i) => T(sh, dx + devW / 2, by + F * 1.15 + i * lh(F), l, { anchor: 'middle', bold: true, color: info.devShort === NA ? COL.na : COL.ink }));

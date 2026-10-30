@@ -76,14 +76,17 @@ test('spare ways: one compact line with ranges, drawn once after the circuits', 
   const svg = diagramSvg({ type: 'EIC', supply: {}, parts: {}, boards: [{ ref: 'DB9', circuits }] });
   assert.match(svg, /Spare: 1, 3\u20135/); assert.doesNotMatch(svg, /SPARE/);
 });
-test('SPD way: SPD symbol and type label, breaker shown, no Points line', () => {
+test('SPD way: breaker in its box, SPD drawn as the load, no Points line', () => {
   const c = { num: '7', desc: 'SPD', type: 'B', rating: '32', device: 'mcb' };
   assert.ok(isSpd(c)); assert.ok(isSpd({ desc: 'Surge protection' })); assert.ok(!isSpd({ desc: 'Sockets' }));
   assert.equal(spdLabel(c, { spdT2: true }), 'SPD Type 2'); assert.equal(spdLabel({ desc: 'SPD Type 1+2' }, {}), 'SPD Type 1+2');
   const svg = diagramSvg({ type: 'EIC', supply: {}, parts: {}, boards: [{ ref: 'DB9', spdT2: true, circuits: [c, { num: '8', desc: 'Sockets', type: 'B', rating: '32' }] }] });
   assert.match(svg, /SPD Type 2/); assert.match(svg, /B32 MCB/);
-  const spdPart = svg.slice(svg.indexOf('7  SPD'), svg.indexOf('8  Sockets'));
-  assert.doesNotMatch(spdPart, /Points/);
+  const L = layout(diagramModel({ type: 'EIC', supply: {}, parts: {}, boards: [{ ref: 'DB9', spdT2: true, circuits: [c] }] }));
+  const txt = L.blocks.filter((b) => b.kind === 'circuit').flatMap((b) => b.shapes.filter((z) => z.t === 'text').map((z) => z.txt));
+  assert.ok(!txt.some((t) => /Points/.test(t)));
+  for (const t of ['Breaker: ', 'Cable: ', 'Load: ', 'B32', 'MCB', 'SPD Type 2']) assert.ok(txt.includes(t), t + ' in ' + txt.join('|'));
+  assert.ok(!txt.includes('SPD') || txt.indexOf('SPD') !== txt.indexOf('B32'));
 });
 test('untouched new-cert defaults are not printed as facts', async () => {
   const { newCert, blankBoard } = await import('../js/certmodel.js');
