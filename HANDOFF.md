@@ -251,6 +251,19 @@ Open points
 - Runtime table at 100/75/50/25% inverter load (Results + PDF).
 - Tests: tests/v350.test.mjs; shots: tests/screens_v350.py → /workspace/sparky-shots/v0.35.0.
 
+## v0.43.0 — Diagram rows, isolators, horizontal runs, room tick-list (live 30 Oct 2026)
+- Room boxes: each switch group is one row (switches left, its lights to the right, wrapping).
+- JB-to-switch rooms each get their own cable lane and C label from the circuit JB.
+- New socket (dome, earth, lead; twin = two strokes) and FCU (box, fuse, flex tail) symbols;
+  pointKind treats fcu/fused/spur/towel/heater as FCU.
+- Local isolator per circuit (circuit.diagram.isolator {type, rating}: 20A/45A DP, switched/
+  unswitched FCU, rotary), drawn as a disconnector; added to the key.
+- Non-room circuits run left to right: feed, contactor, isolator, loads; wider gaps,
+  conductors drawn dark and joined to the symbol edges (screen and PDF).
+- Switches and rooms editor: one tick-list of rooms (job rooms, common rooms, Other…), rooms on
+  other circuits greyed "on circuit N"; each ticked room is a compact ~150px row (Lights and
+  switch steppers, switch-type and wiring segmented bars). Same roomList data format.
+
 ## v0.42.0 — Diagram switches: each switch its own lights, level 2-way rows, IEC contactor (live 30 Oct 2026)
 - Rooms: each 1-way switch (or 2-way pair) controls its own lights, split evenly (3 on 2 = 2 + 1);
   optional room `split` [n, ...] overrides. JB-to-switch feed loops switch to switch. Loop-in and JB
