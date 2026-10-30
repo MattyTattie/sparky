@@ -72,8 +72,6 @@ route(/^\/cert\/([^/]+)$/, async (id) => {
       limitOn() ? limitBar(done, counted.length) : h('div', { class: 'prog', style: 'margin-top:10px' }, h('i', { style: `width:${Math.round((done / counted.length) * 100)}%` })),
       h('div', { class: 'note', style: 'margin-top:4px' }, `${done} of ${counted.length} sections filled in`),
       cert.status !== 'issued' && nextSec ? h('a', { class: 'btn primary', id: 'continuebtn', style: 'display:block;margin-top:10px;text-align:center', href: secHref(nextSec) }, 'Continue: ' + nextSec.title + ' \u203a') : null),
-    // v0.38: wiring diagram link up top on the job's main page (approved)
-    h('a', { class: 'card row', href: `#/cert/${id}/diagram`, id: 'diagramrow', style: 'display:flex;align-items:center;gap:10px;text-decoration:none;color:inherit' }, h('span', { class: 'dot ' + (diagramInPdf(cert) ? 'ok' : '') }), h('div', { class: 'main' }, h('div', { class: 't' }, h('b', {}, 'Wiring diagram')), h('div', { class: 's' }, diagramHasCircuits(cert) ? 'Drawn from your circuits' + (cert.diagramPdf === false ? ' \u00b7 not in the PDF' : ' \u00b7 in the PDF') : 'Draws itself once you add circuits')), h('span', { class: 'go' }, '\u203a')),
     nFlags ? h('div', { class: 'notice red' }, `${nFlags} circuit(s) have a reading outside the limits. Check the schedule before issuing.`) : null,
     warns.map((w) => h('div', { class: 'notice ' + w.level }, w.text)),
     h('div', { class: 'list' }, secs.map((s) => h('a', { class: 'row', href: s.special === 'boards' ? `#/cert/${id}/boards` : `#/cert/${id}/s/${s.id}` },

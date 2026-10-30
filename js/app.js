@@ -13,6 +13,7 @@ import { looksLikeCalDate, CAL_DATE_WARN } from './instruments.js';
 import { labelInputs } from './a11y.js';
 import { APP_NAME, APP_VERSION, APP_SLUG, DRIVE_ROOT, DRIVE_ROOT_OLD } from './config.js';
 import { TYPES, copyCertForJob } from './certmodel.js';
+import { diagramHasCircuits } from './wiring.js';
 import { JOB_COLS, jobRows, sortRows } from './jobtable.js';
 import { calibrationState } from './checks.js';
 import { CHECK_NOTE } from './limits.js';
@@ -342,6 +343,13 @@ route(/^\/job\/([^/]+)(?:\/(photos|details|next|pdfs|backup|dc|parts))?$/, async
     ...[...new Set(certs.map((c) => c.type))].map((t) => { const d = drafts.some((c) => c.type === t); return h('span', { class: 'pill ' + (d ? 'info' : 'green') }, `${t === 'MW' ? 'Minor Works' : t} ${d ? 'draft' : 'issued'}`); }),
     nx ? h('span', { class: 'pill amber' }, 'Re-test ' + new Date(nx.date).toLocaleDateString('en-GB', { month: 'short', year: 'numeric' })) : null,
     backedState ? h('span', { class: 'pill ' + backedState[1] }, backedState[0]) : null];
+  // v0.43.1: the wiring diagram lives on the job page (one cert opens it; several ask which)
+  const diagramRow = (cs) => { const ds = cs.filter((c) => c.type !== 'MW' || (c.boards || []).length);
+    if (!ds.length) return null;
+    const right = ds.length === 1 ? (diagramHasCircuits(ds[0]) ? (ds[0].number || 'Drawn') : 'Not drawn') : `${ds.length} certificates`;
+    if (ds.length === 1) { const r = frow(`#/cert/${ds[0].id}/diagram`, 'Wiring diagram', right, 'layers'); r.id = 'jobdiagram'; return r; }
+    const pick = async () => { const id = await modal('Which wiring diagram?', h('p', { class: 'note' }, 'Pick the certificate to draw.'), [...ds.map((c) => ({ label: `${c.number || c.type} \u00b7 ${(TYPES[c.type] || {}).short || c.type}${diagramHasCircuits(c) ? '' : ' (not drawn)'}`, value: c.id })), { label: 'Cancel', value: null }]); if (id) go(`#/cert/${id}/diagram`); };
+    return h('button', { class: 'row frow', id: 'jobdiagram', type: 'button', onclick: pick }, h('span', { class: 'fic' }, icon('layers', { size: 18 })), h('div', { class: 'main' }, h('div', { class: 't' }, 'Wiring diagram')), h('span', { class: 'rv' }, right), h('span', { class: 'go' }, '\u203a')); };
   const frow = (href, label, right = '', ic = null) => h('a', { class: 'row frow', href }, ic ? h('span', { class: 'fic' }, icon(ic, { size: 18 })) : null, h('div', { class: 'main' }, h('div', { class: 't' }, label)), right !== '' ? h('span', { class: 'rv' }, right) : null, h('span', { class: 'go' }, '›'));
   page(job.title || 'Job', [
     h('div', { class: 'card jsum' },
@@ -361,6 +369,7 @@ route(/^\/job\/([^/]+)(?:\/(photos|details|next|pdfs|backup|dc|parts))?$/, async
       frow(back + '/details', 'Job details & notes', cust ? cust.name : '', 'clipboard'),
       frow(back + '/next', 'Next inspection', nx ? new Date(nx.date).toLocaleDateString('en-GB', { month: 'short', year: 'numeric' }) : 'Not set', 'calendar'),
       frow(back + '/pdfs', 'Saved PDFs', String(pdfs.length), 'fileText'),
+      diagramRow(certs),
       certs.some((c) => (c.boards || []).some((b) => (b.circuits || []).length)) ? frow(back + '/parts', 'Parts used', '', 'clipboard') : null,
       job.dcPlans && job.dcPlans.length ? frow(back + '/dc', 'DC system plans', String(job.dcPlans.length), 'zap') : null,
       frow(back + '/backup', 'Backup', job.backedUpAt ? (backedState[0] === 'Backed up' ? 'In Drive' : 'Changed') : 'This device', 'cloudUp')),
