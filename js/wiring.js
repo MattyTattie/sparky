@@ -243,6 +243,12 @@ export function groupCircuits(circuits, board = null) {
     }
     grp = null; items.push({ kind: 'circuit', c });
   }
+  // v0.43.4: circuits in way order inside each RCD; RCD groups and lone circuits ordered by their lowest way
+  const wn = (c) => { const m = /\d+/.exec(String(val(c.num) ?? '')); return m ? +m[0] : Infinity; };
+  const cmp = (a, b) => wn(a) - wn(b) || String(val(a.num)).localeCompare(String(val(b.num)), undefined, { numeric: true });
+  for (const it of items) if (it.kind === 'rcd') it.circuits.sort(cmp);
+  const first = (it) => (it.kind === 'rcd' ? it.circuits[0] : it.c);
+  items.forEach((it, i) => { it._i = i; }); items.sort((a, b) => cmp(first(a), first(b)) || a._i - b._i); items.forEach((it) => delete it._i);
   if (spares.length) items.push({ kind: 'spares', text: 'Spare: ' + spareRanges(spares), count: spares.length });
   return items;
 }

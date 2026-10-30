@@ -29,3 +29,7 @@ test('single sockets are drawn as a spur branch, labelled', () => {
   const s = shapes(c('1', { points: '6', diagram: { singles: '2' } }));
   assert.ok(s.some((z) => z.t === 'text' && z.txt === 'Spurs'));
 });
+test('RCD groups and lone circuits read in way-number order', () => {
+  const g = W.groupCircuits([c('5', { device: 'rcbo', bs: '61009', ...A }), c('10', A), c('2', A), c('3', B), c('1', {})]);
+  assert.deepEqual(g.map((x) => x.kind === 'rcd' ? x.circuits.map((y) => y.num).join(',') : x.c.num), ['1', '2,10', '3', '5']);
+});
