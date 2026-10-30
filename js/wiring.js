@@ -34,7 +34,7 @@ const KIND_PLURAL = { socket: 'sockets', light: 'lights', cooker: 'cookers', sho
 const KIND_ONE = { socket: 'socket', light: 'light', cooker: 'cooker', shower: 'shower', alarm: 'alarm', immersion: 'immersion', ev: 'EV charger', fan: 'fan', fcu: 'FCU', appliance: 'fixed appliance', point: 'point' };
 // Optional per-circuit diagram extras: circuit.diagram = { rooms, sw1, sw2, swi }.
 // Old certs have none; a lighting circuit then gets one 1-way switch.
-const KEY_EXTRA = { rose: 'Ceiling rose (loop-in)', jb: 'Junction box (JB)', strap: '2-way strappers (two wires)' };
+const KEY_EXTRA = { socket: 'Twin socket', socket1: 'Socket (single)', rose: 'Ceiling rose (loop-in)', jb: 'Junction box (JB)', strap: '2-way strappers (two wires)' };
 export const SWITCH_NAME = { sw1: '1-way switch', sw2: '2-way switch', swi: 'Intermediate switch' };
 const num0 = (v) => { const n = parseInt(String(v ?? ''), 10); return Number.isFinite(n) && n > 0 ? Math.min(n, MAX_SYMBOLS) : 0; };
 export function switchInfo(c) {
@@ -51,6 +51,14 @@ export function switchInfo(c) {
   const list = [...Array(sw1).fill('sw1'), ...Array(sw2 * 2).fill('sw2'), ...Array(swi).fill('swi')];
   const words = [sw1 && `${sw1} \u00d7 1-way`, sw2 && `${sw2} \u00d7 2-way pair`, swi && `${swi} \u00d7 intermediate`].filter(Boolean);
   return { list, text: words.length ? words.join(', ') : 'None', set };
+}
+// Sockets draw as twins by default; circuit.diagram.singles (optional, 0 by
+// default) says how many of the points served are single sockets.
+export function socketSingles(c) {
+  if (pointKind(c) !== 'socket') return 0;
+  const n = parseInt(String((c && c.diagram && c.diagram.singles) ?? ''), 10);
+  if (!Number.isFinite(n) || n <= 0) return 0;
+  const pc = pointCount(c); return pc.known ? Math.min(n, pc.n) : n;
 }
 export const roomsOf = (c) => (roomListOf(c) ? '' : val(c && c.diagram && c.diagram.rooms));
 // v0.39 (test): rooms on a lighting circuit, each drawn in its own box.
@@ -295,13 +303,13 @@ export function layout(model, { W = 380, font = 12, screen = false } = {}) {
   });
   // key: only the symbols this diagram uses
   if (used.size) {
-    const sh = []; const y = 10; const order = ['socket', 'light', 'rose', 'jb', 'sw1', 'sw2', 'swi', 'strap', 'cooker', 'shower', 'alarm', 'immersion', 'ev', 'fan', 'fcu', 'appliance', 'point', 'contactor', 'spd'];
+    const sh = []; const y = 10; const order = ['socket', 'socket1', 'light', 'rose', 'jb', 'sw1', 'sw2', 'swi', 'strap', 'cooker', 'shower', 'alarm', 'immersion', 'ev', 'fan', 'fcu', 'appliance', 'point', 'contactor', 'spd'];
     let hh = textLines(sh, 8, y, 'Key', W - 16, { bold: true });
     const S = F * 1.5; const colW = (W - 16) / 2; let col = 0, rowY = y + hh + 4, rowH = 0;
     for (const k of order.filter((k) => used.has(k))) {
       const x = 8 + col * colW; const name = SWITCH_NAME[k] || KEY_EXTRA[k] || (k === 'contactor' ? 'Contactor (KM) / time clock (TC)' : k === 'spd' ? 'Surge protection (SPD)' : KIND_NAME[k]);
-      if (k === 'contactor') { R(sh, x, rowY + S * 0.1, S * 1.3, S * 0.8, { fill: [255, 255, 255] }); T(sh, x + S * 0.65, rowY + S * 0.68, 'KM', { anchor: 'middle', bold: true, size: small * 0.8 }); }
-      else if (k === 'spd') { const cx = x + S / 2; L(sh, cx, rowY, cx, rowY + S * 0.55); L(sh, cx - F * 0.3, rowY + S * 0.3, cx, rowY + S * 0.55); L(sh, cx + F * 0.3, rowY + S * 0.3, cx, rowY + S * 0.55); earthSym(sh, cx, rowY + S * 0.55, F * 0.5); }
+      if (k === 'contactor') { const kw = S * 1.5, kh = S, kx = x - S * 0.15, ky = rowY; R(sh, kx, ky, kw, kh, { fill: [255, 255, 255] }); const ccx = kx + kw * 0.3, cT = ky + kh * 0.22, cB = ky + kh * 0.78; L(sh, ccx, ky, ccx, cT); L(sh, ccx, cB, ccx, ky + kh); L(sh, ccx, cB, ccx - S * 0.3, cT + S * 0.05); T(sh, kx + kw * 0.7, ky + kh / 2 + small * 0.3, 'KM', { anchor: 'middle', bold: true, size: small * 0.8 }); }
+      else if (k === 'spd') { spdSym(sh, x + S / 2, rowY - 2, F * 0.75); }
       else if (k === 'rose') { L(sh, x + S / 2 - S * 0.6, rowY + S / 2, x + S / 2 + S * 0.6, rowY + S / 2, { w: 0.9, color: COL.grey }); C(sh, x + S / 2, rowY + S / 2, S * 0.17, { fill: COL.line, lw: 0.8 }); }
       else if (k === 'jb') { R(sh, x - S * 0.2, rowY + S * 0.05, S * 1.4, S * 0.9, { fill: [255, 255, 255] }); T(sh, x + S * 0.5, rowY + S * 0.5 + small * 0.3, 'JB', { anchor: 'middle', bold: true, size: small * 0.85 }); }
       else if (k === 'strap') { L(sh, x - S * 0.1, rowY + S * 0.38, x + S * 1.1, rowY + S * 0.38, { w: 1, color: COL.brand }); L(sh, x - S * 0.1, rowY + S * 0.66, x + S * 1.1, rowY + S * 0.66, { w: 1, color: COL.brand }); }
@@ -358,6 +366,7 @@ export function layout(model, { W = 380, font = 12, screen = false } = {}) {
     }
     // points
     const pc = pointCount(c); const kind = pointKind(c);
+    const sgl = Math.min(socketSingles(c), pc.shown); const kindAt = (i) => (kind === 'socket' && i >= pc.shown - sgl ? 'socket1' : kind);
     let ph = 0;
     if (!info.spare && !info.spd && info.rooms) {
       ph = roomsSection(sh, info, tx, y + hh + 6, tw, feedTop, c);
@@ -368,9 +377,9 @@ export function layout(model, { W = 380, font = 12, screen = false } = {}) {
         const n = Math.min(per, pc.shown - r * per); const cy = py + r * (S + 10) + S / 2;
         L(sh, tx - gap / 2, cy, tx + (n - 1) * step + S / 2, cy, { w: 0.9, color: COL.grey });
         if (r === 0) L(sh, tx - gap / 2, feedTop, tx - gap / 2, cy, { w: 0.9, color: COL.grey }); else L(sh, tx - gap / 2, cy - (S + 10), tx - gap / 2, cy, { w: 0.9, color: COL.grey });
-        for (let i = 0; i < n; i++) symbol(sh, kind, tx + i * step + S / 2, cy, S);
+        for (let i = 0; i < n; i++) { const k1 = kindAt(r * per + i); symbol(sh, k1, tx + i * step + S / 2, cy, S); used.add(k1); }
       }
-      used.add(kind);
+      if (kind !== 'socket') used.add(kind);
       ph = 6 + rows * (S + 10) - 10;
       if (pc.more) { ph += textLines(sh, tx, py + ph, `+ ${pc.more} more (${pc.n} in total)`, tw, { size: small, color: COL.grey }) + 2; }
       // light switches: their own row under the lights, on the same feed
@@ -388,10 +397,9 @@ export function layout(model, { W = 380, font = 12, screen = false } = {}) {
     } else if (info.spd) { used.add('spd'); // SPD as the load: arrow to earth, its type label beside it
       const S = F * 1.5, py = y + hh + 6, cx = tx + S / 2, t = py, a = F * 0.9;
       L(sh, tx - gap / 2, y + F * 0.6, tx - gap / 2, t + F * 0.3, { w: 0.9, color: COL.grey }); L(sh, tx - gap / 2, t + F * 0.3, cx, t + F * 0.3, { w: 0.9, color: COL.grey });
-      L(sh, cx, t, cx, t + a); L(sh, cx - F * 0.3, t + a - F * 0.35, cx, t + a); L(sh, cx + F * 0.3, t + a - F * 0.35, cx, t + a);
-      earthSym(sh, cx, t + a, F * 0.7);
+      void a; const sh0 = spdSym(sh, cx, t, F);
       T(sh, cx + S, t + F * 1.1, info.spd, { bold: true, size: small });
-      ph = a + F * 1.3 + 6;
+      ph = sh0 + 6;
     }
     if (screen && !info.spare && !info.spd && info.noPoints && !info.rooms) ph += textLines(sh, tx, y + hh + 2, 'Add points served to draw sockets/lights', tw, { size: small, color: COL.na }) + 4;
     // minor works: new spur(s) branching off the ring, in bold brand colour
@@ -529,25 +537,49 @@ export function layout(model, { W = 380, font = 12, screen = false } = {}) {
     });
     return y0 - top + 2;
   }
+  // Point symbols, after BS EN 60617 / usual UK drawing style.
+  // Only lines, rects, circles and text, so SVG and jsPDF match exactly.
+  function arc(sh, cx, cy, r, a0, a1, o = {}) { const n = 12; for (let i = 0; i < n; i++) { const p = a0 + (a1 - a0) * i / n, q = a0 + (a1 - a0) * (i + 1) / n; L(sh, cx + Math.cos(p) * r, cy + Math.sin(p) * r, cx + Math.cos(q) * r, cy + Math.sin(q) * r, { w: o.w || 1.1, color: o.color }); } }
+  function box(sh, cx, cy, r) { R(sh, cx - r, cy - r, r * 2, r * 2, { lw: 1, fill: [255, 255, 255] }); }
+  function swLever(sh, ax, ay, dx, dy, r) { // lever from the switch circle with a short end tick
+    const ex = ax + dx * r, ey = ay + dy * r; L(sh, ax + dx * r * 0.24, ay + dy * r * 0.24, ex, ey, { w: 1.2 }); L(sh, ex, ey, ex + dy * r * 0.3, ey - dx * r * 0.3, { w: 1.2 }); }
   function symbol(sh, kind, cx, cy, S) {
-    const r = S / 2;
-    if (kind === 'light') { C(sh, cx, cy, r * 0.8, { fill: [255, 255, 255] }); const d = r * 0.8 * 0.707; L(sh, cx - d, cy - d, cx + d, cy + d, { w: 1 }); L(sh, cx - d, cy + d, cx + d, cy - d, { w: 1 }); }
-    else if (kind === 'socket') { R(sh, cx - r, cy - r * 0.75, S, r * 1.5, { lw: 1, fill: [255, 255, 255] }); L(sh, cx - r * 0.45, cy - r * 0.35, cx - r * 0.45, cy + r * 0.05, { w: 1.3 }); L(sh, cx + r * 0.45, cy - r * 0.35, cx + r * 0.45, cy + r * 0.05, { w: 1.3 }); L(sh, cx, cy + r * 0.15, cx, cy + r * 0.5, { w: 1.3 }); }
-    else if (kind === 'cooker') { R(sh, cx - r, cy - r, S, S, { lw: 1, fill: [255, 255, 255] }); for (const [a, b] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) C(sh, cx + a * r * 0.45, cy + b * r * 0.45, r * 0.25, { lw: 0.8 }); }
-    else if (kind === 'shower') { R(sh, cx - r, cy - r, S, S, { lw: 1, fill: [255, 255, 255] }); L(sh, cx - r * 0.6, cy - r * 0.45, cx + r * 0.6, cy - r * 0.45, { w: 1.3 }); for (const a of [-0.45, 0, 0.45]) L(sh, cx + a * r, cy - r * 0.15, cx + a * r, cy + r * 0.6, { w: 0.8 }); }
-    else if (kind === 'alarm') { C(sh, cx, cy, r * 0.85, { fill: [255, 255, 255] }); C(sh, cx, cy, r * 0.45, { lw: 0.8 }); T(sh, cx, cy + r * 0.28, 'S', { anchor: 'middle', bold: true, size: r * 0.75 }); }
-    else if (kind === 'immersion') { R(sh, cx - r, cy - r, S, S, { lw: 1, fill: [255, 255, 255] }); const z = [[-0.6, 0.55], [-0.35, -0.45], [-0.1, 0.55], [0.15, -0.45], [0.4, 0.55], [0.6, -0.1]]; for (let i = 1; i < z.length; i++) L(sh, cx + z[i - 1][0] * r, cy + z[i - 1][1] * r, cx + z[i][0] * r, cy + z[i][1] * r, { w: 1 }); }
-    else if (kind === 'ev') { R(sh, cx - r, cy - r, S, S, { lw: 1, fill: [255, 255, 255] }); T(sh, cx, cy + r * 0.32, 'EV', { anchor: 'middle', bold: true, size: r * 0.9 }); }
-    else if (kind === 'fan') { C(sh, cx, cy, r * 0.85, { fill: [255, 255, 255] }); for (const a of [0, 2.094, 4.189]) L(sh, cx, cy, cx + Math.cos(a) * r * 0.65, cy + Math.sin(a) * r * 0.65, { w: 1.4 }); C(sh, cx, cy, r * 0.15, { fill: COL.line }); }
-    else if (kind === 'fcu') { R(sh, cx - r, cy - r * 0.75, S, r * 1.5, { lw: 1, fill: [255, 255, 255] }); R(sh, cx - r * 0.5, cy - r * 0.2, r, r * 0.4, { lw: 0.8, fill: [255, 255, 255] }); L(sh, cx - r * 0.5, cy, cx + r * 0.5, cy, { w: 0.8 }); }
-    else if (kind === 'sw1' || kind === 'sw2' || kind === 'swi') { // switch: small dot with lever(s)
-      C(sh, cx - r * 0.35, cy + r * 0.3, r * 0.22, { fill: COL.line, lw: 0.8 }); const ax = cx - r * 0.35, ay = cy + r * 0.3;
-      L(sh, ax, ay, ax + r * 0.75, ay - r * 0.75, { w: 1.2 }); L(sh, ax + r * 0.75, ay - r * 0.75, ax + r * 0.95, ay - r * 0.55, { w: 1.2 });
-      if (kind !== 'sw1') { L(sh, ax, ay, ax - r * 0.55, ay - r * 0.75, { w: 1.2 }); L(sh, ax - r * 0.55, ay - r * 0.75, ax - r * 0.75, ay - r * 0.55, { w: 1.2 }); }
-      if (kind === 'swi') L(sh, ax - r * 0.5, ay - r * 0.1, ax + r * 0.9, ay - r * 0.1, { w: 1.2 });
+    const r = S / 2; const W0 = [255, 255, 255];
+    if (kind === 'light') { // outlet for lighting: circle with a cross
+      C(sh, cx, cy, r * 0.8, { fill: W0 }); const d = r * 0.8 * 0.707; L(sh, cx - d, cy - d, cx + d, cy + d, { w: 1 }); L(sh, cx - d, cy + d, cx + d, cy - d, { w: 1 }); }
+    else if (kind === 'socket' || kind === 'socket1') { // socket outlet: semicircle on a bar; twin (the default) gets a second bar
+      const by = cy + r * 0.3; C(sh, cx, by, r * 0.85, { fill: W0, lw: 0 }); sh[sh.length - 1].color = W0;
+      arc(sh, cx, by, r * 0.85, Math.PI, 2 * Math.PI, { w: 1.2 });
+      L(sh, cx - r * 0.95, by, cx + r * 0.95, by, { w: 1.4 });
+      if (kind === 'socket') L(sh, cx - r * 0.95, by + r * 0.22, cx + r * 0.95, by + r * 0.22, { w: 1.4 });
     }
-    else if (kind === 'appliance') { R(sh, cx - r, cy - r, S, S, { lw: 1, fill: [255, 255, 255] }); L(sh, cx - r, cy + r, cx + r, cy - r, { w: 1 }); }
-    else { C(sh, cx, cy, r * 0.7, { fill: [255, 255, 255] }); C(sh, cx, cy, r * 0.18, { fill: COL.line }); }
+    else if (kind === 'cooker') { // cooker: box with four hob rings
+      box(sh, cx, cy, r); for (const [a, b] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) C(sh, cx + a * r * 0.45, cy + b * r * 0.45, r * 0.25, { lw: 0.8 }); }
+    else if (kind === 'shower') { box(sh, cx, cy, r); L(sh, cx - r * 0.6, cy - r * 0.45, cx + r * 0.6, cy - r * 0.45, { w: 1.3 }); for (const a of [-0.45, 0, 0.45]) L(sh, cx + a * r, cy - r * 0.15, cx + a * r, cy + r * 0.6, { w: 0.8 }); }
+    else if (kind === 'alarm') { // fire/smoke detector: box with the detector triangle
+      box(sh, cx, cy, r); L(sh, cx - r * 0.6, cy - r * 0.45, cx + r * 0.6, cy - r * 0.45, { w: 1.1 }); L(sh, cx - r * 0.6, cy - r * 0.45, cx, cy + r * 0.6, { w: 1.1 }); L(sh, cx + r * 0.6, cy - r * 0.45, cx, cy + r * 0.6, { w: 1.1 }); }
+    else if (kind === 'immersion') { // heating element: box with three diagonal element lines
+      box(sh, cx, cy, r); for (const a of [-0.5, 0, 0.5]) L(sh, cx + (a - 0.3) * r, cy + r * 0.6, cx + (a + 0.3) * r, cy - r * 0.6, { w: 1 }); }
+    else if (kind === 'ev') { box(sh, cx, cy, r); T(sh, cx, cy + r * 0.32, 'EV', { anchor: 'middle', bold: true, size: r * 0.9 }); }
+    else if (kind === 'fan') { C(sh, cx, cy, r * 0.85, { fill: W0 }); for (const a of [0, 2.094, 4.189]) L(sh, cx, cy, cx + Math.cos(a) * r * 0.65, cy + Math.sin(a) * r * 0.65, { w: 1.4 }); C(sh, cx, cy, r * 0.15, { fill: COL.line }); }
+    else if (kind === 'fcu') { // fused connection unit: box with the fuse symbol (small rectangle, line through)
+      box(sh, cx, cy, r); R(sh, cx - r * 0.55, cy - r * 0.22, r * 1.1, r * 0.44, { lw: 0.9, fill: W0 }); L(sh, cx - r * 0.85, cy, cx + r * 0.85, cy, { w: 0.9 }); }
+    else if (kind === 'sw1' || kind === 'sw2' || kind === 'swi') { // switch: small open circle with lever(s)
+      const ax = cx - r * 0.1, ay = cy + r * 0.25; const s2 = 0.707;
+      swLever(sh, ax, ay, s2, -s2, r * 0.85);
+      if (kind !== 'sw1') swLever(sh, ax, ay, -s2, s2, r * 0.85);
+      if (kind === 'swi') { swLever(sh, ax, ay, -s2, -s2, r * 0.85); swLever(sh, ax, ay, s2, s2, r * 0.85); }
+      C(sh, ax, ay, r * 0.2, { lw: 1.1 }); }
+    else if (kind === 'appliance') { box(sh, cx, cy, r); L(sh, cx - r, cy + r, cx + r, cy - r, { w: 1 }); }
+    else { C(sh, cx, cy, r * 0.7, { fill: W0 }); C(sh, cx, cy, r * 0.18, { fill: COL.line }); }
+  }
+  // Surge protective device: line down into a box with an arrow, then earth.
+  function spdSym(sh, cx, top, F0) {
+    const bw = F0 * 0.8, bh = F0 * 1.0, by = top + F0 * 0.3;
+    L(sh, cx, top, cx, by); R(sh, cx - bw / 2, by, bw, bh, { lw: 1.1, fill: [255, 255, 255] });
+    L(sh, cx, by + bh * 0.15, cx, by + bh * 0.85, { w: 1 }); L(sh, cx - bw * 0.25, by + bh * 0.55, cx, by + bh * 0.85, { w: 1 }); L(sh, cx + bw * 0.25, by + bh * 0.55, cx, by + bh * 0.85, { w: 1 });
+    L(sh, cx, by + bh, cx, by + bh + F0 * 0.2); earthSym(sh, cx, by + bh + F0 * 0.2, F0 * 0.6);
+    return F0 * 0.3 + bh + F0 * 0.2 + F0 * 0.6 * 1.1;
   }
 }
 

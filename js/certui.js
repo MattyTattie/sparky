@@ -14,7 +14,7 @@ import { TYPES, newCert, sectionsFor, sectionDone, missingFields, visible, get, 
 import { INTAKE_NOTE_10, INTAKE_NOTES, INTAKE_NOTIFIED, migrateIntake, EIC_ITEMS, EIC_OUTCOMES, EICR_ITEMS, EICR_OUTCOMES, CODE_TEXT, OBSERVATIONS, OBS_CATS, EIC_HELP, EICR_HELP } from './inspections.js';
 import { checkCircuit, isSpare } from './checks.js';
 import { CHECK_NOTE } from './limits.js';
-import { diagramSvg, diagramInPdf, diagramHasCircuits, SPUR_FEEDS, CONTROL_VIA, switchInfo, roomListOf, roomPointsNote } from './wiring.js';
+import { diagramSvg, diagramInPdf, diagramHasCircuits, SPUR_FEEDS, CONTROL_VIA, switchInfo, roomListOf, roomPointsNote, pointKind, socketSingles } from './wiring.js';
 import { limitOn, limitBar } from './limitbar.js';
 import { dangerCodes, noticeForObs, noticesOf, noticeMissing, noticeNo } from './dangermodel.js';
 
@@ -206,7 +206,7 @@ function extrasCard(cert, redraw) {
   const all = cert.type === 'MW' ? (cert.mw.circuit ? [cert.mw.circuit] : []) : (cert.boards || []).flatMap((b) => b.circuits || []);
   const live = all.filter((c) => c && !isSpareC(c));
   const name = (c) => `${c.num || '?'}  ${c.desc || 'No description'}`;
-  const nset = live.filter((c) => c.diagram && (c.diagram.rooms || (c.diagram.roomList || []).length || ['sw1', 'sw2', 'swi'].some((k) => c.diagram[k] !== undefined && c.diagram[k] !== ''))).length;
+  const nset = live.filter((c) => c.diagram && (c.diagram.rooms || (c.diagram.roomList || []).length || ['sw1', 'sw2', 'swi', 'singles'].some((k) => c.diagram[k] !== undefined && c.diagram[k] !== ''))).length;
   const body = h('div', { id: 'extrasrows' });
   const save = (c, k, v) => { const d = { ...(c.diagram || {}) }; if (v === '' || v == null) delete d[k]; else d[k] = v; if (Object.keys(d).length) c.diagram = d; else delete c.diagram; changed(); redraw(); };
   fill(body, [h('p', { class: 'note', style: 'margin:4px 0 8px' }, 'Optional. Rooms print beside the circuit name. Lighting circuits get one 1-way switch unless you set the switches here, or add each room below.'),
@@ -218,14 +218,25 @@ function extrasCard(cert, redraw) {
       return h('div', { style: 'border-top:1px solid var(--line);padding-top:6px' }, h('b', { style: 'display:block;margin:2px 0 4px;word-break:break-word' }, name(c)),
         roomListOf(c) ? null : h('label', { class: 'f' }, h('span', {}, 'Rooms'), h('input', { placeholder: 'e.g. Kitchen, Hall', 'aria-label': 'Rooms, circuit ' + (c.num || ''), value: d.rooms || '', onchange: (e) => save(c, 'rooms', e.target.value.trim()) })),
         isLight && !roomListOf(c) ? h('div', { style: 'display:flex;gap:8px' }, numIn('sw1', '1-way'), numIn('sw2', '2-way pairs'), numIn('swi', 'Intermediate')) : null,
-        isLight ? roomsEditor(c, redraw) : null);
+        isLight ? roomsEditor(c, redraw) : null,
+        pointKind(c) === 'socket' ? singlesRow(c, save) : null);
     })]);
-  return h('div', { class: 'card', id: 'extrascard' }, h('details', { class: 'fold' }, h('summary', {}, h('span', { class: 'foldt' }, 'Switches and rooms', h('span', { class: 'folds' }, 'Light switches, room names')), nset ? h('span', { class: 'fbadge' }, `${nset} set`) : null, h('span', { class: 'foldic' }, '\u203a')), h('div', { class: 'foldin' }, body)));
+  return h('div', { class: 'card', id: 'extrascard' }, h('details', { class: 'fold' }, h('summary', {}, h('span', { class: 'foldt' }, 'Switches and rooms', h('span', { class: 'folds' }, 'Light switches, room names, single sockets')), nset ? h('span', { class: 'fbadge' }, `${nset} set`) : null, h('span', { class: 'foldic' }, '\u203a')), h('div', { class: 'foldin' }, body)));
 }
 
 // v0.39 (test): "Rooms on this circuit" for a lighting circuit. Saves an
 // optional circuit.diagram.roomList; with rooms set, the diagram draws each
 // room in its own box and the plain rooms text / switch counts step aside.
+// Sockets: twins by default; a −/+ count of how many are singles.
+function singlesRow(c, save) {
+  const max = Math.max(0, parseInt(c.points, 10) || 10);
+  const out = h('span', { class: 'stepval', id: 'singles-' + (c.num || ''), style: 'min-width:1.6em;text-align:center;font-weight:700' }, String(socketSingles(c)));
+  const st = (dv) => () => { const n = Math.max(0, Math.min(max, (parseInt(out.textContent, 10) || 0) + dv)); out.textContent = String(n); save(c, 'singles', n ? String(n) : ''); };
+  return h('div', { class: 'singlesrow', style: 'margin-top:6px' },
+    h('div', { style: 'display:flex;align-items:center;justify-content:space-between;gap:8px' }, h('span', {}, 'Single sockets'),
+      h('div', { class: 'rstep', style: 'display:flex;align-items:center;gap:6px' }, h('button', { class: 'stepbtn', type: 'button', 'aria-label': 'Single sockets, one fewer', onclick: st(-1) }, '\u2212'), out, h('button', { class: 'stepbtn', type: 'button', 'aria-label': 'Single sockets, one more', onclick: st(1) }, '+'))),
+    h('p', { class: 'note', style: 'margin:2px 0 0' }, 'Sockets draw as twins. Set how many are singles.'));
+}
 const SW_KIND = { sw1: '1-way', sw2: '2-way', sw2i: '2-way + intermediate', none: 'No switch' };
 const swKind = (r) => (+r.sw2pairs > 0 ? (+r.swi > 0 ? 'sw2i' : 'sw2') : +r.sw1 > 0 ? 'sw1' : 'none');
 function roomsEditor(c, redraw) {
