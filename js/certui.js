@@ -174,7 +174,28 @@ route(/^\/cert\/([^/]+)\/diagram$/, async (id) => {
     if (v === 'edit') go(href({ bi, ci, mw }));
     else if (v && v.startsWith('go:')) { const n = v.slice(3); const tj = (b ? b.circuits : []).findIndex((x) => String(x.num) === n); const g = box.querySelector(`.dgc[data-bi="${bi}"][data-ci="${tj}"]`); if (g) { g.scrollIntoView({ block: 'center' }); openReadings(bi, tj, false); } }
   };
-  box.addEventListener('click', (e) => { const g = e.target.closest('.dgc'); if (!g) return; openReadings(+g.dataset.bi, +g.dataset.ci, !!g.dataset.mw); });
+  // v0.43.1: warnings jump to the card that fixes them, on that circuit
+  const circ = (bi, ci, mw) => (mw ? cert.mw.circuit : ((cert.boards || [])[bi] || { circuits: [] }).circuits[ci]);
+  const openFold = (sel) => { const d = document.querySelector(sel + ' details'); if (d) d.open = true; return d; };
+  const openCoil = (c) => { openFold('#controlcard'); const s = [...document.querySelectorAll('#controlrows select')].find((x) => x.getAttribute('aria-label') === 'Coil fed from, circuit ' + (c.num || '')) || [...document.querySelectorAll('#controlrows select')].find((x) => x.getAttribute('aria-label') === 'Controlled by, circuit ' + (c.num || ''));
+    if (s) { s.scrollIntoView({ block: 'center' }); s.focus(); s.style.outline = '3px solid var(--brand,#2952ff)'; setTimeout(() => { s.style.outline = ''; }, 2500); } };
+  const openRooms = (c) => { openFold('#extrascard'); const pk = document.querySelector('#extrascircuit');
+    if (pk) { const o = [...pk.options].find((x) => x.textContent.trim().startsWith(String(c.num || '') + ' ')); if (o && pk.value !== o.value) { pk.value = o.value; pk.dispatchEvent(new Event('change')); } }
+    setTimeout(() => { const r = document.querySelector('#extrascard .roomsed') || pk; if (r) r.scrollIntoView({ block: 'start' }); }, 50); };
+  const WARN = /^(Set the coil circuit|Rooms add up|Coil supply)/;
+  box.addEventListener('click', (e) => { const g = e.target.closest('.dgc'); if (!g) return;
+    const t = e.target.closest('text'); const txt = t ? t.textContent : '';
+    if (WARN.test(txt)) { const c = circ(+g.dataset.bi, +g.dataset.ci, !!g.dataset.mw); if (c) { if (/^Rooms/.test(txt)) openRooms(c); else openCoil(c); return; } }
+    openReadings(+g.dataset.bi, +g.dataset.ci, !!g.dataset.mw); });
+  // v0.43.1: "Needs attention" card: each problem opens its fix; points mismatches get one-tap fixes
+  const issuesBox = h('div', { id: 'diagissues' });
+  const drawIssues = () => { const items = diagramIssues(cert);
+    fill(issuesBox, items.length ? [h('div', { class: 'card', style: 'padding:10px 12px' }, h('b', { style: 'display:block;margin-bottom:4px' }, 'Needs attention'),
+      ...items.map((it) => h('div', { class: 'issue', style: 'border-top:1px solid var(--line);padding:8px 0' },
+        h('button', { type: 'button', class: 'btn ghost issuego', style: 'width:100%;min-height:44px;white-space:normal;text-align:left;justify-content:space-between;display:flex;gap:8px', onclick: () => (it.kind === 'coil' ? openCoil(it.c) : openRooms(it.c)) }, h('span', {}, `Circuit ${it.c.num || '?'}: ${it.text}`), h('span', { 'aria-hidden': 'true' }, '\u203a')),
+        it.fixes.length ? h('div', { style: 'display:flex;flex-wrap:wrap;gap:6px;margin-top:6px' }, it.fixes.map((f) => h('button', { type: 'button', class: 'btn issuefix', style: 'flex:1 1 auto;min-height:44px;white-space:normal', onclick: () => { f.apply(); changed(); refresh(); toast('Done'); } }, f.label))) : null)))] : []); };
+  let extrasEl = null; const refresh = () => { draw(); drawIssues(); if (extrasEl) { const n = extrasCard(cert, () => { draw(); drawIssues(); }); const wasOpen = extrasEl.querySelector('details') && extrasEl.querySelector('details').open; if (wasOpen && n.querySelector('details')) n.querySelector('details').open = true; extrasEl.replaceWith(n); extrasEl = n; } };
+  drawIssues();
   box.addEventListener('keydown', (e) => { if (e.key !== 'Enter') return; const g = e.target.closest('.dgc'); if (g) openReadings(+g.dataset.bi, +g.dataset.ci, !!g.dataset.mw); });
   const tidy = async () => {
     const cb = h('input', { type: 'checkbox', id: 'tidyreset' });
@@ -185,13 +206,30 @@ route(/^\/cert\/([^/]+)\/diagram$/, async (id) => {
   page('Wiring diagram', [
     h('p', { class: 'note' }, cert.type === 'MW' ? 'Drawn from the circuit on this certificate. It fills in as you add the details.' : 'Drawn from the supply, the board and each circuit. It fills in as you add the details. Number of points served sets how many sockets or lights are drawn.'),
     diagramHasCircuits(cert) ? h('div', { class: 'card', style: 'padding:10px 6px' }, box) : emptyState('zap', 'No circuits yet. Add circuits and the diagram draws itself.'),
+    issuesBox,
     cert.type === 'MW' ? spurCard(cert, draw) : null,
     diagramHasCircuits(cert) ? h('div', { style: 'display:flex;gap:8px;align-items:center;margin:-4px 4px 10px' }, h('p', { class: 'note', style: 'margin:0;flex:1' }, 'Tap a circuit or room for its readings.'), h('button', { class: 'btn ghost', type: 'button', id: 'tidybtn', style: 'min-height:44px;white-space:normal', onclick: tidy }, 'Tidy up')) : null,
-    diagramHasCircuits(cert) ? extrasCard(cert, draw) : null,
-    diagramHasCircuits(cert) ? controlCard(cert, draw) : null,
+    diagramHasCircuits(cert) ? (extrasEl = extrasCard(cert, () => { draw(); drawIssues(); })) : null,
+    diagramHasCircuits(cert) ? controlCard(cert, () => { draw(); drawIssues(); }) : null,
     h('div', { class: 'card' }, h('div', { class: 'switchrow', style: 'border-top:0;margin-top:0' }, h('span', {}, 'Include in the PDF (after the schedules)'), sw)),
   ], { back: '#/cert/' + id, sub: cert.number });
 });
+
+// v0.43.1: problems on the diagram, each tied to its circuit, with one-tap fixes for points.
+export function diagramIssues(cert) {
+  const all = cert.type === 'MW' ? (cert.mw && cert.mw.circuit ? [cert.mw.circuit] : []) : (cert.boards || []).flatMap((b) => b.circuits || []);
+  const out = [];
+  for (const c of all) { if (!c || isSpareC(c)) continue;
+    const k = c.control; if (k && k.via && k.via !== 'none' && !String(k.controlCircuit || '').trim()) out.push({ c, kind: 'coil', text: 'Set the coil circuit in Controlled by', fixes: [] });
+    const note = roomPointsNote(c); if (!note) continue;
+    const rl = roomListOf(c) || []; const t = rl.reduce((a, r) => a + (+r.lights || 0), 0); const n = parseInt(String(c.points ?? ''), 10);
+    const fixes = [{ label: `Set points to ${t}`, apply: () => { c.points = String(t); } }];
+    const raw = c.diagram && Array.isArray(c.diagram.roomList) ? c.diagram.roomList : []; const last = raw[raw.length - 1];
+    if (Number.isFinite(n) && n > t && last) { const d = n - t; fixes.push({ label: `Add ${d} light${d === 1 ? '' : 's'} to ${last.name || 'the last room'}`, apply: () => { last.lights = Math.min(10, (+last.lights || 0) + d); } }); }
+    out.push({ c, kind: 'points', text: note, fixes });
+  }
+  return out;
+}
 
 // "Controlled by": a folded card, one pick per circuit. Only circuits
 // switched through a contactor or time clock need touching. Saves an
