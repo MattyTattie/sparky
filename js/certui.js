@@ -13,6 +13,7 @@ import { TYPES, newCert, sectionsFor, sectionDone, missingFields, visible, get, 
 import { INTAKE_NOTE_10, INTAKE_NOTES, INTAKE_NOTIFIED, migrateIntake, EIC_ITEMS, EIC_OUTCOMES, EICR_ITEMS, EICR_OUTCOMES, CODE_TEXT, OBSERVATIONS, OBS_CATS, EIC_HELP, EICR_HELP } from './inspections.js';
 import { checkCircuit, isSpare } from './checks.js';
 import { CHECK_NOTE } from './limits.js';
+import { diagramSvg, diagramInPdf, diagramHasCircuits } from './wiring.js';
 import { limitOn, limitBar } from './limitbar.js';
 import { dangerCodes, noticeForObs, noticesOf, noticeMissing, noticeNo } from './dangermodel.js';
 
@@ -74,6 +75,7 @@ route(/^\/cert\/([^/]+)$/, async (id) => {
     h('div', { class: 'list' }, secs.map((s) => h('a', { class: 'row', href: s.special === 'boards' ? `#/cert/${id}/boards` : `#/cert/${id}/s/${s.id}` },
       h('span', { class: 'dot ' + (sectionDone(cert, s) ? 'ok' : '') }), h('div', { class: 'main' }, h('div', { class: 't' }, s.title), h('div', { class: 's faint' }, 'On the IET form: section ' + s.form)), h('span', { class: 'go' }, '›'))),
       h('a', { class: 'row', href: `#/cert/${id}/s/instruments` }, h('span', { class: 'dot ' + (Object.values(cert.instruments || {}).some(Boolean) ? 'ok' : '') }), h('div', { class: 'main' }, h('div', { class: 't' }, 'Test instruments'), h('div', { class: 's' }, 'From your settings; change for this certificate')), h('span', { class: 'go' }, '›')),
+      h('a', { class: 'row', href: `#/cert/${id}/diagram`, id: 'diagramrow' }, h('span', { class: 'dot ' + (diagramInPdf(cert) ? 'ok' : '') }), h('div', { class: 'main' }, h('div', { class: 't' }, 'Wiring diagram'), h('div', { class: 's' }, 'Drawn from your circuits' + (cert.diagramPdf === false ? ' · not in the PDF' : ''))), h('span', { class: 'go' }, '›')),
       job ? h('a', { class: 'row', href: `#/cert/${id}/photos` }, h('span', { class: 'dot ' + ((cert.photoIds || []).length ? 'ok' : '') }), h('div', { class: 'main' }, h('div', { class: 't' }, 'Photos on the certificate'), h('div', { class: 's' }, `${(cert.photoIds || []).length} chosen`)), h('span', { class: 'go' }, '›')) : null),
     h('div', { class: 'card' }, h('h2', {}, 'PDF'),
       h('p', { class: 'note' }, 'Laid out like the IET forms. Nothing is sent until you pick who it goes to.'),
@@ -147,6 +149,20 @@ route(/^\/cert\/([^/]+)\/photos$/, async (id) => {
     h('p', { class: 'note' }, 'Tap the photos to add to the end of the PDF. Add photos on the job page.'),
     photos.length ? h('div', { class: 'photos' }, photos.map((f) => { const img = h('img', { src: URL.createObjectURL(f.blob), style: cert.photoIds.includes(f.id) ? 'outline:4px solid var(--brand)' : 'opacity:.6', onclick: () => { const i = cert.photoIds.indexOf(f.id); if (i >= 0) cert.photoIds.splice(i, 1); else cert.photoIds.push(f.id); changed(); img.style.cssText = cert.photoIds.includes(f.id) ? 'outline:4px solid var(--brand)' : 'opacity:.6'; } }); return img; })) : h('div', { class: 'empty' }, 'No photos on this job yet.'),
   ], { back: '#/cert/' + id });
+});
+
+// ---------- v0.38 (prototype): wiring diagram ----------
+route(/^\/cert\/([^/]+)\/diagram$/, async (id) => {
+  const cert = await openCert(id); if (!cert) return go('#/');
+  const box = h('div', { class: 'diagram', style: 'overflow-x:auto;background:#fff;border-radius:8px;color-scheme:light' }); // white paper in dark mode too
+  const draw = () => { box.innerHTML = diagramHasCircuits(cert) ? diagramSvg(cert, { W: 380, font: 12 }) : ''; };
+  draw();
+  const sw = h('button', { class: 'switch' + (cert.diagramPdf !== false ? ' on' : ''), type: 'button', role: 'switch', id: 'diagrampdf', 'aria-label': 'Include in the PDF', 'aria-checked': String(cert.diagramPdf !== false), onclick: () => { cert.diagramPdf = cert.diagramPdf === false; changed(); sw.classList.toggle('on', cert.diagramPdf !== false); sw.setAttribute('aria-checked', String(cert.diagramPdf !== false)); } }, h('span', {}));
+  page('Wiring diagram', [
+    h('p', { class: 'note' }, cert.type === 'MW' ? 'Drawn from the circuit on this certificate. It fills in as you add the details.' : 'Drawn from the supply, the board and each circuit. It fills in as you add the details. Number of points served sets how many sockets or lights are drawn.'),
+    diagramHasCircuits(cert) ? h('div', { class: 'card', style: 'padding:10px 6px' }, box) : emptyState('zap', 'No circuits yet. Add circuits and the diagram draws itself.'),
+    h('div', { class: 'card' }, h('div', { class: 'switchrow', style: 'border-top:0;margin-top:0' }, h('span', {}, 'Include in the PDF (after the schedules)'), sw)),
+  ], { back: '#/cert/' + id, sub: cert.number });
 });
 
 // ---------- A form section ----------

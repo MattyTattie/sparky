@@ -1,5 +1,6 @@
 import { pdfFlagsOn } from './certmodel.js';
 import { showRcdType } from './rcdtype.js';
+import { drawDiagramPdf, diagramInPdf } from './wiring.js';
 // =====================================================================
 // pdf.js — certificates as PDFs, laid out like the IET model forms
 // (BS 7671:2018+A4:2026, 15 April 2026). No IET logo (their terms).
@@ -413,6 +414,14 @@ function schedules(k, cert, certNo) {
   }
   bondingSchedule(k, cert, certNo);
   sourcesSheet(k, cert, certNo);
+  diagramSheet(k, cert, certNo);
+}
+// v0.38 (prototype): single-line wiring diagram, after the schedules.
+export function diagramSheet(k, cert, certNo) {
+  if (!diagramInPdf(cert)) return;
+  const tag = 'Single-line diagram drawn from the schedule of circuit details. Not to scale; no room layout.';
+  k.addPage('p'); contTitle(k, 'WIRING DIAGRAM', certNo, tag); k.y += 3;
+  drawDiagramPdf(k, cert, () => { k.addPage('p'); contTitle(k, 'WIRING DIAGRAM (continued)', certNo, tag); k.y += 3; });
 }
 // v0.5: Schedule of supplementary bonding. The IET model forms record
 // supplementary bonding only as an inspection item, so this is printed as
@@ -894,7 +903,7 @@ export async function certificatePdf(cert, { profile = {}, photos = [] } = {}) {
   const k = new Kit(jsPDF, { orientation: 'p', footer: FOOT + (profile.business ? '  Issued by ' + profile.business + '.' : '') });
   if (cert.type === 'EIC') { eic(k, cert, profile); guidancePage(k, 'EIC'); }
   else if (cert.type === 'EICR') { k.noLabel = 'Report No.'; eicr(k, cert, profile); guidancePage(k, 'EICR'); }
-  else { mw(k, cert, profile); guidancePage(k, 'MW'); }
+  else { mw(k, cert, profile); diagramSheet(k, cert, cert.number); guidancePage(k, 'MW'); }
   photosPages(k, photos, cert.number);
   k.footers(cert.number);
   return k.blob();
