@@ -7,7 +7,7 @@ test('isolatorOf: types, rating, none', () => {
   assert.equal(isolatorOf({}), null); assert.equal(isolatorOf({ diagram: { isolator: { type: 'bogus' } } }), null);
   assert.equal(isolatorOf({ diagram: { isolator: { type: 'dp20' } } }).label, '20A DP');
   assert.equal(isolatorOf({ diagram: { isolator: { type: 'dp45', rating: '50A' } } }).label, '50A DP');
-  assert.equal(isolatorOf({ diagram: { isolator: { type: 'sfcu', rating: '13A' } } }).label, 'Switched FCU 13A');
+  assert.equal(isolatorOf({ diagram: { isolator: { type: 'sfcu', rating: '13A' } } }).label, '13A SFCU');
   assert.equal(isolatorOf({ diagram: { isolator: { type: 'ufcu' } } }).switched, false);
   assert.equal(Object.keys(ISOLATORS).length, 6);
 });
