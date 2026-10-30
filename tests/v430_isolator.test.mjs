@@ -9,7 +9,7 @@ test('isolatorOf: types, rating, none', () => {
   assert.equal(isolatorOf({ diagram: { isolator: { type: 'dp45', rating: '50A' } } }).label, '50A DP');
   assert.equal(isolatorOf({ diagram: { isolator: { type: 'sfcu', rating: '13A' } } }).label, 'Switched FCU 13A');
   assert.equal(isolatorOf({ diagram: { isolator: { type: 'ufcu' } } }).switched, false);
-  assert.equal(Object.keys(ISOLATORS).length, 5);
+  assert.equal(Object.keys(ISOLATORS).length, 6);
 });
 test('immersion with contactor and 20A DP draws label, key, screen and PDF', () => {
   const c = diagramEICSwitches(); const hw = c.boards[0].circuits.find((x) => /^Hot water/.test(x.desc));
