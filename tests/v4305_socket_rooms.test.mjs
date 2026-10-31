@@ -33,18 +33,19 @@ test('singles per room count towards points and draw as single sockets on the ri
   assert.ok(L.blocks.some((b) => b.shapes.some((z) => z.k === 'socket1' || z.sym === 'socket1' || JSON.stringify(z).includes('socket1'))) || t.includes('Socket (single)'));
   assert.match(ui, /grp\('Singles'/); assert.match(ui, /\['sockets', 'singles', 'spurs', 'spurKind'\]/);
 });
-test('a ring with rooms is a closed loop: out leg left, return right of the boxes, back to the feed', () => {
-  const L = lay(ring); const isRoom = (z) => z.t === 'rect' && String(z.color) === '150,160,190';
-  const sh = L.blocks.find((b) => b.shapes.some(isRoom)).shapes; const boxes = sh.filter(isRoom);
-  const right = Math.max(...boxes.map((b) => b.x + b.w)), left = Math.min(...boxes.map((b) => b.x)), lines = sh.filter((z) => z.t === 'line');
-  assert.ok(new Set(boxes.map((b) => b.w)).size === 1, 'room boxes same width');
-  const ret = lines.filter((z) => z.x1 === z.x2 && z.x1 > right + 4); assert.equal(ret.length, 1, 'one return leg on the right');
-  assert.ok(!lines.some((z) => Math.max(z.x1, z.x2) > ret[0].x1 + 0.5), 'nothing beyond the return');
-  assert.ok(lines.some((z) => z.y1 === z.y2 && Math.min(z.x1, z.x2) < left && Math.max(z.x1, z.x2) >= ret[0].x1 && z.y1 < Math.min(...boxes.map((b) => b.y))), 'top: return lands back on the feed');
-  assert.ok(sh.some((z) => z.t === 'circle' || z.t === 'circ'), 'junction dot');
+const crossings = (L) => { let n = 0; for (const b of L.blocks) { const ls = b.shapes.filter((z) => z.t === 'line' && !z.dash && (z.x1 === z.x2 || z.y1 === z.y2));
+  for (let i = 0; i < ls.length; i++) for (let j = i + 1; j < ls.length; j++) { const p = ls[i], q = ls[j]; const h = p.y1 === p.y2 && p.x1 !== p.x2 ? p : q.y1 === q.y2 && q.x1 !== q.x2 ? q : null, v = p.x1 === p.x2 && p !== h ? p : q.x1 === q.x2 && q !== h ? q : null; if (!h || !v) continue;
+    const x = v.x1, y = h.y1, e = 0.6; if (x > Math.min(h.x1, h.x2) + e && x < Math.max(h.x1, h.x2) - e && y > Math.min(v.y1, v.y2) + e && y < Math.max(v.y1, v.y2) - e) n++; } } return n; };
+const big = { ...ring, diagram: { roomList: [{ name: 'Bedroom 1', sockets: 9, spurs: 1 }, { name: 'Landing', sockets: 0 }, { name: 'Outside', sockets: 2, singles: 1, spurs: 2 }, { name: 'Bedroom 2', sockets: 1 }] } };
+test('ring finals are a hairpin: two legs out of the breaker, sockets between, joined after the last; no crossings', () => {
+  for (const c of [ring, big, { ...ring, diagram: undefined, points: '4' }, { ...ring, diagram: { singles: 2 }, points: '14' }])
+    for (const Wd of [380, 560, 1100]) { const L = W.layout(W.diagramModel({ type: 'EIC', boards: [{ id: 'b', ref: 'DB1', circuits: [c] }] }), { W: Wd, font: 12, screen: Wd < 600 });
+      assert.equal(crossings(L), 0, c.desc + ' ' + Wd);
+      const sh = L.blocks.flatMap((b) => b.shapes); const dev = sh.find((z) => z.t === 'rect' && z.h > 20 && z.w < 80 && z.x < 60);
+      assert.ok(sh.some((z) => z.t === 'line' && z.x1 === z.x2 && Math.abs(Math.min(z.y1, z.y2) - (dev.y + dev.h)) < 0.5 && z.x1 > dev.x && z.x1 < dev.x + dev.w), 'leg B leaves the breaker'); }
 });
-test('a plain ring draws its return leg back to the breaker; a radial does not', () => {
-  const plain = { ...ring, diagram: undefined, points: '4' };
-  const n = (c) => lay(c).blocks.flatMap((b) => b.shapes).filter((z) => z.t === 'line').length;
-  assert.equal(n(plain) - n({ ...plain, desc: 'Radial sockets', rating: '20' }), 3);
+test('a radial has no second leg', () => {
+  const L = lay({ ...ring, desc: 'Radial sockets', rating: '20', live: '2.5', diagram: undefined, points: '4' }); const sh = L.blocks.flatMap((b) => b.shapes);
+  const dev = sh.find((z) => z.t === 'rect' && z.h > 20 && z.w < 80 && z.x < 60);
+  assert.ok(!sh.some((z) => z.t === 'line' && z.x1 === z.x2 && Math.abs(Math.min(z.y1, z.y2) - (dev.y + dev.h)) < 0.5 && z.x1 > dev.x && z.x1 < dev.x + dev.w));
 });

@@ -375,7 +375,7 @@ export function layout(model, { W = 380, font = 12, screen = false, cableTable =
   const blocks = []; const cables = []; let ctx = {}; let feeds = {}; let curBoard = '';
   // v0.41: C1, C2… one per cable run, listed in the PDF's cable table
   const cable = (from, to, type, key) => { const label = 'C' + (cables.length + 1); cables.push({ label, from, to, type: type || '' }); if (key) cableOf[key] = cables[cables.length - 1]; return label; }; const cableOf = {};
-  const busX = 14, devX = busX + 14, devW = F * 4.6, gap = 8;
+  const busX = 14, devX = busX + 14, devW = F * 4.6, gap = 8; let ringLegB = null;
   const T = (sh, x, y, txt, o = {}) => sh.push({ t: 'text', x, y, txt, size: o.size || F, bold: !!o.bold, color: o.color || COL.ink, anchor: o.anchor || 'start' });
   const L = (sh, x1, y1, x2, y2, o = {}) => sh.push({ t: 'line', x1, y1, x2, y2, w: o.w || 1.2, color: o.color || COL.line, ...(o.dash ? { dash: o.dash } : {}) });
   const R = (sh, x, y, w, h, o = {}) => sh.push({ t: 'rect', x, y, w, h, lw: o.lw || 1.2, color: o.color || COL.line, fill: o.fill || null });
@@ -537,7 +537,7 @@ export function layout(model, { W = 380, font = 12, screen = false, cableTable =
   function tag(b, bd, c) { b.ref = { bi: bd.bi ?? 0, ci: bd.src ? bd.src.indexOf(c) : 0, mw: model.type === 'MW' }; return b; }
 
   function circuitBlock(c, bus, last, outerBus, spd = '', spur = null) {
-    const sh = []; const info = circuitLines(c, spd); const y = 8;
+    const sh = []; const info = circuitLines(c, spd); const y = 8; ringLegB = null;
     const dx = bus + 12; const tx = dx + devW + gap; const tw = W - tx - 6;
     // text
     let hh = textLines(sh, tx, y - 2, info.title, tw, { bold: true, color: info.spare ? COL.na : COL.ink });
@@ -603,8 +603,10 @@ export function layout(model, { W = 380, font = 12, screen = false, cableTable =
       ph = roomsSection(sh, info, tx, y + hh + 6, tw, feedTop, c);
     } else if (!info.spare && !info.spd && info.sockRooms && !ctl && !iso && !fed) {
       ph = sockRoomsSection(sh, info, tx, y + hh + 6, tw, feedTop, c);
+    } else if (!info.spare && !info.spd && horiz && kind === 'socket' && isRingC(c) && pc.shown > 0 && !ctl && !iso && !fed) {
+      ph = ringPlain(sh, c, pc, sgl, tx, y + hh + 6, tw, feedTop); // v0.43.5: a ring final as a hairpin: two legs out of the breaker, sockets between, joined after the last
     } else if (horiz && (pc.shown || ctl || iso)) {
-      const S = F * 1.5, step = S + 6, lstep = S + 15, gapX = F * 2.3; const per = Math.max(1, Math.floor((tw - 4) / step)); const lab0 = (ctl || iso) ? small * 1.3 + (iso && iso.ccu ? F * 0.5 : 0) : 0; const loopUp = kind === 'socket' && isRingC(c) && !ctl && !iso && pc.shown > sgl ? 12 : 0; /* v0.43.5: clear space for a ring's return leg over the row */ const py = y + hh + 6 + lab0 + loopUp; const fx = tx - gap / 2; const g9 = { w: 1.1, color: COL.line }; // v0.43: run conductor, same weight as the symbols so it reads as one line
+      const S = F * 1.5, step = S + 6, lstep = S + 15, gapX = F * 2.3; const per = Math.max(1, Math.floor((tw - 4) / step)); const lab0 = (ctl || iso) ? small * 1.3 + (iso && iso.ccu ? F * 0.5 : 0) : 0; const py = y + hh + 6 + lab0; const fx = tx - gap / 2; const g9 = { w: 1.1, color: COL.line }; // v0.43: run conductor, same weight as the symbols so it reads as one line
       // items along the row: [width, draw(x, cy)]
       const items = []; let coilAt = null;
       if (ctl) { const kw = F * 2.4; items.push([kw + gapX, (x, cy) => { rotH(sh, x, cy, (o) => nocSym(o, x, cy, kw)); T(sh, x + kw / 2, cy - S * 0.55, tags[val(c.num) || '?'] || ctl.tag, { anchor: 'middle', bold: true, size: small }); coilAt = { x: x + kw * 0.5, y: cy }; }, false, kw]); }
@@ -617,8 +619,7 @@ export function layout(model, { W = 380, font = 12, screen = false, cableTable =
         symbol(sh, k0, x + S / 2, cy - r * 0.25, S); used.add(k0); L(sh, x, cy, ax - r * 0.2, cy, g9); L(sh, ax + r * 0.62, cy, x + S, cy, g9); }, false, S]);
       const nSw = swIn.length; const ringN = kind === 'socket' ? pc.shown - sgl : pc.shown; // v0.43.4: single sockets hang off the ring as spurs
       for (let i = 0; i < ringN; i++) { const k1 = kindAt(i); items.push([lstep, (x, cy) => { heatLab = isTowel(c) ? 'Rail' : 'Rad'; symbol(sh, k1, x + S / 2, cy, S); used.add(k1); }, true]); }
-      const loop = kind === 'socket' && isRingC(c) && !ctl && !iso && ringN > 0; // v0.43.5: plain ring drawn as a loop back to its breaker
-      const rowsX = []; let x = tx + F * 0.6, row = 0; const maxX = W - 6 - (loop ? 10 : 0);
+      const rowsX = []; let x = tx + F * 0.6, row = 0; const maxX = W - 6;
       for (const it of items) { if (x + it[0] > maxX + 6 && x > tx + F * 0.6) { row++; x = tx + F * 0.6; } rowsX.push([x, row]); x += it[0]; }
       const rows = row + 1; const rowH = S + lab0 + 8; let prevEnd = null;
       items.forEach((it, i) => { const [xx, r] = rowsX[i]; const cy = py + r * rowH + S / 2;
@@ -627,9 +628,7 @@ export function layout(model, { W = 380, font = 12, screen = false, cableTable =
         else if (rowsX[i - 1][1] !== r) { const pcy = cy - rowH; L(sh, prevEnd, pcy, prevEnd + 3, pcy, g9); L(sh, prevEnd + 3, pcy, prevEnd + 3, pcy + rowH / 2 + S * 0.2, g9); L(sh, prevEnd + 3, pcy + rowH / 2 + S * 0.2, fx, pcy + rowH / 2 + S * 0.2, g9); L(sh, fx, pcy + rowH / 2 + S * 0.2, fx, cy, g9); L(sh, fx, cy, inX, cy, g9); }
         else L(sh, prevEnd, cy, inX, cy, g9);
         it[1](xx, cy); prevEnd = it[2] ? xx + S / 2 + loadR(kindAt(li), S) : xx + it[3]; });
-      ph = 6 + lab0 + loopUp + rows * rowH - 8 + (iso && iso.ccu ? F * 1.8 : 0);
-      if (loop) { const yt = py - 12, ly = py + (rows - 1) * rowH + S / 2; const xr = Math.max(...items.map((it, i) => rowsX[i][0] + (it[2] ? S / 2 + loadR(kindAt(i - (items.length - ringN)), S) : it[3]))) + 8;
-        L(sh, prevEnd, ly, xr, ly, g9); L(sh, xr, ly, xr, yt, g9); L(sh, xr, yt, fx, yt, g9); C(sh, fx, yt, 1.8, { fill: COL.line, lw: 0.6 }); }
+      ph = 6 + lab0 + rows * rowH - 8 + (iso && iso.ccu ? F * 1.8 : 0);
       if (kind === 'socket' && sgl && items.length) { // spur(s): a branch dropping from the last ring socket, below everything else
         used.add('socket1'); const [lx0, lr] = rowsX[items.length - 1]; const bx = lx0 + S / 2; const by = py + lr * rowH + S / 2 + S * 0.45;
         const sy = py + rows * rowH + 4 + S / 2; const sper = Math.max(1, Math.floor((maxX - tx - F * 0.6) / lstep)); let px = null;
@@ -688,6 +687,7 @@ export function layout(model, { W = 380, font = 12, screen = false, cableTable =
     // device box
     const bh = F * 3.2; const by = y;
     R(sh, dx, by, devW, bh, reds.length ? { fill: [255, 255, 255], color: COL.red, lw: screen ? 2.4 : 2.8 /* v0.43.1: thick so it still reads in greyscale print */ } : { fill: info.spare ? [248, 248, 248] : [255, 255, 255] }); sh.unshift(sh.pop());
+    if (ringLegB != null) { const lx = dx + devW * 0.7; L(sh, lx, by + bh, lx, ringLegB, { w: 1.1, color: COL.line }); } // v0.43.5: the ring's second leg, out of the same breaker
     if (info.spare) T(sh, dx + devW / 2, by + bh / 2 + F * 0.35, 'Spare', { anchor: 'middle', color: COL.na, size: small });
     else {
       const d1 = wrapText(info.devShort, devW - 6, F, true); const d2 = info.devKind ? wrapText(info.devKind, devW - 6, small * 0.92) : [];
@@ -713,7 +713,87 @@ export function layout(model, { W = 380, font = 12, screen = false, cableTable =
   // tee into the box's left edge, sockets on the tee (doubles then singles), spurs
   // below. A ring adds a parallel return lane further left; the two legs join at the
   // top (the feed) and below the last room. Nothing on the right, no crossings.
+  // v0.43.5: ring final as a hairpin (ladder). Leg A and leg B both leave the
+  // breaker output side by side and run in parallel; each socket sits between
+  // them (A to its earth bar, its lead down to B); after the last socket the two
+  // legs join. Rows that run out of width snake back (alternate direction) with
+  // nested U-turns, so no line ever crosses another.
+  function hairpin(sh, rows, o) {
+    const { S, g, step } = o; const r = S / 2, upT = r * 0.52 + 4, dnB = r * 0.95 + 4; const out = [];
+    const N = rows.length;
+    rows.forEach((row, k) => {
+      const dir = k % 2 ? -1 : 1, cy = row.cy, yT = cy - upT, yB = cy + dnB;
+      const pos = row.items.map((it, j) => (dir > 0 ? o.xL + j * step : o.xR - j * step));
+      const side = (d) => (d > 0 ? o.turnR : o.turnL); // [outer, inner]
+      let tIn, bIn; if (k === 0) { tIn = o.startT; bIn = o.startB; } else { const s0 = side(-dir); tIn = s0[1]; bIn = s0[0]; }
+      let tOut, bOut;
+      if (k === N - 1) { const lastX = pos.length ? pos[pos.length - 1] + dir * (loadR(row.items[pos.length - 1], S) + 12) : (dir > 0 ? Math.max(tIn, bIn) : Math.min(tIn, bIn)) + dir * 14; tOut = bOut = lastX; L(sh, lastX, yT, lastX, yB, g); }
+      else { const s1 = side(dir); tOut = s1[0]; bOut = s1[1]; const nx = rows[k + 1]; const nyT = nx.cy - upT, nyB = nx.cy + dnB;
+        L(sh, s1[0], yT, s1[0], nyB, g); L(sh, s1[1], yB, s1[1], nyT, g); }
+      L(sh, tIn, yT, tOut, yT, g); L(sh, bIn, yB, bOut, yB, g);
+      row.items.forEach((kd, j) => { const cx = pos[j]; L(sh, cx, yT, cx, cy - r * 0.52, g); symbol(sh, kd, cx, cy, S); L(sh, cx, cy + r * 0.95, cx, yB, g); used.add(kd); if (row.tag) row.tag(cx, cy, kd); });
+      out.push({ pos, yT, yB, dir });
+    });
+    return out;
+  }
+
+  function HP(S) { return { upT: S / 2 * 0.52 + 4, dnB: S / 2 * 0.95 + 4 }; }
+  function spurRow(sh, k, dx, yFrom, sy, step, S, g, n, lab, maxX, tag, minX = 0) {
+    used.add(k); const sr = loadR(k, S); L(sh, dx, yFrom, dx, sy, g);
+    const need = 6 + n * step + (tag ? 12 : 6) + textW(lab, small); const d = dx + need < maxX || dx - need < minX ? 1 : -1; // branch away from the edge
+    let px = dx;
+    for (let j = 0; j < n; j++) { const cx = dx + d * (6 + sr + j * step); L(sh, px, sy, cx - d * sr, sy, g); symbol(sh, k, cx, sy, S); if (tag) tag(cx + sr + 1, sy + S * 0.55); px = cx + d * sr; }
+    if (d > 0) { const lx = px + (tag ? 12 : 6); if (lx + textW(lab, small) < maxX) T(sh, lx, sy + small * 0.35, lab, { size: small, color: COL.grey }); }
+    else { const lx = px - 6 - textW(lab, small); if (lx > minX) T(sh, lx, sy + small * 0.35, lab, { size: small, color: COL.grey }); }
+  }
+  function ringPlain(sh, c, pc, sgl, tx, top, tw, feedTop) {
+    const S = F * 1.5, g = { w: 1.1, color: COL.line }, step = S + 12, fx = tx - gap / 2; const { upT, dnB } = HP(S);
+    const ringN = pc.shown - sgl; const xL = tx + 14 + S / 2, xR = W - 16 - S / 2; const per = Math.max(1, Math.floor((xR - xL) / step) + 1);
+    const items = Array(ringN).fill('socket'); const rows = []; const pitch = upT + dnB + 10;
+    for (let k = 0; k * per < items.length; k++) rows.push({ items: items.slice(k * per, (k + 1) * per), cy: top + 4 + upT + k * pitch });
+    const xRr = xL + (per - 1) * step; // right-hand turn sits just past the widest row
+    const res = hairpin(sh, rows, { S, g, step, xL, xR: xRr, startT: fx, startB: tx - gap - devW * 0.3, turnL: [tx + 2, tx + 7], turnR: [xRr + S * 0.5 + 12, xRr + S * 0.5 + 7] });
+    L(sh, fx, feedTop, fx, res[0].yT, g); ringLegB = res[0].yB; // leg B leaves the breaker's foot (drawn with the breaker)
+    let bottom = res[res.length - 1].yB + 4;
+    if (sgl) { const last = res[res.length - 1]; const dx = Math.min(...(last.pos.length ? last.pos : [xL])) - S * 0.2; const sy = last.yB + S * 0.5 + 8; used.add('socket1');
+      spurRow(sh, 'socket1', dx, last.yB, sy, step, S, g, sgl, sgl === 1 ? 'Spur' : 'Spurs', W - 6); bottom = sy + S * 0.6; }
+    let ph = bottom - top + 2;
+    if (pc.more) ph += textLines(sh, tx, top + ph, `+ ${pc.more} more (${pc.n} in total)`, tw, { size: small, color: COL.grey }) + 2;
+    return ph;
+  }
+  function ringRooms(sh, info, tx, top, tw, feedTop, c) {
+    const S = F * 1.5, g = { w: 1.1, color: COL.line }, step = S + 12, fx = tx - gap / 2; const { upT, dnB } = HP(S);
+    const bx = tx + 14, bw = tx + tw - bx - 14, ix = bx + 8, iw = bw - 16; const xL = ix + S * 0.5 + 6, xR = bx + bw - 10 - S * 0.5;
+    const per = Math.max(1, Math.floor((xR - xL) / step) + 1); const xRr = xL + (per - 1) * step;
+    let y0 = top; if (screen && info.roomNote) y0 += textLines(sh, tx, y0 - 4, info.roomNote, tw, { size: small, color: COL.na }) + 4;
+    used.add('socket'); const rows = [], boxes = [];
+    info.sockRooms.forEach((r) => { // lay out first: header, rows, spurs
+      const rs = []; let ry = y0 + 4;
+      ry += textLines(rs, ix, ry, r.name || 'Room ' + (r.i + 1), iw, { bold: true, size: small });
+      const ip = /outside|outdoor|garden|exterior|external|patio/i.test(r.name); if (ip) used.add('ipsock');
+      const pl = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`;
+      ry += textLines(rs, ix, ry, [pl(r.sockets, 'double'), r.singles ? pl(r.singles, 'single') : '', r.spurs ? pl(r.spurs, 'spur') + (r.spurKind === 'fcu' ? ' (FCU)' : '') : '', ip ? 'outdoor, IP rated' : ''].filter(Boolean).join(' \u00b7 '), iw, { size: small * 0.92, color: COL.grey });
+      const items = [...Array(r.sockets).fill('socket'), ...Array(r.singles).fill('socket1')];
+      const tag = ip ? (cx, cy, kd) => T(sh, cx + loadR(kd, S) + 1, cy + S * 0.3, 'IP', { bold: true, size: small * 0.75, color: COL.brand }) : null;
+      const first = rows.length; let cy = ry + 6 + upT;
+      for (let k = 0; k === 0 || k * per < items.length; k++) { rows.push({ items: items.slice(k * per, (k + 1) * per), cy, tag }); cy += upT + dnB + 12; }
+      let bottom = rows[rows.length - 1].cy + dnB + 4;
+      const box = { r, rs, y0, first, last: rows.length - 1, ip, bottom };
+      if (r.spurs) box.spurY = bottom + S * 0.5 + 4, bottom = box.spurY + S * 0.6;
+      box.bottom = bottom; boxes.push(box); y0 = bottom + 6 + 10;
+    });
+    // boxes first (under the lines), then the hairpin, then the spurs
+    for (const b of boxes) { R(sh, bx, b.y0, bw, b.bottom + 6 - b.y0, { fill: COL.fill, color: [150, 160, 190] }); sh.push(...b.rs); }
+    const res = hairpin(sh, rows, { S, g, step, xL, xR: xRr, startT: fx, startB: tx - gap - devW * 0.3, turnL: [bx - 10, bx - 5], turnR: [bx + bw + 10, bx + bw + 5] });
+    L(sh, fx, feedTop, fx, res[0].yT, g); ringLegB = res[0].yB; // leg B leaves the breaker's foot (drawn with the breaker)
+    for (const b of boxes) { const r = b.r; cable('Circuit ' + (val(c.num) || '?'), r.name || 'room', cableLabel(c).split(' \u00b7 ')[0]);
+      if (!r.spurs) continue; const lr = res[b.last]; const k = r.spurKind === 'fcu' ? 'fcu' : 'socket1';
+      const dx = lr.pos.length ? (lr.dir > 0 ? Math.min(...lr.pos) : Math.max(...lr.pos)) - lr.dir * S * 0.2 : xL;
+      spurRow(sh, k, dx, lr.yB, b.spurY, step, S, g, r.spurs, (r.spurKind === 'fcu' ? 'FCU spur' : 'Spur') + (r.spurs === 1 ? '' : 's'), bx + bw - 6, b.ip && k === 'socket1' ? (x, y) => T(sh, x, y, 'IP', { bold: true, size: small * 0.75, color: COL.brand }) : null, bx + 6); }
+    return y0 - top - 8;
+  }
   function sockRoomsSection(sh, info, tx, top, tw, feedTop, c) {
+    if (isRingC(c)) return ringRooms(sh, info, tx, top, tw, feedTop, c);
     const S = F * 1.5, rad = loadR('socket', S), step = S + 12, rowH = S + 12, fx = tx - gap / 2; const g = { w: 1.1, color: COL.line };
     const ring = isRingC(c); const xi = ring ? fx : tx + 4, bx = tx + 8, bw = tx + tw - bx - (ring ? 18 : 0), xr = bx + bw + 10; /* v0.43.5: a ring is drawn as a closed loop */
     let y0 = top; if (screen && info.roomNote) y0 += textLines(sh, tx, y0 - 4, info.roomNote, tw, { size: small, color: COL.na }) + 4;
