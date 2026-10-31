@@ -604,7 +604,7 @@ export function layout(model, { W = 380, font = 12, screen = false, cableTable =
     } else if (!info.spare && !info.spd && info.sockRooms && !ctl && !iso && !fed) {
       ph = sockRoomsSection(sh, info, tx, y + hh + 6, tw, feedTop, c);
     } else if (horiz && (pc.shown || ctl || iso)) {
-      const S = F * 1.5, step = S + 6, lstep = S + 15, gapX = F * 2.3; const per = Math.max(1, Math.floor((tw - 4) / step)); const lab0 = (ctl || iso) ? small * 1.3 + (iso && iso.ccu ? F * 0.5 : 0) : 0; const py = y + hh + 6 + lab0; const fx = tx - gap / 2; const g9 = { w: 1.1, color: COL.line }; // v0.43: run conductor, same weight as the symbols so it reads as one line
+      const S = F * 1.5, step = S + 6, lstep = S + 15, gapX = F * 2.3; const per = Math.max(1, Math.floor((tw - 4) / step)); const lab0 = (ctl || iso) ? small * 1.3 + (iso && iso.ccu ? F * 0.5 : 0) : 0; const loopUp = kind === 'socket' && isRingC(c) && !ctl && !iso && pc.shown > sgl ? 12 : 0; /* v0.43.5: clear space for a ring's return leg over the row */ const py = y + hh + 6 + lab0 + loopUp; const fx = tx - gap / 2; const g9 = { w: 1.1, color: COL.line }; // v0.43: run conductor, same weight as the symbols so it reads as one line
       // items along the row: [width, draw(x, cy)]
       const items = []; let coilAt = null;
       if (ctl) { const kw = F * 2.4; items.push([kw + gapX, (x, cy) => { rotH(sh, x, cy, (o) => nocSym(o, x, cy, kw)); T(sh, x + kw / 2, cy - S * 0.55, tags[val(c.num) || '?'] || ctl.tag, { anchor: 'middle', bold: true, size: small }); coilAt = { x: x + kw * 0.5, y: cy }; }, false, kw]); }
@@ -627,8 +627,8 @@ export function layout(model, { W = 380, font = 12, screen = false, cableTable =
         else if (rowsX[i - 1][1] !== r) { const pcy = cy - rowH; L(sh, prevEnd, pcy, prevEnd + 3, pcy, g9); L(sh, prevEnd + 3, pcy, prevEnd + 3, pcy + rowH / 2 + S * 0.2, g9); L(sh, prevEnd + 3, pcy + rowH / 2 + S * 0.2, fx, pcy + rowH / 2 + S * 0.2, g9); L(sh, fx, pcy + rowH / 2 + S * 0.2, fx, cy, g9); L(sh, fx, cy, inX, cy, g9); }
         else L(sh, prevEnd, cy, inX, cy, g9);
         it[1](xx, cy); prevEnd = it[2] ? xx + S / 2 + loadR(kindAt(li), S) : xx + it[3]; });
-      ph = 6 + lab0 + rows * rowH - 8 + (iso && iso.ccu ? F * 1.8 : 0);
-      if (loop) { const yt = py - 4, ly = py + (rows - 1) * rowH + S / 2; const xr = Math.max(...items.map((it, i) => rowsX[i][0] + (it[2] ? S / 2 + loadR(kindAt(i - (items.length - ringN)), S) : it[3]))) + 8;
+      ph = 6 + lab0 + loopUp + rows * rowH - 8 + (iso && iso.ccu ? F * 1.8 : 0);
+      if (loop) { const yt = py - 12, ly = py + (rows - 1) * rowH + S / 2; const xr = Math.max(...items.map((it, i) => rowsX[i][0] + (it[2] ? S / 2 + loadR(kindAt(i - (items.length - ringN)), S) : it[3]))) + 8;
         L(sh, prevEnd, ly, xr, ly, g9); L(sh, xr, ly, xr, yt, g9); L(sh, xr, yt, fx, yt, g9); C(sh, fx, yt, 1.8, { fill: COL.line, lw: 0.6 }); }
       if (kind === 'socket' && sgl && items.length) { // spur(s): a branch dropping from the last ring socket, below everything else
         used.add('socket1'); const [lx0, lr] = rowsX[items.length - 1]; const bx = lx0 + S / 2; const by = py + lr * rowH + S / 2 + S * 0.45;
