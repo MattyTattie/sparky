@@ -1004,7 +1004,7 @@ export function layout(model, { W = 380, font = 12, screen = false, cableTable =
   }
   // v0.43: draw a vertical in-line symbol (top at x,y0) turned to run left to right from (x, y0).
   // v0.43: where a conductor meets a load symbol on its row (half-width from centre)
-  function loadR(k, S) { const r = S / 2; return k === 'light' ? r * 0.8 : k === 'fan' ? r * 0.85 : SOCK[k] ? (SOCK[k][0] ? r * 1.85 : r * 1.0) : (k === 'dpu' || k === 'dps') ? r * 0.85 : k === 'fcu' ? r * 0.85 : k === 'point' ? r * 0.7 : r; }
+  function loadR(k, S) { const r = S / 2; return k === 'light' ? r * 0.8 : k === 'fan' ? r * 0.85 : SOCK[k] ? (SOCK[k][0] ? r * 2.0 : r * 1.1) : (k === 'dpu' || k === 'dps') ? r * 0.85 : k === 'fcu' ? r * 0.85 : k === 'point' ? r * 0.7 : r; }
   function rotH(o, x0, y0, fn) { const tmp = []; fn(tmp); const P = (x, y) => [x0 + (y - y0), y0 - (x - x0)];
     for (const z of tmp) { if (z.t === 'line') { const [a, b] = P(z.x1, z.y1), [c2, d] = P(z.x2, z.y2); o.push({ ...z, x1: a, y1: b, x2: c2, y2: d }); }
       else if (z.t === 'rect') { const [a, b] = P(z.x + z.w, z.y); o.push({ ...z, x: a, y: b, w: z.h, h: z.w }); }
@@ -1028,13 +1028,14 @@ export function layout(model, { W = 380, font = 12, screen = false, cableTable =
   // (dome up) sitting on a base line; switched adds the slanted stroke + tick off the dome's top right. One size: r = S / 2.
   // v0.43.9: sockets look like sockets: a UK 13 A faceplate seen from the front, hung from the top centre (x, y).
   // Earth pin hole vertical at the top, L and N horizontal below; switched = a small rocker beside each pin set.
-  function plate(sh, x, y, r, twin, sw) {
-    const H = r * 1.7, w = twin ? H * 2 : H, x0 = x - w / 2, ink = COL.line;
+  function plate(sh, x, y, r, twin, sw) { // v0.43.9 (v41): laid out like a real MK/BG twin: small rockers at the top, inboard; pins lower, outboard
+    const H = r * 1.7, w = twin ? H * 2.2 : H * 1.15, x0 = x - w / 2, ink = COL.line, U = w / (twin ? 2 : 1);
     sh.push({ t: 'rect', x: x0, y, w, h: H, lw: 1.1, color: ink, fill: [255, 255, 255] });
     const hole = (hx, hy, hw, hh) => sh.push({ t: 'rect', x: hx - hw / 2, y: hy - hh / 2, w: hw, h: hh, lw: 0, color: ink, fill: ink });
-    for (let u = 0; u < (twin ? 2 : 1); u++) { const ux = x0 + u * H, inb = twin && u === 1, px = ux + H * (sw ? (inb ? 0.6 : 0.4) : 0.5); // twin: both rockers inboard, in the middle
-      hole(px, y + H * 0.3, H * 0.09, H * 0.22); hole(px - H * 0.19, y + H * 0.62, H * 0.2, H * 0.09); hole(px + H * 0.19, y + H * 0.62, H * 0.2, H * 0.09);
-      if (sw) rocker(sh, ux + H * (inb ? 0.1 : 0.72), y + H * 0.24, H * 0.18, H * 0.48); } }
+    const rw = H * 0.12, rh = H * 0.28, ry = y + H * 0.13;
+    for (let u = 0; u < (twin ? 2 : 1); u++) { const ux = x0 + u * U, right = twin && u === 1, px = ux + U * (sw ? (right ? 0.6 : 0.4) : 0.5);
+      hole(px, y + H * 0.4, H * 0.09, H * 0.22); hole(px - H * 0.19, y + H * 0.72, H * 0.2, H * 0.09); hole(px + H * 0.19, y + H * 0.72, H * 0.2, H * 0.09);
+      if (sw) rocker(sh, twin ? (right ? ux + H * 0.05 : ux + U - H * 0.05 - rw) : ux + U - H * 0.08 - rw, ry, rw, rh); } }
   // a rocker switch seen from the front: square-cornered outline, split across the middle, the ON half shaded
   function rocker(sh, x, y, w, h) { const o = { w: 0.9 }; L(sh, x, y, x + w, y, o); L(sh, x + w, y, x + w, y + h, o); L(sh, x + w, y + h, x, y + h, o); L(sh, x, y + h, x, y, o);
     sh.push({ t: 'rect', x, y: y + h / 2, w, h: h / 2, lw: 0, color: COL.line, fill: COL.line, rocker: true }); }
@@ -1052,8 +1053,8 @@ export function layout(model, { W = 380, font = 12, screen = false, cableTable =
     else if (kind === 'dpu' || kind === 'dps') { // v0.43.9: DP switch plate (rocker marked DP) in the ring; long spur up and over to its socket faceplate
       const H = r * 1.7, x0 = cx - H / 2, y0 = cy - H / 2;
       sh.push({ t: 'rect', x: x0, y: y0, w: H, h: H, lw: 1.1, color: COL.line, fill: W0 });
-      rocker(sh, cx - H * 0.13, y0 + H * 0.12, H * 0.26, H * 0.48);
-      T(sh, cx, y0 + H * 0.9, 'DP', { anchor: 'middle', bold: true, size: H * 0.3 });
+      rocker(sh, cx - H * 0.17, y0 + H * 0.1, H * 0.34, H * 0.52);
+      T(sh, cx, y0 + H * 0.92, 'DP', { anchor: 'middle', bold: true, size: H * 0.32 });
       const Y = y0 - r * 2.5, sx = cx + r * 2.4; L(sh, cx, y0, cx, Y, { w: 1.1 }); L(sh, cx, Y, sx, Y, { w: 1.1 }); L(sh, sx, Y, sx, Y + r * 0.35, { w: 1.1 });
       plate(sh, sx, Y + r * 0.35, r, false, kind === 'dps'); }
     else if (kind === 'cooker') { // cooker: box with four hob rings
