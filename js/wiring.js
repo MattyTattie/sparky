@@ -188,10 +188,10 @@ export function arrangedOrder(c) {
 export function socketRoomsOf(c) {
   const l = c && c.diagram && c.diagram.roomList;
   if (!Array.isArray(l) || !l.length || pointKind(c) !== 'socket') return null;
-  return arrangedOrder(c).map((i) => [l[i], i]).filter(([r]) => r).map(([r, i]) => ({ i, name: val(r.name), sockets: cnt(r.sockets), spurs: cnt(r.spurs, 4), spurKind: r.spurKind === 'fcu' ? 'fcu' : 'socket' }));
+  return arrangedOrder(c).map((i) => [l[i], i]).filter(([r]) => r).map(([r, i]) => ({ i, name: val(r.name), sockets: cnt(r.sockets), singles: cnt(r.singles, 10), spurs: cnt(r.spurs, 4), spurKind: r.spurKind === 'fcu' ? 'fcu' : 'socket' }));
 }
 export const isRingC = (c) => /\bring\b/i.test(String((c && c.desc) || '')) || (!/radial/i.test(String((c && c.desc) || '')) && String(val(c && c.rating)) === '32' && String(val(c && c.live)) === '2.5');
-export const roomSocketTotal = (c) => (socketRoomsOf(c) || []).reduce((a, r) => a + r.sockets + r.spurs, 0);
+export const roomSocketTotal = (c) => (socketRoomsOf(c) || []).reduce((a, r) => a + r.sockets + r.singles + r.spurs, 0);
 export const roomLightTotal = (c) => (roomListOf(c) || []).reduce((a, r) => a + r.lights, 0);
 // v0.43.1: optional room fan: room.fans (0-2), room.fanCtl (how it is switched)
 export const FAN_CTL = { humidistat: 'Humidistat', timer: 'Timer (overrun)', switch: 'Light switch', isolator: 'Isolator only' };
@@ -705,39 +705,51 @@ export function layout(model, { W = 380, font = 12, screen = false, cableTable =
   // into each box on the left, through its sockets, out on the right, down the gap and
   // back to a lane left of the boxes for the next room. A ring returns up the right
   // side and over the top to the breaker. Spurs drop off the line before the first socket.
+  // v0.43.5: socket rooms. Feed enters each room box at the left on its own line
+  // under the summary (doubles, then singles, on it); the cable turns down at the
+  // right inside the box, returns along the box bottom and leaves at the left into a
+  // lane outside the boxes, then drops to the next room. A ring's last room exits at
+  // the right into a return lane outside the boxes, up and back to the feed.
   function sockRoomsSection(sh, info, tx, top, tw, feedTop, c) {
-    const S = F * 1.5, rad = loadR('socket', S), step = S + 12, rowH = S + 10, fx = tx - gap / 2; const g = { w: 1.1, color: COL.line };
-    const ring = isRingC(c); const laneX = tx + 4, bx = tx + 12, bw = tw - 12 - (ring ? 14 : 0), xR = bx + bw + 7;
+    const S = F * 1.5, rad = loadR('socket', S), step = S + 12, rowH = S + 12, fx = tx - gap / 2; const g = { w: 1.1, color: COL.line };
+    const ring = isRingC(c); const laneX = tx + 5, bx = tx + 11, bw = tw - 11 - (ring ? 16 : 0), xR = bx + bw + 8;
     let y0 = top; if (screen && info.roomNote) y0 += textLines(sh, tx, y0 - 4, info.roomNote, tw, { size: small, color: COL.na }) + 4;
     const topY = y0 + 2; if (ring) y0 += 10;
-    let prev = null; used.add('socket');
+    let prevOut = null; used.add('socket'); const N = info.sockRooms.length;
     info.sockRooms.forEach((r, ri) => {
-      const rs = []; const ix = bx + 8, iw = bw - 16; let ry = y0 + 4;
+      const rs = []; const ix = bx + 8, iw = bw - 16; let ry = y0 + 4; const lastRoom = ri === N - 1;
       ry += textLines(rs, ix, ry, r.name || 'Room ' + (r.i + 1), iw, { bold: true, size: small });
-      const sp = r.spurs ? ` \u00b7 ${r.spurs} spur${r.spurs === 1 ? '' : 's'}${r.spurKind === 'fcu' ? ' (FCU)' : ''}` : '';
-      const ip = /outside|outdoor|garden|exterior|external|patio/i.test(r.name); if (ip) used.add('ipsock'); // v0.43.5: outdoor sockets: weatherproof, marked IP
+      const ip = /outside|outdoor|garden|exterior|external|patio/i.test(r.name); if (ip) used.add('ipsock'); // outdoor: weatherproof, marked IP
+      const pl = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`;
+      const parts = [pl(r.sockets, 'double'), r.singles ? pl(r.singles, 'single') : '', r.spurs ? pl(r.spurs, 'spur') + (r.spurKind === 'fcu' ? ' (FCU)' : '') : '', ip ? 'outdoor, IP rated' : ''].filter(Boolean);
+      ry += textLines(rs, ix, ry, parts.join(' \u00b7 '), iw, { size: small * 0.92, color: COL.grey });
+      const items = [...Array(r.sockets).fill('socket'), ...Array(r.singles).fill('socket1')]; if (r.singles) used.add('socket1');
+      const xT = bx + bw - 12; /* the turn-down, inside the box, clear of its border */ const cx0 = ix + S * 0.9 + rad; const per = Math.max(1, Math.floor((xT - 6 - rad - cx0) / step) + 1);
+      const rowY0 = ry + S * 0.5 + 4; let last = null; let lineStart = bx;
       const ipTag = (x, y) => { if (ip) T(rs, x, y, 'IP', { bold: true, size: small * 0.75, color: COL.brand }); };
-      ry += textLines(rs, ix, ry, `${r.sockets} socket${r.sockets === 1 ? '' : 's'}${sp}${ip ? ' \u00b7 outdoor, IP rated' : ''}`, iw, { size: small * 0.92, color: COL.grey });
-      const cx0 = ix + S * 0.9 + rad, xE = bx + bw - 4; const per = Math.max(1, Math.floor((xE - 8 - cx0 - rad) / step) + 1);
-      const n = r.sockets, rows = Math.max(1, Math.ceil(n / per)); const rowY0 = ry + S * 0.5 + 2;
-      const endRadial = !ring && ri === info.sockRooms.length - 1; L(rs, bx, rowY0, n ? cx0 - rad : endRadial ? (r.spurs ? cx0 - S * 0.8 : bx + 6) : xE, rowY0, g); let last = null;
-      for (let j = 0; j < n; j++) { const cx = cx0 + (j % per) * step, cy = rowY0 + Math.floor(j / per) * rowH;
-        if (j && j % per === 0) { const wy = cy - rowH / 2, wx = cx0 - S * 0.5; L(rs, last.x + rad, last.y, last.x + rad + 3, last.y, g); L(rs, last.x + rad + 3, last.y, last.x + rad + 3, wy, g); L(rs, last.x + rad + 3, wy, wx, wy, g); L(rs, wx, wy, wx, cy, g); L(rs, wx, cy, cx - rad, cy, g); }
-        else if (j) L(rs, last.x + rad, cy, cx - rad, cy, g);
-        symbol(rs, 'socket', cx, cy, S); ipTag(cx + rad + 1, cy + S * 0.55); last = { x: cx, y: cy }; }
-      const exitY = last ? last.y : rowY0; const lastRoom = ri === info.sockRooms.length - 1; const outX = ring && lastRoom ? xR : lastRoom ? (last ? last.x + rad : bx + 6) : xE; /* a radial ends at its last socket */
-      if (last && outX > last.x + rad) L(rs, last.x + rad, exitY, outX, exitY, g); else if (!last && outX > xE) L(rs, xE, exitY, outX, exitY, g); else if (!last && lastRoom && !ring) { /* empty last room on a radial: the line already reaches xE */ }
-      let bottom = rowY0 + (rows - 1) * rowH + S * 0.6;
-      if (r.spurs) { const k = r.spurKind === 'fcu' ? 'fcu' : 'socket1'; used.add(k); const sr = loadR(k, S); const sy = bottom + S * 0.5 + 4, dx = cx0 - S * 0.8;
-        L(rs, dx, rowY0, dx, sy, g); let px = dx;
+      items.forEach((k, j) => { const cx = cx0 + (j % per) * step, cy = rowY0 + Math.floor(j / per) * rowH; const kr = loadR(k, S);
+        if (!j) L(rs, lineStart, cy, cx - kr, cy, g);
+        else if (j % per === 0) { const wy = cy - rowH / 2, wx = ix + 2; L(rs, last.x + last.r, last.y, last.x + last.r + 3, last.y, g); L(rs, last.x + last.r + 3, last.y, last.x + last.r + 3, wy, g); L(rs, last.x + last.r + 3, wy, wx, wy, g); L(rs, wx, wy, wx, cy, g); L(rs, wx, cy, cx - kr, cy, g); }
+        else L(rs, last.x + last.r, cy, cx - kr, cy, g);
+        symbol(rs, k, cx, cy, S); ipTag(cx + kr + 1, cy + S * 0.55); last = { x: cx, y: cy, r: kr }; });
+      const endY = last ? last.y : rowY0; const endX = last ? last.x + last.r : bx;
+      let bottom = endY + S * 0.6;
+      if (r.spurs) { const k = r.spurKind === 'fcu' ? 'fcu' : 'socket1'; used.add(k); const sr = loadR(k, S); const sy = bottom + S * 0.5 + 6, dx = cx0 - S * 0.8;
+        if (!last) L(rs, bx, rowY0, dx, rowY0, g);
+        L(rs, dx, last ? last.y : rowY0, dx, sy, g); let px = dx;
         for (let j = 0; j < r.spurs; j++) { const cx = cx0 + j * step; L(rs, px, sy, cx - sr, sy, g); symbol(rs, k, cx, sy, S); if (k === 'socket1') ipTag(cx + sr + 1, sy + S * 0.55); px = cx + sr; }
-        const lab = r.spurKind === 'fcu' ? 'FCU spur' : 'Spur'; const lx = px + (ip ? 12 : 6); if (lx + textW(lab + 's', small) < xE) T(rs, lx, sy + small * 0.35, r.spurs === 1 ? lab : lab + 's', { size: small, color: COL.grey });
+        const lab = (r.spurKind === 'fcu' ? 'FCU spur' : 'Spur') + (r.spurs === 1 ? '' : 's'); const lx = px + (ip ? 12 : 6); if (lx + textW(lab, small) < xT - 4) T(rs, lx, sy + small * 0.35, lab, { size: small, color: COL.grey });
         bottom = sy + S * 0.6; }
-      const bh = bottom - y0 + 6; R(sh, bx, y0, bw, bh, { fill: COL.fill, color: [150, 160, 190] }); sh.push(...rs);
-      if (!prev) { L(sh, fx, feedTop, fx, rowY0, g); L(sh, fx, rowY0, bx, rowY0, g); }
-      else { const gy = y0 - 6; L(sh, prev.x, prev.y, prev.x, gy, g); L(sh, prev.x, gy, laneX, gy, g); L(sh, laneX, gy, laneX, rowY0, g); L(sh, laneX, rowY0, bx, rowY0, g); }
-      prev = { x: xE, y: exitY };
-      if (ring && ri === info.sockRooms.length - 1) { L(sh, xR, exitY, xR, topY, g); L(sh, xR, topY, fx, topY, g); C(sh, fx, topY, 1.8, { fill: COL.line, lw: 0.6 }); } /* the ring closes back on its feed at the breaker */
+      let outY = null;
+      if (lastRoom && !ring) { if (!last && !r.spurs) L(rs, bx, rowY0, bx + 10, rowY0, g); /* a radial ends at its last socket */ }
+      else if (lastRoom && ring) { L(rs, endX, endY, xR, endY, g); if (!last && r.spurs) {} }
+      else { outY = bottom + 7; L(rs, last ? endX : (r.spurs ? cx0 - S * 0.8 : bx), endY, xT, endY, g); L(rs, xT, endY, xT, outY, g); L(rs, xT, outY, bx, outY, g); bottom = outY; }
+      const bh = bottom - y0 + (outY != null ? 8 : 6); R(sh, bx, y0, bw, bh, { fill: COL.fill, color: [150, 160, 190] }); sh.push(...rs);
+      if (outY != null) L(sh, bx, outY, laneX, outY, g); // leaves at the left
+      if (!prevOut) { L(sh, fx, feedTop, fx, rowY0, g); L(sh, fx, rowY0, bx, rowY0, g); }
+      else { L(sh, laneX, prevOut, laneX, rowY0, g); L(sh, laneX, rowY0, bx, rowY0, g); }
+      prevOut = outY;
+      if (ring && lastRoom) { L(sh, xR, endY, xR, topY, g); L(sh, xR, topY, fx, topY, g); C(sh, fx, topY, 1.8, { fill: COL.line, lw: 0.6 }); }
       cable('Circuit ' + (val(c.num) || '?'), r.name || 'room', cableLabel(c).split(' \u00b7 ')[0]);
       y0 += bh + 12;
     });

@@ -23,6 +23,13 @@ test('old socket circuit without rooms draws as before', () => {
 });
 test('rooms editor has a socket mode with doubles, spurs and copy last room', () => {
   assert.match(ui, /mode === 'socket' \? \{ name, sockets: 2 \}/);
-  assert.match(ui, /grp\('Doubles'/); assert.match(ui, /grp\('Spurs'/); assert.match(ui, /\['sockets', 'spurs', 'spurKind'\]/);
+  assert.match(ui, /grp\('Doubles'/); assert.match(ui, /grp\('Spurs'/);
   assert.match(ui, /roomsOnOtherCircuits\(all, c\), 'socket'\)/); assert.match(ui, /'Outside'\]/);
+});
+test('singles per room count towards points and draw as single sockets on the ring', () => {
+  const c = { ...ring, diagram: { roomList: [{ name: 'Kitchen', sockets: 2, singles: 3 }, { name: 'Hall', sockets: 1, singles: 99 }] } };
+  const r = W.socketRoomsOf(c); assert.equal(r[0].singles, 3); assert.equal(r[1].singles, 10); assert.equal(W.roomSocketTotal(c), 16);
+  const L = lay(c); const t = txt(L); assert.ok(t.some((x) => /2 doubles \u00b7 3 singles/.test(x)));
+  assert.ok(L.blocks.some((b) => b.shapes.some((z) => z.k === 'socket1' || z.sym === 'socket1' || JSON.stringify(z).includes('socket1'))) || t.includes('Socket (single)'));
+  assert.match(ui, /grp\('Singles'/); assert.match(ui, /\['sockets', 'singles', 'spurs', 'spurKind'\]/);
 });
