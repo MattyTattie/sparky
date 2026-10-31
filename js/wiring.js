@@ -738,7 +738,7 @@ export function layout(model, { W = 380, font = 12, screen = false, cableTable =
     return out;
   }
 
-  function HP(S) { return { upT: S / 2 * 0.87 + 4, dnB: 10 }; }
+  function HP(S) { return { upT: S / 2 * 1.32 + 4, dnB: 10 }; }
   function spurRow(sh, k, dx, yFrom, sy, step, S, g, n, lab, maxX, tag, minX = 0) {
     used.add(k); const sr = loadR(k, S); L(sh, dx, yFrom, dx, sy, g);
     const need = 6 + n * step + (tag ? 12 : 6) + textW(lab, small); const d = dx + need < maxX || dx - need < minX ? 1 : -1; // branch away from the edge
@@ -788,7 +788,7 @@ export function layout(model, { W = 380, font = 12, screen = false, cableTable =
       // spurs ride on the same row, teed off after the last ring socket, when they fit
       const spurK = r.spurKind === 'fcu' ? 'fcu' : 'socket1'; const spurLab = r.spurs === 1 ? 'Spur' : 'Spurs'; // the symbol says socket or FCU; the room summary says which
       const spurW = r.spurs ? 10 + (r.spurs - 1) * step + 2 * loadR(spurK, S) + (ip && spurK === 'socket1' ? 12 : 4) + textW(spurLab, small) : 0;
-      const nRows = Math.max(1, Math.ceil(items.length / per)); let cy = ry + 6 + r0; let x = fx; let lineY = cy; const yIn = lineY;
+      const nRows = Math.max(1, Math.ceil(items.length / per)); let cy = ry + 6 + r0 * 1.45; let x = fx; let lineY = cy; const yIn = lineY;
       for (let k = 0; k < nRows; k++) { const row = items.slice(k * per, (k + 1) * per); const dir = k % 2 ? -1 : 1; lineY = cy;
         const pos = row.map((_, j) => (dir > 0 ? cx0 + j * step : cx0 + (row.length - 1 - j) * step));
         if (k > 0) { L(ln, x, lineY - pitch, x, lineY, g); } // drop to the next row
@@ -1031,7 +1031,8 @@ export function layout(model, { W = 380, font = 12, screen = false, cableTable =
       // dome (semicircle) open side down on its lead, earth contact = straight line across the top of the dome.
       // Twin (multiple outlet, 11-13-03 style) = two short strokes across the lead.
       // v0.43.5: drawn IN the cable: the dome's flat base sits on the line (cy), which runs in one side and out the other; no stem
-      const by = cy, rr = r * 0.75;
+      const rr = r * 0.75, by = cy - r * 0.45; // v0.43.5: BS EN 60617 layout style: the cable at cy comes up at an angle into the base and back down, a small V
+      L(sh, cx - rr, cy, cx, by, { w: 1.1 }); L(sh, cx, by, cx + rr, cy, { w: 1.1 });
       arc(sh, cx, by, rr, Math.PI, 2 * Math.PI, { w: 1.2 });
       L(sh, cx - rr, by, cx + rr, by, { w: 1.1 });
       L(sh, cx - rr * 0.8, by - rr - r * 0.12, cx + rr * 0.8, by - rr - r * 0.12, { w: 1.2 });
