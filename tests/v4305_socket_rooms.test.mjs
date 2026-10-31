@@ -31,7 +31,7 @@ test('singles per room count towards points and draw as single sockets on the ri
   const r = W.socketRoomsOf(c); assert.equal(r[0].singles, 3); assert.equal(r[1].singles, 10); assert.equal(W.roomSocketTotal(c), 16);
   const L = lay(c); const t = txt(L); assert.ok(t.some((x) => /2 doubles \u00b7 3 singles/.test(x)));
   assert.ok(L.blocks.some((b) => b.shapes.some((z) => z.k === 'socket1' || z.sym === 'socket1' || JSON.stringify(z).includes('socket1'))) || t.includes('Socket (single)'));
-  assert.match(ui, /grp\('Singles'/); assert.match(ui, /\['sockets', 'singles', 'spurs', 'spurKind'\]/);
+  assert.match(ui, /grp\('Singles'/); assert.match(ui, /\['sockets', 'singles', 'spurs', 'spurKind', 'commando', 'commandoA'\]/);
 });
 const crossings = (L) => { let n = 0; for (const b of L.blocks) { const ls = b.shapes.filter((z) => z.t === 'line' && !z.dash && (z.x1 === z.x2 || z.y1 === z.y2));
   for (let i = 0; i < ls.length; i++) for (let j = i + 1; j < ls.length; j++) { const p = ls[i], q = ls[j]; const h = p.y1 === p.y2 && p.x1 !== p.x2 ? p : q.y1 === q.y2 && q.x1 !== q.x2 ? q : null, v = p.x1 === p.x2 && p !== h ? p : q.x1 === q.x2 && q !== h ? q : null; if (!h || !v) continue;
@@ -67,4 +67,16 @@ test('v29: sockets sit on the ring line (no stems) and a spur tees off on the sa
   const lines = sh.filter((z) => z.t === 'line' && z.y1 === z.y2 && z.y1 > ky && z.y1 < sp1.y + 20);
   const rowY = Math.min(...lines.map((z) => z.y1)); assert.ok(Math.abs(sp1.y - rowY) < 12, 'spur label on the socket row');
   assert.equal(crossings(L), 0);
+});
+
+test('v0.43.6 commando sockets: optional per room, 16 A default, count towards points, key and tag drawn', () => {
+  assert.equal(W.socketRoomsOf(ring)[0].commando, 0); // old rooms unchanged
+  const c = { ...ring, diagram: { roomList: [{ name: 'Workshop', sockets: 2, commando: 2 }, { name: 'Garden', sockets: 1, commando: 1, commandoA: '32' }] } };
+  const r = W.socketRoomsOf(c); assert.equal(r[0].commandoA, '16'); assert.equal(r[1].commandoA, '32');
+  assert.equal(W.roomSocketTotal(c), 6);
+  for (const Wd of [380, 560, 1100]) { const L = W.layout(W.diagramModel({ type: 'EIC', boards: [{ id: 'b', ref: 'DB1', circuits: [c] }] }), { W: Wd, font: 12, screen: true });
+    const t = txt(L); assert.equal(t.filter((x) => x === '16A').length, 3); assert.equal(t.filter((x) => x === '32A').length, 2); const j = t.join(' ');
+    assert.match(j, /Industrial socket BS EN\s60309, 16 A \(blue, 230 V\)/); assert.match(j, /Industrial socket BS EN\s60309, 32 A \(blue, 230 V\)/);
+    assert.ok(t.some((x) => /2 commandos \(16 A\)/.test(x))); assert.equal(crossings(L), 0, String(Wd)); }
+  assert.match(ui, /grp\('Commando'/); assert.match(ui, /'commando', 'commandoA'\]/);
 });

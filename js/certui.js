@@ -427,7 +427,7 @@ export function roomsOnOtherCircuits(all, except) {
 }
 export const isRoomName = (n) => { const t = String(n ?? '').trim(); return t.length > 0 && t.length <= 40 && /[a-z]/i.test(t); };
 export function defaultRoom(name, wiring = 'loop-in', mode = 'light') { return mode === 'socket' ? { name, sockets: 2 } : { name, lights: 1, sw1: 1, sw2pairs: 0, swi: 0, wiring }; }
-export function roomIsDefault(r, wiring = 'loop-in', mode = 'light') { if (mode === 'socket') return String(r.sockets ?? '') === '2' && !(+r.spurs > 0) && !(+r.singles > 0); const d = defaultRoom(r.name, wiring); return !(+r.fans > 0) && ['lights', 'sw1', 'sw2pairs', 'swi', 'wiring'].every((k) => String(r[k] ?? '') === String(d[k])); }
+export function roomIsDefault(r, wiring = 'loop-in', mode = 'light') { if (mode === 'socket') return String(r.sockets ?? '') === '2' && !(+r.spurs > 0) && !(+r.singles > 0) && !(+r.commando > 0); const d = defaultRoom(r.name, wiring); return !(+r.fans > 0) && ['lights', 'sw1', 'sw2pairs', 'swi', 'wiring'].every((k) => String(r[k] ?? '') === String(d[k])); }
 function roomsEditor(c, redraw, usedNames = () => [], otherMap = () => ({}), mode = 'light') {
   const box = h('div', { class: 'roomsed', style: 'margin:8px 0 4px' });
   const list = () => (c.diagram && Array.isArray(c.diagram.roomList) ? c.diagram.roomList : []);
@@ -459,9 +459,11 @@ function roomsEditor(c, redraw, usedNames = () => [], otherMap = () => ({}), mod
           h('div', { style: 'display:flex;flex-wrap:wrap;gap:4px 12px;align-items:center;justify-content:space-between' },
             h('div', { style: 'display:flex;gap:6px;align-items:center;flex-wrap:nowrap;max-width:100%' }, grp('Doubles', mini(+r.sockets || 0, r.name + ' double sockets', (n) => upd({ sockets: n }), 0, 20)),
             grp('Singles', mini(+r.singles || 0, r.name + ' single sockets', (n) => upd({ singles: n }), 0, 10))),
+            grp('Commando', mini(+r.commando || 0, r.name + ' commando sockets (BS EN 60309)', (n) => upd({ commando: n, ...(n && !r.commandoA ? { commandoA: '16' } : {}) }, true), 0, 6)),
             grp('Spurs', mini(+r.spurs || 0, r.name + ' spurs', (n) => upd({ spurs: n, ...(n && !r.spurKind ? { spurKind: 'socket' } : {}) }, true), 0, 4)),
-            i > 0 ? h('button', { type: 'button', class: 'linkbtn copylast', 'aria-label': 'Copy last room into ' + r.name, style: 'background:none;border:0;padding:8px 2px;min-height:40px;color:var(--brand,#2952ff);font-weight:600;font-size:14px', onclick: () => { const p = list()[i - 1]; const cp = {}; for (const f of ['sockets', 'singles', 'spurs', 'spurKind']) cp[f] = p[f]; upd(cp, true); toast('Copied from ' + p.name); } }, 'Copy last room') : null),
-          +r.spurs > 0 ? seg1([['socket', 'Single socket'], ['fcu', 'FCU', 'Fused spur (FCU)']], r.spurKind === 'fcu' ? 'fcu' : 'socket', r.name + ' spur type', (v) => upd({ spurKind: v }, true)) : null); }
+            i > 0 ? h('button', { type: 'button', class: 'linkbtn copylast', 'aria-label': 'Copy last room into ' + r.name, style: 'background:none;border:0;padding:8px 2px;min-height:40px;color:var(--brand,#2952ff);font-weight:600;font-size:14px', onclick: () => { const p = list()[i - 1]; const cp = {}; for (const f of ['sockets', 'singles', 'spurs', 'spurKind', 'commando', 'commandoA']) cp[f] = p[f]; upd(cp, true); toast('Copied from ' + p.name); } }, 'Copy last room') : null),
+          +r.spurs > 0 ? seg1([['socket', 'Single socket'], ['fcu', 'FCU', 'Fused spur (FCU)']], r.spurKind === 'fcu' ? 'fcu' : 'socket', r.name + ' spur type', (v) => upd({ spurKind: v }, true)) : null,
+          +r.commando > 0 ? seg1([['16', '16 A', 'Commando 16 A (blue, 230 V)'], ['32', '32 A', 'Commando 32 A (blue, 230 V)']], String(r.commandoA) === '32' ? '32' : '16', r.name + ' commando rating', (v) => upd({ commandoA: v }, true)) : null); }
       const k = swKind(r);
       const swCount = k === 'sw1' ? ['1-way', '1-way switches', +r.sw1 || 1, (n) => upd({ sw1: n }), 1, 4] : k === 'sw2' ? ['Pairs', '2-way pairs', +r.sw2pairs || 1, (n) => upd({ sw2pairs: n }), 1, 3] : k === 'sw2i' ? ['Int', 'Intermediates', +r.swi || 1, (n) => upd({ swi: n }), 1, 4] : null;
       const grp = (t, el) => h('div', { style: 'display:flex;align-items:center;gap:6px' }, h('span', { style: 'font-size:14px' }, t), el);
