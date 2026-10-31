@@ -331,4 +331,4 @@ Auto single-line wiring diagram from the cert (EIC/EICR whole board, MWC just th
 
 ## v0.43.8 beta (branch dp-switch-socket, NOT live)
 - Socket rooms: two counts, "DP + skt" (`dpsw`) and "DP + sw skt" (`dpsws`), 0-4 each. Each is a DP switch IN the ring/radial (same angled V feed as a socket, after the room's sockets in feed order) with a single socket spurred off its top: unswitched, or switched (switch stroke on the dome). Key entries for both. Count towards room socket total; copied by "Copy last room". Old certs load as 0.
-- Tests: tests/v4308_dpswitch.test.mjs. Shots: /workspace/polish-review/diagram/v34-dpinline/ui.py.
+- Tests: tests/v4308_dpswitch.test.mjs. Shots: /workspace/polish-review/diagram/v35-dpbigger/ui.py. DP symbol and its socket drawn ~28% bigger than a socket, with a longer spur lead between them; DP rooms get extra height (S*1.65).
