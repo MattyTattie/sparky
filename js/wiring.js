@@ -95,7 +95,7 @@ const KIND_PLURAL = { heater: 'heaters', socket: 'sockets', light: 'lights', coo
 const KIND_ONE = { heater: 'heater', socket: 'socket', light: 'light', cooker: 'cooker', shower: 'shower', alarm: 'alarm', immersion: 'immersion', ev: 'EV charger', fan: 'fan', fcu: 'FCU', flex: 'flex outlet', appliance: 'fixed appliance', point: 'point' };
 // Optional per-circuit diagram extras: circuit.diagram = { rooms, sw1, sw2, swi }.
 // Old certs have none; a lighting circuit then gets one 1-way switch.
-const KEY_EXTRA = { ipsock: 'Outdoor socket, weatherproof (IP rated)', fanh: 'Humidistat (%RH) switching a fan', fant: 'Fan timer / overrun (T)', fani: 'Fan isolator', heater: 'Heater / radiator', tailblock: 'Meter tail connector block', swfuse: 'Switch fuse / isolator (supplying a board)', jbsw: 'Switch-fed: JB to switch, looped switch to switch, each to its own lights', socket: 'Twin socket (switched)', socketu: 'Twin socket (unswitched)', socket1: 'Single socket (switched)', socket1u: 'Single socket (unswitched)', rose: 'Ceiling rose (loop-in)', jb: 'Junction box (JB)', strap: '2-way strappers (two wires)', iso: 'Local isolator: DP switch', isofcu: 'Unswitched fused connection unit (FCU), with flex outlet', isosfcu: 'Switched fused connection unit (SFCU), with flex outlet', isoccu: 'Cooker control unit (CCU): 45 A DP switch with a 13 A socket', dpu: 'DP switch in the ring, spurring an unswitched single socket (washer, dishwasher etc.)', dps: 'DP switch in the ring, spurring a switched single socket' };
+const KEY_EXTRA = { ipsock: 'Outdoor socket, weatherproof (IP rated)', fanh: 'Humidistat (%RH) switching a fan', fant: 'Fan timer / overrun (T)', fani: 'Fan isolator', heater: 'Heater / radiator', tailblock: 'Meter tail connector block', swfuse: 'Switch fuse / isolator (supplying a board)', jbsw: 'Switch-fed: JB to switch, looped switch to switch, each to its own lights', socket: 'Twin socket (switched)', socketu: 'Twin socket (unswitched)', socket1: 'Single socket (switched)', socket1u: 'Single socket (unswitched)', rose: 'Ceiling rose (loop-in)', jb: 'Junction box (JB)', strap: '2-way strappers (two wires)', iso: 'Local isolator: DP switch', fcu: 'Unswitched fused connection unit (FCU)', isofcu: 'Unswitched fused connection unit (FCU)', isosfcu: 'Switched fused connection unit (SFCU)', isofcux: 'Unswitched fused connection unit (FCU) with flex outlet', isosfcux: 'Switched fused connection unit (SFCU) with flex outlet', isoccu: 'Cooker control unit (CCU): 45 A DP switch with a 13 A socket', dpu: 'DP switch in the ring, spurring an unswitched single socket (washer, dishwasher etc.)', dps: 'DP switch in the ring, spurring a switched single socket' };
 // v0.43 (test): optional local isolator next to the load: circuit.diagram.isolator = { type, rating }.
 export const ISOLATORS = { dp20: '20 A DP switch', dp45: '45 A DP switch (cooker / shower)', sfcu: 'Switched FCU', ufcu: 'Unswitched FCU', rotary: 'Rotary isolator', ccu: 'Cooker control unit (CCU)' };
 const ISO_SHORT = { dp20: '20A DP', dp45: '45A DP', sfcu: 'SFCU', ufcu: 'FCU', rotary: 'Rotary isolator', ccu: '45A CCU' };
@@ -105,7 +105,7 @@ export function impliedFcu(c) {
   if ((c && c.diagram && c.diagram.isolator && ISOLATORS[c.diagram.isolator.type]) || pointKind(c) !== 'fcu') return null;
   const d = String((c && c.desc) || '').toLowerCase(); const named = d.replace(/\b(s?fcu|fused|connection|unit|spurs?|switched|unswitched|13 ?a|outlet|flex)\b/g, '').replace(/[^a-z]/g, '');
   if (!named) return null; const sw = /\bsfcu\b|\bswitched\b/.test(d) && !/unswitched/.test(d);
-  return { type: sw ? 'sfcu' : 'ufcu', rating: '', fcu: true, ccu: false, switched: sw, label: '13A ' + (sw ? 'SFCU' : 'FCU'), name: ISOLATORS[sw ? 'sfcu' : 'ufcu'], implied: true };
+  return { type: sw ? 'sfcu' : 'ufcu', rating: '', fcu: true, ccu: false, switched: sw, flex: /\bflex\b/.test(d), label: '13A ' + (sw ? 'SFCU' : 'FCU'), name: ISOLATORS[sw ? 'sfcu' : 'ufcu'], implied: true };
 }
 export const isoFor = (c) => isolatorOf(c) || impliedFcu(c);
 export function loadKind(c, iso = isoFor(c)) { const k0 = pointKind(c);
@@ -116,7 +116,7 @@ export function isolatorOf(c) {
   const rating = val(i.rating).trim(); const fcu = i.type === 'sfcu' || i.type === 'ufcu';
   const ccu = i.type === 'ccu';
   const label = ccu ? (rating ? rating.replace(/\s*CCU$/i, '') + ' CCU' : ISO_SHORT.ccu) : fcu ? (rating ? rating.replace(/\s+/g, '') : '13A') + ' ' + ISO_SHORT[i.type] : (rating ? (/dp/.test(i.type) ? rating + (/DP/i.test(rating) ? '' : ' DP') : rating + ' rotary') : ISO_SHORT[i.type]);
-  return { type: i.type, rating, fcu, ccu, switched: i.type !== 'ufcu', label, name: ISOLATORS[i.type] };
+  return { type: i.type, rating, fcu, ccu, switched: i.type !== 'ufcu', flex: fcu && /\bflex\b/i.test(String(c.desc || '')), label, name: ISOLATORS[i.type] }; // v0.43.9: flex outlet only when the description says so
 }
 export const SWITCH_NAME = { sw1: '1-way switch', sw2: '2-way switch', swi: 'Intermediate switch' };
 const num0 = (v) => { const n = parseInt(String(v ?? ''), 10); return Number.isFinite(n) && n > 0 ? Math.min(n, MAX_SYMBOLS) : 0; };
@@ -479,10 +479,10 @@ export function layout(model, { W = 380, font = 12, screen = false, cableTable =
   // key: only the symbols this diagram uses
   heatLab = 'Rad';
   if (used.size) {
-    const sh = []; const y = 10; const order = ['socket', 'socketu', 'socket1', 'socket1u', 'ipsock', 'light', 'rose', 'jb', 'jbsw', 'sw1', 'sw2', 'swi', 'strap', 'cooker', 'shower', 'alarm', 'immersion', 'heater', 'ev', 'fan', 'fcu', 'flex', 'appliance', 'point', 'contactor', 'coil', 'timeclock', 'iso', 'isofcu', 'isosfcu', 'isoccu', 'dpu', 'dps', 'tailblock', 'swfuse', 'fanh', 'fant', 'fani', 'spd'];
+    const sh = []; const y = 10; const order = ['socket', 'socketu', 'socket1', 'socket1u', 'ipsock', 'light', 'rose', 'jb', 'jbsw', 'sw1', 'sw2', 'swi', 'strap', 'cooker', 'shower', 'alarm', 'immersion', 'heater', 'ev', 'fan', 'fcu', 'flex', 'appliance', 'point', 'contactor', 'coil', 'timeclock', 'iso', 'isofcu', 'isofcux', 'isosfcu', 'isosfcux', 'isoccu', 'dpu', 'dps', 'tailblock', 'swfuse', 'fanh', 'fant', 'fani', 'spd'];
     let hh = textLines(sh, 8, y, 'Key', W - 16, { bold: true });
     const S = F * 1.5; const colW = (W - 16) / 2; let col = 0, rowY = y + hh + 4, rowH = 0; const KW = 2 * loadR('socket', S); // v0.43.9: icon column fits the widest (twin) outlet
-    for (const k of order.filter((k) => used.has(k))) {
+    for (const k of order.filter((k) => used.has(k) && !(k === 'isofcu' && used.has('fcu')))) { // v0.43.9: one FCU entry, same faceplate
       const x = 8 + col * colW; const name = SWITCH_NAME[k] || KEY_EXTRA[k] || (k === 'contactor' ? 'Contactor contact (KM, normally open)' : k === 'coil' ? 'Contactor coil (A1/A2)' : k === 'timeclock' ? 'Time clock' : k === 'spd' ? 'Surge protection (SPD)' : KIND_NAME[k]);
       if (k === 'contactor') { const yy = rowY + S / 2; rotH(sh, x - S * 0.1, yy, (o) => nocSym(o, x - S * 0.1, yy, S * 1.2)); }
       else if (k === 'coil') { coilSym(sh, x + S * 0.2, rowY + S * 0.1, S * 0.8, S * 0.75); }
@@ -494,7 +494,7 @@ export function layout(model, { W = 380, font = 12, screen = false, cableTable =
       else if (k === 'ipsock') { symbol(sh, 'socket', x + KW / 2, rowY + S * 0.1, S); T(sh, x + KW - 4, rowY + S * 0.85, 'IP', { bold: true, size: small * 0.75, color: COL.brand }); }
       else if (k === 'tailblock') { tailBlockSym(sh, x + S * 0.5, rowY + S * 0.15, S * 0.8); }
       else if (k === 'swfuse') { isoSym(sh, x + S * 0.5, rowY - S * 0.1, S * 1.2, true, true); }
-      else if (k === 'isofcu' || k === 'isosfcu') isoPlateH(sh, x - S * 0.1, rowY + S / 2, S * 1.2, true, k === 'isosfcu', false);
+      else if (/^isos?fcux?$/.test(k)) isoPlateH(sh, x - S * 0.1, rowY + S / 2, S * 1.2, true, k.startsWith('isosfcu'), false, k.endsWith('x'));
       else if (k === 'fanh' || k === 'fant' || k === 'fani') { fanCtlSym(sh, x - S * 0.1, rowY + S / 2, S, k === 'fanh' ? '%RH' : k === 'fant' ? 'T' : 'ISO'); }
       else if (k === 'spd') { spdSym(sh, x + S / 2, rowY - 2, F * 0.75); }
       else if (k === 'rose') { L(sh, x + S / 2 - S * 0.6, rowY + S / 2, x + S / 2 + S * 0.6, rowY + S / 2, { w: 0.9, color: COL.grey }); C(sh, x + S / 2, rowY + S / 2, S * 0.17, { fill: COL.line, lw: 0.8 }); }
@@ -578,11 +578,11 @@ export function layout(model, { W = 380, font = 12, screen = false, cableTable =
     }
     // v0.43: local isolator (DP switch, FCU, rotary) in line, just before the load
     const iso = info.spare ? null : isoFor(c);
-    if (iso && horiz) used.add(iso.ccu ? 'isoccu' : iso.fcu ? (iso.switched ? 'isosfcu' : 'isofcu') : 'iso');
-    if (iso && !horiz) { used.add(iso.ccu ? 'isoccu' : iso.fcu ? (iso.switched ? 'isosfcu' : 'isofcu') : 'iso');
+    if (iso && horiz) used.add(iso.ccu ? 'isoccu' : iso.fcu ? (iso.switched ? 'isosfcu' : 'isofcu') + (iso.flex ? 'x' : '') : 'iso');
+    if (iso && !horiz) { used.add(iso.ccu ? 'isoccu' : iso.fcu ? (iso.switched ? 'isosfcu' : 'isofcu') + (iso.flex ? 'x' : '') : 'iso');
       const iy = Math.max(feedTop, y + hh) + 4, ih = F * 2.4;
       L(sh, fx0, feedTop, fx0, iy, { w: 0.9, color: COL.grey });
-      isoPlateV(sh, fx0, iy, ih, iso.fcu, iso.switched, iso.ccu);
+      isoPlateV(sh, fx0, iy, ih, iso.fcu, iso.switched, iso.ccu, iso.flex);
       const nh = textLines(sh, fx0 + F * 1.3, iy + ih * 0.3 - small, iso.label, W - fx0 - F * 1.3 - 6, { size: small, bold: true });
       const out = iy + Math.max(ih, nh) + 2; L(sh, fx0, iy + ih, fx0, out, { w: 0.9, color: COL.grey });
       hh = out - y + 2; feedTop = out; }
@@ -616,7 +616,7 @@ export function layout(model, { W = 380, font = 12, screen = false, cableTable =
       const items = []; let coilAt = null;
       if (ctl) { const kw = F * 2.4; items.push([kw + gapX, (x, cy) => { rotH(sh, x, cy, (o) => nocSym(o, x, cy, kw)); T(sh, x + kw / 2, cy - S * 0.55, tags[val(c.num) || '?'] || ctl.tag, { anchor: 'middle', bold: true, size: small }); coilAt = { x: x + kw * 0.5, y: cy }; }, false, kw]); }
       if (iso) { const ih = iso.ccu ? F * 3.2 : F * 2.4; const iw0 = Math.max(ih, textW(iso.label, small, true) + 4); items.push([iw0 + gapX, (x0, cy) => { /* v0.43.3: label centred over its symbol; leads fill the slot */ const pad = (iw0 - ih) / 2, x = x0 + pad; if (pad > 0) { L(sh, x0, cy, x, cy, g9); L(sh, x + ih, cy, x0 + iw0, cy, g9); }
-        isoPlateH(sh, x, cy, ih, iso.fcu, iso.switched, iso.ccu); T(sh, x + ih / 2, cy - Math.max(S * 0.55, iso.ccu ? ih * 0.36 : 0), iso.label, { anchor: 'middle', bold: true, size: small }); }, false, iw0]); }
+        isoPlateH(sh, x, cy, ih, iso.fcu, iso.switched, iso.ccu, iso.flex); T(sh, x + ih / 2, cy - Math.max(S * 0.55, iso.ccu ? ih * 0.36 : 0), iso.label, { anchor: 'middle', bold: true, size: small }); }, false, iw0]); }
       heatLab = isTowel(c) ? 'Rail' : 'Rad';
       // v0.43.4: a plain lighting circuit's switch(es) sit in line before its lights (feed -> switch -> lights)
       const si0 = switchInfo(c); const swIn = si0 && si0.list.length && pc.shown && kind === 'light' ? si0.list : [];
@@ -1041,23 +1041,23 @@ export function layout(model, { W = 380, font = 12, screen = false, cableTable =
   // dp = DP switch (big centred rocker, neon, DP); fcu = fused connection unit (fuse carrier + flex outlet hole);
   // sfcu = same plus a rocker and neon; flex = unfused flex / cable outlet plate; ccu = cooker control unit (big DP rocker + switched socket).
   function faceW(type, r) { const H = r * 1.7; return type === 'ccu' ? H * 2.2 : H; }
-  function facePlate(sh, cx, cy, type, r) {
+  function facePlate(sh, cx, cy, type, r, flex = false) {
     const H = r * 1.7, w = faceW(type, r), x0 = cx - w / 2, y0 = cy - H / 2, ink = COL.line, W0 = [255, 255, 255];
     sh.push({ t: 'rect', x: x0, y: y0, w, h: H, lw: 1.1, color: ink, fill: W0 });
     const neon = (nx, ny) => C(sh, nx, ny, H * 0.045, { fill: [200, 40, 40], lw: 0 });
     const cord = () => { const cw = H * 0.26; L(sh, cx - cw / 2, y0 + H, cx - cw / 2, y0 + H * 0.88, { w: 0.9 }); L(sh, cx - cw / 2, y0 + H * 0.88, cx + cw / 2, y0 + H * 0.88, { w: 0.9 }); L(sh, cx + cw / 2, y0 + H * 0.88, cx + cw / 2, y0 + H, { w: 0.9 }); };
     const fuse = (fy) => { const fw = H * 0.46, fh = H * 0.2; L(sh, cx - fw / 2, fy, cx + fw / 2, fy, { w: 0.9 }); L(sh, cx + fw / 2, fy, cx + fw / 2, fy + fh, { w: 0.9 }); L(sh, cx + fw / 2, fy + fh, cx - fw / 2, fy + fh, { w: 0.9 }); L(sh, cx - fw / 2, fy + fh, cx - fw / 2, fy, { w: 0.9 }); L(sh, cx - fw * 0.3, fy + fh / 2, cx + fw * 0.3, fy + fh / 2, { w: 0.9 }); };
-    if (type === 'dp') { rocker(sh, cx - H * 0.15, y0 + H * 0.1, H * 0.3, H * 0.5); neon(cx + H * 0.33, y0 + H * 0.2); T(sh, cx, y0 + H * 0.9, 'DP', { anchor: 'middle', bold: true, size: H * 0.26 }); }
-    else if (type === 'fcu') { fuse(y0 + H * 0.3); cord(); }
-    else if (type === 'sfcu') { rocker(sh, cx - H * 0.08, y0 + H * 0.08, H * 0.16, H * 0.32); neon(cx + H * 0.3, y0 + H * 0.2); fuse(y0 + H * 0.5); cord(); }
+    if (type === 'dp') { rocker(sh, cx - H * 0.15, y0 + H * 0.08, H * 0.3, H * 0.46); neon(cx + H * 0.33, y0 + H * 0.2); T(sh, cx, y0 + H * 0.93, 'DP', { anchor: 'middle', bold: true, size: H * 0.32 }); }
+    else if (type === 'fcu') { fuse(y0 + H * (flex ? 0.3 : 0.4)); if (flex) cord(); }
+    else if (type === 'sfcu') { rocker(sh, cx - H * 0.08, y0 + H * 0.08, H * 0.16, H * 0.32); neon(cx + H * 0.3, y0 + H * 0.2); fuse(y0 + H * 0.55); if (flex) cord(); }
     else if (type === 'flex') { C(sh, cx, y0 + H * 0.45, H * 0.07, { lw: 0.9, fill: W0 }); cord(); }
-    else if (type === 'ccu') { const hx = x0 + H * 0.5; rocker(sh, hx - H * 0.17, y0 + H * 0.22, H * 0.34, H * 0.56); neon(hx + H * 0.33, y0 + H * 0.22);
-      T(sh, hx, y0 + H * 0.15, 'COOKER', { anchor: 'middle', bold: true, size: H * 0.17 }); L(sh, cx, y0 + H * 0.1, cx, y0 + H * 0.9, { w: 0.6, color: COL.grey });
+    else if (type === 'ccu') { const hx = x0 + H * 0.5; rocker(sh, hx - H * 0.17, y0 + H * 0.28, H * 0.34, H * 0.56); neon(hx + H * 0.36, y0 + H * 0.5);
+      T(sh, hx, y0 + H * 0.19, 'COOKER', { anchor: 'middle', bold: true, size: H * 0.21 }); L(sh, cx, y0 + H * 0.1, cx, y0 + H * 0.9, { w: 0.6, color: COL.grey });
       const px = x0 + H * 1.5, hole = (hx2, hy, hw, hh) => sh.push({ t: 'rect', x: hx2 - hw / 2, y: hy - hh / 2, w: hw, h: hh, lw: 0, color: ink, fill: ink });
       hole(px, y0 + H * 0.4, H * 0.09, H * 0.22); hole(px - H * 0.19, y0 + H * 0.72, H * 0.2, H * 0.09); hole(px + H * 0.19, y0 + H * 0.72, H * 0.2, H * 0.09); rocker(sh, px + H * 0.36, y0 + H * 0.13, H * 0.12, H * 0.28); } }
   function isoType(fcu, sw, ccu) { return ccu ? 'ccu' : fcu ? (sw ? 'sfcu' : 'fcu') : 'dp'; }
-  function isoPlateV(o, x, y0, h, fcu, sw, ccu) { const r = F * 0.75, H = r * 1.7, t = isoType(fcu, sw, ccu), cy = y0 + h / 2; L(o, x, y0, x, cy - H / 2, { w: 1.1 }); facePlate(o, x, cy, t, r); L(o, x, cy + H / 2, x, y0 + h, { w: 1.1 }); }
-  function isoPlateH(o, x, cy, h, fcu, sw, ccu) { const r = F * 0.75, t = isoType(fcu, sw, ccu), w = faceW(t, r), cx = x + h / 2; L(o, x, cy, cx - w / 2, cy, { w: 1.1 }); facePlate(o, cx, cy, t, r); L(o, cx + w / 2, cy, x + h, cy, { w: 1.1 }); }
+  function isoPlateV(o, x, y0, h, fcu, sw, ccu, flex = false) { const r = F * 0.75, H = r * 1.7, t = isoType(fcu, sw, ccu), cy = y0 + h / 2; L(o, x, y0, x, cy - H / 2, { w: 1.1 }); facePlate(o, x, cy, t, r, flex); L(o, x, cy + H / 2, x, y0 + h, { w: 1.1 }); }
+  function isoPlateH(o, x, cy, h, fcu, sw, ccu, flex = false) { const r = F * 0.75, t = isoType(fcu, sw, ccu), w = faceW(t, r), cx = x + h / 2; L(o, x, cy, cx - w / 2, cy, { w: 1.1 }); facePlate(o, cx, cy, t, r, flex); L(o, cx + w / 2, cy, x + h, cy, { w: 1.1 }); }
   // a rocker switch seen from the front: square-cornered outline, split across the middle, the ON half shaded
   function rocker(sh, x, y, w, h) { const o = { w: 0.9 }; L(sh, x, y, x + w, y, o); L(sh, x + w, y, x + w, y + h, o); L(sh, x + w, y + h, x, y + h, o); L(sh, x, y + h, x, y, o);
     sh.push({ t: 'rect', x, y: y + h / 2, w, h: h / 2, lw: 0, color: COL.line, fill: COL.line, rocker: true }); }
