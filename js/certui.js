@@ -454,11 +454,11 @@ function roomsEditor(c, redraw, usedNames = () => [], otherMap = () => ({}), mod
       return h('div', { class: 'rstep', style: 'display:flex;align-items:center;gap:4px' }, b('\u2212', -1, 'fewer'), out, b('+', 1, 'more')); };
     const roomRow = (r) => { const i = list().findIndex((x) => x.name === r.name);
       const upd = (patch, again = false) => { const nl = list().map((x, j) => (j === i ? { ...x, ...patch } : x)); store(nl); if (again) draw(); };
-      if (mode === 'socket') { const grp = (t, el) => h('div', { style: 'display:flex;align-items:center;gap:6px' }, h('span', { style: 'font-size:14px' }, t), el); // v0.43.5: sockets (doubles) and optional spurs
+      if (mode === 'socket') { const grp = (t, el) => h('div', { style: 'display:flex;align-items:center;gap:3px;min-width:0' }, h('span', { style: 'font-size:13px' }, t), el); // v0.43.5: sockets (doubles) and optional spurs
         return h('div', { class: 'roomrow sockrow', style: 'border:1px solid var(--line);border-radius:10px;padding:6px 8px;margin:0 0 8px' },
           h('div', { style: 'display:flex;flex-wrap:wrap;gap:4px 12px;align-items:center;justify-content:space-between' },
-            grp('Doubles', mini(+r.sockets || 0, r.name + ' double sockets', (n) => upd({ sockets: n }), 0, 20)),
-            grp('Singles', mini(+r.singles || 0, r.name + ' single sockets', (n) => upd({ singles: n }), 0, 10)),
+            h('div', { style: 'display:flex;gap:6px;align-items:center;flex-wrap:nowrap;max-width:100%' }, grp('Doubles', mini(+r.sockets || 0, r.name + ' double sockets', (n) => upd({ sockets: n }), 0, 20)),
+            grp('Singles', mini(+r.singles || 0, r.name + ' single sockets', (n) => upd({ singles: n }), 0, 10))),
             grp('Spurs', mini(+r.spurs || 0, r.name + ' spurs', (n) => upd({ spurs: n, ...(n && !r.spurKind ? { spurKind: 'socket' } : {}) }, true), 0, 4)),
             i > 0 ? h('button', { type: 'button', class: 'linkbtn copylast', 'aria-label': 'Copy last room into ' + r.name, style: 'background:none;border:0;padding:8px 2px;min-height:40px;color:var(--brand,#2952ff);font-weight:600;font-size:14px', onclick: () => { const p = list()[i - 1]; const cp = {}; for (const f of ['sockets', 'singles', 'spurs', 'spurKind']) cp[f] = p[f]; upd(cp, true); toast('Copied from ' + p.name); } }, 'Copy last room') : null),
           +r.spurs > 0 ? seg1([['socket', 'Single socket'], ['fcu', 'FCU', 'Fused spur (FCU)']], r.spurKind === 'fcu' ? 'fcu' : 'socket', r.name + ' spur type', (v) => upd({ spurKind: v }, true)) : null); }

@@ -705,55 +705,48 @@ export function layout(model, { W = 380, font = 12, screen = false, cableTable =
   // into each box on the left, through its sockets, out on the right, down the gap and
   // back to a lane left of the boxes for the next room. A ring returns up the right
   // side and over the top to the breaker. Spurs drop off the line before the first socket.
-  // v0.43.5: socket rooms. Feed enters each room box at the left on its own line
-  // under the summary (doubles, then singles, on it); the cable turns down at the
-  // right inside the box, returns along the box bottom and leaves at the left into a
-  // lane outside the boxes, then drops to the next room. A ring's last room exits at
-  // the right into a return lane outside the boxes, up and back to the feed.
+  // v0.43.5: socket rooms, in the lighting-room style. The circuit cable is a
+  // vertical lane on the left, outside the boxes; each room hangs off it with one
+  // tee into the box's left edge, sockets on the tee (doubles then singles), spurs
+  // below. A ring adds a parallel return lane further left; the two legs join at the
+  // top (the feed) and below the last room. Nothing on the right, no crossings.
   function sockRoomsSection(sh, info, tx, top, tw, feedTop, c) {
     const S = F * 1.5, rad = loadR('socket', S), step = S + 12, rowH = S + 12, fx = tx - gap / 2; const g = { w: 1.1, color: COL.line };
-    const ring = isRingC(c); const laneX = tx + 5, bx = tx + 11, bw = tw - 11 - (ring ? 16 : 0), xR = bx + bw + 8;
+    const ring = isRingC(c); const xo = tx + 3, xi = ring ? tx + 9 : tx + 4, bx = xi + 7, bw = tx + tw - bx;
     let y0 = top; if (screen && info.roomNote) y0 += textLines(sh, tx, y0 - 4, info.roomNote, tw, { size: small, color: COL.na }) + 4;
-    const topY = y0 + 2; if (ring) y0 += 10;
-    let prevOut = null; used.add('socket'); const N = info.sockRooms.length;
-    info.sockRooms.forEach((r, ri) => {
-      const rs = []; const ix = bx + 8, iw = bw - 16; let ry = y0 + 4; const lastRoom = ri === N - 1;
+    const topY = y0 + 2; y0 += 8; used.add('socket'); let teeY = topY, lastBottom = y0;
+    info.sockRooms.forEach((r) => {
+      const rs = []; const ix = bx + 8, iw = bw - 16; let ry = y0 + 4;
       ry += textLines(rs, ix, ry, r.name || 'Room ' + (r.i + 1), iw, { bold: true, size: small });
       const ip = /outside|outdoor|garden|exterior|external|patio/i.test(r.name); if (ip) used.add('ipsock'); // outdoor: weatherproof, marked IP
       const pl = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`;
       const parts = [pl(r.sockets, 'double'), r.singles ? pl(r.singles, 'single') : '', r.spurs ? pl(r.spurs, 'spur') + (r.spurKind === 'fcu' ? ' (FCU)' : '') : '', ip ? 'outdoor, IP rated' : ''].filter(Boolean);
       ry += textLines(rs, ix, ry, parts.join(' \u00b7 '), iw, { size: small * 0.92, color: COL.grey });
       const items = [...Array(r.sockets).fill('socket'), ...Array(r.singles).fill('socket1')]; if (r.singles) used.add('socket1');
-      const xT = bx + bw - 12; /* the turn-down, inside the box, clear of its border */ const cx0 = ix + S * 0.9 + rad; const per = Math.max(1, Math.floor((xT - 6 - rad - cx0) / step) + 1);
-      const rowY0 = ry + S * 0.5 + 4; let last = null; let lineStart = bx;
+      const cx0 = ix + S * 0.9 + rad; const per = Math.max(1, Math.floor((bx + bw - 10 - rad - cx0) / step) + 1);
+      const rowY0 = ry + S * 0.5 + 4; let last = null;
       const ipTag = (x, y) => { if (ip) T(rs, x, y, 'IP', { bold: true, size: small * 0.75, color: COL.brand }); };
       items.forEach((k, j) => { const cx = cx0 + (j % per) * step, cy = rowY0 + Math.floor(j / per) * rowH; const kr = loadR(k, S);
-        if (!j) L(rs, lineStart, cy, cx - kr, cy, g);
-        else if (j % per === 0) { const wy = cy - rowH / 2, wx = ix + 2; L(rs, last.x + last.r, last.y, last.x + last.r + 3, last.y, g); L(rs, last.x + last.r + 3, last.y, last.x + last.r + 3, wy, g); L(rs, last.x + last.r + 3, wy, wx, wy, g); L(rs, wx, wy, wx, cy, g); L(rs, wx, cy, cx - kr, cy, g); }
+        if (!j) L(rs, bx, cy, cx - kr, cy, g);
+        else if (j % per === 0) { const wy = cy - rowH / 2, wx = ix + 2, ex = last.x + last.r + 3; L(rs, last.x + last.r, last.y, ex, last.y, g); L(rs, ex, last.y, ex, wy, g); L(rs, ex, wy, wx, wy, g); L(rs, wx, wy, wx, cy, g); L(rs, wx, cy, cx - kr, cy, g); }
         else L(rs, last.x + last.r, cy, cx - kr, cy, g);
         symbol(rs, k, cx, cy, S); ipTag(cx + kr + 1, cy + S * 0.55); last = { x: cx, y: cy, r: kr }; });
-      const endY = last ? last.y : rowY0; const endX = last ? last.x + last.r : bx;
-      let bottom = endY + S * 0.6;
+      if (!last) L(rs, bx, rowY0, r.spurs ? cx0 - S * 0.8 : bx + 10, rowY0, g);
+      let bottom = (last ? last.y : rowY0) + S * 0.6;
       if (r.spurs) { const k = r.spurKind === 'fcu' ? 'fcu' : 'socket1'; used.add(k); const sr = loadR(k, S); const sy = bottom + S * 0.5 + 6, dx = cx0 - S * 0.8;
-        if (!last) L(rs, bx, rowY0, dx, rowY0, g);
         L(rs, dx, last ? last.y : rowY0, dx, sy, g); let px = dx;
         for (let j = 0; j < r.spurs; j++) { const cx = cx0 + j * step; L(rs, px, sy, cx - sr, sy, g); symbol(rs, k, cx, sy, S); if (k === 'socket1') ipTag(cx + sr + 1, sy + S * 0.55); px = cx + sr; }
-        const lab = (r.spurKind === 'fcu' ? 'FCU spur' : 'Spur') + (r.spurs === 1 ? '' : 's'); const lx = px + (ip ? 12 : 6); if (lx + textW(lab, small) < xT - 4) T(rs, lx, sy + small * 0.35, lab, { size: small, color: COL.grey });
+        const lab = (r.spurKind === 'fcu' ? 'FCU spur' : 'Spur') + (r.spurs === 1 ? '' : 's'); const lx = px + (ip ? 12 : 6); if (lx + textW(lab, small) < bx + bw - 6) T(rs, lx, sy + small * 0.35, lab, { size: small, color: COL.grey });
         bottom = sy + S * 0.6; }
-      let outY = null;
-      if (lastRoom && !ring) { if (!last && !r.spurs) L(rs, bx, rowY0, bx + 10, rowY0, g); /* a radial ends at its last socket */ }
-      else if (lastRoom && ring) { L(rs, endX, endY, xR, endY, g); if (!last && r.spurs) {} }
-      else { outY = bottom + 7; L(rs, last ? endX : (r.spurs ? cx0 - S * 0.8 : bx), endY, xT, endY, g); L(rs, xT, endY, xT, outY, g); L(rs, xT, outY, bx, outY, g); bottom = outY; }
-      const bh = bottom - y0 + (outY != null ? 8 : 6); R(sh, bx, y0, bw, bh, { fill: COL.fill, color: [150, 160, 190] }); sh.push(...rs);
-      if (outY != null) L(sh, bx, outY, laneX, outY, g); // leaves at the left
-      if (!prevOut) { L(sh, fx, feedTop, fx, rowY0, g); L(sh, fx, rowY0, bx, rowY0, g); }
-      else { L(sh, laneX, prevOut, laneX, rowY0, g); L(sh, laneX, rowY0, bx, rowY0, g); }
-      prevOut = outY;
-      if (ring && lastRoom) { L(sh, xR, endY, xR, topY, g); L(sh, xR, topY, fx, topY, g); C(sh, fx, topY, 1.8, { fill: COL.line, lw: 0.6 }); }
+      const bh = bottom - y0 + 6; R(sh, bx, y0, bw, bh, { fill: COL.fill, color: [150, 160, 190] }); sh.push(...rs);
+      L(sh, xi, rowY0, bx, rowY0, g); teeY = rowY0; lastBottom = y0 + bh; // the tee
       cable('Circuit ' + (val(c.num) || '?'), r.name || 'room', cableLabel(c).split(' \u00b7 ')[0]);
-      y0 += bh + 12;
+      y0 += bh + 10;
     });
-    return y0 - top - 2;
+    L(sh, fx, feedTop, fx, topY, g); L(sh, fx, topY, xi, topY, g);
+    if (ring) { const by = lastBottom + 4; L(sh, xi, topY, xi, by, g); L(sh, xo, topY, xo, by, g); L(sh, xo, by, xi, by, g); C(sh, xo, topY, 1.6, { fill: COL.line, lw: 0.6 }); }
+    else L(sh, xi, topY, xi, teeY, g);
+    return y0 - top - 2 + (ring ? 4 : 0);
   }
   function roomsSection(sh, info, tx, top, tw, feedTop, c) {
     const S = F * 1.5, step = S + 8, fx = tx - gap / 2, G = { w: 0.9, color: COL.grey };
