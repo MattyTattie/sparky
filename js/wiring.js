@@ -488,7 +488,7 @@ export function layout(model, { W = 380, font = 12, screen = false, cableTable =
       else if (k === 'timeclock') { clockSym(sh, x + S / 2, rowY + S / 2, S * 0.42); }
       else if (k === 'iso') { const yy = rowY + S / 2; rotH(sh, x - S * 0.1, yy, (o) => isoSym(o, x - S * 0.1, yy, S * 1.2, false)); }
       else if (k === 'isoccu') { const yy = rowY + S / 2; rotH(sh, x - S * 0.1, yy, (o) => isoSym(o, x - S * 0.1, yy, S * 1.2, false, true, true)); ccuSock(sh, x - S * 0.1 + S * 0.6, yy + S * 0.36, S * 0.8); }
-      else if (k === 'dpu' || k === 'dps') { L(sh, x, rowY + S * 1.75, x + S * 1.2, rowY + S * 1.75, { w: 1.1 }); symbol(sh, k, x + S * 0.6, rowY + S * 1.75, S); }
+      else if (k === 'dpu' || k === 'dps') { const ky = rowY + S * 1.75; L(sh, x, ky, x + S * 0.17, ky, { w: 1.1 }); L(sh, x + S * 1.03, ky, x + S * 1.2, ky, { w: 1.1 }); /* cable meets the plate's sides, not through it */ symbol(sh, k, x + S * 0.6, rowY + S * 1.75, S); }
       else if (SOCK[k]) symbol(sh, k, x + KW / 2, rowY + S * 0.1, S);
       else if (k === 'ipsock') { symbol(sh, 'socket', x + KW / 2, rowY + S * 0.1, S); T(sh, x + KW - 4, rowY + S * 0.85, 'IP', { bold: true, size: small * 0.75, color: COL.brand }); }
       else if (k === 'tailblock') { tailBlockSym(sh, x + S * 0.5, rowY + S * 0.15, S * 0.8); }
@@ -1032,9 +1032,12 @@ export function layout(model, { W = 380, font = 12, screen = false, cableTable =
     const H = r * 1.7, w = twin ? H * 2 : H, x0 = x - w / 2, ink = COL.line;
     sh.push({ t: 'rect', x: x0, y, w, h: H, lw: 1.1, color: ink, fill: [255, 255, 255] });
     const hole = (hx, hy, hw, hh) => sh.push({ t: 'rect', x: hx - hw / 2, y: hy - hh / 2, w: hw, h: hh, lw: 0, color: ink, fill: ink });
-    for (let u = 0; u < (twin ? 2 : 1); u++) { const ux = x0 + u * H, px = ux + H * (sw ? 0.4 : 0.5);
+    for (let u = 0; u < (twin ? 2 : 1); u++) { const ux = x0 + u * H, inb = twin && u === 1, px = ux + H * (sw ? (inb ? 0.6 : 0.4) : 0.5); // twin: both rockers inboard, in the middle
       hole(px, y + H * 0.3, H * 0.09, H * 0.22); hole(px - H * 0.19, y + H * 0.62, H * 0.2, H * 0.09); hole(px + H * 0.19, y + H * 0.62, H * 0.2, H * 0.09);
-      if (sw) sh.push({ t: 'rect', x: ux + H * 0.73, y: y + H * 0.3, w: H * 0.15, h: H * 0.36, lw: 0.9, color: ink, fill: [255, 255, 255], rocker: true }); } }
+      if (sw) rocker(sh, ux + H * (inb ? 0.1 : 0.72), y + H * 0.24, H * 0.18, H * 0.48); } }
+  // a rocker switch seen from the front: square-cornered outline, split across the middle, the ON half shaded
+  function rocker(sh, x, y, w, h) { const o = { w: 0.9 }; L(sh, x, y, x + w, y, o); L(sh, x + w, y, x + w, y + h, o); L(sh, x + w, y + h, x, y + h, o); L(sh, x, y + h, x, y, o);
+    sh.push({ t: 'rect', x, y: y + h / 2, w, h: h / 2, lw: 0, color: COL.line, fill: COL.line, rocker: true }); }
   function arc(sh, cx, cy, r, a0, a1, o = {}) { const n = 12; for (let i = 0; i < n; i++) { const p = a0 + (a1 - a0) * i / n, q = a0 + (a1 - a0) * (i + 1) / n; L(sh, cx + Math.cos(p) * r, cy + Math.sin(p) * r, cx + Math.cos(q) * r, cy + Math.sin(q) * r, { w: o.w || 1.1, color: o.color }); } }
   function box(sh, cx, cy, r) { R(sh, cx - r, cy - r, r * 2, r * 2, { lw: 1, fill: [255, 255, 255] }); }
   function swLever(sh, ax, ay, dx, dy, r) { // lever from the switch circle with a short end tick
@@ -1049,7 +1052,7 @@ export function layout(model, { W = 380, font = 12, screen = false, cableTable =
     else if (kind === 'dpu' || kind === 'dps') { // v0.43.9: DP switch plate (rocker marked DP) in the ring; long spur up and over to its socket faceplate
       const H = r * 1.7, x0 = cx - H / 2, y0 = cy - H / 2;
       sh.push({ t: 'rect', x: x0, y: y0, w: H, h: H, lw: 1.1, color: COL.line, fill: W0 });
-      sh.push({ t: 'rect', x: cx - H * 0.13, y: y0 + H * 0.16, w: H * 0.26, h: H * 0.42, lw: 0.9, color: COL.line, fill: W0 });
+      rocker(sh, cx - H * 0.13, y0 + H * 0.12, H * 0.26, H * 0.48);
       T(sh, cx, y0 + H * 0.9, 'DP', { anchor: 'middle', bold: true, size: H * 0.3 });
       const Y = y0 - r * 2.5, sx = cx + r * 2.4; L(sh, cx, y0, cx, Y, { w: 1.1 }); L(sh, cx, Y, sx, Y, { w: 1.1 }); L(sh, sx, Y, sx, Y + r * 0.35, { w: 1.1 });
       plate(sh, sx, Y + r * 0.35, r, false, kind === 'dps'); }
