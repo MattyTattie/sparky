@@ -14,7 +14,7 @@ import { TYPES, newCert, sectionsFor, sectionDone, missingFields, visible, get, 
 import { INTAKE_NOTE_10, INTAKE_NOTES, INTAKE_NOTIFIED, migrateIntake, EIC_ITEMS, EIC_OUTCOMES, EICR_ITEMS, EICR_OUTCOMES, CODE_TEXT, OBSERVATIONS, OBS_CATS, EIC_HELP, EICR_HELP } from './inspections.js';
 import { checkCircuit, isSpare } from './checks.js';
 import { CHECK_NOTE } from './limits.js';
-import { diagramSvg, diagramInPdf, diagramHasCircuits, SPUR_FEEDS, CONTROL_VIA, switchInfo, roomListOf, roomPointsNote, pointKind, socketSingles, arrangedOrder, feedInfo, ISOLATORS } from './wiring.js';
+import { diagramSvg, diagramInPdf, diagramHasCircuits, SPUR_FEEDS, CONTROL_VIA, switchInfo, roomListOf, roomPointsNote, socketRoomsOf, roomPointTotal, pointKind, socketSingles, arrangedOrder, feedInfo, ISOLATORS } from './wiring.js';
 import { limitOn, limitBar } from './limitbar.js';
 import { circuitReadings, makeTemplate, applyTemplate, nextRoom, tidyLayouts, BUILTIN_TEMPLATES, TEMPLATE_KEY } from './diagrampro.js';
 import { dangerCodes, noticeForObs, noticesOf, noticeMissing, noticeNo } from './dangermodel.js';
@@ -229,10 +229,10 @@ export function diagramIssues(cert) {
   for (const c of all) { if (!c || isSpareC(c)) continue;
     const k = c.control; if (k && k.via && k.via !== 'none' && !String(k.controlCircuit || '').trim()) out.push({ c, kind: 'coil', text: 'choose which circuit feeds the contactor coil', fixes: [] });
     const note = roomPointsNote(c); if (!note) continue;
-    const rl = roomListOf(c) || []; const t = rl.reduce((a, r) => a + (+r.lights || 0) + (+r.fans || 0), 0); const n = parseInt(String(c.points ?? ''), 10);
+    const sock = !!socketRoomsOf(c); const t = roomPointTotal(c); const n = parseInt(String(c.points ?? ''), 10);
     const fixes = [{ label: `Set points to ${t}`, apply: () => { c.points = String(t); } }];
     const raw = c.diagram && Array.isArray(c.diagram.roomList) ? c.diagram.roomList : []; const last = raw[raw.length - 1];
-    if (Number.isFinite(n) && n > t && last) { const d = n - t; fixes.push({ label: `Add ${d} light${d === 1 ? '' : 's'} to ${last.name || 'the last room'}`, apply: () => { last.lights = Math.min(10, (+last.lights || 0) + d); } }); }
+    if (Number.isFinite(n) && n > t && last) { const d = n - t; const f = sock ? 'sockets' : 'lights', w = sock ? 'socket' : 'light'; fixes.push({ label: `Add ${d} ${w}${d === 1 ? '' : 's'} to ${last.name || 'the last room'}`, apply: () => { last[f] = Math.min(sock ? 20 : 10, (+last[f] || 0) + d); } }); }
     out.push({ c, kind: 'points', text: note, fixes });
   }
   return out;
@@ -307,8 +307,9 @@ function extrasCard(cert, redraw) {
       isLight && !roomListOf(c) ? h('details', { class: 'fold', style: 'margin-top:6px' }, h('summary', {}, h('span', { class: 'foldt' }, 'Or just set switch counts', h('span', { class: 'folds' }, 'Without rooms')), h('span', { class: 'foldic' }, '\u203a')),
         h('div', { class: 'foldin' }, h('label', { class: 'f' }, h('span', {}, 'Rooms (text)'), h('input', { placeholder: 'e.g. Kitchen, Hall', 'aria-label': 'Rooms, circuit ' + (c.num || ''), value: d.rooms || '', onchange: (e) => save(c, 'rooms', e.target.value.trim()) })),
           h('div', { style: 'display:flex;gap:8px' }, numIn('sw1', '1-way'), numIn('sw2', '2-way pairs'), numIn('swi', 'Intermediate')))) : null,
-      !isLight ? h('label', { class: 'f' }, h('span', {}, 'Rooms'), h('input', { placeholder: 'e.g. Kitchen, Hall', 'aria-label': 'Rooms, circuit ' + (c.num || ''), value: d.rooms || '', onchange: (e) => save(c, 'rooms', e.target.value.trim()) })) : null,
-      pointKind(c) === 'socket' ? singlesRow(c, save) : null,
+      pointKind(c) === 'socket' ? roomsEditor(c, redraw, () => jobRoomNames(all, c), () => roomsOnOtherCircuits(all, c), 'socket') : null, // v0.43.5: rooms on rings and radials
+      !isLight && (pointKind(c) !== 'socket' || (d.rooms && !socketRoomsOf(c))) ? h('label', { class: 'f' }, h('span', {}, 'Rooms'), h('input', { placeholder: 'e.g. Kitchen, Hall', 'aria-label': 'Rooms, circuit ' + (c.num || ''), value: d.rooms || '', onchange: (e) => save(c, 'rooms', e.target.value.trim()) })) : null,
+      pointKind(c) === 'socket' && !socketRoomsOf(c) ? singlesRow(c, save) : null,
       isolatorRow(c, save)]);
   };
   const pick = h('select', { id: 'extrascircuit', 'aria-label': 'Circuit', style: 'width:100%;white-space:normal', onchange: (e) => { pickedCircuit.set(key, +e.target.value); arranging = false; drawOne(); } },
@@ -420,14 +421,14 @@ export const TICK_ROOMS = ['Kitchen', 'Living room', 'Dining room', 'Hall', 'Lan
 // name -> circuit number, for rooms on OTHER lighting circuits of this job
 export function roomsOnOtherCircuits(all, except) {
   const m = {};
-  for (const x of all) { if (!x || x === except || !x.diagram || !Array.isArray(x.diagram.roomList)) continue;
+  for (const x of all) { if (!x || x === except || !x.diagram || !Array.isArray(x.diagram.roomList) || (except && pointKind(x) !== pointKind(except))) continue; // v0.43.5: only circuits of the same kind (lights / sockets)
     for (const r of x.diagram.roomList) if (r && isRoomName(r.name) && !m[String(r.name).trim()]) m[String(r.name).trim()] = String(x.num || '?'); }
   return m;
 }
 export const isRoomName = (n) => { const t = String(n ?? '').trim(); return t.length > 0 && t.length <= 40 && /[a-z]/i.test(t); };
-export function defaultRoom(name, wiring = 'loop-in') { return { name, lights: 1, sw1: 1, sw2pairs: 0, swi: 0, wiring }; }
-export function roomIsDefault(r, wiring = 'loop-in') { const d = defaultRoom(r.name, wiring); return !(+r.fans > 0) && ['lights', 'sw1', 'sw2pairs', 'swi', 'wiring'].every((k) => String(r[k] ?? '') === String(d[k])); }
-function roomsEditor(c, redraw, usedNames = () => [], otherMap = () => ({})) {
+export function defaultRoom(name, wiring = 'loop-in', mode = 'light') { return mode === 'socket' ? { name, sockets: 2 } : { name, lights: 1, sw1: 1, sw2pairs: 0, swi: 0, wiring }; }
+export function roomIsDefault(r, wiring = 'loop-in', mode = 'light') { if (mode === 'socket') return String(r.sockets ?? '') === '2' && !(+r.spurs > 0); const d = defaultRoom(r.name, wiring); return !(+r.fans > 0) && ['lights', 'sw1', 'sw2pairs', 'swi', 'wiring'].every((k) => String(r[k] ?? '') === String(d[k])); }
+function roomsEditor(c, redraw, usedNames = () => [], otherMap = () => ({}), mode = 'light') {
   const box = h('div', { class: 'roomsed', style: 'margin:8px 0 4px' });
   const list = () => (c.diagram && Array.isArray(c.diagram.roomList) ? c.diagram.roomList : []);
   const store = (l) => { const d = { ...(c.diagram || {}) }; if (l.length) d.roomList = l; else delete d.roomList; if (Object.keys(d).length) c.diagram = d; else delete c.diagram; changed(); redraw(); };
@@ -442,8 +443,8 @@ function roomsEditor(c, redraw, usedNames = () => [], otherMap = () => ({})) {
     const job = [...new Set([...usedNames(), ...Object.keys(other)])].filter((n) => n && !TICK_ROOMS.includes(n));
     const extra = names.filter((n) => n && !TICK_ROOMS.includes(n) && !job.includes(n));
     const tick = async (n) => { const i = names.indexOf(n);
-      if (i < 0) { store([...list(), defaultRoom(n, defW())]); draw(); return; }
-      const r = l[i]; if (!roomIsDefault(r, defW())) { const ok = await modal('Remove ' + n + '?', h('p', { class: 'note' }, 'Its lights, switches and wiring will be cleared.'), [{ label: 'Keep', value: false }, { label: 'Remove', value: true, cls: 'primary' }]); if (!ok) return; }
+      if (i < 0) { store([...list(), defaultRoom(n, defW(), mode)]); draw(); return; }
+      const r = l[i]; if (!roomIsDefault(r, defW(), mode)) { const ok = await modal('Remove ' + n + '?', h('p', { class: 'note' }, mode === 'socket' ? 'Its sockets and spurs will be cleared.' : 'Its lights, switches and wiring will be cleared.'), [{ label: 'Keep', value: false }, { label: 'Remove', value: true, cls: 'primary' }]); if (!ok) return; }
       store(list().filter((x) => x.name !== n)); draw(); };
     const seg1 = (opts, cur, label, pick) => h('div', { class: 'seg1', role: 'group', 'aria-label': label, style: 'display:flex;align-items:stretch;margin-top:6px;padding:0;border:1px solid var(--line);border-radius:10px;overflow:hidden' },
       opts.map(([v, t, aria], j) => h('button', { type: 'button', class: 'segb' + (v === cur ? ' on' : ''), 'aria-pressed': String(v === cur), 'aria-label': aria || t, style: 'flex:1 1 0;min-width:0;min-height:40px;padding:4px 2px;font-size:14px;font-weight:600;white-space:normal;line-height:1.1;border:0;' + (j ? 'border-left:1px solid var(--line);' : '') + (v === cur ? 'background:var(--brand,#2952ff);color:#fff' : 'background:transparent;color:inherit'), onclick: () => pick(v) }, t)));
@@ -453,6 +454,13 @@ function roomsEditor(c, redraw, usedNames = () => [], otherMap = () => ({})) {
       return h('div', { class: 'rstep', style: 'display:flex;align-items:center;gap:4px' }, b('\u2212', -1, 'fewer'), out, b('+', 1, 'more')); };
     const roomRow = (r) => { const i = list().findIndex((x) => x.name === r.name);
       const upd = (patch, again = false) => { const nl = list().map((x, j) => (j === i ? { ...x, ...patch } : x)); store(nl); if (again) draw(); };
+      if (mode === 'socket') { const grp = (t, el) => h('div', { style: 'display:flex;align-items:center;gap:6px' }, h('span', { style: 'font-size:14px' }, t), el); // v0.43.5: sockets (doubles) and optional spurs
+        return h('div', { class: 'roomrow sockrow', style: 'border:1px solid var(--line);border-radius:10px;padding:6px 8px;margin:0 0 8px' },
+          h('div', { style: 'display:flex;flex-wrap:wrap;gap:4px 12px;align-items:center;justify-content:space-between' },
+            grp('Doubles', mini(+r.sockets || 0, r.name + ' double sockets', (n) => upd({ sockets: n }), 0, 20)),
+            grp('Spurs', mini(+r.spurs || 0, r.name + ' spurs', (n) => upd({ spurs: n, ...(n && !r.spurKind ? { spurKind: 'socket' } : {}) }, true), 0, 4)),
+            i > 0 ? h('button', { type: 'button', class: 'linkbtn copylast', 'aria-label': 'Copy last room into ' + r.name, style: 'background:none;border:0;padding:8px 2px;min-height:40px;color:var(--brand,#2952ff);font-weight:600;font-size:14px', onclick: () => { const p = list()[i - 1]; const cp = {}; for (const f of ['sockets', 'spurs', 'spurKind']) cp[f] = p[f]; upd(cp, true); toast('Copied from ' + p.name); } }, 'Copy last room') : null),
+          +r.spurs > 0 ? seg1([['socket', 'Single socket'], ['fcu', 'FCU', 'Fused spur (FCU)']], r.spurKind === 'fcu' ? 'fcu' : 'socket', r.name + ' spur type', (v) => upd({ spurKind: v }, true)) : null); }
       const k = swKind(r);
       const swCount = k === 'sw1' ? ['1-way', '1-way switches', +r.sw1 || 1, (n) => upd({ sw1: n }), 1, 4] : k === 'sw2' ? ['Pairs', '2-way pairs', +r.sw2pairs || 1, (n) => upd({ sw2pairs: n }), 1, 3] : k === 'sw2i' ? ['Int', 'Intermediates', +r.swi || 1, (n) => upd({ swi: n }), 1, 4] : null;
       const grp = (t, el) => h('div', { style: 'display:flex;align-items:center;gap:6px' }, h('span', { style: 'font-size:14px' }, t), el);
@@ -482,7 +490,7 @@ function roomsEditor(c, redraw, usedNames = () => [], otherMap = () => ({})) {
       ...free.flatMap(tickRow),
       busy.length ? h('button', { class: 'btn ghost showother', type: 'button', 'aria-expanded': String(showOther), style: 'width:100%;min-height:44px;margin-top:6px;white-space:normal', onclick: () => { showOther = !showOther; draw(); } }, (showOther ? 'Hide' : 'Show') + ` rooms on other circuits (${busy.length})`) : null,
       ...(showOther ? busy.flatMap(tickRow) : []),
-      typing ? h('label', { class: 'f', style: 'margin-top:6px' }, h('span', {}, 'Room name'), h('input', { class: 'roomother', placeholder: 'Type the room name', 'aria-label': 'Room name', onchange: (e) => { const n = e.target.value.trim(); typing = false; if (n && !list().some((x) => x.name === n)) store([...list(), defaultRoom(n, defW())]); draw(); } }))
+      typing ? h('label', { class: 'f', style: 'margin-top:6px' }, h('span', {}, 'Room name'), h('input', { class: 'roomother', placeholder: 'Type the room name', 'aria-label': 'Room name', onchange: (e) => { const n = e.target.value.trim(); typing = false; if (n && !list().some((x) => x.name === n)) store([...list(), defaultRoom(n, defW(), mode)]); draw(); } }))
         : h('button', { class: 'btn ghost', type: 'button', id: 'roomother-' + (c.num || ''), style: 'width:100%;min-height:48px;margin-top:6px', onclick: () => { typing = true; draw(); const t = box.querySelector('.roomother'); if (t) t.focus(); } }, 'Other\u2026'),
       h('p', { class: 'note roomsnote', style: 'margin:6px 0;color:#9aa0aa' + (note ? '' : ';display:none') }, note)]);
   };
