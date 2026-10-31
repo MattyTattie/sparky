@@ -10,5 +10,5 @@ for (const o of [{ W: 380, font: 12, screen: true }, { W: 560, font: 11, cableTa
   assert.ok(!txt.some((t) => /\u2026|undefined|NaN/.test(t)));
   for (const r of ['DB1', 'DB2', 'DB3', 'DB4']) assert.ok(txt.some((t) => t.includes(r)), r);
   assert.ok(txt.some((t) => /Meter tail connector block/.test(t)));
-  assert.ok(txt.some((t) => /\+ 89 more \(99 in total\)/.test(t)));
+  assert.ok(txt.some((t) => /\+ 59 more \(99 in total\)/.test(t)));
 });

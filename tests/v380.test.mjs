@@ -22,7 +22,8 @@ test('point count: up to 10 symbols, then "+ N more"', () => {
   assert.equal(pointCount({ points: '' }).known, false);
   assert.equal(pointCount({ points: 'N/A' }).known, false);
   const svg = diagramSvg({ ...diagramEIC() });
-  assert.match(svg, /\+ 4 more \(14 in total\)/);
+  assert.doesNotMatch(svg, /\+ 4 more \(14 in total\)/); // v0.43.7: socket circuits draw every socket (up to 40)
+  assert.equal(pointCount({ desc: 'Ring', points: '14' }).more, 0);
 });
 test('split board: MCBs grouped under their RCDs; RCBOs hang off the bus', () => {
   const g = groupCircuits(diagramEIC().boards[0].circuits);

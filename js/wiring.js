@@ -67,13 +67,14 @@ export function diagramFlags(c, ctx = {}) {
 }
 
 export const MAX_SYMBOLS = 10;
+export const MAX_SOCKETS = 40;
 
 // ---------- what kind of point a circuit feeds ----------
 // v0.43.3: electric heaters / radiators / towel rails (drawing only; pointKind is unchanged)
 export const isHeater = (c) => /towel|radiator|\brads?\b|heater|storage heat|panel heat|convector/.test(String((c && c.desc) || '').toLowerCase()) && !/immersion|water/.test(String((c && c.desc) || '').toLowerCase());
 export function pointKind(c) {
   const d = String((c && c.desc) || '').toLowerCase();
-  if (/socket|ring|s\/o|\bsoc/.test(d)) return 'socket';
+  if (/socket|ring|s\/o|\bsoc|\bs(?:oc|c)?kts?\b|\bsckt/.test(d)) return 'socket';
   if (/light|lamp|ltg|lighting/.test(d)) return 'light';
   if (/cooker|oven|hob|range/.test(d)) return 'cooker';
   if (/shower/.test(d)) return 'shower';
@@ -213,7 +214,7 @@ export function pointCount(c) {
   const n = parseInt(String((c && c.points) ?? '').trim(), 10);
   if (n === 0 && /^0+$/.test(String(c.points).trim())) return { n: 0, shown: 0, more: 0, known: true }; // v0.43.4: a typed 0 is a value, not blank
   if (!Number.isFinite(n) || n <= 0) return { n: 0, shown: 0, more: 0, known: false };
-  const shown = Math.min(n, MAX_SYMBOLS);
+  const shown = Math.min(n, pointKind(c) === 'socket' ? MAX_SOCKETS : MAX_SYMBOLS); // v0.43.7: every socket is drawn (rows wrap); other loads cap at MAX_SYMBOLS
   return { n, shown, more: n - shown, known: true };
 }
 
