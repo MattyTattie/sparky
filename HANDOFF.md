@@ -251,6 +251,11 @@ Open points
 - Runtime table at 100/75/50/25% inverter load (Results + PDF).
 - Tests: tests/v350.test.mjs; shots: tests/screens_v350.py → /workspace/sparky-shots/v0.35.0.
 
+## v0.43.5 — Sockets per room on the diagram (live 31 Oct 2026)
+- Socket circuits take rooms: doubles, singles (0-10), spurs (single socket or FCU) per room, Copy last room, outdoor rooms marked IP. All fields optional; old certs unchanged.
+- Rings drawn as a real ring: one leg out of the MCB, in and out of each room box, back to the breaker; plain rings as a hairpin. Zero crossings.
+- Sockets drawn layout-style (BS EN 60617): cable comes in at an angle to the base; spurs tee off on the same row when there is room.
+
 ## v0.43.4 — Diagram stress-test fixes (live 30 Oct 2026)
 Stress-tested with a made-up 4-board, 70-circuit cert (tests/stress-cert.json, tests/v20_stress.test.mjs). Fixes: one RCD heading per RCD per board (RCBOs/MCBs ungrouped), circuits in way order inside each RCD and groups ordered by lowest way; plain lighting circuits draw the switch in line before the lights; points "0" shows 0 (blank unchanged); diagram.singles drawn as a spur branch off the ring. No data format changes. Tests: tests/v4304_stressfix.test.mjs.
 
