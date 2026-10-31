@@ -20,3 +20,9 @@ test('socket rings with no rooms draw every socket with socket symbols, no "+ N 
 test('non-socket generic points still cap with + N more', () => {
   const t = txt(lay([mk('Misc points', '14', { rating: '16', live: '1.5' })], 560)); assert.ok(t.some((x) => /\+ 4 more \(14 in total\)/.test(x)));
 });
+test('room editor picks socket mode from the shared pointKind (so "skts" circuits get socket rooms)', async () => {
+  const { readFileSync } = await import('node:fs'); const ui = readFileSync(new URL('../js/certui.js', import.meta.url), 'utf8');
+  assert.match(ui, /pointKind\(c\) === 'socket' \? roomsEditor\(c, [^;]*'socket'\)/);
+  assert.match(ui, /import \{[^}]*\bpointKind\b[^}]*\} from '\.\/wiring\.js'/);
+  assert.equal(W.pointKind({ desc: 'Downstairs skts' }), 'socket');
+});
