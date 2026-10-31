@@ -87,13 +87,14 @@ export function pointKind(c) {
   if (/boiler|heater|heating|ev\b|charger|fan|extract|alarm|smoke|heat det|pump|inverter|garage|sub-?main|towel|spur|fcu|fused/.test(d)) return 'appliance';
   return 'point';
 }
+export const SOCK = { socket: [true, true], socketu: [true, false], socket1: [false, true], socket1u: [false, false] }; // [twin, switched]
 export const KIND_NAME = { heater: 'Heater / radiator', socket: 'Socket', light: 'Light', cooker: 'Cooker', shower: 'Shower', alarm: 'Smoke / heat alarm', immersion: 'Immersion heater', ev: 'EV charger', fan: 'Fan', fcu: 'Fused spur (FCU)', appliance: 'Fixed appliance', point: 'Point' };
 // Plural words for the "Points:" line.
 const KIND_PLURAL = { heater: 'heaters', socket: 'sockets', light: 'lights', cooker: 'cookers', shower: 'showers', alarm: 'alarms', immersion: 'immersions', ev: 'EV chargers', fan: 'fans', fcu: 'FCUs', appliance: 'fixed appliances', point: 'points' };
 const KIND_ONE = { heater: 'heater', socket: 'socket', light: 'light', cooker: 'cooker', shower: 'shower', alarm: 'alarm', immersion: 'immersion', ev: 'EV charger', fan: 'fan', fcu: 'FCU', appliance: 'fixed appliance', point: 'point' };
 // Optional per-circuit diagram extras: circuit.diagram = { rooms, sw1, sw2, swi }.
 // Old certs have none; a lighting circuit then gets one 1-way switch.
-const KEY_EXTRA = { ipsock: 'Outdoor socket, weatherproof (IP rated)', fanh: 'Humidistat (%RH) switching a fan', fant: 'Fan timer / overrun (T)', fani: 'Fan isolator', heater: 'Heater / radiator', tailblock: 'Meter tail connector block', swfuse: 'Switch fuse / isolator (supplying a board)', jbsw: 'Switch-fed: JB to switch, looped switch to switch, each to its own lights', socket: 'Twin socket', socket1: 'Socket (single)', rose: 'Ceiling rose (loop-in)', jb: 'Junction box (JB)', strap: '2-way strappers (two wires)', iso: 'Local isolator: double pole switch-disconnector (// = 2 poles)', isofcu: 'Local isolator: fused connection unit (switched shows the blade)', isoccu: 'Cooker control unit: DP switch in a box, with its 13 A socket', dpu: 'DP switch in the ring, spurring an unswitched single socket (washer, dishwasher etc.)', dps: 'DP switch in the ring, spurring a switched single socket', socketsw: 'Switched socket (single)' };
+const KEY_EXTRA = { ipsock: 'Outdoor socket, weatherproof (IP rated)', fanh: 'Humidistat (%RH) switching a fan', fant: 'Fan timer / overrun (T)', fani: 'Fan isolator', heater: 'Heater / radiator', tailblock: 'Meter tail connector block', swfuse: 'Switch fuse / isolator (supplying a board)', jbsw: 'Switch-fed: JB to switch, looped switch to switch, each to its own lights', socket: 'Twin socket (switched)', socketu: 'Twin socket (unswitched)', socket1: 'Single socket (switched)', socket1u: 'Single socket (unswitched)', rose: 'Ceiling rose (loop-in)', jb: 'Junction box (JB)', strap: '2-way strappers (two wires)', iso: 'Local isolator: double pole switch-disconnector (// = 2 poles)', isofcu: 'Local isolator: fused connection unit (switched shows the blade)', isoccu: 'Cooker control unit: DP switch in a box, with its 13 A socket', dpu: 'DP switch in the ring, spurring an unswitched single socket (washer, dishwasher etc.)', dps: 'DP switch in the ring, spurring a switched single socket' };
 // v0.43 (test): optional local isolator next to the load: circuit.diagram.isolator = { type, rating }.
 export const ISOLATORS = { dp20: '20 A DP switch', dp45: '45 A DP switch (cooker / shower)', sfcu: 'Switched FCU', ufcu: 'Unswitched FCU', rotary: 'Rotary isolator', ccu: 'Cooker control unit (CCU)' };
 const ISO_SHORT = { dp20: '20A DP', dp45: '45A DP', sfcu: 'SFCU', ufcu: 'FCU', rotary: 'Rotary isolator', ccu: '45A CCU' };
@@ -189,7 +190,7 @@ export function arrangedOrder(c) {
 export function socketRoomsOf(c) {
   const l = c && c.diagram && c.diagram.roomList;
   if (!Array.isArray(l) || !l.length || pointKind(c) !== 'socket') return null;
-  return arrangedOrder(c).map((i) => [l[i], i]).filter(([r]) => r).map(([r, i]) => ({ i, name: val(r.name), sockets: cnt(r.sockets), singles: cnt(r.singles, 10), spurs: cnt(r.spurs, 4), spurKind: r.spurKind === 'fcu' ? 'fcu' : 'socket', dpsw: cnt(r.dpsw, 4), dpsws: cnt(r.dpsws, 4) })); // v0.43.8: DP switches in the ring, each spurring a single socket: dpsw = unswitched socket, dpsws = switched socket
+  return arrangedOrder(c).map((i) => [l[i], i]).filter(([r]) => r).map(([r, i]) => ({ i, name: val(r.name), sockets: cnt(r.sockets), singles: cnt(r.singles, 10), spurs: cnt(r.spurs, 4), spurKind: r.spurKind === 'fcu' ? 'fcu' : 'socket', dpsw: cnt(r.dpsw, 4), dpsws: cnt(r.dpsws, 4), unsw: cnt(r.unsw, 30) })); // v0.43.8: sockets are switched unless counted in unsw (doubles first, then singles) // v0.43.8: DP switches in the ring, each spurring a single socket: dpsw = unswitched socket, dpsws = switched socket
 }
 export const isRingC = (c) => /\bring\b/i.test(String((c && c.desc) || '')) || (!/radial/i.test(String((c && c.desc) || '')) && String(val(c && c.rating)) === '32' && String(val(c && c.live)) === '2.5');
 export const roomSocketTotal = (c) => (socketRoomsOf(c) || []).reduce((a, r) => a + r.sockets + r.singles + r.spurs + r.dpsw + r.dpsws, 0);
@@ -477,7 +478,7 @@ export function layout(model, { W = 380, font = 12, screen = false, cableTable =
   // key: only the symbols this diagram uses
   heatLab = 'Rad';
   if (used.size) {
-    const sh = []; const y = 10; const order = ['socket', 'socket1', 'ipsock', 'light', 'rose', 'jb', 'jbsw', 'sw1', 'sw2', 'swi', 'strap', 'cooker', 'shower', 'alarm', 'immersion', 'heater', 'ev', 'fan', 'fcu', 'appliance', 'point', 'contactor', 'coil', 'timeclock', 'iso', 'isofcu', 'isoccu', 'dpu', 'dps', 'tailblock', 'swfuse', 'fanh', 'fant', 'fani', 'spd'];
+    const sh = []; const y = 10; const order = ['socket', 'socketu', 'socket1', 'socket1u', 'ipsock', 'light', 'rose', 'jb', 'jbsw', 'sw1', 'sw2', 'swi', 'strap', 'cooker', 'shower', 'alarm', 'immersion', 'heater', 'ev', 'fan', 'fcu', 'appliance', 'point', 'contactor', 'coil', 'timeclock', 'iso', 'isofcu', 'isoccu', 'dpu', 'dps', 'tailblock', 'swfuse', 'fanh', 'fant', 'fani', 'spd'];
     let hh = textLines(sh, 8, y, 'Key', W - 16, { bold: true });
     const S = F * 1.5; const colW = (W - 16) / 2; let col = 0, rowY = y + hh + 4, rowH = 0;
     for (const k of order.filter((k) => used.has(k))) {
@@ -487,7 +488,7 @@ export function layout(model, { W = 380, font = 12, screen = false, cableTable =
       else if (k === 'timeclock') { clockSym(sh, x + S / 2, rowY + S / 2, S * 0.42); }
       else if (k === 'iso') { const yy = rowY + S / 2; rotH(sh, x - S * 0.1, yy, (o) => isoSym(o, x - S * 0.1, yy, S * 1.2, false)); }
       else if (k === 'isoccu') { const yy = rowY + S / 2; rotH(sh, x - S * 0.1, yy, (o) => isoSym(o, x - S * 0.1, yy, S * 1.2, false, true, true)); ccuSock(sh, x - S * 0.1 + S * 0.6, yy + S * 0.36, S * 0.8); }
-      else if (k === 'dpu' || k === 'dps') symbol(sh, k, x + S / 2, rowY + S * 1.05, S * 0.75);
+      else if (k === 'dpu' || k === 'dps') symbol(sh, k, x + S / 2, rowY + S * 1.75, S);
       else if (k === 'ipsock') { symbol(sh, 'socket', x + S / 2, rowY + S * 0.3, S); T(sh, x + S * 0.95, rowY + S * 0.85, 'IP', { bold: true, size: small * 0.75, color: COL.brand }); }
       else if (k === 'tailblock') { tailBlockSym(sh, x + S * 0.5, rowY + S * 0.15, S * 0.8); }
       else if (k === 'swfuse') { isoSym(sh, x + S * 0.5, rowY - S * 0.1, S * 1.2, true, true); }
@@ -500,7 +501,7 @@ export function layout(model, { W = 380, font = 12, screen = false, cableTable =
       else if (k === 'strap') { L(sh, x - S * 0.1, rowY + S * 0.38, x + S * 1.1, rowY + S * 0.38, { w: 1, color: COL.brand }); L(sh, x - S * 0.1, rowY + S * 0.66, x + S * 1.1, rowY + S * 0.66, { w: 1, color: COL.brand }); }
       else symbol(sh, k, x + S / 2, rowY + S / 2, S);
       const th = textLines(sh, x + S + 8, rowY + S / 2 - small * 0.95, name, colW - S - 14, { size: small });
-      rowH = Math.max(rowH, S, th + (S / 2 - small * 0.95) ); col++;
+      rowH = Math.max(rowH, k === 'dpu' || k === 'dps' ? S * 2.1 : S, th + (S / 2 - small * 0.95) ); col++;
       if (col === 2) { col = 0; rowY += rowH + 8; rowH = 0; }
     }
     const h = rowY + (col ? rowH + 8 : 0) + 4;
@@ -779,14 +780,14 @@ export function layout(model, { W = 380, font = 12, screen = false, cableTable =
     const bx = tx + 8, bw = tx + tw - bx, ix = bx + 8, iw = bw - 16; const cx0 = ix + S * 0.5 + 4; const rad = loadR('socket', S);
     const per = Math.max(1, Math.floor((bx + bw - 12 - rad - cx0) / step) + 1); const lead = r0 * 0.95, pitch = S + 12;
     let y0 = top; if (screen && info.roomNote) y0 += textLines(sh, tx, y0 - 4, info.roomNote, tw, { size: small, color: COL.na }) + 4;
-    used.add('socket'); let legY = feedTop; // where leg 2 picks up again
+    let legY = feedTop; // where leg 2 picks up again
     info.sockRooms.forEach((r) => {
       const rs = [], ln = []; let ry = y0 + 4;
       ry += textLines(rs, ix, ry, r.name || 'Room ' + (r.i + 1), iw, { bold: true, size: small });
       const ip = /outside|outdoor|garden|exterior|external|patio/i.test(r.name); if (ip) used.add('ipsock');
       const pl = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`;
-      ry += textLines(rs, ix, ry, [pl(r.sockets, 'double'), r.singles ? pl(r.singles, 'single') : '', r.spurs ? pl(r.spurs, 'spur') + (r.spurKind === 'fcu' ? ' (FCU)' : '') : '', r.dpsw ? pl(r.dpsw, 'DP + socket') : '', r.dpsws ? pl(r.dpsws, 'DP + switched socket') : '', ip ? 'outdoor, IP rated' : ''].filter(Boolean).join(' \u00b7 '), iw, { size: small * 0.92, color: COL.grey });
-      const items = [...Array(r.sockets).fill('socket'), ...Array(r.singles).fill('socket1'), ...Array(r.dpsw).fill('dpu'), ...Array(r.dpsws).fill('dps')]; if (r.singles) used.add('socket1'); const dpH = r.dpsw || r.dpsws ? S * 1.65 : 0; // v0.43.8: DP stacks stand taller
+      ry += textLines(rs, ix, ry, [pl(r.sockets, 'double'), r.singles ? pl(r.singles, 'single') : '', r.spurs ? pl(r.spurs, 'spur') + (r.spurKind === 'fcu' ? ' (FCU)' : '') : '', r.unsw ? Math.min(r.unsw, r.sockets + r.singles) + ' unswitched' : '', r.dpsw ? pl(r.dpsw, 'DP + socket') : '', r.dpsws ? pl(r.dpsws, 'DP + switched socket') : '', ip ? 'outdoor, IP rated' : ''].filter(Boolean).join(' \u00b7 '), iw, { size: small * 0.92, color: COL.grey });
+      const uD = Math.min(r.unsw, r.sockets), uS = Math.min(r.unsw - uD, r.singles); const items = [...Array(r.sockets - uD).fill('socket'), ...Array(uD).fill('socketu'), ...Array(r.singles - uS).fill('socket1'), ...Array(uS).fill('socket1u'), ...Array(r.dpsw).fill('dpu'), ...Array(r.dpsws).fill('dps')]; const dpH = r.dpsw || r.dpsws ? S * 1.05 : 0; // v0.43.8: DP stacks stand taller
       // spurs ride on the same row, teed off after the last ring socket, when they fit
       const spurK = r.spurKind === 'fcu' ? 'fcu' : 'socket1'; const spurLab = r.spurs === 1 ? 'Spur' : 'Spurs'; // the symbol says socket or FCU; the room summary says which
       const spurW = r.spurs ? 10 + (r.spurs - 1) * step + 2 * loadR(spurK, S) + (ip && spurK === 'socket1' ? 12 : 4) + textW(spurLab, small) : 0;
@@ -826,15 +827,15 @@ export function layout(model, { W = 380, font = 12, screen = false, cableTable =
     const S = F * 1.5, rad = loadR('socket', S), step = S + 12, rowH = S + 12, fx = tx - gap / 2; const g = { w: 1.1, color: COL.line };
     const ring = isRingC(c); const xi = ring ? fx : tx + 4, bx = tx + 8, bw = tx + tw - bx - (ring ? 18 : 0), xr = bx + bw + 10; /* v0.43.5: a ring is drawn as a closed loop */
     let y0 = top; if (screen && info.roomNote) y0 += textLines(sh, tx, y0 - 4, info.roomNote, tw, { size: small, color: COL.na }) + 4;
-    const topY = y0 + 2; y0 += 8; used.add('socket'); let teeY = topY, lastBottom = y0;
+    const topY = y0 + 2; y0 += 8; let teeY = topY, lastBottom = y0;
     info.sockRooms.forEach((r) => {
       const rs = []; const ix = bx + 8, iw = bw - 16; let ry = y0 + 4;
       ry += textLines(rs, ix, ry, r.name || 'Room ' + (r.i + 1), iw, { bold: true, size: small });
       const ip = /outside|outdoor|garden|exterior|external|patio/i.test(r.name); if (ip) used.add('ipsock'); // outdoor: weatherproof, marked IP
       const pl = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`;
-      const parts = [pl(r.sockets, 'double'), r.singles ? pl(r.singles, 'single') : '', r.spurs ? pl(r.spurs, 'spur') + (r.spurKind === 'fcu' ? ' (FCU)' : '') : '', r.dpsw ? pl(r.dpsw, 'DP + socket') : '', r.dpsws ? pl(r.dpsws, 'DP + switched socket') : '', ip ? 'outdoor, IP rated' : ''].filter(Boolean);
+      const parts = [pl(r.sockets, 'double'), r.singles ? pl(r.singles, 'single') : '', r.spurs ? pl(r.spurs, 'spur') + (r.spurKind === 'fcu' ? ' (FCU)' : '') : '', r.unsw ? Math.min(r.unsw, r.sockets + r.singles) + ' unswitched' : '', r.dpsw ? pl(r.dpsw, 'DP + socket') : '', r.dpsws ? pl(r.dpsws, 'DP + switched socket') : '', ip ? 'outdoor, IP rated' : ''].filter(Boolean);
       ry += textLines(rs, ix, ry, parts.join(' \u00b7 '), iw, { size: small * 0.92, color: COL.grey });
-      const items = [...Array(r.sockets).fill('socket'), ...Array(r.singles).fill('socket1'), ...Array(r.dpsw).fill('dpu'), ...Array(r.dpsws).fill('dps')]; if (r.singles) used.add('socket1'); const dpH = r.dpsw || r.dpsws ? S * 1.65 : 0; // v0.43.8: DP stacks stand taller
+      const uD = Math.min(r.unsw, r.sockets), uS = Math.min(r.unsw - uD, r.singles); const items = [...Array(r.sockets - uD).fill('socket'), ...Array(uD).fill('socketu'), ...Array(r.singles - uS).fill('socket1'), ...Array(uS).fill('socket1u'), ...Array(r.dpsw).fill('dpu'), ...Array(r.dpsws).fill('dps')]; const dpH = r.dpsw || r.dpsws ? S * 1.05 : 0; // v0.43.8: DP stacks stand taller
       const cx0 = ix + S * 0.9 + rad; const per = Math.max(1, Math.floor((bx + bw - 10 - rad - cx0) / step) + 1);
       const rowY0 = ry + S * 0.5 + 4 + dpH; let last = null; const rowHr = rowH + dpH;
       const ipTag = (x, y) => { if (ip) T(rs, x, y, 'IP', { bold: true, size: small * 0.75, color: COL.brand }); };
@@ -986,7 +987,7 @@ export function layout(model, { W = 380, font = 12, screen = false, cableTable =
   // the fuse symbol, plus the blade above it when switched.
   // v0.43.1: the CCU's 13 A outlet: a small socket hanging below the CCU box on a short lead
   function S0() { return F * 1.1; }
-  function ccuSock(o, cx, top, S) { L(o, cx, top, cx, top + S * 0.18, { w: 0.9 }); symbol(o, 'socket1', cx, top + S * 0.18 + S * 0.42, S * 0.9); }
+  function ccuSock(o, cx, top, S) { L(o, cx, top, cx, top + S * 0.18, { w: 0.9 }); symbol(o, 'socket1', cx, top + S * 0.18 + S * 0.42, F * 1.5); } // v0.43.8: same size as every other socket
   function isoSym(o, x, y0, h, fcu = false, switched = true, ccu = false) {
     const g = { w: 1.2, color: COL.line };
     if (ccu) R(o, x - h * 0.3, y0 + h * 0.16, h * 0.6, h * 0.68, { lw: 0.9 });
@@ -1002,7 +1003,7 @@ export function layout(model, { W = 380, font = 12, screen = false, cableTable =
   }
   // v0.43: draw a vertical in-line symbol (top at x,y0) turned to run left to right from (x, y0).
   // v0.43: where a conductor meets a load symbol on its row (half-width from centre)
-  function loadR(k, S) { const r = S / 2; return k === 'light' ? r * 0.8 : k === 'fan' ? r * 0.85 : (k === 'socket' || k === 'socket1' || k === 'dpu' || k === 'dps') ? r * 0.75 : k === 'fcu' ? r * 0.85 : k === 'point' ? r * 0.7 : r; }
+  function loadR(k, S) { const r = S / 2; return k === 'light' ? r * 0.8 : k === 'fan' ? r * 0.85 : (SOCK[k] || k === 'dpu' || k === 'dps') ? r * 0.75 : k === 'fcu' ? r * 0.85 : k === 'point' ? r * 0.7 : r; }
   function rotH(o, x0, y0, fn) { const tmp = []; fn(tmp); const P = (x, y) => [x0 + (y - y0), y0 - (x - x0)];
     for (const z of tmp) { if (z.t === 'line') { const [a, b] = P(z.x1, z.y1), [c2, d] = P(z.x2, z.y2); o.push({ ...z, x1: a, y1: b, x2: c2, y2: d }); }
       else if (z.t === 'rect') { const [a, b] = P(z.x + z.w, z.y); o.push({ ...z, x: a, y: b, w: z.h, h: z.w }); }
@@ -1022,6 +1023,12 @@ export function layout(model, { W = 380, font = 12, screen = false, cableTable =
   }
   // Point symbols, after BS EN 60617 / usual UK drawing style.
   // Only lines, rects, circles and text, so SVG and jsPDF match exactly.
+  // v0.43.8: socket head: earth bar at y (the lead meets its middle), outlet half-circle(s) curving down onto the bar
+  function sockHead(sh, cx, y, r, twin, sw) {
+    const rd = twin ? r * 0.44 : r * 0.68, half = twin ? rd * 2 : rd;
+    if (twin) { for (const d of [-rd, rd]) arc(sh, cx + d, y - rd, rd, 0, Math.PI, { w: 1.2 }); } else arc(sh, cx, y - rd, rd, 0, Math.PI, { w: 1.2 });
+    L(sh, cx - half - r * 0.05, y, cx + half + r * 0.05, y, { w: 1.3 }); // protective contact
+    if (sw) { const x0 = cx + half + r * 0.05, ex = x0 + r * 0.3, ey = y - r * 0.7; L(sh, x0, y, ex, ey, { w: 1 }); L(sh, ex, ey, ex + r * 0.22, ey + r * 0.13, { w: 1 }); } }
   function arc(sh, cx, cy, r, a0, a1, o = {}) { const n = 12; for (let i = 0; i < n; i++) { const p = a0 + (a1 - a0) * i / n, q = a0 + (a1 - a0) * (i + 1) / n; L(sh, cx + Math.cos(p) * r, cy + Math.sin(p) * r, cx + Math.cos(q) * r, cy + Math.sin(q) * r, { w: o.w || 1.1, color: o.color }); } }
   function box(sh, cx, cy, r) { R(sh, cx - r, cy - r, r * 2, r * 2, { lw: 1, fill: [255, 255, 255] }); }
   function swLever(sh, ax, ay, dx, dy, r) { // lever from the switch circle with a short end tick
@@ -1030,28 +1037,19 @@ export function layout(model, { W = 380, font = 12, screen = false, cableTable =
     const r = S / 2; const W0 = [255, 255, 255];
     if (kind === 'light') { // outlet for lighting: circle with a cross
       C(sh, cx, cy, r * 0.8, { fill: W0 }); const d = r * 0.8 * 0.707; L(sh, cx - d, cy - d, cx + d, cy + d, { w: 1 }); L(sh, cx - d, cy + d, cx + d, cy - d, { w: 1 }); }
-    else if (kind === 'socket' || kind === 'socket1') { // v0.43 BS EN 60617 11-13-02: socket outlet with protective (earth) contact:
-      // dome (semicircle) open side down on its lead, earth contact = straight line across the top of the dome.
-      // Twin (multiple outlet, 11-13-03 style) = two short strokes across the lead.
-      // v0.43.5: drawn IN the cable: the dome's flat base sits on the line (cy), which runs in one side and out the other; no stem
-      const rr = r * 0.75, by = cy - r * 0.45; // v0.43.5: BS EN 60617 layout style: the cable at cy comes up at an angle into the base and back down, a small V
-      L(sh, cx - rr, cy, cx, by, { w: 1.1 }); L(sh, cx, by, cx + rr, cy, { w: 1.1 });
-      arc(sh, cx, by, rr, Math.PI, 2 * Math.PI, { w: 1.2 });
-      L(sh, cx - rr, by, cx + rr, by, { w: 1.1 });
-      L(sh, cx - rr * 0.8, by - rr - r * 0.12, cx + rr * 0.8, by - rr - r * 0.12, { w: 1.2 });
-      if (kind === 'socket') for (const o of [-0.16, 0.16]) L(sh, cx + r * o - r * 0.1, by - rr * 0.22, cx + r * o + r * 0.1, by - rr * 0.68, { w: 1 }); // twin: two strokes inside the dome
-    }
-    else if (kind === 'dpu' || kind === 'dps') { // v0.43.8: DP switch IN the cable (same V feed as a socket), a single socket spurred off its top
-      const rr = r * 0.75, q = r * 1.28, by = cy - r * 0.45, bw = q * 1.3, bh = q * 0.8, bt = by - bh; // v0.43.8: a wee bit bigger than a socket
-      L(sh, cx - rr, cy, cx - bw * 0.3, by, { w: 1.1 }); L(sh, cx + bw * 0.3, by, cx + rr, cy, { w: 1.1 });
-      R(sh, cx - bw / 2, bt, bw, bh, { lw: 1, fill: W0 });
-      L(sh, cx - bw * 0.3, by - bh * 0.2, cx + bw * 0.28, bt + bh * 0.2, { w: 1 }); // the blade
-      for (const o of [-0.08, 0.08]) L(sh, cx + bw * (o - 0.08), by - bh * 0.32 - bw * o * 0.5, cx + bw * (o + 0.08), by - bh * 0.62 - bw * o * 0.5, { w: 0.9 }); // // = two poles
-      const sy = bt - q * 0.95; L(sh, cx, bt, cx, sy, { w: 1.1 }); // the spur up to its socket
-      const sr = q * 0.6, sb = sy; arc(sh, cx, sb, sr, Math.PI, 2 * Math.PI, { w: 1.2 }); L(sh, cx - sr, sb, cx + sr, sb, { w: 1.1 }); L(sh, cx - sr * 0.8, sb - sr - q * 0.1, cx + sr * 0.8, sb - sr - q * 0.1, { w: 1.2 });
-      if (kind === 'dps') { L(sh, cx + sr * 0.7, sb - sr * 0.7, cx + sr * 1.45, sb - sr * 1.45, { w: 1 }); L(sh, cx + sr * 1.45, sb - sr * 1.45, cx + sr * 1.75, sb - sr * 1.15, { w: 1 }); } // switched: the switch stroke off the dome
-    }
-    else if (kind === 'socketsw') { symbol(sh, 'socket1', cx, cy, S); const rr = r * 0.75, by = cy - r * 0.45; L(sh, cx + rr * 0.7, by - rr * 0.7, cx + rr * 1.45, by - rr * 1.45, { w: 1 }); L(sh, cx + rr * 1.45, by - rr * 1.45, cx + rr * 1.75, by - rr * 1.15, { w: 1 }); }
+    else if (SOCK[kind]) { // v0.43.8: BS EN 60617 11-13 family, all one size. Socket outlet = half-circle with the lead into its curved side;
+      // protective (earth) contact (11-13-04) = the straight bar across that side; twin = two outlets on one bar (multiple outlet,
+      // 11-13-03 form 2); switched (11-13-06) = the slanted switch line with its end tick. Drawn IN the cable: a small V up into the bar.
+      const [twin, sw] = SOCK[kind], rr = r * 0.75, by = cy - r * 0.45;
+      L(sh, cx - rr, cy, cx, by, { w: 1.1 }); L(sh, cx, by, cx + rr, cy, { w: 1.1 }); sockHead(sh, cx, by, r, twin, sw); }
+    else if (kind === 'dpu' || kind === 'dps') { // v0.43.8: DP switch IN the cable (11-14-04: switch circle, lever, two ticks = two poles), a long spur up to its single socket
+      const by = cy - r * 0.45, rr = r * 0.75, cr = r * 0.24, ccy = by - cr;
+      L(sh, cx - rr, cy, cx - cr * 0.7, ccy + cr * 0.7, { w: 1.1 }); L(sh, cx + cr * 0.7, ccy + cr * 0.7, cx + rr, cy, { w: 1.1 });
+      C(sh, cx, ccy, cr, { lw: 1.1, fill: W0 });
+      const ex = cx + r * 0.62, ey = ccy - r * 0.62; L(sh, cx + cr * 0.7, ccy - cr * 0.7, ex, ey, { w: 1.1 }); // the lever, up and away from the spur
+      for (const t of [0, 0.35]) { const px = ex - (ex - cx) * t, py = ey - (ey - ccy) * t; L(sh, px, py, px + r * 0.3, py + r * 0.15, { w: 1 }); } // two ticks: two poles
+      const sy = ccy - cr - r * 1.3; L(sh, cx, ccy - cr, cx, sy, { w: 1.1 }); // the spur, straight into the socket's earth bar
+      sockHead(sh, cx, sy, r, false, kind === 'dps'); }
     else if (kind === 'cooker') { // cooker: box with four hob rings
       box(sh, cx, cy, r); for (const [a, b] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) C(sh, cx + a * r * 0.45, cy + b * r * 0.45, r * 0.25, { lw: 0.8 }); }
     else if (kind === 'shower') { box(sh, cx, cy, r); L(sh, cx - r * 0.6, cy - r * 0.45, cx + r * 0.6, cy - r * 0.45, { w: 1.3 }); for (const a of [-0.45, 0, 0.45]) L(sh, cx + a * r, cy - r * 0.15, cx + a * r, cy + r * 0.6, { w: 0.8 }); }

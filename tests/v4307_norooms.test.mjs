@@ -14,7 +14,7 @@ test('abbreviated socket names are sockets', () => {
 });
 test('socket rings with no rooms draw every socket with socket symbols, no "+ N more", no crossings', () => {
   for (const Wd of [380, 560, 1100]) { const L = lay([mk('Downstairs skts', '14'), { ...mk('Upstairs skts', '12'), num: '7' }], Wd); const t = txt(L);
-    assert.ok(!t.some((x) => /more \(/.test(x)), 'no + N more at ' + Wd); assert.ok(t.some((x) => /14 × sockets/.test(x))); assert.ok(t.includes('Twin socket'));
+    assert.ok(!t.some((x) => /more \(/.test(x)), 'no + N more at ' + Wd); assert.ok(t.some((x) => /14 × sockets/.test(x))); assert.ok(t.includes('Twin socket (switched)'));
     assert.equal(crossings(L), 0, String(Wd)); }
 });
 test('non-socket generic points still cap with + N more', () => {
