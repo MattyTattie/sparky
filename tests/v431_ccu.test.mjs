@@ -23,7 +23,7 @@ for (const [nm, o] of [['screen', { W: 380, font: 12, screen: true }], ['pdf', {
   const sh = layout(diagramModel(c), o).blocks.flatMap((b) => b.shapes);
   const run = sh.filter((z) => z.t === 'line' && z.y1 === z.y2 && z.w === 1.1); assert.ok(run.length);
   const cy = run[run.length - 1].y1;
-  const boxes = sh.filter((z) => z.t === 'rect' && z.lw === 1 && z.y < cy && z.y + z.h > cy);
+  const boxes = sh.filter((z) => z.t === 'rect' && z.lw >= 1 && z.y < cy && z.y + z.h > cy);
   assert.ok(boxes.length >= 2, 'FCU box (and heater box) straddle the conductor');
   assert.ok(!sh.some((z) => z.t === 'circle' && Math.abs((z.cy ?? z.y) - cy) < 1 && z.r < 3), 'no point dot on the run');
 });
