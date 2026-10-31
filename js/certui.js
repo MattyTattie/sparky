@@ -427,7 +427,7 @@ export function roomsOnOtherCircuits(all, except) {
 }
 export const isRoomName = (n) => { const t = String(n ?? '').trim(); return t.length > 0 && t.length <= 40 && /[a-z]/i.test(t); };
 export function defaultRoom(name, wiring = 'loop-in', mode = 'light') { return mode === 'socket' ? { name, sockets: 2 } : { name, lights: 1, sw1: 1, sw2pairs: 0, swi: 0, wiring }; }
-export function roomIsDefault(r, wiring = 'loop-in', mode = 'light') { if (mode === 'socket') return String(r.sockets ?? '') === '2' && !(+r.spurs > 0) && !(+r.singles > 0); const d = defaultRoom(r.name, wiring); return !(+r.fans > 0) && ['lights', 'sw1', 'sw2pairs', 'swi', 'wiring'].every((k) => String(r[k] ?? '') === String(d[k])); }
+export function roomIsDefault(r, wiring = 'loop-in', mode = 'light') { if (mode === 'socket') return String(r.sockets ?? '') === '2' && !(+r.spurs > 0) && !(+r.singles > 0) && !(+r.dpsw > 0); const d = defaultRoom(r.name, wiring); return !(+r.fans > 0) && ['lights', 'sw1', 'sw2pairs', 'swi', 'wiring'].every((k) => String(r[k] ?? '') === String(d[k])); }
 function roomsEditor(c, redraw, usedNames = () => [], otherMap = () => ({}), mode = 'light') {
   const box = h('div', { class: 'roomsed', style: 'margin:8px 0 4px' });
   const list = () => (c.diagram && Array.isArray(c.diagram.roomList) ? c.diagram.roomList : []);
@@ -444,7 +444,7 @@ function roomsEditor(c, redraw, usedNames = () => [], otherMap = () => ({}), mod
     const extra = names.filter((n) => n && !TICK_ROOMS.includes(n) && !job.includes(n));
     const tick = async (n) => { const i = names.indexOf(n);
       if (i < 0) { store([...list(), defaultRoom(n, defW(), mode)]); draw(); return; }
-      const r = l[i]; if (!roomIsDefault(r, defW(), mode)) { const ok = await modal('Remove ' + n + '?', h('p', { class: 'note' }, mode === 'socket' ? 'Its sockets and spurs will be cleared.' : 'Its lights, switches and wiring will be cleared.'), [{ label: 'Keep', value: false }, { label: 'Remove', value: true, cls: 'primary' }]); if (!ok) return; }
+      const r = l[i]; if (!roomIsDefault(r, defW(), mode)) { const ok = await modal('Remove ' + n + '?', h('p', { class: 'note' }, mode === 'socket' ? 'Its sockets, spurs and DP switches will be cleared.' : 'Its lights, switches and wiring will be cleared.'), [{ label: 'Keep', value: false }, { label: 'Remove', value: true, cls: 'primary' }]); if (!ok) return; }
       store(list().filter((x) => x.name !== n)); draw(); };
     const seg1 = (opts, cur, label, pick) => h('div', { class: 'seg1', role: 'group', 'aria-label': label, style: 'display:flex;align-items:stretch;margin-top:6px;padding:0;border:1px solid var(--line);border-radius:10px;overflow:hidden' },
       opts.map(([v, t, aria], j) => h('button', { type: 'button', class: 'segb' + (v === cur ? ' on' : ''), 'aria-pressed': String(v === cur), 'aria-label': aria || t, style: 'flex:1 1 0;min-width:0;min-height:40px;padding:4px 2px;font-size:14px;font-weight:600;white-space:normal;line-height:1.1;border:0;' + (j ? 'border-left:1px solid var(--line);' : '') + (v === cur ? 'background:var(--brand,#2952ff);color:#fff' : 'background:transparent;color:inherit'), onclick: () => pick(v) }, t)));
@@ -460,7 +460,8 @@ function roomsEditor(c, redraw, usedNames = () => [], otherMap = () => ({}), mod
             h('div', { style: 'display:flex;gap:6px;align-items:center;flex-wrap:nowrap;max-width:100%' }, grp('Doubles', mini(+r.sockets || 0, r.name + ' double sockets', (n) => upd({ sockets: n }), 0, 20)),
             grp('Singles', mini(+r.singles || 0, r.name + ' single sockets', (n) => upd({ singles: n }), 0, 10))),
             grp('Spurs', mini(+r.spurs || 0, r.name + ' spurs', (n) => upd({ spurs: n, ...(n && !r.spurKind ? { spurKind: 'socket' } : {}) }, true), 0, 4)),
-            i > 0 ? h('button', { type: 'button', class: 'linkbtn copylast', 'aria-label': 'Copy last room into ' + r.name, style: 'background:none;border:0;padding:8px 2px;min-height:40px;color:var(--brand,#2952ff);font-weight:600;font-size:14px', onclick: () => { const p = list()[i - 1]; const cp = {}; for (const f of ['sockets', 'singles', 'spurs', 'spurKind']) cp[f] = p[f]; upd(cp, true); toast('Copied from ' + p.name); } }, 'Copy last room') : null),
+            grp('DP switched', mini(+r.dpsw || 0, r.name + ' DP switched sockets', (n) => upd({ dpsw: n }), 0, 4)),
+            i > 0 ? h('button', { type: 'button', class: 'linkbtn copylast', 'aria-label': 'Copy last room into ' + r.name, style: 'background:none;border:0;padding:8px 2px;min-height:40px;color:var(--brand,#2952ff);font-weight:600;font-size:14px', onclick: () => { const p = list()[i - 1]; const cp = {}; for (const f of ['sockets', 'singles', 'spurs', 'spurKind', 'dpsw']) cp[f] = p[f]; upd(cp, true); toast('Copied from ' + p.name); } }, 'Copy last room') : null),
           +r.spurs > 0 ? seg1([['socket', 'Single socket'], ['fcu', 'FCU', 'Fused spur (FCU)']], r.spurKind === 'fcu' ? 'fcu' : 'socket', r.name + ' spur type', (v) => upd({ spurKind: v }, true)) : null); }
       const k = swKind(r);
       const swCount = k === 'sw1' ? ['1-way', '1-way switches', +r.sw1 || 1, (n) => upd({ sw1: n }), 1, 4] : k === 'sw2' ? ['Pairs', '2-way pairs', +r.sw2pairs || 1, (n) => upd({ sw2pairs: n }), 1, 3] : k === 'sw2i' ? ['Int', 'Intermediates', +r.swi || 1, (n) => upd({ swi: n }), 1, 4] : null;

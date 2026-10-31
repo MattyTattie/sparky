@@ -328,3 +328,7 @@ Lighting circuits can list rooms (optional circuit.diagram.roomList): each room 
 
 ## v0.38.0 — Wiring diagram (live 30 Oct 2026)
 Auto single-line wiring diagram from the cert (EIC/EICR whole board, MWC just the circuit): supply/earthing, main switch, RCD grouping, breakers, cable, points-served symbols (sockets, lights, alarms, immersion, EV, fan, FCU, SPD as load off its MCB), spares squashed to one line, default supply fuse/location hidden. MWC "Spur added" (count, socket/FCU). Per-circuit "Controlled by" (contactor / time clock / relay, coil circuit, dashed links). Auto 1-way switches + optional 2-way/intermediate and rooms. Symbol key on PDF; optional PDF pages. Wiring diagram card on the job's main page; tap a circuit to edit; on-screen "Add points served" hint. Cache sparky-v0.38.0. Version-pinned tests widened to 0.38.x. 454/454 node tests.
+
+## v0.43.8 beta (branch dp-switch-socket, NOT live)
+- Socket rooms get a "DP switched" count (room field `dpsw`, 0-4): a 20 A DP switch feeding a socket (washer, dishwasher). Drawn as a branch below the room off the ring/radial: tee → DP switch symbol (// two poles) labelled 20A DP → short lead → single socket, "DP switched socket" beside it. Key entry "DP switch feeding a socket". Counts towards room socket total; copied by "Copy last room". Old certs with no `dpsw` load as 0.
+- Tests: tests/v4308_dpswitch.test.mjs (no crossings at 380/560/1100). Shots: /workspace/polish-review/diagram/v33-dpswitch/ui.py.
