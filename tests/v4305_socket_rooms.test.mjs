@@ -15,7 +15,7 @@ test('socket rooms read from roomList; lighting rooms untouched', () => {
 });
 test('socket rooms draw room boxes, spurs and IP-marked outdoor sockets', () => {
   const t = txt(lay(ring));
-  for (const s of ['Kitchen', 'Outside', 'FCU spur', 'Spur', 'IP', 'weatherproof (IP rated)']) assert.ok(t.includes(s) || t.some((x) => x.includes(s)), s);
+  for (const s of ['Kitchen', 'Outside', 'FCU', 'Spur', 'IP', 'weatherproof (IP rated)']) assert.ok(t.includes(s) || t.some((x) => x.includes(s)), s);
   assert.ok(t.some((x) => /outdoor, IP rated/.test(x)));
 });
 test('old socket circuit without rooms draws as before', () => {
@@ -57,4 +57,14 @@ test('ring with rooms: leg 2 goes in and out of each room at its left; boxes ali
   assert.ok(!lines.some((z) => Math.max(z.x1, z.x2) > right - 8), 'no line runs to the box right edge');
   const left = boxes[0].x; const crossLeft = lines.filter((z) => Math.min(z.x1, z.x2) < left && Math.max(z.x1, z.x2) > left);
   assert.equal(crossLeft.length, 2 * boxes.length, 'one line in and one back out per room');
+});
+
+test('v29: sockets sit on the ring line (no stems) and a spur tees off on the same row when it fits', () => {
+  const L = W.layout(W.diagramModel({ type: 'EIC', boards: [{ id: 'b', ref: 'DB1', circuits: [ring] }] }), { W: 700, font: 12, screen: true });
+  const sh = L.blocks.flatMap((b) => b.shapes); const sp = sh.find((z) => z.t === 'text' && z.txt === 'Spur');
+  const ky = sh.find((z) => z.t === 'text' && z.txt === 'Kitchen').y; const sp1 = sh.filter((z) => z.t === 'text' && z.txt === 'Spur' && z.y > ky)[0];
+  assert.ok(sp && sp1);
+  const lines = sh.filter((z) => z.t === 'line' && z.y1 === z.y2 && z.y1 > ky && z.y1 < sp1.y + 20);
+  const rowY = Math.min(...lines.map((z) => z.y1)); assert.ok(Math.abs(sp1.y - rowY) < 12, 'spur label on the socket row');
+  assert.equal(crossings(L), 0);
 });
