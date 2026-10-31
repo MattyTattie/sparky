@@ -33,12 +33,18 @@ test('singles per room count towards points and draw as single sockets on the ri
   assert.ok(L.blocks.some((b) => b.shapes.some((z) => z.k === 'socket1' || z.sym === 'socket1' || JSON.stringify(z).includes('socket1'))) || t.includes('Socket (single)'));
   assert.match(ui, /grp\('Singles'/); assert.match(ui, /\['sockets', 'singles', 'spurs', 'spurKind'\]/);
 });
-test('socket rooms draw in the lighting style: lanes left of the boxes, nothing to the right', () => {
+test('a ring with rooms is a closed loop: out leg left, return right of the boxes, back to the feed', () => {
   const L = lay(ring); const isRoom = (z) => z.t === 'rect' && String(z.color) === '150,160,190';
-  const sh = L.blocks.find((b) => b.shapes.some(isRoom)).shapes; const boxes = sh.filter(isRoom); assert.ok(boxes.length >= 2);
-  const right = Math.max(...boxes.map((b) => b.x + b.w)), left = Math.min(...boxes.map((b) => b.x));
-  assert.ok(!sh.some((z) => z.t === 'line' && Math.max(z.x1, z.x2) > right + 0.5), 'no line right of the room boxes');
+  const sh = L.blocks.find((b) => b.shapes.some(isRoom)).shapes; const boxes = sh.filter(isRoom);
+  const right = Math.max(...boxes.map((b) => b.x + b.w)), left = Math.min(...boxes.map((b) => b.x)), lines = sh.filter((z) => z.t === 'line');
   assert.ok(new Set(boxes.map((b) => b.w)).size === 1, 'room boxes same width');
-  const vlanes = sh.filter((z) => z.t === 'line' && z.x1 === z.x2 && z.x1 < left && z.x1 > left - 15 && Math.abs(z.y2 - z.y1) > 40);
-  assert.equal(vlanes.length, 2, 'ring: two legs on the left');
+  const ret = lines.filter((z) => z.x1 === z.x2 && z.x1 > right + 4); assert.equal(ret.length, 1, 'one return leg on the right');
+  assert.ok(!lines.some((z) => Math.max(z.x1, z.x2) > ret[0].x1 + 0.5), 'nothing beyond the return');
+  assert.ok(lines.some((z) => z.y1 === z.y2 && Math.min(z.x1, z.x2) < left && Math.max(z.x1, z.x2) >= ret[0].x1 && z.y1 < Math.min(...boxes.map((b) => b.y))), 'top: return lands back on the feed');
+  assert.ok(sh.some((z) => z.t === 'circle' || z.t === 'circ'), 'junction dot');
+});
+test('a plain ring draws its return leg back to the breaker; a radial does not', () => {
+  const plain = { ...ring, diagram: undefined, points: '4' };
+  const n = (c) => lay(c).blocks.flatMap((b) => b.shapes).filter((z) => z.t === 'line').length;
+  assert.equal(n(plain) - n({ ...plain, desc: 'Radial sockets', rating: '20' }), 3);
 });

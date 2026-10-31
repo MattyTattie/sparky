@@ -617,7 +617,8 @@ export function layout(model, { W = 380, font = 12, screen = false, cableTable =
         symbol(sh, k0, x + S / 2, cy - r * 0.25, S); used.add(k0); L(sh, x, cy, ax - r * 0.2, cy, g9); L(sh, ax + r * 0.62, cy, x + S, cy, g9); }, false, S]);
       const nSw = swIn.length; const ringN = kind === 'socket' ? pc.shown - sgl : pc.shown; // v0.43.4: single sockets hang off the ring as spurs
       for (let i = 0; i < ringN; i++) { const k1 = kindAt(i); items.push([lstep, (x, cy) => { heatLab = isTowel(c) ? 'Rail' : 'Rad'; symbol(sh, k1, x + S / 2, cy, S); used.add(k1); }, true]); }
-      const rowsX = []; let x = tx + F * 0.6, row = 0; const maxX = W - 6;
+      const loop = kind === 'socket' && isRingC(c) && !ctl && !iso && ringN > 0; // v0.43.5: plain ring drawn as a loop back to its breaker
+      const rowsX = []; let x = tx + F * 0.6, row = 0; const maxX = W - 6 - (loop ? 10 : 0);
       for (const it of items) { if (x + it[0] > maxX + 6 && x > tx + F * 0.6) { row++; x = tx + F * 0.6; } rowsX.push([x, row]); x += it[0]; }
       const rows = row + 1; const rowH = S + lab0 + 8; let prevEnd = null;
       items.forEach((it, i) => { const [xx, r] = rowsX[i]; const cy = py + r * rowH + S / 2;
@@ -627,6 +628,8 @@ export function layout(model, { W = 380, font = 12, screen = false, cableTable =
         else L(sh, prevEnd, cy, inX, cy, g9);
         it[1](xx, cy); prevEnd = it[2] ? xx + S / 2 + loadR(kindAt(li), S) : xx + it[3]; });
       ph = 6 + lab0 + rows * rowH - 8 + (iso && iso.ccu ? F * 1.8 : 0);
+      if (loop) { const yt = py - 4, ly = py + (rows - 1) * rowH + S / 2; const xr = Math.max(...items.map((it, i) => rowsX[i][0] + (it[2] ? S / 2 + loadR(kindAt(i - (items.length - ringN)), S) : it[3]))) + 8;
+        L(sh, prevEnd, ly, xr, ly, g9); L(sh, xr, ly, xr, yt, g9); L(sh, xr, yt, fx, yt, g9); C(sh, fx, yt, 1.8, { fill: COL.line, lw: 0.6 }); }
       if (kind === 'socket' && sgl && items.length) { // spur(s): a branch dropping from the last ring socket, below everything else
         used.add('socket1'); const [lx0, lr] = rowsX[items.length - 1]; const bx = lx0 + S / 2; const by = py + lr * rowH + S / 2 + S * 0.45;
         const sy = py + rows * rowH + 4 + S / 2; const sper = Math.max(1, Math.floor((maxX - tx - F * 0.6) / lstep)); let px = null;
@@ -712,7 +715,7 @@ export function layout(model, { W = 380, font = 12, screen = false, cableTable =
   // top (the feed) and below the last room. Nothing on the right, no crossings.
   function sockRoomsSection(sh, info, tx, top, tw, feedTop, c) {
     const S = F * 1.5, rad = loadR('socket', S), step = S + 12, rowH = S + 12, fx = tx - gap / 2; const g = { w: 1.1, color: COL.line };
-    const ring = isRingC(c); const xo = tx + 3, xi = ring ? tx + 9 : tx + 4, bx = xi + 7, bw = tx + tw - bx;
+    const ring = isRingC(c); const xi = ring ? fx : tx + 4, bx = tx + 8, bw = tx + tw - bx - (ring ? 18 : 0), xr = bx + bw + 10; /* v0.43.5: a ring is drawn as a closed loop */
     let y0 = top; if (screen && info.roomNote) y0 += textLines(sh, tx, y0 - 4, info.roomNote, tw, { size: small, color: COL.na }) + 4;
     const topY = y0 + 2; y0 += 8; used.add('socket'); let teeY = topY, lastBottom = y0;
     info.sockRooms.forEach((r) => {
@@ -743,10 +746,10 @@ export function layout(model, { W = 380, font = 12, screen = false, cableTable =
       cable('Circuit ' + (val(c.num) || '?'), r.name || 'room', cableLabel(c).split(' \u00b7 ')[0]);
       y0 += bh + 10;
     });
-    L(sh, fx, feedTop, fx, topY, g); L(sh, fx, topY, xi, topY, g);
-    if (ring) { const by = lastBottom + 4; L(sh, xi, topY, xi, by, g); L(sh, xo, topY, xo, by, g); L(sh, xo, by, xi, by, g); C(sh, xo, topY, 1.6, { fill: COL.line, lw: 0.6 }); }
-    else L(sh, xi, topY, xi, teeY, g);
-    return y0 - top - 2 + (ring ? 4 : 0);
+    if (ring) { // out leg down the left from the breaker, return leg up the right, both landing back on the breaker's feed
+      const by = lastBottom + 8; L(sh, fx, feedTop, fx, by, g); L(sh, fx, by, xr, by, g); L(sh, xr, by, xr, topY, g); L(sh, xr, topY, fx, topY, g); C(sh, fx, topY, 1.8, { fill: COL.line, lw: 0.6 }); }
+    else { L(sh, fx, feedTop, fx, topY, g); L(sh, fx, topY, xi, topY, g); L(sh, xi, topY, xi, teeY, g); }
+    return y0 - top - 2 + (ring ? 8 : 0);
   }
   function roomsSection(sh, info, tx, top, tw, feedTop, c) {
     const S = F * 1.5, step = S + 8, fx = tx - gap / 2, G = { w: 0.9, color: COL.grey };
