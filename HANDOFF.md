@@ -337,3 +337,4 @@ Auto single-line wiring diagram from the cert (EIC/EICR whole board, MWC just th
 ## v0.43.9 — UK chart socket symbols (branch uk-socket-symbols, not live)
 - Socket-outlets now match Matthew's UK location chart: dome-up half circle on a base line with a short stem to the cable; twin = two; switched adds slanted stroke + tick. DP switch (circle, lever, two ticks) spurs to the same outlet symbol. Same size in SVG, PDF and key.
 - Extra clearance below the cable for hanging outlets; spur start moved left (no crossings).
+- v38 rework (after "doesn't look right"): outlets ~2x bigger (dome radius = light circle), twin = two separate outlets with a gap, cable W-dips only to each stalk top; bigger DP switch (circle, lever, 2 ticks) with long spur; wider socket spacing, taller rooms, DP headroom only on its row; key icon column fits the twin. Style checked against UK CAD legends (refs in polish-review/diagram/ref/uk-cad).
