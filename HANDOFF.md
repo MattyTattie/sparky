@@ -251,6 +251,10 @@ Open points
 - Runtime table at 100/75/50/25% inverter load (Results + PDF).
 - Tests: tests/v350.test.mjs; shots: tests/screens_v350.py → /workspace/sparky-shots/v0.35.0.
 
+## v0.43.6 — Commando (BS EN 60309) sockets per room (live 31 Oct 2026)
+- Socket rooms get an optional Commando stepper (0-6) with a 16 A / 32 A choice (default 16 A, blue 230 V). New optional fields commando, commandoA; old certs unchanged.
+- Diagram: industrial socket symbol with the same angled feed, doubled base and a 16A/32A tag (IP when outdoors); key entry 'Industrial socket BS EN 60309, 16 A (blue, 230 V)' / 32 A. Counted in points.
+
 ## v0.43.5 — Sockets per room on the diagram (live 31 Oct 2026)
 - Socket circuits take rooms: doubles, singles (0-10), spurs (single socket or FCU) per room, Copy last room, outdoor rooms marked IP. All fields optional; old certs unchanged.
 - Rings drawn as a real ring: one leg out of the MCB, in and out of each room box, back to the breaker; plain rings as a hairpin. Zero crossings.
