@@ -26,3 +26,8 @@ test('room editor picks socket mode from the shared pointKind (so "skts" circuit
   assert.match(ui, /import \{[^}]*\bpointKind\b[^}]*\} from '\.\/wiring\.js'/);
   assert.equal(W.pointKind({ desc: 'Downstairs skts' }), 'socket');
 });
+test('old certs holding commando fields load fine; fields ignored', () => {
+  const c = mk('Ring kitchen', '3', { diagram: { roomList: [{ name: 'Workshop', sockets: 2, commando: 2, commandoA: '32' }] } });
+  assert.equal(W.roomSocketTotal(c), 2); const t = txt(lay([c], 380));
+  assert.ok(!t.some((x) => /ommando|60309|16A|32A/.test(x))); assert.equal(crossings(lay([c], 380)), 0);
+});
