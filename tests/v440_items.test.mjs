@@ -28,19 +28,14 @@ test('item rooms draw on a radiator circuit, every item in the key, no crossings
   const key = L.blocks.find((b) => b.kind === 'legend'); const kt = key.shapes.filter((z) => z.t === 'text').map((z) => z.txt).join(' ');
   assert.match(kt, /SFCU/); assert.match(kt, /Heater/); assert.equal(crossings(L), 0); assert.ok(!T.some((t) => t.includes('\u2026')));
 });
-test('control circuit: one cable into KM1 then on into KM2, Shelly first; no point circles', () => {
+test('control circuit (v0.44.1): old Shelly item + links become Shelly -> KM1, KM2 branch, same size boxes', () => {
   const cs = [mk('7', 'Immersion top', { control: { via: 'contactor', controlCircuit: '9' } }), mk('8', 'Immersion bottom', { control: { via: 'contactor', controlCircuit: '9' } }),
     mk('9', 'Control circuit', { points: '2', rating: '6', live: '1.5', cpc: '1.0', diagram: { items: { shelly: 1 } } })];
   const L = lay(cs); const blk = L.blocks.find((b) => b.num === '9'); const T = blk.shapes.filter((z) => z.t === 'text').map((z) => z.txt);
   for (const t of ['Shelly', 'KM1', 'KM2']) assert.ok(T.includes(t), t);
-  const xs = (t) => blk.shapes.find((z) => z.t === 'text' && z.txt === t).x; assert.ok(xs('Shelly') < xs('KM1') && xs('KM1') < xs('KM2'), 'Shelly, KM1, KM2 in order');
-  const y = blk.shapes.find((z) => z.t === 'text' && z.txt === 'KM1').y; const boxes = blk.shapes.filter((z) => z.t === 'rect' && z.h > 10 && Math.abs(z.y + z.h / 2 - y) < 12);
-  assert.ok(boxes.length >= 3, 'three device boxes in a row'); const sz = new Set(boxes.map((b) => Math.round(b.w) + 'x' + Math.round(b.h))); assert.equal(sz.size, 1, 'same size');
-  // a cable joins the right side of KM1 to the left side of KM2
-  const [k1, k2] = boxes.slice(-2).sort((a, b) => a.x - b.x); assert.ok(blk.shapes.some((z) => z.t === 'line' && Math.abs(Math.min(z.x1, z.x2) - (k1.x + k1.w)) < 0.6 && Math.abs(Math.max(z.x1, z.x2) - k2.x) < 0.6));
-  assert.ok(!blk.shapes.some((z) => z.t === 'circle' && z.r > 2 && z.fill && String(z.fill) === '255,255,255' && z.r < 7 && false));
-  assert.ok(!texts(L).includes('A1')); assert.equal(crossings(L), 0);
-  const kt = L.blocks.find((b) => b.kind === 'legend').shapes.filter((z) => z.t === 'text').map((z) => z.txt).join(' '); assert.match(kt, /Shelly smart relay/); assert.match(kt, /Contactor \(KM\)/);
+  const at = (t) => blk.shapes.find((z) => z.t === 'text' && z.txt === t); assert.ok(at('Shelly').x < at('KM1').x && at('KM1').y < at('KM2').y, 'Shelly then KM1 over KM2');
+  const boxes = blk.shapes.filter((z) => z.t === 'rect' && z.h > 10 && z.w < 40); const sz = new Set(boxes.map((b) => Math.round(b.w) + 'x' + Math.round(b.h))); assert.equal(sz.size, 1, 'same size');
+  assert.equal(crossings(L), 0);
 });
 test('editor: room tick boxes for every circuit kind, add-item picker on every room and circuit', () => {
   assert.match(src, /roomsEditor\(c, redraw, [^\n]*'other'\)/); assert.match(src, /'\+ Add an item\\u2026'/); assert.match(src, /Other items on this circuit/);

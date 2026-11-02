@@ -14,7 +14,7 @@ import { TYPES, newCert, sectionsFor, sectionDone, missingFields, visible, get, 
 import { INTAKE_NOTE_10, INTAKE_NOTES, INTAKE_NOTIFIED, migrateIntake, EIC_ITEMS, EIC_OUTCOMES, EICR_ITEMS, EICR_OUTCOMES, CODE_TEXT, OBSERVATIONS, OBS_CATS, EIC_HELP, EICR_HELP } from './inspections.js';
 import { checkCircuit, isSpare } from './checks.js';
 import { CHECK_NOTE } from './limits.js';
-import { ITEM_KINDS, itemRoomsOf } from './wiring.js';
+import { ITEM_KINDS, itemRoomsOf, CONTROLLER_KINDS, controllersOf, isControlCircuit, migrateControllers } from './wiring.js';
 import { diagramSvg, diagramInPdf, diagramHasCircuits, SPUR_FEEDS, CONTROL_VIA, switchInfo, roomListOf, roomPointsNote, socketRoomsOf, roomPointTotal, pointKind, socketSingles, arrangedOrder, feedInfo, ISOLATORS } from './wiring.js';
 import { limitOn, limitBar } from './limitbar.js';
 import { circuitReadings, makeTemplate, applyTemplate, nextRoom, tidyLayouts, BUILTIN_TEMPLATES, TEMPLATE_KEY } from './diagrampro.js';
@@ -296,7 +296,8 @@ function extrasCard(cert, redraw) {
   const one = h('div', { id: 'extrasone' }); let arranging = false;
   const drawOne = () => {
     const c = live[pickedCircuit.get(key)]; if (!c) { fill(one, []); return; }
-    const d = c.diagram || {}; const isLight = switchInfo(c) !== null;
+    const ctlC = isControlCircuit(c, all); if (ctlC && !Array.isArray((c.diagram || {}).controllers) && controllersOf(c, all).length) migrateControllers(c, all); // v0.44.1: move old Shelly / contactor items into the list
+    const d = c.diagram || {}; const isLight = switchInfo(c) !== null && !ctlC;
     const si = isLight ? switchInfo(c) : null;
     const ins = {}; const cur = { sw1: si ? String(si.list.filter((x) => x === 'sw1').length) : '1', sw2: si ? String(si.list.filter((x) => x === 'sw2').length / 2) : '0', swi: si ? String(si.list.filter((x) => x === 'swi').length) : '0' };
     const numIn = (k, label) => h('label', { class: 'f', style: 'flex:1;min-width:0' }, h('span', {}, label), ins[k] = h('input', { type: 'number', min: '0', max: '10', inputmode: 'numeric', 'aria-label': label + ', circuit ' + (c.num || ''), value: cur[k], onchange: () => { for (const o of ['sw1', 'sw2', 'swi']) { const n = Math.max(0, Math.min(10, parseInt(ins[o].value, 10) || 0)); ins[o].value = String(n); save(c, o, String(n)); } } }));
@@ -309,12 +310,13 @@ function extrasCard(cert, redraw) {
         h('div', { class: 'foldin' }, h('label', { class: 'f' }, h('span', {}, 'Rooms (text)'), h('input', { placeholder: 'e.g. Kitchen, Hall', 'aria-label': 'Rooms, circuit ' + (c.num || ''), value: d.rooms || '', onchange: (e) => save(c, 'rooms', e.target.value.trim()) })),
           h('div', { style: 'display:flex;gap:8px' }, numIn('sw1', '1-way'), numIn('sw2', '2-way pairs'), numIn('swi', 'Intermediate')))) : null,
       pointKind(c) === 'socket' ? roomsEditor(c, redraw, () => jobRoomNames(all, c), () => roomsOnOtherCircuits(all, c), 'socket') : null, // v0.43.5: rooms on rings and radials
-      !isLight && pointKind(c) !== 'socket' ? roomsEditor(c, redraw, () => jobRoomNames(all, c), () => roomsOnOtherCircuits(all, c), 'other') : null, // v0.44.0: room tick boxes on every circuit
+      !isLight && !ctlC && pointKind(c) !== 'socket' ? roomsEditor(c, redraw, () => jobRoomNames(all, c), () => roomsOnOtherCircuits(all, c), 'other') : null, // v0.44.0: room tick boxes on every circuit
       !isLight && ((pointKind(c) === 'socket' && d.rooms && !socketRoomsOf(c)) || (pointKind(c) !== 'socket' && d.rooms && !itemRoomsOf(c))) ? h('label', { class: 'f' }, h('span', {}, 'Rooms'), h('input', { placeholder: 'e.g. Kitchen, Hall', 'aria-label': 'Rooms, circuit ' + (c.num || ''), value: d.rooms || '', onchange: (e) => save(c, 'rooms', e.target.value.trim()) })) : null,
       pointKind(c) === 'socket' && !socketRoomsOf(c) ? singlesRow(c, save) : null,
       isolatorRow(c, save),
-      h('b', { style: 'display:block;margin:10px 0 0' }, 'Other items on this circuit'), h('p', { class: 'note', style: 'margin:2px 0 0' }, 'Anything not in a room, e.g. a Shelly relay on a control circuit.'),
-      itemsEditor(d.items, 'circuit ' + (c.num || ''), (m) => { save(c, 'items', Object.keys(m).length ? m : ''); drawOne(); })]);
+      ctlC ? controllersEditor(c, all, (list) => { save(c, 'controllers', list); drawOne(); }) : null, // v0.44.1: controllers list replaces items on control circuits
+      ctlC ? null : h('b', { style: 'display:block;margin:10px 0 0' }, 'Other items on this circuit'), ctlC ? null : h('p', { class: 'note', style: 'margin:2px 0 0' }, 'Anything not in a room.'),
+      ctlC ? null : itemsEditor(d.items, 'circuit ' + (c.num || ''), (m) => { save(c, 'items', Object.keys(m).length ? m : ''); drawOne(); })]);
   };
   const pick = h('select', { id: 'extrascircuit', 'aria-label': 'Circuit', style: 'width:100%;white-space:normal', onchange: (e) => { pickedCircuit.set(key, +e.target.value); arranging = false; drawOne(); } },
     live.map((c, i) => h('option', { value: String(i), selected: i === pickedCircuit.get(key) ? true : null }, name(c) + (c.diagram && (c.diagram.roomList || []).length ? ` (${c.diagram.roomList.length} room${c.diagram.roomList.length === 1 ? '' : 's'})` : ''))));
@@ -862,4 +864,33 @@ function moveToDescription(cert, draw) {
   return h('div', { class: 'notice amber' },
     h('div', {}, 'This is a new installation, so Section I (comments on the existing installation) would normally be N/A. If this describes the work, it belongs in Section B, Description and extent of the installation.'),
     h('button', { class: 'btn small', style: 'margin-top:8px', onclick: () => { const d = String(get(cert, 'install.description') || '').trim(); set(cert, 'install.description', (d ? d + '\n' : '') + String(cert.comments).trim()); cert.comments = ''; changed(); toast('Moved to Section B, Description and extent of the installation'); draw(); } }, 'Move to Section B, Description and extent'));
+}
+
+// v0.44.1: Controllers on a control circuit. Add Hive / Shelly / Time clock / Other, each with its own contactors (KM1, KM2 ...),
+// and for each contactor tick the circuit(s) it switches or type a label. Big buttons, x to remove.
+export function controllersEditor(c, all, onset) {
+  const list = controllersOf(c, all).map((k) => ({ ...k, contactors: k.contactors.map((x) => ({ ...x, circuits: [...x.circuits] })) }));
+  const set = () => onset(list.map((k) => ({ type: k.type, ...(k.name ? { name: k.name } : {}), contactors: k.contactors.map((x) => ({ circuits: x.circuits, ...(x.label ? { label: x.label } : {}) })) })));
+  const others = all.filter((o) => o && o !== c && !isSpareC(o) && String(o.num || '').trim());
+  const big = 'min-height:48px;width:100%;margin-top:6px';
+  const x = (lab, fn) => h('button', { class: 'btn ghost', type: 'button', 'aria-label': lab, style: 'min-width:44px;min-height:44px;padding:0 10px;flex:none;font-size:18px', onclick: fn }, '\u2715');
+  let n = 0;
+  return h('div', { class: 'ctled', id: 'ctlrows', style: 'margin-top:10px' },
+    h('b', { style: 'display:block' }, 'Controllers'), h('p', { class: 'note', style: 'margin:2px 0 6px' }, 'What this control circuit feeds, and the contactors each one switches.'),
+    list.map((k, ki) => { const title = k.type === 'other' ? (k.name || 'Other controller') : CONTROLLER_KINDS[k.type];
+      return h('div', { class: 'ctlbox', style: 'border:1px solid var(--line);border-radius:10px;padding:8px;margin:0 0 10px' },
+        h('div', { style: 'display:flex;align-items:center;gap:8px' }, h('b', { style: 'flex:1;min-width:0;white-space:normal;word-break:break-word;font-size:16px' }, title), x('Remove controller ' + title, () => { list.splice(ki, 1); set(); })),
+        k.type === 'other' ? h('label', { class: 'f' }, h('span', {}, 'Name'), h('input', { 'aria-label': 'Controller name', placeholder: 'e.g. Wiser hub', value: k.name || '', onchange: (e) => { k.name = e.target.value.trim(); set(); } })) : null,
+        k.contactors.map((ct, xi) => { const tag = 'KM' + (++n);
+          return h('div', { class: 'ctlkm', style: 'border-left:3px solid var(--brand,#1b6);padding:4px 0 4px 8px;margin:6px 0' },
+            h('div', { style: 'display:flex;align-items:center;gap:8px' }, h('b', { style: 'flex:1' }, 'Contactor ' + tag), x('Remove contactor ' + tag, () => { k.contactors.splice(xi, 1); set(); })),
+            h('span', { class: 'note', style: 'display:block' }, 'Switches:'),
+            ct.circuits.map((num) => { const o = others.find((v) => String(v.num).trim() === num);
+              return h('div', { class: 'ctlpick', style: 'display:flex;align-items:center;gap:8px;min-height:44px' }, h('span', { style: 'flex:1;min-width:0;white-space:normal;word-break:break-word' }, 'Circuit ' + num + (o && o.desc ? '  ' + o.desc : '')), x('Remove circuit ' + num + ' from ' + tag, () => { ct.circuits = ct.circuits.filter((v) => v !== num); set(); })); }),
+            h('select', { 'aria-label': tag + ' switches circuit', style: 'width:100%;min-height:48px;white-space:normal;margin-top:4px', onchange: (e) => { const v = e.target.value; if (v && !ct.circuits.includes(v)) { ct.circuits = [...ct.circuits, v]; set(); } } },
+              h('option', { value: '' }, '+ Pick a circuit it switches\u2026'), others.filter((o) => !ct.circuits.includes(String(o.num).trim())).map((o) => h('option', { value: String(o.num).trim() }, String(o.num).trim() + '  ' + (o.desc || 'No description')))),
+            h('label', { class: 'f' }, h('span', {}, 'Or a label'), h('input', { 'aria-label': tag + ' label', placeholder: 'e.g. Hot water', value: ct.label || '', onchange: (e) => { ct.label = e.target.value.trim(); set(); } }))); }),
+        h('button', { class: 'btn ghost', type: 'button', style: big, onclick: () => { k.contactors.push({ circuits: [], label: '' }); set(); } }, '+ Add contactor')); }),
+    h('select', { class: 'addctl', 'aria-label': 'Add controller', style: 'width:100%;min-height:48px;white-space:normal', onchange: (e) => { const t = e.target.value; if (!t) return; list.push({ type: t, name: '', contactors: [{ circuits: [], label: '' }] }); set(); } },
+      h('option', { value: '' }, '+ Add controller\u2026'), Object.entries(CONTROLLER_KINDS).map(([v, t]) => h('option', { value: v }, t))));
 }

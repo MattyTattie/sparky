@@ -94,7 +94,7 @@ test('8: tidy up keeps the order unless asked, drops bad slots', () => {
 test('9: contactor cross-references both ways', () => {
   const t = texts(layout(diagramModel(diagramEICPro()), { W: 560, font: 11 }));
   assert.ok(t.includes('Coil switched by circuit 10 (see circuit 10)'));
-  assert.ok(/Switches contactor on circuits 8, 9 \(see/.test(t));
+  assert.ok(/Switches circuit 8/.test(t) && /circuit 9/.test(t)); // v0.44.1 controller branch
   const L = layout(diagramModel(diagramEICPro()), { W: 380, screen: true });
   const k8 = L.blocks.find((b) => b.num === '8'); assert.deepEqual(k8.links, ['10']);
 });

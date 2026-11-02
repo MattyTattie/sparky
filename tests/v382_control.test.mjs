@@ -20,7 +20,7 @@ test('links: control circuit knows which contactors it switches', () => {
   const c = diagramEICContactors();
   assert.deepEqual(controlLinks(c.boards[0].circuits), { 10: ['8', '9'] });
   const svg = diagramSvg(c);
-  assert.ok(svg.includes('Switches contactor on circuits 8, 9'));
+  assert.ok(/Switches circuit 8.*circuit 9|Switches circuit 8/.test(svg) && svg.includes('circuit 9')); // v0.44.1: drawn as controller branch
   assert.ok(svg.includes('Coil switched by circuit 10'));
   assert.ok(svg.includes('via contactor, time clock controlled'));
   assert.ok(/>KM1</.test(svg));
