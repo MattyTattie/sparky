@@ -89,10 +89,10 @@ export function pointKind(c) {
   return 'point';
 }
 export const SOCK = { socket: [true, true], socketu: [true, false], socket1: [false, true], socket1u: [false, false] }; // [twin, switched]
-export const KIND_NAME = { heater: 'Heater / radiator', socket: 'Socket', light: 'Light', cooker: 'Cooker', shower: 'Shower', alarm: 'Smoke / heat alarm', immersion: 'Immersion heater', ev: 'EV charger', fan: 'Fan', fcu: 'Fused spur (FCU)', sfcu: 'Switched fused connection unit (SFCU)', km: 'Contactor coil (KM1, KM2 and on), switched by the controller before it', shelly: 'Shelly smart relay', hive: 'Hive heating controller', relay: 'Other controller (named in the box)', flex: 'Flex outlet (cable outlet plate)', appliance: 'Fixed appliance', point: 'Point' };
+export const KIND_NAME = { heater: 'Heater / radiator', socket: 'Socket', light: 'Light', cooker: 'Cooker', hob: 'Hob', oven: 'Oven', combi: 'Combi oven', shower: 'Shower', alarm: 'Smoke / heat alarm', immersion: 'Immersion heater', ev: 'EV charger', fan: 'Fan', fcu: 'Fused spur (FCU)', sfcu: 'Switched fused connection unit (SFCU)', km: 'Contactor coil (KM1, KM2 and on), switched by the controller before it', shelly: 'Shelly smart relay', hive: 'Hive heating controller', relay: 'Other controller (named in the box)', flex: 'Flex outlet (cable outlet plate)', appliance: 'Fixed appliance', point: 'Point' };
 // Plural words for the "Points:" line.
-const KIND_PLURAL = { heater: 'heaters', socket: 'sockets', light: 'lights', cooker: 'cookers', shower: 'showers', alarm: 'alarms', immersion: 'immersions', ev: 'EV chargers', fan: 'fans', fcu: 'FCUs', sfcu: 'SFCUs', km: 'contactors', shelly: 'Shelly relays', flex: 'flex outlets', appliance: 'fixed appliances', point: 'points' };
-const KIND_ONE = { heater: 'heater', socket: 'socket', light: 'light', cooker: 'cooker', shower: 'shower', alarm: 'alarm', immersion: 'immersion', ev: 'EV charger', fan: 'fan', fcu: 'FCU', sfcu: 'SFCU', km: 'contactor', shelly: 'Shelly relay', flex: 'flex outlet', appliance: 'fixed appliance', point: 'point' };
+const KIND_PLURAL = { heater: 'heaters', socket: 'sockets', light: 'lights', cooker: 'cookers', hob: 'hobs', oven: 'ovens', combi: 'combi ovens', shower: 'showers', alarm: 'alarms', immersion: 'immersions', ev: 'EV chargers', fan: 'fans', fcu: 'FCUs', sfcu: 'SFCUs', km: 'contactors', shelly: 'Shelly relays', flex: 'flex outlets', appliance: 'fixed appliances', point: 'points' };
+const KIND_ONE = { heater: 'heater', socket: 'socket', light: 'light', cooker: 'cooker', hob: 'hob', oven: 'oven', combi: 'combi oven', shower: 'shower', alarm: 'alarm', immersion: 'immersion', ev: 'EV charger', fan: 'fan', fcu: 'FCU', sfcu: 'SFCU', km: 'contactor', shelly: 'Shelly relay', flex: 'flex outlet', appliance: 'fixed appliance', point: 'point' };
 // Optional per-circuit diagram extras: circuit.diagram = { rooms, sw1, sw2, swi }.
 // Old certs have none; a lighting circuit then gets one 1-way switch.
 const KEY_EXTRA = { ipsock: 'Outdoor socket, weatherproof (IP rated)', fanh: 'Humidistat (%RH) switching a fan', fant: 'Fan timer / overrun (T)', fani: 'Fan isolator', heater: 'Heater / radiator', tailblock: 'Meter tail connector block', swfuse: 'Switch fuse / isolator (supplying a board)', jbsw: 'Switch-fed: JB to switch, looped switch to switch, each to its own lights', socket: 'Twin socket (switched)', socketu: 'Twin socket (unswitched)', socket1: 'Single socket (switched)', socket1u: 'Single socket (unswitched)', rose: 'Ceiling rose (loop-in)', jb: 'Junction box (JB)', strap: '2-way strappers (two wires)', iso: 'Local switch / isolator: DP switch', fcu: 'Unswitched fused connection unit (FCU)', isofcu: 'Unswitched fused connection unit (FCU)', isosfcu: 'Switched fused connection unit (SFCU)', isofcux: 'Unswitched fused connection unit (FCU) with flex outlet', isosfcux: 'Switched fused connection unit (SFCU) with flex outlet', isoccu: 'Cooker control unit (CCU): 45 A DP switch with a 13 A socket', dpu: 'DP switch in the ring, spurring an unswitched single socket (washer, dishwasher etc.)', dps: 'DP switch in the ring, spurring a switched single socket' };
@@ -112,7 +112,7 @@ export const listedItems = (c) => !!(c && c.diagram && c.diagram.items && typeof
 // v0.44.4: what the drawing would guess from the circuit name/points, as real list items { items, itemOrder } (or null)
 // v0.44.4: "Don't guess, I'll pick": item-type circuits (not lighting, sockets, rooms or control) draw no load from their name/points; only items he adds
 // v0.44.4: one kind of load picked (e.g. 1 heater): drawn in line after the local switch, like before
-const SOLO_OK = new Set(['heater', 'immersion', 'cooker', 'shower', 'ev', 'appliance', 'flex', 'fan', 'light', 'alarm']);
+const SOLO_OK = new Set(['heater', 'immersion', 'cooker', 'hob', 'oven', 'combi', 'shower', 'ev', 'appliance', 'flex', 'fan', 'light', 'alarm']);
 export function soloItem(c) { if (!noGuessLoad(c)) return null; const its = itemsOf(c.diagram); return its.length === 1 && SOLO_OK.has(its[0][0]) ? [its[0][0], Math.min(10, +its[0][1] || 1)] : null; }
 export const noGuessLoad = (c) => !!c && !roomListOf(c) && switchInfo(c) === null && pointKind(c) !== 'socket';
 export const isoFor = (c) => isolatorOf(c) || impliedFcu(c);
@@ -210,7 +210,7 @@ export const roomSocketTotal = (c) => (socketRoomsOf(c) || []).reduce((a, r) => 
 export const roomLightTotal = (c) => (roomListOf(c) || []).reduce((a, r) => a + r.lights, 0);
 // v0.43.1: optional room fan: room.fans (0-2), room.fanCtl (how it is switched)
 // v0.44.0: any item on any circuit or in any room: obj.items = { kind: count } (optional)
-export const ITEM_KINDS = { socket: 'Double socket (switched)', socketu: 'Double socket (unswitched)', socket1: 'Single socket (switched)', socket1u: 'Single socket (unswitched)', dpu: 'DP switch + socket', dps: 'DP switch + switched socket', fcu: 'Fused spur (FCU)', sfcu: 'Switched fused spur (SFCU)', flex: 'Flex outlet', light: 'Light', fan: 'Fan', heater: 'Heater / radiator', cooker: 'Cooker', shower: 'Shower', immersion: 'Immersion heater', ev: 'EV charger', alarm: 'Smoke / heat alarm', appliance: 'Fixed appliance', km: 'Contactor', shelly: 'Shelly smart relay' };
+export const ITEM_KINDS = { socket: 'Double socket (switched)', socketu: 'Double socket (unswitched)', socket1: 'Single socket (switched)', socket1u: 'Single socket (unswitched)', dpu: 'DP switch + socket', dps: 'DP switch + switched socket', fcu: 'Fused spur (FCU)', sfcu: 'Switched fused spur (SFCU)', flex: 'Flex outlet', light: 'Light', fan: 'Fan', heater: 'Heater / radiator', cooker: 'Cooker', hob: 'Hob', oven: 'Oven', combi: 'Combi oven', shower: 'Shower', immersion: 'Immersion heater', ev: 'EV charger', alarm: 'Smoke / heat alarm', appliance: 'Fixed appliance', km: 'Contactor', shelly: 'Shelly smart relay' };
 export function itemsOf(o) { const m = o && o.items; if (!m || typeof m !== 'object') return []; const ord = Array.isArray(o.itemOrder) ? o.itemOrder.filter((k) => ITEM_KINDS[k]) : []; /* v0.44.2: user's order first */
   return [...new Set([...ord, ...Object.keys(ITEM_KINDS)])].map((k) => [k, cnt(m[k], 10)]).filter(([, n]) => n > 0); }
 export const itemList = (o) => itemsOf(o).flatMap(([k, n]) => Array(n).fill(k));
@@ -594,7 +594,7 @@ export function layout(model, { W = 380, font = 12, screen = false, cableTable =
   // key: only the symbols this diagram uses
   heatLab = 'Rad';
   if (used.size) {
-    const sh = []; const y = 10; const order = ['socket', 'socketu', 'socket1', 'socket1u', 'ipsock', 'light', 'rose', 'jb', 'jbsw', 'sw1', 'sw2', 'swi', 'strap', 'cooker', 'shower', 'alarm', 'immersion', 'heater', 'ev', 'fan', 'fcu', 'sfcu', 'flex', 'appliance', 'point', 'contactor', 'coil', 'km', 'shelly', 'hive', 'relay', 'timeclock', 'iso', 'isofcu', 'isofcux', 'isosfcu', 'isosfcux', 'isoccu', 'dpu', 'dps', 'tailblock', 'swfuse', 'fanh', 'fant', 'fani', 'spd'];
+    const sh = []; const y = 10; const order = ['socket', 'socketu', 'socket1', 'socket1u', 'ipsock', 'light', 'rose', 'jb', 'jbsw', 'sw1', 'sw2', 'swi', 'strap', 'cooker', 'hob', 'oven', 'combi', 'shower', 'alarm', 'immersion', 'heater', 'ev', 'fan', 'fcu', 'sfcu', 'flex', 'appliance', 'point', 'contactor', 'coil', 'km', 'shelly', 'hive', 'relay', 'timeclock', 'iso', 'isofcu', 'isofcux', 'isosfcu', 'isosfcux', 'isoccu', 'dpu', 'dps', 'tailblock', 'swfuse', 'fanh', 'fant', 'fani', 'spd'];
     let hh = textLines(sh, 8, y, 'Key', W - 16, { bold: true });
     const S = F * 1.5; const colW = (W - 16) / 2; let col = 0, rowY = y + hh + 4, rowH = 0; const KW = 2 * loadR('socket', S); // v0.43.9: icon column fits the widest (twin) outlet
     const CW = S * 1.7, CH = S * 1.4; void KW; // v0.44.3: every key symbol gets the same cell; labels line up
@@ -770,7 +770,7 @@ export function layout(model, { W = 380, font = 12, screen = false, cableTable =
     } else if (!info.spare && !info.spd && horiz && kind === 'socket' && isRingC(c) && pc.shown > 0 && !ctl && !iso && !fed) {
       ph = ringPlain(sh, c, pc, sgl, tx, y + hh + 6, tw, feedTop); // v0.43.5: a ring final as a hairpin: two legs out of the breaker, sockets between, joined after the last
     } else if (horiz && (pc.shown || ctl || iso)) {
-      const S = F * 1.5, step = S + 6, lstep = S + 15, gapX = F * 2.3; const per = Math.max(1, Math.floor((tw - 4) / step)); const lab0 = (ctl || iso || kind === 'alarm' || kind === 'heater') ? small * 1.3 : 0; /* v0.44.3: room for the Rad / Rail / Alarm labels */ const py = y + hh + 6 + lab0; const fx = tx - gap / 2; const g9 = { w: 1.1, color: COL.line }; // v0.43: run conductor, same weight as the symbols so it reads as one line
+      const S = F * 1.5, step = S + 6, lstep = S + 15, gapX = F * 2.3; const per = Math.max(1, Math.floor((tw - 4) / step)); const lab0 = (ctl || iso || kind === 'alarm' || kind === 'heater' || kind === 'hob' || kind === 'oven' || kind === 'combi') ? small * 1.3 : 0; /* v0.44.3: room for the Rad / Rail / Alarm labels */ const py = y + hh + 6 + lab0; const fx = tx - gap / 2; const g9 = { w: 1.1, color: COL.line }; // v0.43: run conductor, same weight as the symbols so it reads as one line
       // items along the row: [width, draw(x, cy)]
       const items = []; let coilAt = null, lastCy = py + S / 2;
       if (ctl) { const kw = F * 2.4; items.push([kw + gapX, (x, cy) => { nocH(sh, x, cy, kw); T(sh, x + kw / 2, cy - S * 0.55, tags[val(c.num) || '?'] || ctl.tag, { anchor: 'middle', bold: true, size: small }); coilAt = { x: x + kw * 0.5, y: cy }; }, false, kw]); } // v0.44.2: contact drawn straight in line
@@ -914,7 +914,7 @@ export function layout(model, { W = 380, font = 12, screen = false, cableTable =
   function chain(sh, list, o) {
     const S = o.S, r = S / 2, g = { w: 1.1, color: COL.line }; const dp = (k) => k === 'dpu' || k === 'dps';
     const wOf = (k) => (dp(k) ? r * 4.4 : 2 * loadR(k, S));
-    const up = list.some((it) => dp(it.k)) ? r * 3.5 : list.some((it) => it.k === 'heater') ? r + small * 1.2 + 2 : r + 2; /* heater: room for its Rad label */ const down = list.some((it) => SOCK[it.k]) ? r * 2.3 + 4 : r + 2; const rowH = up + down + 10;
+    const up = list.some((it) => dp(it.k)) ? r * 3.5 : list.some((it) => ['heater', 'hob', 'oven', 'combi'].includes(it.k)) ? r + small * 1.2 + 2 : r + 2; /* heater: room for its Rad label */ const down = list.some((it) => SOCK[it.k]) ? r * 2.3 + 4 : r + 2; const rowH = up + down + 10;
     let x = o.x0; let row = 0; const pos = [];
     for (const it of list) { const w = wOf(it.k); if (x + w > o.xMax && x > o.x0) { row++; x = o.x0; } pos.push({ x: x + loadR(it.k, S), row }); x += w + 14; }
     let prev = null;
@@ -1296,6 +1296,11 @@ export function layout(model, { W = 380, font = 12, screen = false, cableTable =
       plate(sh, sx, Y + r * 0.35, r, false, kind === 'dps'); }
     else if (kind === 'cooker') { // cooker: box with four hob rings
       box(sh, cx, cy, r); for (const [a, b] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) C(sh, cx + a * r * 0.45, cy + b * r * 0.45, r * 0.25, { lw: 0.8 }); }
+    // v0.44.5: hob (two rings across, top view), oven (door with window and handle), combi oven (oven window with a fan/microwave mark); labelled like Rad
+    else if (kind === 'hob') { box(sh, cx, cy, r); for (const a of [-1, 1]) C(sh, cx + a * r * 0.45, cy, r * 0.32, { lw: 0.9 }); if (heatLab) T(sh, cx, cy - r - 3, 'Hob', { anchor: 'middle', bold: true, size: Math.max(r * 0.8, small * 0.85), color: COL.grey }); }
+    else if (kind === 'oven' || kind === 'combi') { box(sh, cx, cy, r); L(sh, cx - r * 0.5, cy - r * 0.55, cx + r * 0.5, cy - r * 0.55, { w: 1.1 }); R(sh, cx - r * 0.6, cy - r * 0.3, r * 1.2, r * 0.9, { lw: 0.9 });
+      if (kind === 'combi') { const yy = cy + r * 0.3, a = r * 0.28; for (const [x1, y1, x2, y2] of [[-0.45, 0, -0.22, -1], [-0.22, -1, 0, 0], [0, 0, 0.22, -1], [0.22, -1, 0.45, 0]]) L(sh, cx + x1 * r, yy + y1 * a, cx + x2 * r, yy + y2 * a, { w: 1.1 }); }
+      if (heatLab) T(sh, cx, cy - r - 3, kind === 'combi' ? 'Combi' : 'Oven', { anchor: 'middle', bold: true, size: Math.max(r * 0.8, small * 0.85), color: COL.grey }); }
     else if (kind === 'shower') { box(sh, cx, cy, r); L(sh, cx - r * 0.6, cy - r * 0.45, cx + r * 0.6, cy - r * 0.45, { w: 1.3 }); for (const a of [-0.45, 0, 0.45]) L(sh, cx + a * r, cy - r * 0.15, cx + a * r, cy + r * 0.6, { w: 0.8 }); }
     else if (kind === 'alarm') { // fire/smoke detector: box with the detector triangle
       box(sh, cx, cy, r); L(sh, cx - r * 0.6, cy - r * 0.45, cx + r * 0.6, cy - r * 0.45, { w: 1.1 }); L(sh, cx - r * 0.6, cy - r * 0.45, cx, cy + r * 0.6, { w: 1.1 }); L(sh, cx + r * 0.6, cy - r * 0.45, cx, cy + r * 0.6, { w: 1.1 }); if (heatLab) T(sh, cx, cy - r - 3, 'Alarm', { anchor: 'middle', bold: true, size: Math.max(r * 0.8, small * 0.85), color: COL.grey }); } // v0.44.3: labelled, like Rad
