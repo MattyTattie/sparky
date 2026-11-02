@@ -22,7 +22,7 @@ test('immersion with contactor and 20A DP draws label, key, screen and PDF', () 
 });
 test('left-to-right run: conductor segments touch the symbols (no gaps)', () => {
   const c = diagramEICSwitches(); const hw = c.boards[0].circuits.find((x) => /^Hot water/.test(x.desc));
-  hw.diagram = { isolator: { type: 'dp20' } };
+  hw.diagram = { isolator: { type: 'dp20' }, items: { immersion: 1 } };
   for (const o of [{ W: 380, font: 12, screen: true }, { W: 560, font: 11 }]) {
     const b = layout(diagramModel(c), o).blocks.find((k) => k.shapes.some((z) => z.txt === '20A DP'));
     const sh = b.shapes; const segs = sh.filter((z) => z.t === 'line' && z.w === 1.1 && z.y1 === z.y2 && z.x2 - z.x1 > 2);

@@ -102,7 +102,7 @@ const ISO_SHORT = { dp20: '20A DP', dp45: '45A DP', sfcu: 'SFCU', ufcu: 'FCU', r
 // v0.43.3: points recorded as an FCU / spur on a named load (towel rail, heater...): the FCU is the isolator, the load comes after it
 const isTowel = (c) => /towel/i.test(String((c && c.desc) || ''));
 export function impliedFcu(c) {
-  if ((c && c.diagram && c.diagram.isolator && ISOLATORS[c.diagram.isolator.type]) || pointKind(c) !== 'fcu' || listedItems(c)) return null;
+  if ((c && c.diagram && c.diagram.isolator && ISOLATORS[c.diagram.isolator.type]) || pointKind(c) !== 'fcu' || listedItems(c) || noGuessLoad(c)) return null;
   const d = String((c && c.desc) || '').toLowerCase(); const named = d.replace(/\b(s?fcu|fused|connection|unit|spurs?|switched|unswitched|13 ?a|outlet|flex)\b/g, '').replace(/[^a-z]/g, '');
   if (!named) return null; const sw = /\bsfcu\b|\bswitched\b/.test(d) && !/unswitched/.test(d);
   return { type: sw ? 'sfcu' : 'ufcu', rating: '', fcu: true, ccu: false, switched: sw, flex: /\bflex\b/.test(d), label: '13A ' + (sw ? 'SFCU' : 'FCU'), name: ISOLATORS[sw ? 'sfcu' : 'ufcu'], implied: true };
@@ -110,15 +110,11 @@ export function impliedFcu(c) {
 // v0.44.4: once the circuit has its own item list (even emptied), nothing is guessed from the name
 export const listedItems = (c) => !!(c && c.diagram && c.diagram.items && typeof c.diagram.items === 'object' && !Array.isArray(c.diagram.items));
 // v0.44.4: what the drawing would guess from the circuit name/points, as real list items { items, itemOrder } (or null)
-export function guessedItems(c) {
-  if (!c || listedItems(c) || roomListOf(c) || switchInfo(c) !== null || pointKind(c) === 'socket') return null;
-  const pc = pointCount(c); const n = Math.min(10, pc.shown || 0); if (!n) return null;
-  const k = loadKind(c); if (!ITEM_KINDS[k]) return null;
-  const imp = impliedFcu(c); const items = {}; const order = [];
-  if (imp && k !== 'fcu') { const fk = imp.switched ? 'sfcu' : 'fcu'; items[fk] = 1; order.push(fk); }
-  items[k] = (items[k] || 0) + n; if (!order.includes(k)) order.push(k);
-  return { items, ...(order.length > 1 ? { itemOrder: order } : {}) };
-}
+// v0.44.4: "Don't guess, I'll pick": item-type circuits (not lighting, sockets, rooms or control) draw no load from their name/points; only items he adds
+// v0.44.4: one kind of load picked (e.g. 1 heater): drawn in line after the local switch, like before
+const SOLO_OK = new Set(['heater', 'immersion', 'cooker', 'shower', 'ev', 'appliance', 'flex', 'fan', 'light', 'alarm']);
+export function soloItem(c) { if (!noGuessLoad(c)) return null; const its = itemsOf(c.diagram); return its.length === 1 && SOLO_OK.has(its[0][0]) ? [its[0][0], Math.min(10, +its[0][1] || 1)] : null; }
+export const noGuessLoad = (c) => !!c && !roomListOf(c) && switchInfo(c) === null && pointKind(c) !== 'socket';
 export const isoFor = (c) => isolatorOf(c) || impliedFcu(c);
 export function loadKind(c, iso = isoFor(c)) { const k0 = pointKind(c);
   if (isHeater(c) && ['fcu', 'appliance', 'point'].includes(k0)) return 'heater';
@@ -471,7 +467,7 @@ export function circuitLines(c, spd = '') {
   const pre = rcd ? [['RCD', rcd]] : [];
   const rooms = roomsOf(c); const room = rooms ? ' \u00b7 ' + rooms : '';
   if (spd) return { title: `${val(c.num) || '?'}  ${val(c.desc) || 'SPD'}${room}`, spare: false, spd, device, devShort: dev || NA, devKind: kind, rows: [...pre, ['Cable', cable], ['Load', spd]] };
-  const k = loadKind(c); const KO = k === 'heater' && isTowel(c) ? 'towel rail' : KIND_ONE[k], KP = k === 'heater' && isTowel(c) ? 'towel rails' : KIND_PLURAL[k]; const si = switchInfo(c);
+  const so = soloItem(c); const ng = noGuessLoad(c) && !so; const k = so ? so[0] : loadKind(c); const KO = ng ? 'point' : k === 'heater' && isTowel(c) ? 'towel rail' : KIND_ONE[k], KP = ng ? 'points' : k === 'heater' && isTowel(c) ? 'towel rails' : KIND_PLURAL[k]; const si = switchInfo(c); // v0.44.4: no load named from the description const si = switchInfo(c);
   return { title: `${val(c.num) || '?'}  ${val(c.desc) || 'No description'}${room}`, spare: false, device, devShort: dev || NA, devKind: kind, noPoints: !pc.known,
     rooms: drawnRooms(roomListOf(c)), sockRooms: drawnRooms(socketRoomsOf(c)), itemRooms: drawnRooms(itemRoomsOf(c)), roomNote: roomPointsNote(c),
     rows: [...pre, ['Cable', cable], ...(anyRooms(c) ? [['Rooms', anyRooms(c).length + (anyRooms(c).length === 1 ? ' room' : ' rooms')]] : []), ['Points', pc.known ? (roomFanTotal(c) && pc.n === roomFanTotal(c) + roomLightTotal(c) ? `${pc.n - roomFanTotal(c)} \u00d7 ${pc.n - roomFanTotal(c) === 1 ? KO : KP} + ${roomFanTotal(c)} \u00d7 fan${roomFanTotal(c) === 1 ? '' : 's'}` : roomFanTotal(c) ? `${pc.n} \u00d7 point${pc.n === 1 ? '' : 's'}` : `${pc.n} \u00d7 ${pc.n === 1 ? KO : KP}`) : ''], ...(si ? [['Switches', si.text]] : [])] };
@@ -762,7 +758,7 @@ export function layout(model, { W = 380, font = 12, screen = false, cableTable =
       hh = res.bottom - y + 6; feedTop = res.lastY; ctlChained = true;
     }
     // points
-    const pc0 = pointCount(c); const pc = (fed && !ctl && !iso) || listedItems(c) || (ctlChained && /^(point|appliance)$/.test(pointKind(c))) ? { ...pc0, shown: 0, more: 0 } : pc0; /* v0.44.0: a control circuit's points are its contactor coils, drawn in the chain */ /* v0.43.1: a sub-main draws no load, it feeds the board */ const kind0 = pointKind(c); const kind = loadKind(c, iso); void kind0; /* v0.43.3: heaters, radiators, towel rails get the heating-element symbol */ // v0.43.1: the FCU isolator IS the spur, the load is the heater itself
+    const pc0 = pointCount(c); const solo = !fed && !ctlChained ? soloItem(c) : null; const pc = solo ? { ...pc0, n: solo[1], shown: solo[1], more: 0, known: true } : (fed && !ctl && !iso) || noGuessLoad(c) || (ctlChained && /^(point|appliance)$/.test(pointKind(c))) ? { ...pc0, shown: 0, more: 0 } : pc0; /* v0.44.0: a control circuit's points are its contactor coils, drawn in the chain */ /* v0.43.1: a sub-main draws no load, it feeds the board */ const kind0 = pointKind(c); const kind = solo ? solo[0] : loadKind(c, iso); void kind0; /* v0.43.3: heaters, radiators, towel rails get the heating-element symbol */ // v0.43.1: the FCU isolator IS the spur, the load is the heater itself
     const sgl = Math.min(socketSingles(c), pc.shown); const kindAt = (i) => (kind === 'socket' && i >= pc.shown - sgl ? 'socket1' : kind);
     let ph = 0;
     if (!info.spare && !info.spd && info.rooms) {
@@ -834,7 +830,7 @@ export function layout(model, { W = 380, font = 12, screen = false, cableTable =
       T(sh, cx + S, t + F * 1.1, info.spd, { bold: true, size: small });
       ph = sh0 + 6;
     }
-    const cItems = !info.spare && !info.spd && !ctlChained && c.diagram ? itemList(c.diagram) : [];
+    const cItems = !info.spare && !info.spd && !ctlChained && c.diagram && !solo ? itemList(c.diagram) : [];
     if (cItems.length) { const S = F * 1.5; const top0 = y + hh + 6 + ph + (ph ? 8 : 0); const t0 = textLines(sh, tx, top0, listedItems(c) && !ph ? 'On this circuit' : 'Also on this circuit', tw, { size: small, color: COL.grey });
       const res = chain(sh, cItems.map((k) => ({ k })), { S, inX: tx - gap / 2, fromY: feedTop, x0: tx + F * 0.6, xMax: W - 6, top: top0 + t0 + 2, wrapX: tx + 2 });
       ph = res.bottom - (y + hh + 6) + 4; }

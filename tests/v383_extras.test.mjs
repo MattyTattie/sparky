@@ -36,8 +36,7 @@ test('key lists only symbols used, and is the last block', () => {
   const L = layout(diagramModel(diagramEICExtras()), { W: 560, font: 11 });
   const last = L.blocks[L.blocks.length - 1]; assert.equal(last.kind, 'legend');
   const t = last.shapes.filter((z) => z.t === 'text').map((z) => z.txt).join('|');
-  for (const w of ['Key', 'Twin socket (switched)', 'Light', '1-way switch', '2-way switch', 'Intermediate switch', 'Smoke / heat alarm', 'Immersion heater', 'EV charger', 'Fan', 'Contactor']) assert.ok(t.includes(w), w);
-  assert.ok(/Fused spur \(FCU\)|fused/.test(t)); // v0.43.3: an FCU on a named load is drawn as its isolator
+  for (const w of ['Key', 'Twin socket (switched)', 'Light', '1-way switch', '2-way switch', 'Intermediate switch', 'Contactor']) assert.ok(t.includes(w), w);
   const L2 = layout(diagramModel(diagramMW()));
   const t2 = L2.blocks.at(-1).shapes.filter((z) => z.t === 'text').map((z) => z.txt).join('|');
   assert.ok(t2.includes('Twin socket (switched)') && !t2.includes('Light') && !t2.includes('EV'));

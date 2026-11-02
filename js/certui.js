@@ -15,7 +15,7 @@ import { INTAKE_NOTE_10, INTAKE_NOTES, INTAKE_NOTIFIED, migrateIntake, EIC_ITEMS
 import { checkCircuit, isSpare } from './checks.js';
 import { CHECK_NOTE } from './limits.js';
 import { ITEM_KINDS, itemRoomsOf, isControlCircuit, chainOf, migrateChain, kmNumbers, CHAIN_KINDS, CHAIN_SUPPLY, iconSvg, itemsOf } from './wiring.js';
-import { diagramSvg, diagramInPdf, diagramHasCircuits, SPUR_FEEDS, CONTROL_VIA, switchInfo, roomListOf, roomPointsNote, socketRoomsOf, roomPointTotal, pointKind, socketSingles, arrangedOrder, feedInfo, ISOLATORS, guessedItems } from './wiring.js';
+import { diagramSvg, diagramInPdf, diagramHasCircuits, SPUR_FEEDS, CONTROL_VIA, switchInfo, roomListOf, roomPointsNote, socketRoomsOf, roomPointTotal, pointKind, socketSingles, arrangedOrder, feedInfo, ISOLATORS } from './wiring.js';
 import { limitOn, limitBar } from './limitbar.js';
 import { circuitReadings, makeTemplate, applyTemplate, nextRoom, tidyLayouts, BUILTIN_TEMPLATES, TEMPLATE_KEY } from './diagrampro.js';
 import { dangerCodes, noticeForObs, noticesOf, noticeMissing, noticeNo } from './dangermodel.js';
@@ -298,7 +298,6 @@ function extrasCard(cert, redraw) {
     const c = live[pickedCircuit.get(key)]; if (!c) { fill(one, []); return; }
     const bcs = cert.type === 'MW' ? all : ((cert.boards || []).find((b) => (b.circuits || []).includes(c)) || {}).circuits || all;
     const ctlC = isControlCircuit(c, bcs); if (ctlC && !Array.isArray((c.diagram || {}).chain)) { migrateChain(c, bcs); changed(); redraw(); } // v0.44.2: one ordered list
-    if (!ctlC) { const g = guessedItems(c); if (g) { c.diagram = { ...(c.diagram || {}), ...g }; changed(); redraw(); } } // v0.44.4: no hidden guesses: what the name implies becomes real, editable items
     const d = c.diagram || {}; const isLight = switchInfo(c) !== null && !ctlC;
     const si = isLight ? switchInfo(c) : null;
     let isoSum = null; const ins = {}; const cur = { sw1: si ? String(si.list.filter((x) => x === 'sw1').length) : '1', sw2: si ? String(si.list.filter((x) => x === 'sw2').length / 2) : '0', swi: si ? String(si.list.filter((x) => x === 'swi').length) : '0' };
