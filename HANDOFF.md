@@ -370,3 +370,16 @@ Auto single-line wiring diagram from the cert (EIC/EICR whole board, MWC just th
 - Compact editors. On the control circuit, each supply item or controller gets one box that holds its contactors (`kmRow`). ↑ ↓ ✕ sit inline as 38px `tinyBtn`s. The "Switches circuit" text is full width in ink colour.
 - Room cards and item rows are on one line: icon, label, −n+, ↑ ↓, ✕. Dark mode: symbol icons sit on a white chip, and the cards use var(--card).
 - Key: every symbol is drawn at the origin, then `fitCell` scales and centres it into a fixed 1.7S×1.4S cell. Labels start at the same x and are vertically centred. The same shapes go to the PDF.
+
+### v0.44.3b: blind-review fixes (branch only, not published)
+- Ring room boxes grow to hold every socket row; rooms with nothing in them are not drawn (circuitLines filters them).
+- Room-circuit contactor contact now the same inline contact (turned down the feed), no dashed link; the "via contactor" note sits tight under/next to its contact.
+- One SFCU key entry (chain SFCU folds into it); flex variant drawn with the same plate.
+- Sub-main circuit: Points says "Sub-main to DB2"; the sub-board draws its main switch (isolator) under the sub-main line.
+- Rad/Rail label per circuit (rooms too), bigger; Alarm label on alarms; rows with labels get headroom.
+- Control circuit Points = contactor coils drawn; each coil has a neutral return stub (N).
+- Fan-only lighting room: no "No lights set" gap.
+- Plain ring: rows balanced and left-aligned; socket cable runs straight over each plate with one drop.
+- CCU "COOKER" caption under the plate, readable.
+- Editors: spur type toggle under the Spur line; contactor rows compact (chips + picker and label side by side, captions always shown).
+- Tests: tests/v443b_review.test.mjs.
