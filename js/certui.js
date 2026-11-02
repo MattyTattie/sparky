@@ -919,12 +919,12 @@ const moveIn = (arr, from, to) => { const a = [...arr]; const [x] = a.splice(fro
 const handle = (aria) => h('span', { class: 'drag', role: 'img', 'aria-label': aria, style: 'touch-action:none;cursor:grab;min-width:28px;min-height:44px;display:inline-flex;align-items:center;justify-content:center;color:#9aa0aa;font-size:20px;flex:none' }, '\u2261');
 // one line: icon, name, - n +, up, down, x
 function itemLine({ icon, label, n, min = 0, max = 10, onN, onUp, onDown, onX, aria, extra }) {
+  const step = () => (n != null ? h('div', { class: 'rstep', style: 'display:flex;align-items:center;gap:4px;flex:none' }, smallBtn('\u2212', aria + ', one fewer', () => onN(Math.max(min, n - 1))), h('span', { class: 'stepval', style: 'min-width:1.4em;text-align:center;font-weight:700' }, String(n)), smallBtn('+', aria + ', one more', () => onN(Math.min(max, n + 1)))) : null);
   return h('div', { class: 'iline', style: 'display:flex;align-items:center;gap:6px;min-height:48px;border-top:1px solid var(--line);padding:2px 0;flex-wrap:wrap' },
     onUp || onDown ? handle('Drag ' + aria) : null, icon ? ico(icon) : null,
-    h('span', { class: 'ilabel', style: 'flex:1 1 90px;min-width:0;white-space:normal;word-break:break-word;font-size:15px' }, label),
-    n != null ? h('div', { class: 'rstep', style: 'display:flex;align-items:center;gap:4px;flex:none' }, smallBtn('\u2212', aria + ', one fewer', () => onN(Math.max(min, n - 1))), h('span', { class: 'stepval', style: 'min-width:1.4em;text-align:center;font-weight:700' }, String(n)), smallBtn('+', aria + ', one more', () => onN(Math.min(max, n + 1)))) : null,
-    onUp ? smallBtn('\u2191', 'Move up ' + aria, onUp) : null, onDown ? smallBtn('\u2193', 'Move down ' + aria, onDown) : null,
-    onX ? smallBtn('\u2715', 'Remove ' + aria, onX) : null, extra || null);
+    h('span', { class: 'ilabel', style: 'flex:1 1 90px;min-width:0;white-space:normal;overflow-wrap:break-word;font-size:15px' }, label),
+    (onUp || onDown) ? null : step(), (onUp || onDown) ? null : (onX ? smallBtn('\u2715', 'Remove ' + aria, onX) : null), (onUp || onDown) ? null : (extra || null),
+    (onUp || onDown) ? h('div', { class: 'moverow', style: 'display:flex;align-items:center;gap:6px;width:100%;padding-left:26px' }, step(), h('span', { style: 'flex:1' }), onUp ? smallBtn('\u2191', 'Move up ' + aria, onUp) : null, onDown ? smallBtn('\u2193', 'Move down ' + aria, onDown) : null, onX ? smallBtn('\u2715', 'Remove ' + aria, onX) : null, extra || null) : null);
 }
 // what a room can hold, by circuit type: [field, label, icon, max]
 const NATIVE = {
@@ -1013,8 +1013,8 @@ export function chainEditor(c, bcs, onset) {
     } else body.push(h('input', { 'aria-label': title + ' name or rating', placeholder: CHAIN_SUPPLY[it.k] ? 'Rating (optional), e.g. 3A' : it.k === 'other' ? 'Name, e.g. Wiser hub' : 'Note (optional)', style: 'width:100%;min-height:44px;margin-top:4px', value: it.name || '', onchange: (e) => set(list.map((x, j) => (j === i ? { ...x, name: e.target.value.trim() } : x))) }));
     return h('div', { class: 'chainrow', style: 'border:1px solid var(--line);border-radius:12px;padding:4px 8px 8px;margin:0 0 8px' + (under ? ';margin-left:22px;border-left:4px solid var(--brand,#2952ff)' : '') },
       h('div', { style: 'display:flex;align-items:center;gap:6px;min-height:48px' }, handle('Drag ' + title), ico(ICON[it.k]), h('b', { style: 'flex:1;min-width:0;white-space:normal;overflow-wrap:break-word;font-size:16px' }, (i + 1) + '. ' + title),
-        i > 0 ? smallBtn('\u2191', 'Move up ' + title, () => set(moveIn(list, i, i - 1))) : null, i < list.length - 1 ? smallBtn('\u2193', 'Move down ' + title, () => set(moveIn(list, i, i + 1))) : null,
-        smallBtn('\u2715', 'Remove ' + title, () => set(list.filter((_, j) => j !== i)))), ...body); }));
+        smallBtn('\u2715', 'Remove ' + title, () => set(list.filter((_, j) => j !== i)))),
+      list.length > 1 ? h('div', { class: 'moverow', style: 'display:flex;justify-content:flex-end;gap:6px' }, i > 0 ? smallBtn('\u2191', 'Move up ' + title, () => set(moveIn(list, i, i - 1))) : null, i < list.length - 1 ? smallBtn('\u2193', 'Move down ' + title, () => set(moveIn(list, i, i + 1))) : null) : null, ...body); }));
   dragRows(rows, '.chainrow', (a, b) => set(moveIn(list, a, b)));
   const add = async () => { const v = await pickTiles('Add to the control circuit', Object.entries(CHAIN_KINDS).map(([k, t]) => [k, t, ICON[k], k === 'km' ? 'Goes under the controller above it' : null])); if (v) set([...list, { k: v, ...(v === 'km' ? { circuits: [] } : {}) }]); };
   return h('div', { class: 'ctled', id: 'ctlrows', style: 'margin-top:10px' },
