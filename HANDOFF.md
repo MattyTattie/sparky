@@ -389,3 +389,7 @@ Auto single-line wiring diagram from the cert (EIC/EICR whole board, MWC just th
 - "Add to circuit" picker tiles: colours moved to CSS. Dark = dark boxes, white text; light = white boxes, near-black text. Dark rule hand-added to dark.css and tools/dark-manual.css (gen-dark.py is out of step with hand edits; don't re-run blindly).
 - No load guessing (owner: "Don't guess, I'll pick"): item-type circuits (not lighting, sockets, rooms, control) draw only picked items; no implied FCU from names; Points line says "point(s)". A single picked load kind draws inline after the local switch (soloItem). Old certs that relied on the guess draw the circuit with no load. Removing the last item keeps `items: {}`.
 - Tests: tests/v444_iso_picker.test.mjs; older guess-based tests updated. Cache sparky-v0.44.4.
+
+## v0.44.5 (live 2 Nov 2026)
+- New items Hob, Oven, Combi oven (item keys `hob`, `oven`, `combi`; nothing else in the stored format changed). Own symbols in the Cooker box style: hob = two rings; oven = handle bar over a door window; combi = oven window with a microwave zigzag. Grey "Hob" / "Oven" / "Combi" labels above on the diagram/PDF (not on picker icons); key entries Hob / Oven / Combi oven. Cooker unchanged. A single picked one draws inline (SOLO_OK).
+- Tests: tests/v445_cooking.test.mjs. Cache sparky-v0.44.5.
