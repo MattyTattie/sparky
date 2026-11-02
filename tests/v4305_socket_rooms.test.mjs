@@ -21,10 +21,8 @@ test('socket rooms draw room boxes, spurs and IP-marked outdoor sockets', () => 
 test('old socket circuit without rooms draws as before', () => {
   const t = txt(lay({ ...ring, diagram: undefined })); assert.ok(!t.includes('Kitchen')); assert.ok(!t.includes('IP'));
 });
-test('rooms editor has a socket mode with doubles, spurs and copy last room', () => {
-  assert.match(ui, /mode === 'socket' \? \{ name, sockets: 2 \}/);
-  assert.match(ui, /grp\('Doubles'/); assert.match(ui, /grp\('Spurs'/);
-  assert.match(ui, /roomsOnOtherCircuits\(all, c\), 'socket'\)/); assert.match(ui, /'Outside'\]/);
+test('socket circuits use the one-list editor in socket mode (v0.44.2)', () => {
+  assert.match(ui, /mode === 'socket' \? \{ name, sockets: 2 \}/); assert.match(ui, /pointKind\(c\) === 'socket' \? 'socket'/); assert.match(ui, /export function whatsOn\(/);
 });
 test('singles per room count towards points and draw as single sockets on the ring', () => {
   const c = { ...ring, diagram: { roomList: [{ name: 'Kitchen', sockets: 2, singles: 3 }, { name: 'Hall', sockets: 1, singles: 99 }] } };

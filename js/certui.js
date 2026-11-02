@@ -14,7 +14,7 @@ import { TYPES, newCert, sectionsFor, sectionDone, missingFields, visible, get, 
 import { INTAKE_NOTE_10, INTAKE_NOTES, INTAKE_NOTIFIED, migrateIntake, EIC_ITEMS, EIC_OUTCOMES, EICR_ITEMS, EICR_OUTCOMES, CODE_TEXT, OBSERVATIONS, OBS_CATS, EIC_HELP, EICR_HELP } from './inspections.js';
 import { checkCircuit, isSpare } from './checks.js';
 import { CHECK_NOTE } from './limits.js';
-import { ITEM_KINDS, itemRoomsOf, CONTROLLER_KINDS, controllersOf, isControlCircuit, migrateControllers } from './wiring.js';
+import { ITEM_KINDS, itemRoomsOf, isControlCircuit, chainOf, migrateChain, kmNumbers, CHAIN_KINDS, CHAIN_SUPPLY, iconSvg, itemsOf } from './wiring.js';
 import { diagramSvg, diagramInPdf, diagramHasCircuits, SPUR_FEEDS, CONTROL_VIA, switchInfo, roomListOf, roomPointsNote, socketRoomsOf, roomPointTotal, pointKind, socketSingles, arrangedOrder, feedInfo, ISOLATORS } from './wiring.js';
 import { limitOn, limitBar } from './limitbar.js';
 import { circuitReadings, makeTemplate, applyTemplate, nextRoom, tidyLayouts, BUILTIN_TEMPLATES, TEMPLATE_KEY } from './diagrampro.js';
@@ -218,7 +218,7 @@ route(/^\/cert\/([^/]+)\/diagram$/, async (id) => {
     cert.type === 'MW' ? spurCard(cert, draw) : null,
     diagramHasCircuits(cert) ? h('div', { style: 'display:flex;gap:8px;align-items:center;margin:-4px 4px 10px' }, h('p', { class: 'note', style: 'margin:0;flex:1' }, 'Tap a circuit or room for its readings.'), h('button', { class: 'btn ghost', type: 'button', id: 'tidybtn', style: 'min-height:44px;white-space:normal', onclick: tidy }, 'Tidy up')) : null,
     diagramHasCircuits(cert) ? (extrasEl = extrasCard(cert, () => { draw(); drawIssues(); })) : null,
-    diagramHasCircuits(cert) ? controlCard(cert, () => { draw(); drawIssues(); }) : null,
+    diagramHasCircuits(cert) && !(cert.boards || []).some((b) => (b.circuits || []).some((c) => isControlCircuit(c, b.circuits))) ? controlCard(cert, () => { draw(); drawIssues(); }) : null, // v0.44.2: control lives in the circuit's list
     h('div', { class: 'card' }, h('div', { class: 'switchrow', style: 'border-top:0;margin-top:0' }, h('span', {}, 'Include in the PDF (after the schedules)'), sw)),
   ], { back: '#/cert/' + id, sub: cert.number });
 });
@@ -296,27 +296,24 @@ function extrasCard(cert, redraw) {
   const one = h('div', { id: 'extrasone' }); let arranging = false;
   const drawOne = () => {
     const c = live[pickedCircuit.get(key)]; if (!c) { fill(one, []); return; }
-    const ctlC = isControlCircuit(c, all); if (ctlC && !Array.isArray((c.diagram || {}).controllers) && controllersOf(c, all).length) migrateControllers(c, all); // v0.44.1: move old Shelly / contactor items into the list
+    const bcs = cert.type === 'MW' ? all : ((cert.boards || []).find((b) => (b.circuits || []).includes(c)) || {}).circuits || all;
+    const ctlC = isControlCircuit(c, bcs); if (ctlC && !Array.isArray((c.diagram || {}).chain)) { migrateChain(c, bcs); changed(); redraw(); } // v0.44.2: one ordered list
     const d = c.diagram || {}; const isLight = switchInfo(c) !== null && !ctlC;
     const si = isLight ? switchInfo(c) : null;
     const ins = {}; const cur = { sw1: si ? String(si.list.filter((x) => x === 'sw1').length) : '1', sw2: si ? String(si.list.filter((x) => x === 'sw2').length / 2) : '0', swi: si ? String(si.list.filter((x) => x === 'swi').length) : '0' };
     const numIn = (k, label) => h('label', { class: 'f', style: 'flex:1;min-width:0' }, h('span', {}, label), ins[k] = h('input', { type: 'number', min: '0', max: '10', inputmode: 'numeric', 'aria-label': label + ', circuit ' + (c.num || ''), value: cur[k], onchange: () => { for (const o of ['sw1', 'sw2', 'swi']) { const n = Math.max(0, Math.min(10, parseInt(ins[o].value, 10) || 0)); ins[o].value = String(n); save(c, o, String(n)); } } }));
     fill(one, [h('b', { class: 'pickname', style: 'display:block;margin:8px 0 4px;word-break:break-word;white-space:normal' }, name(c)),
       isLight && arranging ? arrangeRooms(c, redraw, () => { arranging = false; drawOne(); }) : null,
-      isLight && !arranging ? roomsEditor(c, redraw, () => jobRoomNames(all, c), () => roomsOnOtherCircuits(all, c)) : null,
+      ctlC ? chainEditor(c, bcs, (list) => { save(c, 'chain', list); drawOne(); }) : null, // v0.44.2: control circuit = one ordered list
+      !ctlC && !arranging ? whatsOn(c, isLight ? 'light' : pointKind(c) === 'socket' ? 'socket' : 'other', redraw, drawOne, () => jobRoomNames(all, c), () => roomsOnOtherCircuits(all, c)) : null,
       isLight && !arranging ? templateRow(c, redraw, drawOne) : null,
-      isLight && !arranging && (d.roomList || []).length > 1 ? h('button', { class: 'btn ghost', type: 'button', id: 'arrangebtn', style: 'width:100%;min-height:48px;margin-top:4px', onclick: () => { arranging = true; drawOne(); } }, 'Arrange room boxes') : null,
+      isLight && !arranging && (d.roomList || []).length > 1 ? h('button', { class: 'btn ghost', type: 'button', id: 'arrangebtn', style: 'width:100%;min-height:48px;margin-top:4px', onclick: () => { arranging = true; drawOne(); } }, 'Arrange room boxes on the drawing') : null,
       isLight && !roomListOf(c) ? h('details', { class: 'fold', style: 'margin-top:6px' }, h('summary', {}, h('span', { class: 'foldt' }, 'Or just set switch counts', h('span', { class: 'folds' }, 'Without rooms')), h('span', { class: 'foldic' }, '\u203a')),
         h('div', { class: 'foldin' }, h('label', { class: 'f' }, h('span', {}, 'Rooms (text)'), h('input', { placeholder: 'e.g. Kitchen, Hall', 'aria-label': 'Rooms, circuit ' + (c.num || ''), value: d.rooms || '', onchange: (e) => save(c, 'rooms', e.target.value.trim()) })),
           h('div', { style: 'display:flex;gap:8px' }, numIn('sw1', '1-way'), numIn('sw2', '2-way pairs'), numIn('swi', 'Intermediate')))) : null,
-      pointKind(c) === 'socket' ? roomsEditor(c, redraw, () => jobRoomNames(all, c), () => roomsOnOtherCircuits(all, c), 'socket') : null, // v0.43.5: rooms on rings and radials
-      !isLight && !ctlC && pointKind(c) !== 'socket' ? roomsEditor(c, redraw, () => jobRoomNames(all, c), () => roomsOnOtherCircuits(all, c), 'other') : null, // v0.44.0: room tick boxes on every circuit
-      !isLight && ((pointKind(c) === 'socket' && d.rooms && !socketRoomsOf(c)) || (pointKind(c) !== 'socket' && d.rooms && !itemRoomsOf(c))) ? h('label', { class: 'f' }, h('span', {}, 'Rooms'), h('input', { placeholder: 'e.g. Kitchen, Hall', 'aria-label': 'Rooms, circuit ' + (c.num || ''), value: d.rooms || '', onchange: (e) => save(c, 'rooms', e.target.value.trim()) })) : null,
-      pointKind(c) === 'socket' && !socketRoomsOf(c) ? singlesRow(c, save) : null,
-      isolatorRow(c, save),
-      ctlC ? controllersEditor(c, all, (list) => { save(c, 'controllers', list); drawOne(); }) : null, // v0.44.1: controllers list replaces items on control circuits
-      ctlC ? null : h('b', { style: 'display:block;margin:10px 0 0' }, 'Other items on this circuit'), ctlC ? null : h('p', { class: 'note', style: 'margin:2px 0 0' }, 'Anything not in a room.'),
-      ctlC ? null : itemsEditor(d.items, 'circuit ' + (c.num || ''), (m) => { save(c, 'items', Object.keys(m).length ? m : ''); drawOne(); })]);
+      !isLight && !ctlC && ((pointKind(c) === 'socket' && d.rooms && !socketRoomsOf(c)) || (pointKind(c) !== 'socket' && d.rooms && !itemRoomsOf(c))) ? h('label', { class: 'f' }, h('span', {}, 'Rooms'), h('input', { placeholder: 'e.g. Kitchen, Hall', 'aria-label': 'Rooms, circuit ' + (c.num || ''), value: d.rooms || '', onchange: (e) => save(c, 'rooms', e.target.value.trim()) })) : null,
+      pointKind(c) === 'socket' && !socketRoomsOf(c) && !ctlC ? singlesRow(c, save) : null,
+      ctlC ? null : h('details', { class: 'fold', style: 'margin-top:8px' }, h('summary', {}, h('span', { class: 'foldt' }, 'Local isolator', h('span', { class: 'folds' }, d.isolator && d.isolator.type ? ISOLATORS[d.isolator.type] || 'Set' : 'None')), h('span', { class: 'foldic' }, '\u203a')), h('div', { class: 'foldin' }, isolatorRow(c, save)))]);
   };
   const pick = h('select', { id: 'extrascircuit', 'aria-label': 'Circuit', style: 'width:100%;white-space:normal', onchange: (e) => { pickedCircuit.set(key, +e.target.value); arranging = false; drawOne(); } },
     live.map((c, i) => h('option', { value: String(i), selected: i === pickedCircuit.get(key) ? true : null }, name(c) + (c.diagram && (c.diagram.roomList || []).length ? ` (${c.diagram.roomList.length} room${c.diagram.roomList.length === 1 ? '' : 's'})` : ''))));
@@ -893,4 +890,136 @@ export function controllersEditor(c, all, onset) {
         h('button', { class: 'btn ghost', type: 'button', style: big, onclick: () => { k.contactors.push({ circuits: [], label: '' }); set(); } }, '+ Add contactor')); }),
     h('select', { class: 'addctl', 'aria-label': 'Add controller', style: 'width:100%;min-height:48px;white-space:normal', onchange: (e) => { const t = e.target.value; if (!t) return; list.push({ type: t, name: '', contactors: [{ circuits: [], label: '' }] }); set(); } },
       h('option', { value: '' }, '+ Add controller\u2026'), Object.entries(CONTROLLER_KINDS).map(([v, t]) => h('option', { value: v }, t))));
+}
+
+// ---- v0.44.2: one simple "what's on this circuit" editor -------------------------------------------
+const ico = (k) => { const sp = h('span', { class: 'pico', style: 'width:36px;height:36px;flex:none;display:inline-flex;align-items:center;justify-content:center' }); sp.innerHTML = iconSvg(k); return sp; };
+const smallBtn = (txt, aria, fn, extra = '') => h('button', { class: 'btn ghost mv', type: 'button', 'aria-label': aria, style: 'min-width:44px;min-height:44px;padding:0 6px;flex:none;font-size:18px;line-height:1' + extra, onclick: fn }, txt);
+// big tiles with an icon, one tap picks. Resolves the value, or null.
+export function pickTiles(title, opts) {
+  return new Promise((res) => {
+    const close = (v) => { bg.remove(); res(v); };
+    const bg = h('div', { class: 'modal-bg', onclick: (e) => { if (e.target === bg) close(null); } },
+      h('div', { class: 'modal picker', role: 'dialog', style: 'max-height:85vh;overflow:auto' }, h('h3', {}, title),
+        h('div', { class: 'tiles', style: 'display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px' }, opts.map(([v, label, icon, note]) => h('button', { type: 'button', class: 'tile', 'data-v': v, style: 'display:grid;grid-template-columns:36px minmax(0,1fr);align-items:center;gap:8px;width:100%;min-height:60px;padding:6px 8px;text-align:left;white-space:normal;border:1.5px solid #dfe3ec;border-radius:14px;background:#fff;color:inherit;font:inherit', onclick: () => close(v) },
+          icon ? ico(icon) : h('span', {}), h('span', { style: 'display:block;min-width:0;overflow-wrap:break-word;font-size:15px;font-weight:600;line-height:1.2' }, label, note ? h('span', { class: 'note', style: 'display:block;margin:0;font-size:12px' }, note) : null)))),
+        h('div', { class: 'btns full' }, h('button', { class: 'btn', type: 'button', onclick: () => close(null) }, 'Cancel'))));
+    document.body.append(bg);
+  });
+}
+// drag a row by its handle (touch or mouse) to a new place in the list; arrows do the same
+function dragRows(list, rowSel, onMove) {
+  list.addEventListener('pointerdown', (e) => { const hd = e.target.closest('.drag'); if (!hd) return; const row = hd.closest(rowSel); if (!row) return; e.preventDefault();
+    const rows = [...list.querySelectorAll(rowSel)]; const from = rows.indexOf(row); let to = from; row.style.opacity = '0.6';
+    const mv = (ev) => { const y = ev.clientY; to = rows.filter((r) => { const b = r.getBoundingClientRect(); return b.top + b.height / 2 < y; }).length; if (to > from) to--; rows.forEach((r, i) => { r.style.borderTop = i === (to > from ? to + 1 : to) && to !== from ? '3px solid var(--brand,#2952ff)' : ''; }); };
+    const up = () => { document.removeEventListener('pointermove', mv); document.removeEventListener('pointerup', up); row.style.opacity = ''; rows.forEach((r) => { r.style.borderTop = ''; }); if (to !== from) onMove(from, to); };
+    document.addEventListener('pointermove', mv); document.addEventListener('pointerup', up); });
+}
+const moveIn = (arr, from, to) => { const a = [...arr]; const [x] = a.splice(from, 1); a.splice(Math.max(0, Math.min(a.length, to)), 0, x); return a; };
+const handle = (aria) => h('span', { class: 'drag', role: 'img', 'aria-label': aria, style: 'touch-action:none;cursor:grab;min-width:28px;min-height:44px;display:inline-flex;align-items:center;justify-content:center;color:#9aa0aa;font-size:20px;flex:none' }, '\u2261');
+// one line: icon, name, - n +, up, down, x
+function itemLine({ icon, label, n, min = 0, max = 10, onN, onUp, onDown, onX, aria, extra }) {
+  return h('div', { class: 'iline', style: 'display:flex;align-items:center;gap:6px;min-height:48px;border-top:1px solid var(--line);padding:2px 0;flex-wrap:wrap' },
+    onUp || onDown ? handle('Drag ' + aria) : null, icon ? ico(icon) : null,
+    h('span', { class: 'ilabel', style: 'flex:1 1 90px;min-width:0;white-space:normal;word-break:break-word;font-size:15px' }, label),
+    n != null ? h('div', { class: 'rstep', style: 'display:flex;align-items:center;gap:4px;flex:none' }, smallBtn('\u2212', aria + ', one fewer', () => onN(Math.max(min, n - 1))), h('span', { class: 'stepval', style: 'min-width:1.4em;text-align:center;font-weight:700' }, String(n)), smallBtn('+', aria + ', one more', () => onN(Math.min(max, n + 1)))) : null,
+    onUp ? smallBtn('\u2191', 'Move up ' + aria, onUp) : null, onDown ? smallBtn('\u2193', 'Move down ' + aria, onDown) : null,
+    onX ? smallBtn('\u2715', 'Remove ' + aria, onX) : null, extra || null);
+}
+// what a room can hold, by circuit type: [field, label, icon, max]
+const NATIVE = {
+  light: [['lights', 'Light', 'light', 10], ['fans', 'Fan', 'fan', 2], ['sw1', '1-way switch', 'sw1', 4], ['sw2pairs', '2-way switch pair', 'sw2', 3], ['swi', 'Intermediate switch', 'swi', 4]],
+  socket: [['_sw', 'Double socket (switched)', 'socket', 20], ['unsw', 'Double socket (unswitched)', 'socketu', 20], ['singles', 'Single socket', 'socket1', 10], ['spurs', 'Spur', 'socket1', 4], ['dpsw', 'DP switch + socket', 'dpu', 4], ['dpsws', 'DP switch + switched socket', 'dps', 4]],
+  other: [],
+};
+const ITEM_ICON = (k) => k;
+// native count, and setter patch (sockets = switched + unswitched doubles)
+const natGet = (r, f) => (f === '_sw' ? Math.max(0, (+r.sockets || 0) - (+r.unsw || 0)) : +r[f] || 0);
+const natSet = (r, f, n) => (f === '_sw' ? { sockets: n + (+r.unsw || 0) } : f === 'unsw' ? { unsw: n, sockets: Math.max(0, (+r.sockets || 0) - (+r.unsw || 0)) + n } : f === 'spurs' ? { spurs: n, ...(n && !r.spurKind ? { spurKind: 'socket' } : {}) } : f === 'fans' ? { fans: n, ...(n && !r.fanCtl ? { fanCtl: 'humidistat' } : {}) } : { [f]: n });
+// lines for a room or a circuit: native fields (rooms only) then the extra items in their own order
+function linesFor(o, mode, label, put) {
+  const out = [];
+  for (const [f, t, ic, max] of mode ? NATIVE[mode] : []) { const n = natGet(o, f); if (!n) continue;
+    out.push(itemLine({ icon: ic, label: t, n, max, aria: label + ' ' + t, onN: (v) => put(natSet(o, f, v)), onX: () => put(natSet(o, f, 0)) })); }
+  const its = itemsOf(o); const keys = its.map(([k]) => k);
+  const setOrd = (ks) => ({ itemOrder: ks.length > 1 ? ks : undefined });
+  its.forEach(([k, n], i) => out.push(itemLine({ icon: ITEM_ICON(k), label: ITEM_KINDS[k], n, aria: label + ' ' + ITEM_KINDS[k],
+    onN: (v) => { const m = { ...(o.items || {}) }; if (v) m[k] = v; else delete m[k]; put({ items: Object.keys(m).length ? m : undefined, ...setOrd(keys.filter((x) => m[x])) }); },
+    onUp: i > 0 ? () => put(setOrd(moveIn(keys, i, i - 1))) : null, onDown: i < keys.length - 1 ? () => put(setOrd(moveIn(keys, i, i + 1))) : null,
+    onX: () => { const m = { ...(o.items || {}) }; delete m[k]; put({ items: Object.keys(m).length ? m : undefined, ...setOrd(keys.filter((x) => x !== k)) }); } })));
+  return out;
+}
+async function addTo(o, mode, put, title) {
+  const opts = [...(mode ? NATIVE[mode] : []).map(([f, t, ic]) => ['n:' + f, t, ic]), ...Object.entries(ITEM_KINDS).filter(([k]) => !(mode === 'socket' && ['socket', 'socketu', 'socket1', 'dpu', 'dps'].includes(k)) && !(mode === 'light' && ['light', 'fan'].includes(k))).map(([k, t]) => ['i:' + k, t, k])];
+  const v = await pickTiles(title, opts); if (!v) return;
+  if (v.startsWith('n:')) { const f = v.slice(2); put(natSet(o, f, natGet(o, f) + 1)); return; }
+  const k = v.slice(2); const m = { ...(o.items || {}) }; m[k] = Math.min(10, (+m[k] || 0) + 1); const ks = itemsOf(o).map(([x]) => x); put({ items: m, itemOrder: ks.includes(k) ? (ks.length > 1 ? ks : undefined) : [...ks, k].length > 1 ? [...ks, k] : undefined });
+}
+// Everything on a circuit in one place: rooms in feed order (each with its items), then anything not in a room.
+export function whatsOn(c, mode, redraw, again, usedNames = () => [], otherMap = () => ({})) {
+  const box = h('div', { class: 'whatson', id: 'whatson', style: 'margin:8px 0 4px' });
+  const rooms = () => (c.diagram && Array.isArray(c.diagram.roomList) ? c.diagram.roomList : []);
+  const store = (patch) => { const d = { ...(c.diagram || {}), ...patch }; for (const k of Object.keys(d)) if (d[k] === undefined || (Array.isArray(d[k]) && !d[k].length && k === 'roomList')) delete d[k]; if (patch.roomList) delete d.layout; if (Object.keys(d).length) c.diagram = d; else delete c.diagram; changed(); redraw(); draw(); };
+  const clean = (o) => { const x = { ...o }; for (const k of Object.keys(x)) if (x[k] === undefined) delete x[k]; return x; };
+  const defW = () => { const l = rooms(); return (l[0] && l[0].wiring) || 'loop-in'; };
+  const seg1 = (opts, cur, label, pick) => h('div', { class: 'seg1', role: 'group', 'aria-label': label, style: 'display:flex;align-items:stretch;margin-top:6px;border:1px solid var(--line);border-radius:10px;overflow:hidden' },
+    opts.map(([v, t, aria], j) => h('button', { type: 'button', class: 'segb' + (v === cur ? ' on' : ''), 'aria-pressed': String(v === cur), 'aria-label': aria || t, style: 'flex:1 1 0;min-width:0;min-height:44px;padding:4px 2px;font-size:14px;font-weight:600;white-space:normal;line-height:1.1;border:0;' + (j ? 'border-left:1px solid var(--line);' : '') + (v === cur ? 'background:var(--brand,#2952ff);color:#fff' : 'background:transparent;color:inherit'), onclick: () => pick(v) }, t)));
+  const draw = () => {
+    const l = rooms(); const putRoom = (i) => (patch) => store({ roomList: rooms().map((x, j) => (j === i ? clean({ ...x, ...patch }) : x)) });
+    const moveRoom = (a, b) => store({ roomList: moveIn(rooms(), a, b) });
+    const list = h('div', { class: 'roomlist' }, l.map((r, i) => { const put = putRoom(i); const nm = r.name || 'Room ' + (i + 1);
+      return h('div', { class: 'roomcard', style: 'border:1px solid var(--line);border-radius:12px;padding:6px 8px;margin:0 0 10px' },
+        h('div', { style: 'display:flex;align-items:center;gap:6px' }, handle('Drag room ' + nm), h('b', { style: 'flex:1;min-width:0;white-space:normal;word-break:break-word;font-size:16px' }, (i + 1) + '. ' + nm),
+          i > 0 ? smallBtn('\u2191', 'Move up room ' + nm, () => moveRoom(i, i - 1)) : null, i < l.length - 1 ? smallBtn('\u2193', 'Move down room ' + nm, () => moveRoom(i, i + 1)) : null,
+          smallBtn('\u2715', 'Remove room ' + nm, async () => { if (await confirmBox('Remove ' + nm + '?', 'Everything in this room comes off the drawing.', 'Remove')) store({ roomList: rooms().filter((_, j) => j !== i) }); })),
+        ...linesFor(r, mode, nm, put),
+        mode === 'light' && (+r.lights || +r.fans) ? seg1([['loop-in', 'Loop-in'], ['junction box', 'JB', 'Junction box'], ['jb-switch', 'JB\u2192sw', 'JB to switch']], ['junction box', 'jb-switch'].includes(r.wiring) ? r.wiring : 'loop-in', nm + ' wiring', (v) => put({ wiring: v })) : null,
+        mode === 'light' && +r.fans > 0 ? seg1([['humidistat', 'Humidistat'], ['timer', 'Timer', 'Timer (overrun)'], ['switch', 'Light sw', 'Light switch'], ['isolator', 'Isolator', 'Isolator only']], r.fanCtl || 'humidistat', nm + ' fan control', (v) => put({ fanCtl: v })) : null,
+        mode === 'socket' && +r.spurs > 0 ? seg1([['socket', 'Spur: single socket'], ['fcu', 'Spur: FCU', 'Fused spur (FCU)']], r.spurKind === 'fcu' ? 'fcu' : 'socket', nm + ' spur type', (v) => put({ spurKind: v })) : null,
+        h('button', { class: 'btn ghost addin', type: 'button', style: 'width:100%;min-height:48px;margin-top:6px', 'aria-label': 'Add to ' + nm, onclick: () => addTo(r, mode === 'other' ? null : mode, put, 'Add to ' + nm) }, '+ Add to ' + nm)); }));
+    dragRows(list, '.roomcard', moveRoom);
+    const addRoom = async () => { const other = otherMap(); const have = l.map((r) => r.name);
+      const names = [...new Set([...usedNames(), ...Object.keys(other), ...TICK_ROOMS])].filter((n) => isRoomName(n) && !have.includes(n));
+      const v = await pickTiles('Add a room', [...names.map((n) => [n, n, null, other[n] ? 'also on circuit ' + other[n] : null]), ['\u0000type', 'Type a name\u2026', null]]); if (!v) return;
+      let n = v; if (v === '\u0000type') { const inp = h('input', { class: 'roomother', 'aria-label': 'Room name', placeholder: 'e.g. Snug' }); const ok = await modal('Room name', inp, [{ label: 'Cancel', value: false }, { label: 'Add', value: true, cls: 'primary' }]); n = ok ? inp.value.trim() : ''; }
+      if (n && !rooms().some((x) => x.name === n)) store({ roomList: [...rooms(), defaultRoom(n, defW(), mode)] }); };
+    const d = c.diagram || {}; const putC = (patch) => store(patch);
+    fill(box, [h('b', { style: 'display:block;font-size:17px' }, "What's on this circuit"),
+      h('p', { class: 'note', style: 'margin:2px 0 8px' }, 'In wiring order. Use \u2191 \u2193 or drag \u2261 to move, \u2715 to remove.'),
+      l.length ? list : null,
+      h('button', { class: 'btn addroom', type: 'button', id: 'roomother-' + (c.num || ''), style: 'width:100%;min-height:52px;margin:0 0 10px', onclick: addRoom }, '+ Add a room'),
+      h('div', { class: 'notroom', style: 'border:1px dashed var(--line);border-radius:12px;padding:6px 8px' }, h('b', { style: 'display:block' }, l.length ? 'Not in a room' : 'Items'),
+        ...linesFor(d, null, 'circuit ' + (c.num || ''), putC),
+        h('button', { class: 'btn ghost additem', type: 'button', style: 'width:100%;min-height:48px;margin-top:6px', onclick: () => addTo(d, null, putC, 'Add to circuit ' + (c.num || '')) }, l.length ? '+ Add (not in a room)' : '+ Add an item')),
+      h('p', { class: 'note roomsnote', style: 'margin:6px 0;color:#9aa0aa' + (roomPointsNote(c) ? '' : ';display:none') }, roomPointsNote(c))]);
+    void again; };
+  draw(); return box;
+}
+// Control circuit: ONE ordered list in wiring order. SFCU / FCU / isolator, Shelly, Hive, time clock, other, contactor.
+export function chainEditor(c, bcs, onset) {
+  const list = chainOf(c, bcs); const num = String(c.num || '').trim() || '?';
+  const tagOf = (i) => (kmNumbers(bcs.map((x) => (x === c ? { ...x, diagram: { ...(x.diagram || {}), chain: list } } : x))).km[num + ':' + i]) || 'KM';
+  const others = bcs.filter((o) => o && o !== c && !isSpareC(o) && String(o.num || '').trim());
+  const set = (l) => onset(l);
+  const ICON = { sfcu: 'sfcu', fcu: 'fcu', iso: 'iso', shelly: 'shelly', hive: 'hive', timeclock: 'timeclock', other: 'other', km: 'km' };
+  const rows = h('div', { class: 'chainlist' }, list.map((it, i) => { const title = it.k === 'km' ? 'Contactor ' + tagOf(i) : it.k === 'other' ? (it.name || 'Other controller') : CHAIN_KINDS[it.k];
+    const owner = it.k === 'km' ? [...list.slice(0, i)].reverse().find((x) => x.k !== 'km') : null; const under = it.k === 'km' && owner && !CHAIN_SUPPLY[owner.k];
+    const body = [];
+    if (it.k === 'km') {
+      for (const n of it.circuits) { const o = others.find((v) => String(v.num).trim() === n); body.push(h('div', { class: 'ctlpick', style: 'display:flex;align-items:center;gap:6px;min-height:44px' }, h('span', { style: 'flex:1;min-width:0;white-space:normal;word-break:break-word;color:var(--brand,#2952ff);font-weight:600' }, 'Switches circuit ' + n + (o && o.desc ? ' ' + o.desc : '')), smallBtn('\u2715', 'Remove circuit ' + n + ' from ' + title, () => set(list.map((x, j) => (j === i ? { ...x, circuits: x.circuits.filter((v) => v !== n) } : x)))))); }
+      body.push(h('select', { 'aria-label': title + ' switches circuit', style: 'width:100%;min-height:48px;white-space:normal;margin-top:4px', onchange: (e) => { const v = e.target.value; if (v) set(list.map((x, j) => (j === i ? { ...x, circuits: [...x.circuits, v] } : x))); } },
+        h('option', { value: '' }, it.circuits.length ? '+ Another circuit it switches\u2026' : 'Switches circuit\u2026'), others.filter((o) => !it.circuits.includes(String(o.num).trim())).map((o) => h('option', { value: String(o.num).trim() }, String(o.num).trim() + '  ' + (o.desc || 'No description')))));
+      body.push(h('input', { 'aria-label': title + ' label', placeholder: 'Label (optional), e.g. Hot water', style: 'width:100%;min-height:44px;margin-top:4px', value: it.label || '', onchange: (e) => set(list.map((x, j) => (j === i ? { ...x, label: e.target.value.trim() } : x))) }));
+    } else body.push(h('input', { 'aria-label': title + ' name or rating', placeholder: CHAIN_SUPPLY[it.k] ? 'Rating (optional), e.g. 3A' : it.k === 'other' ? 'Name, e.g. Wiser hub' : 'Note (optional)', style: 'width:100%;min-height:44px;margin-top:4px', value: it.name || '', onchange: (e) => set(list.map((x, j) => (j === i ? { ...x, name: e.target.value.trim() } : x))) }));
+    return h('div', { class: 'chainrow', style: 'border:1px solid var(--line);border-radius:12px;padding:4px 8px 8px;margin:0 0 8px' + (under ? ';margin-left:22px;border-left:4px solid var(--brand,#2952ff)' : '') },
+      h('div', { style: 'display:flex;align-items:center;gap:6px;min-height:48px' }, handle('Drag ' + title), ico(ICON[it.k]), h('b', { style: 'flex:1;min-width:0;white-space:normal;overflow-wrap:break-word;font-size:16px' }, (i + 1) + '. ' + title),
+        i > 0 ? smallBtn('\u2191', 'Move up ' + title, () => set(moveIn(list, i, i - 1))) : null, i < list.length - 1 ? smallBtn('\u2193', 'Move down ' + title, () => set(moveIn(list, i, i + 1))) : null,
+        smallBtn('\u2715', 'Remove ' + title, () => set(list.filter((_, j) => j !== i)))), ...body); }));
+  dragRows(rows, '.chainrow', (a, b) => set(moveIn(list, a, b)));
+  const add = async () => { const v = await pickTiles('Add to the control circuit', Object.entries(CHAIN_KINDS).map(([k, t]) => [k, t, ICON[k], k === 'km' ? 'Goes under the controller above it' : null])); if (v) set([...list, { k: v, ...(v === 'km' ? { circuits: [] } : {}) }]); };
+  return h('div', { class: 'ctled', id: 'ctlrows', style: 'margin-top:10px' },
+    h('b', { style: 'display:block;font-size:17px' }, 'Control circuit, in wiring order'),
+    h('p', { class: 'note', style: 'margin:2px 0 8px' }, 'Top is nearest the breaker. A contactor belongs to the controller above it. Use \u2191 \u2193 or drag \u2261 to move.'),
+    list.length ? rows : h('p', { class: 'note' }, 'Nothing added yet.'),
+    h('button', { class: 'btn addctl', type: 'button', style: 'width:100%;min-height:52px', onclick: add }, '+ Add'));
 }

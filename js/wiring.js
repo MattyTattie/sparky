@@ -89,7 +89,7 @@ export function pointKind(c) {
   return 'point';
 }
 export const SOCK = { socket: [true, true], socketu: [true, false], socket1: [false, true], socket1u: [false, false] }; // [twin, switched]
-export const KIND_NAME = { heater: 'Heater / radiator', socket: 'Socket', light: 'Light', cooker: 'Cooker', shower: 'Shower', alarm: 'Smoke / heat alarm', immersion: 'Immersion heater', ev: 'EV charger', fan: 'Fan', fcu: 'Fused spur (FCU)', sfcu: 'Switched fused connection unit (SFCU)', km: 'Contactor (KM): switched by its controller, switches the circuit named beside it', shelly: 'Shelly smart relay', hive: 'Hive heating controller', relay: 'Other controller (named under it)', flex: 'Flex outlet (cable outlet plate)', appliance: 'Fixed appliance', point: 'Point' };
+export const KIND_NAME = { heater: 'Heater / radiator', socket: 'Socket', light: 'Light', cooker: 'Cooker', shower: 'Shower', alarm: 'Smoke / heat alarm', immersion: 'Immersion heater', ev: 'EV charger', fan: 'Fan', fcu: 'Fused spur (FCU)', sfcu: 'Switched fused connection unit (SFCU)', km: 'Contactor coil (KM1, KM2 and on), switched by the controller before it', shelly: 'Shelly smart relay', hive: 'Hive heating controller', relay: 'Other controller (named in the box)', flex: 'Flex outlet (cable outlet plate)', appliance: 'Fixed appliance', point: 'Point' };
 // Plural words for the "Points:" line.
 const KIND_PLURAL = { heater: 'heaters', socket: 'sockets', light: 'lights', cooker: 'cookers', shower: 'showers', alarm: 'alarms', immersion: 'immersions', ev: 'EV chargers', fan: 'fans', fcu: 'FCUs', sfcu: 'SFCUs', km: 'contactors', shelly: 'Shelly relays', flex: 'flex outlets', appliance: 'fixed appliances', point: 'points' };
 const KIND_ONE = { heater: 'heater', socket: 'socket', light: 'light', cooker: 'cooker', shower: 'shower', alarm: 'alarm', immersion: 'immersion', ev: 'EV charger', fan: 'fan', fcu: 'FCU', sfcu: 'SFCU', km: 'contactor', shelly: 'Shelly relay', flex: 'flex outlet', appliance: 'fixed appliance', point: 'point' };
@@ -199,7 +199,8 @@ export const roomLightTotal = (c) => (roomListOf(c) || []).reduce((a, r) => a + 
 // v0.43.1: optional room fan: room.fans (0-2), room.fanCtl (how it is switched)
 // v0.44.0: any item on any circuit or in any room: obj.items = { kind: count } (optional)
 export const ITEM_KINDS = { socket: 'Double socket (switched)', socketu: 'Double socket (unswitched)', socket1: 'Single socket (switched)', socket1u: 'Single socket (unswitched)', dpu: 'DP switch + socket', dps: 'DP switch + switched socket', fcu: 'Fused spur (FCU)', sfcu: 'Switched fused spur (SFCU)', flex: 'Flex outlet', light: 'Light', fan: 'Fan', heater: 'Heater / radiator', cooker: 'Cooker', shower: 'Shower', immersion: 'Immersion heater', ev: 'EV charger', alarm: 'Smoke / heat alarm', appliance: 'Fixed appliance', km: 'Contactor', shelly: 'Shelly smart relay' };
-export function itemsOf(o) { const m = o && o.items; if (!m || typeof m !== 'object') return []; return Object.keys(ITEM_KINDS).map((k) => [k, cnt(m[k], 10)]).filter(([, n]) => n > 0); }
+export function itemsOf(o) { const m = o && o.items; if (!m || typeof m !== 'object') return []; const ord = Array.isArray(o.itemOrder) ? o.itemOrder.filter((k) => ITEM_KINDS[k]) : []; /* v0.44.2: user's order first */
+  return [...new Set([...ord, ...Object.keys(ITEM_KINDS)])].map((k) => [k, cnt(m[k], 10)]).filter(([, n]) => n > 0); }
 export const itemList = (o) => itemsOf(o).flatMap(([k, n]) => Array(n).fill(k));
 // v0.44.0: rooms on any other circuit (heaters, cooker, control, ...): roomList rooms with items only
 export function itemRoomsOf(c) {
@@ -337,10 +338,46 @@ export function controllersOf(c, circuits) {
   if (out.length) out[out.length - 1].contactors = ks; // the contactors were on the end of the old chain
   return out;
 }
+// v0.44.2: a control circuit is ONE ordered list in wiring order: circuit.diagram.chain =
+// [{ k: 'sfcu'|'fcu'|'iso'|'shelly'|'hive'|'timeclock'|'other'|'km', name?, circuits?: ['24'], label? }]
+// Supply items (SFCU / FCU / isolator) sit in line on the cable; each controller branches off; contactors (km)
+// belong to the controller above them in the list. Drawn in exactly this order.
+export const CHAIN_KINDS = { sfcu: 'Switched fused spur (SFCU)', fcu: 'Fused spur (FCU)', iso: 'Isolator / DP switch', shelly: 'Shelly relay', hive: 'Hive controller', timeclock: 'Time clock', other: 'Other controller', km: 'Contactor' };
+export const CHAIN_SUPPLY = { sfcu: 1, fcu: 1, iso: 1 };
+const cleanChain = (l) => (Array.isArray(l) ? l : []).filter((x) => x && typeof x === 'object' && CHAIN_KINDS[x.k]).slice(0, 30).map((x) => {
+  const o = { k: x.k }; const nm = String(x.name || '').trim().slice(0, 60); if (nm) o.name = nm;
+  if (x.k === 'km') { o.circuits = [...new Set((Array.isArray(x.circuits) ? x.circuits : []).map((n) => String(n).trim()).filter(Boolean))]; const lb = String(x.label || '').trim().slice(0, 80); if (lb) o.label = lb; }
+  return o; });
+export function chainOf(c, circuits) {
+  if (!c) return []; const d = c.diagram || {};
+  if (Array.isArray(d.chain)) return cleanChain(d.chain);
+  const ctl = controllersOf(c, circuits); if (!ctl.length && !CTL_DESC.test(val(c.desc) || '')) return [];
+  const it = Object.fromEntries(itemsOf(d)); const out = [];
+  for (let i = 0; i < (it.sfcu || 0); i++) out.push({ k: 'sfcu' }); for (let i = 0; i < (it.fcu || 0); i++) out.push({ k: 'fcu' }); // SFCU first by default (movable)
+  for (const k of ctl) { if (k.type !== 'none') out.push({ k: k.type, ...(k.name ? { name: k.name } : {}) }); for (const x of k.contactors) out.push({ k: 'km', circuits: x.circuits, ...(x.label ? { label: x.label } : {}) }); }
+  return cleanChain(out);
+}
+// Save the list on the circuit (the editor does this the first time). Moves Shelly / contactor / SFCU / FCU items and old
+// "Controlled by" links into the list, so they are never in two places.
+export function migrateChain(c, circuits) {
+  const list = chainOf(c, circuits); const d = { ...(c.diagram || {}) }; const num = val(c.num);
+  if (!Array.isArray(d.chain)) {
+    if (d.items && typeof d.items === 'object') { const m = { ...d.items }; delete m.shelly; delete m.km; if (list.some((x) => x.k === 'sfcu')) delete m.sfcu; if (list.some((x) => x.k === 'fcu')) delete m.fcu; if (Object.keys(m).length) d.items = m; else delete d.items; }
+    delete d.controllers;
+    if (num) for (const x of circuits || []) if (x !== c && (controlInfo(x) || {}).from === num) delete x.control;
+  }
+  d.chain = list; c.diagram = d; return list;
+}
+// Contactor numbers for one board, the SAME in the editor and on the diagram: KM1, KM2 ... in circuit order, then list order.
+export function kmNumbers(circuits) {
+  const km = {}, m = {}, by = {}; let n = 0;
+  for (const c of circuits || []) { const num = val(c.num) || '?'; chainOf(c, circuits).forEach((x, i) => { if (x.k !== 'km') return; const t = 'KM' + (++n); km[num + ':' + i] = t; for (const s of x.circuits) if (!m[s]) { m[s] = t; by[s] = num; } }); }
+  return { km, m, by, n };
+}
 // Is this a control circuit? (has controllers, drives a contactor, or is described as one)
 export function isControlCircuit(c, circuits) {
   if (!c) return false; const d = c.diagram || {};
-  if (Array.isArray(d.controllers)) return true;
+  if (Array.isArray(d.chain) || Array.isArray(d.controllers)) return true;
   return controllersOf(c, circuits).length > 0 || CTL_DESC.test(val(c.desc) || '');
 }
 // Turn old data into the new list (what the editor saves the first time it is used). Removes the items it moved.
@@ -351,8 +388,7 @@ export function migrateControllers(c, circuits) {
 }
 // Contactor numbers for a board: controllers' contactors first, in circuit order, then older "Controlled by" picks.
 export function boardTags(circuits) {
-  const m = {}; const km = {}; const by = {}; let n = 0;
-  for (const c of circuits || []) controllersOf(c, circuits).forEach((k, ki) => k.contactors.forEach((x, xi) => { const t = 'KM' + (++n); km[(val(c.num) || '?') + ':' + ki + ':' + xi] = t; for (const s of x.circuits) if (!m[s]) { m[s] = t; by[s] = val(c.num) || '?'; } }));
+  const { km, m, by } = kmNumbers(circuits); let n = Object.keys(km).length;
   let tc = 0; for (const c of circuits || []) { const ci = controlInfo(c); const k = val(c.num) || '?'; if (ci && !m[k]) m[k] = ci.tag === 'TC' ? 'TC' + (++tc) : 'KM' + (++n); }
   return { ...m, _km: km, _by: by };
 }
@@ -425,7 +461,7 @@ export function circuitLines(c, spd = '') {
     rows: [...pre, ['Cable', cable], ...((roomListOf(c) || socketRoomsOf(c) || itemRoomsOf(c)) ? [['Rooms', (roomListOf(c) || socketRoomsOf(c) || itemRoomsOf(c)).length + ((roomListOf(c) || socketRoomsOf(c) || itemRoomsOf(c)).length === 1 ? ' room' : ' rooms')]] : []), ['Points', pc.known ? (roomFanTotal(c) && pc.n === roomFanTotal(c) + roomLightTotal(c) ? `${pc.n - roomFanTotal(c)} \u00d7 ${pc.n - roomFanTotal(c) === 1 ? KO : KP} + ${roomFanTotal(c)} \u00d7 fan${roomFanTotal(c) === 1 ? '' : 's'}` : roomFanTotal(c) ? `${pc.n} \u00d7 point${pc.n === 1 ? '' : 's'}` : `${pc.n} \u00d7 ${pc.n === 1 ? KO : KP}`) : ''], ...(si ? [['Switches', si.text]] : [])] };
 }
 
-export function layout(model, { W = 380, font = 12, screen = false, cableTable = false, legend = true } = {}) {
+export function layout(model, { W = 380, font = 12, screen = false, cableTable = false, legend = true, icon = null } = {}) {
   const F = font, small = F * 0.86, lh = (s) => s * 1.3;
   const blocks = []; const cables = []; let ctx = {}; let feeds = {}; let curBoard = '';
   // v0.41: C1, C2… one per cable run, listed in the PDF's cable table
@@ -528,6 +564,13 @@ export function layout(model, { W = 380, font = 12, screen = false, cableTable =
       }
     });
   });
+  if (icon) { const sh = []; const S = F * 1.5; heatLab = ''; // v0.44.2: one symbol for the editor's picker
+    if (icon === 'km') kmCoil(sh, 18, 18, S / 2, null); else if (icon === 'contactor') nocH(sh, 6, 20, 24);
+    else if (CHAIN_SUPPLY[icon]) facePlate(sh, 18, 18, icon === 'sfcu' ? 'sfcu' : icon === 'fcu' ? 'fcu' : 'dp', S / 2);
+    else if (icon === 'timeclock') clockSym(sh, 18, 18, S * 0.42); else if (icon === 'other') symbol(sh, 'relay', 18, 18, S, 'Ctrl');
+    else if (SOCK[icon] || icon === 'dpu' || icon === 'dps') symbol(sh, icon, 18, icon === 'dpu' || icon === 'dps' ? 10 : 6, S * (icon === 'dpu' || icon === 'dps' ? 0.8 : 0.85));
+    else symbol(sh, icon, 18, 18, S);
+    return sh; }
   // key: only the symbols this diagram uses
   heatLab = 'Rad';
   if (used.size) {
@@ -535,8 +578,8 @@ export function layout(model, { W = 380, font = 12, screen = false, cableTable =
     let hh = textLines(sh, 8, y, 'Key', W - 16, { bold: true });
     const S = F * 1.5; const colW = (W - 16) / 2; let col = 0, rowY = y + hh + 4, rowH = 0; const KW = 2 * loadR('socket', S); // v0.43.9: icon column fits the widest (twin) outlet
     for (const k of order.filter((k) => used.has(k) && !(k === 'isofcu' && used.has('fcu')))) { // v0.43.9: one FCU entry, same faceplate
-      const x = 8 + col * colW; const name = SWITCH_NAME[k] || KEY_EXTRA[k] || (k === 'contactor' ? 'Contactor contact (KM, normally open)' : k === 'coil' ? 'Contactor coil (A1/A2)' : k === 'timeclock' ? 'Time clock' : k === 'spd' ? 'Surge protection (SPD)' : KIND_NAME[k]);
-      if (k === 'contactor') { const yy = rowY + S / 2; rotH(sh, x - S * 0.1, yy, (o) => nocSym(o, x - S * 0.1, yy, S * 1.2)); }
+      const x = 8 + col * colW; const name = SWITCH_NAME[k] || KEY_EXTRA[k] || (k === 'contactor' ? 'Contactor contact (KM), in line on the circuit it switches' : k === 'coil' ? 'Contactor coil (A1/A2)' : k === 'timeclock' ? 'Time clock' : k === 'spd' ? 'Surge protection (SPD)' : KIND_NAME[k]);
+      if (k === 'contactor') { nocH(sh, x - S * 0.1, rowY + S * 0.65, S * 1.2); }
       else if (k === 'coil') { coilSym(sh, x + S * 0.2, rowY + S * 0.1, S * 0.8, S * 0.75); }
       else if (k === 'timeclock') { clockSym(sh, x + S / 2, rowY + S / 2, S * 0.42); }
       else if (k === 'iso') isoPlateH(sh, x - S * 0.1, rowY + S / 2, S * 1.2, false, true, false);
@@ -544,7 +587,8 @@ export function layout(model, { W = 380, font = 12, screen = false, cableTable =
       else if (k === 'dpu' || k === 'dps') { const ky = rowY + S * 1.75; L(sh, x, ky, x + S * 0.17, ky, { w: 1.1 }); L(sh, x + S * 1.03, ky, x + S * 1.2, ky, { w: 1.1 }); /* cable meets the plate's sides, not through it */ symbol(sh, k, x + S * 0.6, rowY + S * 1.75, S); }
       else if (SOCK[k]) symbol(sh, k, x + KW / 2, rowY + S * 0.1, S);
       else if (k === 'ipsock') { symbol(sh, 'socket', x + KW / 2, rowY + S * 0.1, S); ipMark(sh, x + KW / 2, rowY + S * 0.1, 'socket', S); }
-      else if (k === 'km' || k === 'shelly' || k === 'hive' || k === 'relay') symbol(sh, k, x + S * 0.65, rowY + S / 2, S, k === 'km' ? 'KM' : null);
+      else if (k === 'km') kmCoil(sh, x + S * 0.5, rowY + S * 0.6, S / 2, null);
+      else if (k === 'shelly' || k === 'hive' || k === 'relay') symbol(sh, k, x + S * 0.65, rowY + S / 2, S, k === 'relay' ? 'Ctrl' : null);
       else if (k === 'tailblock') { tailBlockSym(sh, x + S * 0.5, rowY + S * 0.15, S * 0.8); }
       else if (k === 'swfuse') { isoSym(sh, x + S * 0.5, rowY - S * 0.1, S * 1.2, true, true); }
       else if (/^isos?fcux?$/.test(k)) isoPlateH(sh, x - S * 0.1, rowY + S / 2, S * 1.2, true, k.startsWith('isosfcu'), false, k.endsWith('x'));
@@ -555,7 +599,7 @@ export function layout(model, { W = 380, font = 12, screen = false, cableTable =
       else if (k === 'jbsw') { const yy = rowY + S / 2; R(sh, x - S * 0.2, yy - S * 0.3, S * 0.7, S * 0.6, { fill: [255, 255, 255] }); L(sh, x + S * 0.5, yy, x + S * 0.75, yy, { w: 0.9, color: COL.grey }); symbol(sh, 'sw1', x + S * 1.05, yy, S * 0.7); }
       else if (k === 'strap') { L(sh, x - S * 0.1, rowY + S * 0.38, x + S * 1.1, rowY + S * 0.38, { w: 1, color: COL.brand }); L(sh, x - S * 0.1, rowY + S * 0.66, x + S * 1.1, rowY + S * 0.66, { w: 1, color: COL.brand }); }
       else symbol(sh, k, x + S / 2, rowY + S / 2, S);
-      const iw = k === 'km' || k === 'shelly' || k === 'hive' || k === 'relay' ? S * 1.4 : k === 'isoccu' ? S * 1.95 : SOCK[k] || k === 'ipsock' ? KW - 2 : k === 'dpu' || k === 'dps' ? S * 2.3 : S + 2; const th = textLines(sh, x + iw + 6, rowY + S / 2 - small * 0.95, name, colW - iw - 12, { size: small });
+      const iw = k === 'shelly' || k === 'hive' || k === 'relay' ? S * 1.4 : k === 'isoccu' ? S * 1.95 : SOCK[k] || k === 'ipsock' ? KW - 2 : k === 'dpu' || k === 'dps' ? S * 2.3 : S + 2; const th = textLines(sh, x + iw + 6, rowY + S / 2 - small * 0.95, name, colW - iw - 12, { size: small });
       rowH = Math.max(rowH, k === 'dpu' || k === 'dps' ? S * 2.3 : SOCK[k] || k === 'ipsock' ? S * 1.15 : S, th + (S / 2 - small * 0.95) ); col++;
       if (col === 2) { col = 0; rowY += rowH + 8; rowH = 0; }
     }
@@ -595,7 +639,7 @@ export function layout(model, { W = 380, font = 12, screen = false, cableTable =
   function tag(b, bd, c) { b.ref = { bi: bd.bi ?? 0, ci: bd.src ? bd.src.indexOf(c) : 0, mw: model.type === 'MW' }; return b; }
 
   function circuitBlock(c, bus, last, outerBus, spd = '', spur = null) {
-    const sh = []; const info = circuitLines(c, spd); const y = 8; ringLegB = null; let ctlChained = false;
+    const sh = []; const info = circuitLines(c, spd); const y = 8; ringLegB = null; let ctlChained = false; let ctlCap = 0;
     const dx = bus + 12; const tx = dx + devW + gap; const tw = W - tx - 6;
     // text
     let hh = textLines(sh, tx, y - 2, info.title, tw, { bold: true, color: info.spare ? COL.na : COL.ink });
@@ -605,12 +649,12 @@ export function layout(model, { W = 380, font = 12, screen = false, cableTable =
     if (reds.length) hh += textLines(sh, tx, y - 2 + hh, 'Check: ' + reds.join('; '), tw, { size: small, bold: true, color: COL.red });
     const fed = !info.spare && feeds[String(val(c.num)).toLowerCase()];
     if (!screen && !info.spare && !info.spd && info.noPoints && !info.rooms && !info.sockRooms && !info.itemRooms && !spur && !fed && !(c.diagram && itemsOf(c.diagram).length)) hh += textLines(sh, tx, y - 2 + hh, 'Points served not recorded', tw, { size: small, bold: screen, color: COL.amber });
-    const swBy = !info.spare && !controlInfo(c) && (tags._by || {})[val(c.num) || '?']; // v0.44.1: switched by a contactor on a control circuit's controller
-    if (swBy) hh += textLines(sh, tx, y - 2 + hh, `Switched by contactor ${tags[val(c.num) || '?']} (see control circuit ${swBy})`, tw, { size: small, bold: true, color: COL.brand });
     if (fed) hh += textLines(sh, tx, y - 2 + hh, 'Feeds ' + fed.join(', ') + ' (see ' + fed.map((x) => x.split(' (')[0]).join(', ') + ')', tw, { size: small, bold: true, color: COL.brand });
     // contactor (or time clock) between the breaker and the load
     const fx0 = tx - gap / 2; let feedTop = y + F * 0.6; let kh0 = 0;
-    const ctl = info.spare ? null : controlInfo(c);
+    const byK = (tags._by || {})[val(c.num) || '?']; const ci0 = info.spare ? null : controlInfo(c); // v0.44.2: also switched by a contactor in a control circuit's list
+    const ctl = info.spare ? null : ci0 ? { ...ci0, from: ci0.from || byK || '' } : byK ? { via: 'contactor', note: 'via contactor', tag: 'KM', from: byK } : null;
+    const chainHere = info.spare || info.spd ? [] : chainOf(c, bdSrc());
     // v0.43: non-room circuits run left to right: contactor, isolator, then the load(s)
     const horiz = !info.spare && !info.spd && !info.rooms && !info.itemRooms;
     if (ctl && horiz) used.add('contactor');
@@ -632,7 +676,7 @@ export function layout(model, { W = 380, font = 12, screen = false, cableTable =
       kh0 = Math.max(kh, nh) + 6; feedTop = out; hh += kh0;
     }
     // v0.43: local isolator (DP switch, FCU, rotary) in line, just before the load
-    const iso = info.spare ? null : isoFor(c);
+    const iso = info.spare || chainHere.length ? null : isoFor(c);
     if (iso && horiz) used.add(iso.ccu ? 'isoccu' : iso.fcu ? (iso.switched ? 'isosfcu' : 'isofcu') + (iso.flex ? 'x' : '') : 'iso');
     if (iso && !horiz) { used.add(iso.ccu ? 'isoccu' : iso.fcu ? (iso.switched ? 'isosfcu' : 'isofcu') + (iso.flex ? 'x' : '') : 'iso');
       const iy = Math.max(feedTop, y + hh) + 4, ih = F * 2.4;
@@ -645,26 +689,35 @@ export function layout(model, { W = 380, font = 12, screen = false, cableTable =
     const sw = !info.spare && links[val(c.num)];
     // v0.44.1: a control circuit draws its controllers: one cable from the breaker, a branch per controller,
     // controller -> its contactor(s) -> what each contactor switches
-    const ctls = info.spare || info.spd ? [] : controllersOf(c, bdSrc());
-    if (ctls.length) { const r = F * 0.75, S = F * 1.5, g = { w: 1.1, color: COL.line }, fx = tx - gap / 2;
-      const names = (n) => { const o = bdSrc().find((x) => (val(x.num) || '?') === n); return 'circuit ' + n + (o && val(o.desc) ? ' ' + val(o.desc) : ''); };
-      let top = y - 2 + hh + 4; let lastY = feedTop;
-      ctls.forEach((k, ki) => { const cxC = tx + F * 0.6 + r * 1.5; const jx = cxC + r * 1.5 + 10, kx = jx + 10 + r * 1.5, lx = kx + r * 1.5 + 6, lw = W - 6 - lx;
-        const kind = k.type === 'hive' ? 'hive' : k.type === 'shelly' ? 'shelly' : k.type === 'timeclock' ? 'timeclock' : k.type === 'other' ? 'relay' : null;
-        const cap = k.type === 'other' ? (k.name || 'Controller') : k.type === 'none' ? '' : k.name; const capW = r * 3 + 8;
-        const cy0 = top + r + 2; let capH = 0;
-        if (kind) { symbol(sh, kind, cxC, cy0, S, kind === 'relay' ? 'Ctrl' : null); used.add(kind); if (cap) capH = textLines(sh, cxC, cy0 + r + 4, cap, capW, { size: small * 0.85, color: COL.grey, anchor: 'middle' }) + 4; }
-        L(sh, fx, lastY, fx, cy0, g); L(sh, fx, cy0, kind ? cxC - r * 1.5 : jx, cy0, g); lastY = cy0;
-        let rowY = cy0; let prevY = cy0; let bottom = cy0 + r + 4 + capH;
-        if (!k.contactors.length) { L(sh, cxC + r * 1.5, cy0, jx, cy0, g); textLines(sh, jx + 4, cy0 - small * 0.6, 'No contactor yet', W - 10 - jx, { size: small, color: COL.na }); }
-        k.contactors.forEach((x, xi) => { const tag = (tags._km || {})[(val(c.num) || '?') + ':' + ki + ':' + xi] || 'KM' + (xi + 1);
-          if (xi === 0) { if (kind) L(sh, cxC + r * 1.5, rowY, jx, rowY, g); } else L(sh, jx, prevY, jx, rowY, g);
-          L(sh, jx, rowY, kx - r * 1.5, rowY, g); symbol(sh, 'km', kx, rowY, S, tag); used.add('km');
-          const what = [...x.circuits.map(names), x.label].filter(Boolean); const txt = what.length ? 'Switches ' + what.join(', ') : 'Switches: ' + NA;
-          const th = textLines(sh, lx, rowY - r + 2, txt, lw, { size: small, bold: !!what.length, color: what.length ? COL.brand : COL.na });
-          prevY = rowY; bottom = Math.max(bottom, rowY + Math.max(r, th - r + 2) + 4); if (xi < k.contactors.length - 1) rowY = Math.max(rowY + r * 2 + 8, rowY - r + th + 8 + r); });
-        top = bottom + 8; });
-      hh = top - y; feedTop = lastY; ctlChained = true;
+    if (chainHere.length) { const S = F * 1.5, r = S / 2, g = { w: 1.1, color: COL.line }, fx = tx - gap / 2, kw = r * 1.5;
+      const nm = (n) => { const o = bdSrc().find((x) => (val(x.num) || '?') === n); return 'circuit ' + n + (o && val(o.desc) ? ' ' + val(o.desc) : ''); };
+      const num = val(c.num) || '?'; let cur = y - 2 + hh + 8; let busY = feedTop; let ctlX = null, jx = null, prevKY = null;
+      const cxC = tx + F * 0.6 + r * 1.5;
+      chainHere.forEach((it, i) => {
+        if (CHAIN_SUPPLY[it.k]) { const ih = F * 2.4; ctlX = null; jx = null; prevKY = null;
+          L(sh, fx, busY, fx, cur, g); isoPlateV(sh, fx, cur, ih, it.k !== 'iso', it.k !== 'fcu', false, false);
+          used.add(it.k === 'iso' ? 'iso' : it.k === 'sfcu' ? 'isosfcu' : 'isofcu');
+          const lab = (it.name ? it.name + ' ' : '') + (it.k === 'sfcu' ? 'SFCU' : it.k === 'fcu' ? 'FCU' : 'Isolator');
+          const th = textLines(sh, fx + F * 1.4, cur + ih / 2 - small * 0.9, lab, W - 6 - fx - F * 1.4, { size: small, bold: true });
+          busY = cur + ih; cur = Math.max(cur + ih, cur + ih / 2 - small * 0.9 + th) + 8; return; }
+        if (it.k !== 'km') { const kind = it.k === 'other' ? 'relay' : it.k; const cy = cur + small + 4 + r;
+          L(sh, fx, busY, fx, cy, g); L(sh, fx, cy, cxC - r * 1.5, cy, g);
+          symbol(sh, kind, cxC, cy, S, it.k === 'other' ? (it.name || 'Controller') : null); used.add(kind);
+          let capH = 0; if (it.name && it.k !== 'other') capH = textLines(sh, cxC, cy + r + small + 2, it.name, r * 3 + 16, { size: small * 0.85, color: COL.grey, anchor: 'middle' }) + 2;
+          busY = cy; ctlX = cxC + r * 1.5; jx = ctlX + 8; prevKY = null;
+          const nextKm = chainHere[i + 1] && chainHere[i + 1].k === 'km';
+          if (!nextKm) { cur = cy + r + capH + 10; return; }
+          cur = cy - r - small - 4; ctlCap = capH; return; }
+        // contactor coil
+        const tag = (tags._km || {})[num + ':' + i] || 'KM'; const kx = (jx || fx) + 26; const lx = kx + kw / 2 + 10, lw = W - 6 - lx;
+        const ky = cur + small + 4 + r;
+        if (prevKY == null) { if (ctlX != null) L(sh, ctlX, ky, kx - kw / 2, ky, g); else { L(sh, fx, busY, fx, ky, g); L(sh, fx, ky, kx - kw / 2, ky, g); busY = ky; } }
+        else { const vx = jx || fx; L(sh, vx, prevKY, vx, ky, g); L(sh, vx, ky, kx - kw / 2, ky, g); if (!jx) busY = ky; }
+        symbol(sh, 'km', kx, ky, S, tag); used.add('km'); used.add('contactor');
+        const what = [...it.circuits.map(nm), it.label].filter(Boolean); const txt = what.length ? 'Switches ' + what.join(', ') : 'Switches: ' + NA;
+        const th = textLines(sh, lx, ky - small * 0.9, txt, lw, { size: small, bold: !!what.length, color: what.length ? COL.brand : COL.na });
+        prevKY = ky; cur = Math.max(ky + r + (ctlCap || 0), ky - small * 0.9 + th) + 10; ctlCap = 0; });
+      hh = cur - y; feedTop = busY; ctlChained = true;
     } else if (sw) {
       const lab = 'Switches contactor on circuit' + (sw.length > 1 ? 's ' : ' ') + sw.join(', ') + ' (see circuit' + (sw.length > 1 ? 's ' : ' ') + sw.join(', ') + ')';
       const ly = y - 2 + hh + 2; const lh0 = textLines(sh, tx + F * 1.6, ly, lab, tw - F * 1.6, { size: small, bold: true, color: COL.brand });
@@ -694,7 +747,7 @@ export function layout(model, { W = 380, font = 12, screen = false, cableTable =
       const S = F * 1.5, step = S + 6, lstep = S + 15, gapX = F * 2.3; const per = Math.max(1, Math.floor((tw - 4) / step)); const lab0 = (ctl || iso) ? small * 1.3 : 0; const py = y + hh + 6 + lab0; const fx = tx - gap / 2; const g9 = { w: 1.1, color: COL.line }; // v0.43: run conductor, same weight as the symbols so it reads as one line
       // items along the row: [width, draw(x, cy)]
       const items = []; let coilAt = null;
-      if (ctl) { const kw = F * 2.4; items.push([kw + gapX, (x, cy) => { rotH(sh, x, cy, (o) => nocSym(o, x, cy, kw)); T(sh, x + kw / 2, cy - S * 0.55, tags[val(c.num) || '?'] || ctl.tag, { anchor: 'middle', bold: true, size: small }); coilAt = { x: x + kw * 0.5, y: cy }; }, false, kw]); }
+      if (ctl) { const kw = F * 2.4; items.push([kw + gapX, (x, cy) => { nocH(sh, x, cy, kw); T(sh, x + kw / 2, cy - S * 0.55, tags[val(c.num) || '?'] || ctl.tag, { anchor: 'middle', bold: true, size: small }); coilAt = { x: x + kw * 0.5, y: cy }; }, false, kw]); } // v0.44.2: contact drawn straight in line
       if (iso) { const ih = iso.ccu ? F * 3.2 : F * 2.4; const iw0 = Math.max(ih, textW(iso.label, small, true) + 4); items.push([iw0 + gapX, (x0, cy) => { /* v0.43.3: label centred over its symbol; leads fill the slot */ const pad = (iw0 - ih) / 2, x = x0 + pad; if (pad > 0) { L(sh, x0, cy, x, cy, g9); L(sh, x + ih, cy, x0 + iw0, cy, g9); }
         isoPlateH(sh, x, cy, ih, iso.fcu, iso.switched, iso.ccu, iso.flex); T(sh, x + ih / 2, cy - Math.max(S * 0.55, iso.ccu ? ih * 0.36 : 0), iso.label, { anchor: 'middle', bold: true, size: small }); }, false, iw0]); }
       heatLab = isTowel(c) ? 'Rail' : 'Rad';
@@ -725,9 +778,8 @@ export function layout(model, { W = 380, font = 12, screen = false, cableTable =
         const srows = Math.ceil(sgl / sper); ph += srows * rowH + 4;
         const lx = tx + F * 0.6 + Math.min(sgl, sper) * lstep; if (lx + textW('Spurs', small) < maxX) T(sh, lx, sy + (srows - 1) * rowH + small * 0.35, sgl === 1 ? 'Spur' : 'Spurs', { size: small, color: COL.grey }); }
       if (ctl) { // coil cross-reference under the row, joined by the dashed mechanical link
-        const ty = y + hh + 6 + ph + 2; const nx0 = coilAt ? Math.max(F * 1.6, coilAt.x - tx + 6) : F * 1.6; const coil = ctl.from ? `Coil switched by circuit ${ctl.from} (see circuit ${ctl.from})` : 'Coil supply: ' + NA;
+        const ty = y + hh + 6 + ph + 2; const nx0 = F * 0.6; void coilAt; const coil = ctl.from ? `Coil switched by circuit ${ctl.from} (see circuit ${ctl.from})` : 'Coil supply: ' + NA;
         let nh = textLines(sh, tx + nx0, ty, ctl.note, tw - nx0, { size: small, bold: true });
-        if (coilAt) L(sh, coilAt.x, coilAt.y + S * 0.3, coilAt.x, ty + small * 0.6, { w: 1.5, color: COL.brand, dash: [4, 2] }), L(sh, coilAt.x, ty + small * 0.6, tx + nx0 - 3, ty + small * 0.6, { w: 1.5, color: COL.brand, dash: [4, 2] });
         nh += textLines(sh, tx + nx0, ty + nh, coil, tw - nx0, { size: small, color: ctl.from ? COL.brand : COL.na });
         if (!ctl.from && screen) nh += textLines(sh, tx + nx0, ty + nh, 'Choose which circuit feeds the coil', tw - nx0, { size: small, color: COL.amber });
         ph += nh + 4; }
@@ -1133,7 +1185,7 @@ export function layout(model, { W = 380, font = 12, screen = false, cableTable =
   }
   // v0.43: draw a vertical in-line symbol (top at x,y0) turned to run left to right from (x, y0).
   // v0.43: where a conductor meets a load symbol on its row (half-width from centre)
-  function loadR(k, S) { const r = S / 2; return k === 'km' || k === 'shelly' || k === 'hive' || k === 'relay' ? r * 1.5 : k === 'sfcu' ? r * 0.85 : k === 'timeclock' ? r * 0.9 : k === 'light' ? r * 0.8 : k === 'fan' ? r * 0.85 : SOCK[k] ? (SOCK[k][0] ? r * 2.0 : r * 1.1) : (k === 'dpu' || k === 'dps') ? r * 0.85 : k === 'fcu' || k === 'flex' ? r * 0.85 : k === 'point' ? r * 0.7 : r; }
+  function loadR(k, S) { const r = S / 2; return k === 'km' ? r * 0.75 : k === 'shelly' || k === 'hive' || k === 'relay' ? r * 1.5 : k === 'sfcu' ? r * 0.85 : k === 'timeclock' ? r * 0.9 : k === 'light' ? r * 0.8 : k === 'fan' ? r * 0.85 : SOCK[k] ? (SOCK[k][0] ? r * 2.0 : r * 1.1) : (k === 'dpu' || k === 'dps') ? r * 0.85 : k === 'fcu' || k === 'flex' ? r * 0.85 : k === 'point' ? r * 0.7 : r; }
   function rotH(o, x0, y0, fn) { const tmp = []; fn(tmp); const P = (x, y) => [x0 + (y - y0), y0 - (x - x0)];
     for (const z of tmp) { if (z.t === 'line') { const [a, b] = P(z.x1, z.y1), [c2, d] = P(z.x2, z.y2); o.push({ ...z, x1: a, y1: b, x2: c2, y2: d }); }
       else if (z.t === 'rect') { const [a, b] = P(z.x + z.w, z.y); o.push({ ...z, x: a, y: b, w: z.h, h: z.w }); }
@@ -1195,10 +1247,15 @@ export function layout(model, { W = 380, font = 12, screen = false, cableTable =
     const ex = ax + dx * r, ey = ay + dy * r; L(sh, ax + dx * r * 0.24, ay + dy * r * 0.24, ex, ey, { w: 1.2 }); L(sh, ex, ey, ex + dy * r * 0.3, ey - dx * r * 0.3, { w: 1.2 }); }
   // v0.44.0: contactor / Shelly / relay: a device box the same height as the other symbols (2r), cable in one side, out the other
   function devBox(sh, cx, cy, r, kind, tag) { const w = r * 3, x0 = cx - w / 2; R(sh, x0, cy - r, w, r * 2, { lw: 1.1, fill: [255, 255, 255] });
-    if (kind === 'km') { T(sh, cx, cy - r * 0.12, tag || 'KM', { anchor: 'middle', bold: true, size: r * 0.85 }); R(sh, cx - r * 0.6, cy + r * 0.22, r * 1.2, r * 0.52, { lw: 0.9, fill: [255, 255, 255] }); L(sh, cx - r * 0.6, cy + r * 0.74, cx + r * 0.6, cy + r * 0.22, { w: 0.8 }); }
-    else if (kind === 'shelly') { T(sh, cx, cy + r * 0.05, 'Shelly', { anchor: 'middle', bold: true, size: r * 0.8 }); for (const d of [-0.8, 0, 0.8]) C(sh, cx + d * r, cy + r * 0.55, r * 0.17, { lw: 0.8, fill: [255, 255, 255] }); }
-    else if (kind === 'hive') { T(sh, cx, cy + r * 0.05, 'Hive', { anchor: 'middle', bold: true, size: r * 0.8 }); for (const d of [-0.8, 0, 0.8]) C(sh, cx + d * r, cy + r * 0.55, r * 0.17, { lw: 0.8, fill: [255, 255, 255] }); }
-    else T(sh, cx, cy + r * 0.3, tag || 'Relay', { anchor: 'middle', bold: true, size: r * 0.8 }); }
+    if (kind === 'km') { sh.pop(); kmCoil(sh, cx, cy, r, tag); }
+    else if (kind === 'shelly' || kind === 'hive') T(sh, cx, cy + r * 0.35, kind === 'hive' ? 'Hive' : 'Shelly', { anchor: 'middle', bold: true, size: r * (kind === 'hive' ? 1.0 : 0.88) }); // v0.44.2: plain labelled box
+    else { const t = String(tag || 'Relay'); const sz = Math.min(r * 0.8, (w - 4) / Math.max(1, t.length * 0.55)); T(sh, cx, cy + sz * 0.35, t.length > 9 ? 'Ctrl' : t, { anchor: 'middle', bold: true, size: t.length > 9 ? r * 0.8 : sz }); } }
+  // v0.44.2: BS EN 60617 contactor coil: a plain rectangle (A1 in, A2 out), KM tag above it. Same height as the other symbols.
+  function kmCoil(sh, cx, cy, r, tag) { const w = r * 1.5; R(sh, cx - w / 2, cy - r, w, r * 2, { lw: 1.2, fill: [255, 255, 255] }); if (tag !== null) T(sh, cx, cy - r - 4, tag || 'KM', { anchor: 'middle', bold: true, size: small }); }
+  // v0.44.2: contactor main contact (normally open) drawn flat on a straight cable: terminal, blade lifted, contactor half-circle at the fixed contact
+  function nocH(o, x, cy, w) { const g = { w: 1.2, color: COL.line }; const a = x + w * 0.3, b = x + w * 0.7, rr = w * 0.07;
+    L(o, x, cy, a, cy, g); L(o, b, cy, x + w, cy, g); L(o, a, cy, b + w * 0.02, cy - w * 0.26, g);
+    for (let i = 0; i < 6; i++) { const a1 = Math.PI * i / 6, a2 = Math.PI * (i + 1) / 6; L(o, b + rr - rr * Math.cos(a1), cy - rr * Math.sin(a1), b + rr - rr * Math.cos(a2), cy - rr * Math.sin(a2), g); } }
   function symbol(sh, kind, cx, cy, S, tag) {
     const r = S / 2; const W0 = [255, 255, 255];
     if (kind === 'light') { // outlet for lighting: circle with a cross
@@ -1303,3 +1360,7 @@ export function drawDiagramPdf(k, cert, newPage, { bottom = 16 } = {}) {
 // On by default; cert.diagramPdf === false leaves it out of the PDF.
 export const diagramInPdf = (cert) => Boolean(cert) && cert.diagramPdf !== false && diagramHasCircuits(cert);
 export const diagramHasCircuits = (cert) => (cert && cert.type === 'MW' ? Boolean(cert.mw && cert.mw.circuit && (cert.mw.circuit.desc || cert.mw.circuit.rating)) : (cert && cert.boards || []).some((b) => (b.circuits || []).length));
+
+// v0.44.2: small SVG of one symbol, for the editor's "+ Add" picker
+export function iconSvg(kind, px = 36) { let sh = []; try { sh = layout({ boards: [], supply: { lines: [] }, main: {} }, { icon: kind, font: 12 }); } catch { sh = []; }
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 36 36" width="${px}" height="${px}" aria-hidden="true">${shapesSvg(sh)}</svg>`; }

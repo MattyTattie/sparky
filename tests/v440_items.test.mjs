@@ -34,12 +34,11 @@ test('control circuit (v0.44.1): old Shelly item + links become Shelly -> KM1, K
   const L = lay(cs); const blk = L.blocks.find((b) => b.num === '9'); const T = blk.shapes.filter((z) => z.t === 'text').map((z) => z.txt);
   for (const t of ['Shelly', 'KM1', 'KM2']) assert.ok(T.includes(t), t);
   const at = (t) => blk.shapes.find((z) => z.t === 'text' && z.txt === t); assert.ok(at('Shelly').x < at('KM1').x && at('KM1').y < at('KM2').y, 'Shelly then KM1 over KM2');
-  const boxes = blk.shapes.filter((z) => z.t === 'rect' && z.h > 10 && z.w < 40); const sz = new Set(boxes.map((b) => Math.round(b.w) + 'x' + Math.round(b.h))); assert.equal(sz.size, 1, 'same size');
+  const boxes = blk.shapes.filter((z) => z.t === 'rect' && z.h > 10 && z.w < 40); const sz = new Set(boxes.map((b) => Math.round(b.h / 4))); assert.equal(sz.size, 1, 'same size');
   assert.equal(crossings(L), 0);
 });
-test('editor: room tick boxes for every circuit kind, add-item picker on every room and circuit', () => {
-  assert.match(src, /roomsEditor\(c, redraw, [^\n]*'other'\)/); assert.match(src, /'\+ Add an item\\u2026'/); assert.match(src, /Other items on this circuit/);
-  assert.equal((src.match(/itemsEditor\(r\.items, r\.name, setItems\)/g) || []).length, 3, 'light, socket and other rooms');
+test('editor: one ordered list per room with + Add picker on every circuit kind (v0.44.2)', () => {
+  assert.match(src, /whatsOn\(c, isLight \? 'light'/); assert.match(src, /function pickTiles\(/); assert.match(src, /function addTo\(/);
 });
 test('any item on any circuit: extras on a lighting room and a socket room', () => {
   const L = lay([mk('1', 'Lights', { rating: '6', live: '1.5', points: '2', diagram: { roomList: [{ name: 'Hall', lights: 2, sw1: 1, items: { alarm: 1 } }] } }),

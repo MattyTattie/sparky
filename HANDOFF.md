@@ -358,3 +358,10 @@ Auto single-line wiring diagram from the cert (EIC/EICR whole board, MWC just th
 - Fan in a JB→switch room drops straight down that room's own cable lane to the fan row (no run along first); a room with no lights turns straight down.
 - Outdoor socket IP marking: white "IP" on a small blue badge on the plate's bottom-right corner (`ipMark`), also in the key.
 - Tests: tests/v440_items.test.mjs; v420 test no longer expects A1/A2/TC text. Shots (not sent): /workspace/polish-review/diagram/v44.
+
+## v0.44.2 (branch only, not published)
+- Control circuit editor is one ordered list in wiring order (SFCU, FCU, isolator, Shelly, Hive, time clock, other, contactor). Up/down arrows plus drag on the handle, and an X to remove. Nothing is fixed in place, and the diagram draws in exactly this order. Saved as `diagram.chain`. `migrateChain` moves v0.44.1 controllers, SFCU/FCU/Shelly/KM items and the old "Controlled by" links into it.
+- KM numbers come from `kmNumbers` (counted across the whole board), so the editor and the diagram always match.
+- Symbols: Shelly and Hive are plain labelled boxes. The contactor is a 60617 coil with its KM tag. The switched-circuit contact is drawn straight in line.
+- Every circuit editor now uses `whatsOn`: one list per room, a big "+ Add" picker with icons, +/- counts, reorder, and an X to remove. The old roomsEditor, itemsEditor and controllersEditor are unused and can be removed later.
+- Tests: tests/v442_chain.test.mjs.

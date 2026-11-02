@@ -22,7 +22,7 @@ test('non-socket generic points still cap with + N more', () => {
 });
 test('room editor picks socket mode from the shared pointKind (so "skts" circuits get socket rooms)', async () => {
   const { readFileSync } = await import('node:fs'); const ui = readFileSync(new URL('../js/certui.js', import.meta.url), 'utf8');
-  assert.match(ui, /pointKind\(c\) === 'socket' \? roomsEditor\(c, [^;]*'socket'\)/);
+  assert.match(ui, /whatsOn\(c, [^;]*pointKind\(c\) === 'socket' \? 'socket'/);
   assert.match(ui, /import \{[^}]*\bpointKind\b[^}]*\} from '\.\/wiring\.js'/);
   assert.equal(W.pointKind({ desc: 'Downstairs skts' }), 'socket');
 });

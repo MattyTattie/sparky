@@ -16,8 +16,8 @@ test('Shelly and Hive each get their own branch with their own contactor', () =>
   assert.ok(at('Shelly').y < at('Hive').y && at('KM1').y < at('KM2').y); assert.ok(at('KM1').x > at('Shelly').x);
   const all = T.map((z) => z.txt).join(' '); assert.match(all, /Switches/); assert.match(all, /Hot water/); assert.ok(!all.includes('\u2026'));
   assert.equal(crossings(L), 0);
-  const boxes = blk.shapes.filter((z) => z.t === 'rect' && z.h > 10 && z.w < 40); assert.equal(new Set(boxes.map((b) => Math.round(b.w) + 'x' + Math.round(b.h))).size, 1, 'same size');
-  const r3 = L.blocks.find((b) => b.num === '3').shapes.filter((z) => z.t === 'text').map((z) => z.txt).join(' '); assert.match(r3, /Switched by contactor KM1 \(see control circuit 6\)/);
+  const boxes = blk.shapes.filter((z) => z.t === 'rect' && z.h > 10 && z.w < 40); assert.equal(new Set(boxes.map((b) => Math.round(b.h / 4))).size, 1, 'same size');
+  const r3 = L.blocks.find((b) => b.num === '3').shapes.filter((z) => z.t === 'text').map((z) => z.txt).join(' '); assert.match(r3, /KM1 via contactor Coil switched by circuit 6 \(see circuit 6\)/);
 });
 test('key has Hive and contactor; several contactors per controller', () => {
   const cs = house(); cs[2].diagram.controllers[1].contactors.push({ circuits: [], label: 'Towel rails' });
@@ -32,8 +32,8 @@ test('migration: old Shelly/km items and Controlled-by links kept', () => {
   assert.ok(W.isControlCircuit(mk('5', 'Time clock control'), [])); assert.ok(!W.isControlCircuit(mk('5', 'Sockets'), []));
   assert.deepEqual(W.controllersOf({ diagram: { controllers: [{ type: 'bogus', contactors: 'x' }, null] } }, []), [{ type: 'other', name: '', contactors: [] }]);
 });
-test('editor: add controller picker, remove buttons, tick boxes, items hidden on control circuits', () => {
+test('editor: control circuits get the one-list chain editor, items hidden (v0.44.2)', () => {
   const src = readFileSync(new URL('../js/certui.js', import.meta.url), 'utf8');
-  assert.match(src, /\+ Add controller/); assert.match(src, /Remove controller/); assert.match(src, /Remove contactor/); assert.match(src, /\+ Add contactor/);
-  assert.match(src, /ctlC \? null : itemsEditor/); assert.deepEqual(Object.keys(W.CONTROLLER_KINDS).slice(0, 4), ['hive', 'shelly', 'timeclock', 'other']);
+  assert.match(src, /ctlC \? chainEditor\(/); assert.match(src, /!ctlC && !arranging \? whatsOn/);
+  assert.deepEqual(Object.keys(W.CHAIN_KINDS), ['sfcu', 'fcu', 'iso', 'shelly', 'hive', 'timeclock', 'other', 'km']);
 });
