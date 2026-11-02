@@ -11,7 +11,7 @@ import { checkCircuit } from './checks.js';
 const NA = 'N/A';
 const isNAv = (v) => /^\s*n\s*[\/.]?\s*a\s*\.?\s*$/i.test(String(v ?? ''));
 const val = (v) => { const s = String(v ?? '').trim(); return s && !isNAv(s) ? s : ''; };
-export const COL = { ink: [20, 20, 20], grey: [110, 110, 110], na: [170, 170, 170], line: [60, 60, 60], brand: [41, 82, 255], fill: [244, 246, 252], red: [200, 30, 30], amber: [196, 120, 0] };
+export const COL = { ink: [20, 20, 20], grey: [110, 110, 110], na: [170, 170, 170], line: [60, 60, 60], room: [105, 115, 145], box: [35, 35, 35], brand: [41, 82, 255], fill: [244, 246, 252], red: [200, 30, 30], amber: [196, 120, 0] };
 // v0.41 (pro): type of wiring code (schedule column 3) to a short name for the cable label.
 export const WIRING_SHORT = { A: 'T&E', B: 'in metal conduit', C: 'in plastic conduit', D: 'in metal trunking', E: 'in plastic trunking', F: 'SWA (PVC)', G: 'SWA (XLPE)', H: 'MICC', O: '' };
 // '2.5/1.5mm² T&E · B32' from the schedule (cable, type of wiring, OCPD). '' when there's no cable size.
@@ -469,7 +469,7 @@ export function layout(model, { W = 380, font = 12, screen = false, cableTable =
   const busX = 14, devX = busX + 14, devW = F * 4.6, gap = 8; let ringLegB = null;
   const T = (sh, x, y, txt, o = {}) => sh.push({ t: 'text', x, y, txt, size: o.size || F, bold: !!o.bold, color: o.color || COL.ink, anchor: o.anchor || 'start' });
   const L = (sh, x1, y1, x2, y2, o = {}) => sh.push({ t: 'line', x1, y1, x2, y2, w: o.w || 1.2, color: o.color || COL.line, ...(o.dash ? { dash: o.dash } : {}) });
-  const R = (sh, x, y, w, h, o = {}) => sh.push({ t: 'rect', x, y, w, h, lw: o.lw || 1.2, color: o.color || COL.line, fill: o.fill || null });
+  const R = (sh, x, y, w, h, o = {}) => sh.push({ t: 'rect', x, y, w, h, lw: o.lw ? (o.lw < 1.4 ? o.lw * 1.3 : o.lw) : 1.5, color: o.color || COL.box, fill: o.fill || null }); // v0.44.2b: outlines a bit darker and thicker
   const C = (sh, cx, cy, r, o = {}) => sh.push({ t: 'circle', cx, cy, r, lw: o.lw || 1.1, color: o.color || COL.line, fill: o.fill || null });
   const textLines = (sh, x, y, text, w, o = {}) => { const s = o.size || F; const ls = wrapText(text, w, s, o.bold); ls.forEach((l, i) => T(sh, x, y + s + i * lh(s), l, o)); return ls.length * lh(s); };
   // label + value; a missing value prints N/A in light grey
@@ -912,7 +912,7 @@ export function layout(model, { W = 380, font = 12, screen = false, cableTable =
       let bottom;
       if (list.length) { const res = chain(rs, list.map((k) => ({ k })), { S, inX: fx, fromY: lastY, x0: ix + 6, xMax: bx + bw - 8, top: ry + 2, wrapX: ix + 2, ip }); lastY = res.firstY; bottom = res.bottom + 6; }
       else { const fy = ry + 6; L(rs, fx, lastY, fx, fy, g); L(rs, fx, fy, bx, fy, g); lastY = fy; bottom = fy + 6; }
-      R(sh, bx, y0, bw, bottom - y0, { fill: COL.fill, color: [150, 160, 190] }); sh.push(...rs);
+      R(sh, bx, y0, bw, bottom - y0, { fill: COL.fill, color: COL.room, lw: 1.6 }); sh.push(...rs);
       cable('Circuit ' + (val(c.num) || '?'), nm, cableLabel(c).split(' \u00b7 ')[0]);
       y0 = bottom + 10; });
     return y0 - top - 2;
@@ -989,7 +989,7 @@ export function layout(model, { W = 380, font = 12, screen = false, cableTable =
       if (r.spurs && !spurInline) { const k = r.spurKind === 'fcu' ? 'fcu' : 'socket1'; const sy = yOut + S * 0.5 + 8;
         spurRow(ln, k, cx0 - rad - 4, yOut, sy, step, S, g, r.spurs, (r.spurKind === 'fcu' ? 'FCU spur' : 'Spur') + (r.spurs === 1 ? '' : 's'), bx + bw - 6, ip && k === 'socket1' ? (xx, yy, kk) => ipMark(ln, xx, yy, kk, S) : null, bx + 6);
         bottom = sy + S * 0.6; dpFrom = sy; }
-      R(sh, bx, y0, bw, bottom + 4 - y0, { fill: COL.fill, color: [150, 160, 190] }); sh.push(...rs, ...ln);
+      R(sh, bx, y0, bw, bottom + 4 - y0, { fill: COL.fill, color: COL.room, lw: 1.6 }); sh.push(...rs, ...ln);
       L(sh, fx, legY, fx, yIn, g); legY = yOut; // leg 2 into this room; it resumes where the room hands back
       cable('Circuit ' + (val(c.num) || '?'), r.name || 'room', cableLabel(c).split(' \u00b7 ')[0]);
       y0 = bottom + 4 + 10;
@@ -1026,7 +1026,7 @@ export function layout(model, { W = 380, font = 12, screen = false, cableTable =
         for (let j = 0; j < r.spurs; j++) { const cx = cx0 + j * step; L(rs, px, sy, cx - sr, sy, g); symbol(rs, k, cx, sy, S); if (k === 'socket1') ipTag(cx, sy, k); px = cx + sr; }
         const lab = (r.spurKind === 'fcu' ? 'FCU spur' : 'Spur') + (r.spurs === 1 ? '' : 's'); const lx = px + 6; if (lx + textW(lab, small) < bx + bw - 6) T(rs, lx, sy + small * 0.35, lab, { size: small, color: COL.grey });
         bottom = sy + S * 0.6; }
-      const bh = bottom - y0 + 6; R(sh, bx, y0, bw, bh, { fill: COL.fill, color: [150, 160, 190] }); sh.push(...rs);
+      const bh = bottom - y0 + 6; R(sh, bx, y0, bw, bh, { fill: COL.fill, color: COL.room, lw: 1.6 }); sh.push(...rs);
       L(sh, xi, rowY0, bx, rowY0, g); teeY = rowY0; lastBottom = y0 + bh; // the tee
       cable('Circuit ' + (val(c.num) || '?'), r.name || 'room', cableLabel(c).split(' \u00b7 ')[0]);
       y0 += bh + 10;
@@ -1058,7 +1058,7 @@ export function layout(model, { W = 380, font = 12, screen = false, cableTable =
       const sws = [r.sw1 && `${r.sw1} \u00d7 1-way`, r.sw2pairs && (r.sw2pairs === 1 ? '2-way' : `${r.sw2pairs} \u00d7 2-way`), r.swi && `${r.swi} \u00d7 intermediate`].filter(Boolean).join(' + ') || 'No switch';
       ry += textLines(rs, ix, ry, `${r.lights} light${r.lights === 1 ? '' : 's'} \u00b7 ${sws} \u00b7 ${how}`, iw, { size: small * 0.92, color: COL.grey });
       if (r.wiring === 'jb-switch') { const lx = tx + 3 + (nSw - 1 - swK) * 5; const fy = jbSwitchRoom(rs, r, ix, iw, ry, S, G); const bare = !r.lights && !r.sw1 && !r.sw2pairs; fy.bottom = fanRow(rs, r, ix, iw, fy.bottom, S, G, fy.feedIn, fy.swOut, lx); fy.bottom = extraRow(rs, r, ix, iw, fy.bottom, S, lx, fy.feedIn); const bh = fy.bottom - y0 + 6; /* v0.44.0: fan / extras drop straight down the room's own cable lane */
-        R(sh, bx, y0, bw, bh, { fill: COL.fill, color: [150, 160, 190] }); sh.push(...rs);
+        R(sh, bx, y0, bw, bh, { fill: COL.fill, color: COL.room, lw: 1.6 }); sh.push(...rs);
         // v0.43: its own cable from the JB to this room (no shared trunk)
         swK++; /* v0.43.1: top room innermost lane, so tails never cross */ L(sh, lx, jbLastY, lx, fy.feedIn, { w: 1.2, color: COL.line }); if (!bare || !(r.fans || r.items.length)) L(sh, lx, fy.feedIn, fy.swX, fy.feedIn, { w: 1.2, color: COL.line });
         cable('JB, circuit ' + (val(c.num) || '?'), 'switch, ' + nm, cableLabel(c).split(' \u00b7 ')[0]); // v0.43.3: in the cable list only, no tag on the drawing
@@ -1068,7 +1068,7 @@ export function layout(model, { W = 380, font = 12, screen = false, cableTable =
       const fb = roomBody(rs, r, ix, iw, ry, S, G, jb ? 'jb' : 'loop');
       const feedIn = fb.feedIn; const bottom = extraRow(rs, r, ix, iw, fanRow(rs, r, ix, iw, fb.bottom, S, G, fb.feedIn, fb.swOut), S, ix - 4, fb.feedIn); const bare = !r.lights && !r.sw1 && !r.sw2pairs && (r.fans || r.items.length);
       const bh = bottom - y0 + 6;
-      R(sh, bx, y0, bw, bh, { fill: COL.fill, color: [150, 160, 190] });
+      R(sh, bx, y0, bw, bh, { fill: COL.fill, color: COL.room, lw: 1.6 });
       sh.push(...rs);
       // the circuit feed: down the left, then into this room
       L(sh, fx, lastFeedY, fx, feedIn, { w: 1.2, color: COL.line });

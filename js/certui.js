@@ -920,7 +920,7 @@ const handle = (aria) => h('span', { class: 'drag', role: 'img', 'aria-label': a
 // one line: icon, name, - n +, up, down, x
 function itemLine({ icon, label, n, min = 0, max = 10, onN, onUp, onDown, onX, aria, extra }) {
   const step = () => (n != null ? h('div', { class: 'rstep', style: 'display:flex;align-items:center;gap:4px;flex:none' }, smallBtn('\u2212', aria + ', one fewer', () => onN(Math.max(min, n - 1))), h('span', { class: 'stepval', style: 'min-width:1.4em;text-align:center;font-weight:700' }, String(n)), smallBtn('+', aria + ', one more', () => onN(Math.min(max, n + 1)))) : null);
-  return h('div', { class: 'iline', style: 'display:flex;align-items:center;gap:6px;min-height:48px;border-top:1px solid var(--line);padding:2px 0;flex-wrap:wrap' },
+  return h('div', { class: 'iline', style: 'display:flex;align-items:center;gap:6px;min-height:48px;border-top:1.5px solid var(--boxline);padding:2px 0;flex-wrap:wrap' },
     onUp || onDown ? handle('Drag ' + aria) : null, icon ? ico(icon) : null,
     h('span', { class: 'ilabel', style: 'flex:1 1 90px;min-width:0;white-space:normal;overflow-wrap:break-word;font-size:15px' }, label),
     (onUp || onDown) ? null : step(), (onUp || onDown) ? null : (onX ? smallBtn('\u2715', 'Remove ' + aria, onX) : null), (onUp || onDown) ? null : (extra || null),
@@ -962,13 +962,13 @@ export function whatsOn(c, mode, redraw, again, usedNames = () => [], otherMap =
   const store = (patch) => { const d = { ...(c.diagram || {}), ...patch }; for (const k of Object.keys(d)) if (d[k] === undefined || (Array.isArray(d[k]) && !d[k].length && k === 'roomList')) delete d[k]; if (patch.roomList) delete d.layout; if (Object.keys(d).length) c.diagram = d; else delete c.diagram; changed(); redraw(); draw(); };
   const clean = (o) => { const x = { ...o }; for (const k of Object.keys(x)) if (x[k] === undefined) delete x[k]; return x; };
   const defW = () => { const l = rooms(); return (l[0] && l[0].wiring) || 'loop-in'; };
-  const seg1 = (opts, cur, label, pick) => h('div', { class: 'seg1', role: 'group', 'aria-label': label, style: 'display:flex;align-items:stretch;margin-top:6px;border:1px solid var(--line);border-radius:10px;overflow:hidden' },
+  const seg1 = (opts, cur, label, pick) => h('div', { class: 'seg1', role: 'group', 'aria-label': label, style: 'display:flex;align-items:stretch;margin-top:6px;border:1.5px solid var(--boxline);border-radius:10px;overflow:hidden' },
     opts.map(([v, t, aria], j) => h('button', { type: 'button', class: 'segb' + (v === cur ? ' on' : ''), 'aria-pressed': String(v === cur), 'aria-label': aria || t, style: 'flex:1 1 0;min-width:0;min-height:44px;padding:4px 2px;font-size:14px;font-weight:600;white-space:normal;line-height:1.1;border:0;' + (j ? 'border-left:1px solid var(--line);' : '') + (v === cur ? 'background:var(--brand,#2952ff);color:#fff' : 'background:transparent;color:inherit'), onclick: () => pick(v) }, t)));
   const draw = () => {
     const l = rooms(); const putRoom = (i) => (patch) => store({ roomList: rooms().map((x, j) => (j === i ? clean({ ...x, ...patch }) : x)) });
     const moveRoom = (a, b) => store({ roomList: moveIn(rooms(), a, b) });
     const list = h('div', { class: 'roomlist' }, l.map((r, i) => { const put = putRoom(i); const nm = r.name || 'Room ' + (i + 1);
-      return h('div', { class: 'roomcard', style: 'border:1px solid var(--line);border-radius:12px;padding:6px 8px;margin:0 0 10px' },
+      return h('div', { class: 'roomcard', style: 'border:1.5px solid var(--boxline);border-radius:12px;padding:6px 8px;margin:0 0 10px' },
         h('div', { style: 'display:flex;align-items:center;gap:6px' }, handle('Drag room ' + nm), h('b', { style: 'flex:1;min-width:0;white-space:normal;word-break:break-word;font-size:16px' }, (i + 1) + '. ' + nm),
           i > 0 ? smallBtn('\u2191', 'Move up room ' + nm, () => moveRoom(i, i - 1)) : null, i < l.length - 1 ? smallBtn('\u2193', 'Move down room ' + nm, () => moveRoom(i, i + 1)) : null,
           smallBtn('\u2715', 'Remove room ' + nm, async () => { if (await confirmBox('Remove ' + nm + '?', 'Everything in this room comes off the drawing.', 'Remove')) store({ roomList: rooms().filter((_, j) => j !== i) }); })),
@@ -988,7 +988,7 @@ export function whatsOn(c, mode, redraw, again, usedNames = () => [], otherMap =
       h('p', { class: 'note', style: 'margin:2px 0 8px' }, 'In wiring order. Use \u2191 \u2193 or drag \u2261 to move, \u2715 to remove.'),
       l.length ? list : null,
       h('button', { class: 'btn addroom', type: 'button', id: 'roomother-' + (c.num || ''), style: 'width:100%;min-height:52px;margin:0 0 10px', onclick: addRoom }, '+ Add a room'),
-      h('div', { class: 'notroom', style: 'border:1px dashed var(--line);border-radius:12px;padding:6px 8px' }, h('b', { style: 'display:block' }, l.length ? 'Not in a room' : 'Items'),
+      h('div', { class: 'notroom', style: 'border:1.5px dashed var(--boxline);border-radius:12px;padding:6px 8px' }, h('b', { style: 'display:block' }, l.length ? 'Not in a room' : 'Items'),
         ...linesFor(d, null, 'circuit ' + (c.num || ''), putC),
         h('button', { class: 'btn ghost additem', type: 'button', style: 'width:100%;min-height:48px;margin-top:6px', onclick: () => addTo(d, null, putC, 'Add to circuit ' + (c.num || '')) }, l.length ? '+ Add (not in a room)' : '+ Add an item')),
       h('p', { class: 'note roomsnote', style: 'margin:6px 0;color:#9aa0aa' + (roomPointsNote(c) ? '' : ';display:none') }, roomPointsNote(c))]);
@@ -1011,7 +1011,7 @@ export function chainEditor(c, bcs, onset) {
         h('option', { value: '' }, it.circuits.length ? '+ Another circuit it switches\u2026' : 'Switches circuit\u2026'), others.filter((o) => !it.circuits.includes(String(o.num).trim())).map((o) => h('option', { value: String(o.num).trim() }, String(o.num).trim() + '  ' + (o.desc || 'No description')))));
       body.push(h('input', { 'aria-label': title + ' label', placeholder: 'Label (optional), e.g. Hot water', style: 'width:100%;min-height:44px;margin-top:4px', value: it.label || '', onchange: (e) => set(list.map((x, j) => (j === i ? { ...x, label: e.target.value.trim() } : x))) }));
     } else body.push(h('input', { 'aria-label': title + ' name or rating', placeholder: CHAIN_SUPPLY[it.k] ? 'Rating (optional), e.g. 3A' : it.k === 'other' ? 'Name, e.g. Wiser hub' : 'Note (optional)', style: 'width:100%;min-height:44px;margin-top:4px', value: it.name || '', onchange: (e) => set(list.map((x, j) => (j === i ? { ...x, name: e.target.value.trim() } : x))) }));
-    return h('div', { class: 'chainrow', style: 'border:1px solid var(--line);border-radius:12px;padding:4px 8px 8px;margin:0 0 8px' + (under ? ';margin-left:22px;border-left:4px solid var(--brand,#2952ff)' : '') },
+    return h('div', { class: 'chainrow', style: 'border:1.5px solid var(--boxline);border-radius:12px;padding:4px 8px 8px;margin:0 0 8px' + (under ? ';margin-left:22px;border-left:4px solid var(--brand,#2952ff)' : '') },
       h('div', { style: 'display:flex;align-items:center;gap:6px;min-height:48px' }, handle('Drag ' + title), ico(ICON[it.k]), h('b', { style: 'flex:1;min-width:0;white-space:normal;overflow-wrap:break-word;font-size:16px' }, (i + 1) + '. ' + title),
         smallBtn('\u2715', 'Remove ' + title, () => set(list.filter((_, j) => j !== i)))),
       list.length > 1 ? h('div', { class: 'moverow', style: 'display:flex;justify-content:flex-end;gap:6px' }, i > 0 ? smallBtn('\u2191', 'Move up ' + title, () => set(moveIn(list, i, i - 1))) : null, i < list.length - 1 ? smallBtn('\u2193', 'Move down ' + title, () => set(moveIn(list, i, i + 1))) : null) : null, ...body); }));

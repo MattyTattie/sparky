@@ -48,7 +48,7 @@ test('a radial has no second leg', () => {
   assert.ok(!sh.some((z) => z.t === 'line' && z.x1 === z.x2 && Math.abs(Math.min(z.y1, z.y2) - (dev.y + dev.h)) < 0.5 && z.x1 > dev.x && z.x1 < dev.x + dev.w));
 });
 test('ring with rooms: leg 2 goes in and out of each room at its left; boxes aligned; return stops just past the last socket', () => {
-  const L = lay(big); const isRoom = (z) => z.t === 'rect' && String(z.color) === '150,160,190';
+  const L = lay(big); const isRoom = (z) => z.t === 'rect' && String(z.color) === String(W.COL.room);
   const sh = L.blocks.find((b) => b.shapes.some(isRoom)).shapes; const boxes = sh.filter(isRoom);
   assert.equal(new Set(boxes.map((b) => b.x + '/' + b.w)).size, 1);
   const right = boxes[0].x + boxes[0].w; const lines = sh.filter((z) => z.t === 'line' && z.y1 === z.y2);
