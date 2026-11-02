@@ -365,3 +365,8 @@ Auto single-line wiring diagram from the cert (EIC/EICR whole board, MWC just th
 - Symbols: Shelly and Hive are plain labelled boxes. The contactor is a 60617 coil with its KM tag. The switched-circuit contact is drawn straight in line.
 - Every circuit editor now uses `whatsOn`: one list per room, a big "+ Add" picker with icons, +/- counts, reorder, and an X to remove. The old roomsEditor, itemsEditor and controllersEditor are unused and can be removed later.
 - Tests: tests/v442_chain.test.mjs.
+
+## v0.44.3 (branch only)
+- Compact editors. On the control circuit, each supply item or controller gets one box that holds its contactors (`kmRow`). ↑ ↓ ✕ sit inline as 38px `tinyBtn`s. The "Switches circuit" text is full width in ink colour.
+- Room cards and item rows are on one line: icon, label, −n+, ↑ ↓, ✕. Dark mode: symbol icons sit on a white chip, and the cards use var(--card).
+- Key: every symbol is drawn at the origin, then `fitCell` scales and centres it into a fixed 1.7S×1.4S cell. Labels start at the same x and are vertically centred. The same shapes go to the PDF.

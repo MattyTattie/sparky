@@ -571,36 +571,48 @@ export function layout(model, { W = 380, font = 12, screen = false, cableTable =
     else if (SOCK[icon] || icon === 'dpu' || icon === 'dps') symbol(sh, icon, 18, icon === 'dpu' || icon === 'dps' ? 10 : 6, S * (icon === 'dpu' || icon === 'dps' ? 0.8 : 0.85));
     else symbol(sh, icon, 18, 18, S);
     return sh; }
+  // v0.44.3: scale (down only) and centre a symbol drawn at the origin into a fixed key cell
+  const fitCell = (src, dst, x0, y0, cw, ch) => { let a = Infinity, b = Infinity, c = -Infinity, d = -Infinity; const ext = (x1, y1, x2, y2) => { a = Math.min(a, x1); b = Math.min(b, y1); c = Math.max(c, x2); d = Math.max(d, y2); };
+    for (const z of src) { if (z.t === 'line') ext(Math.min(z.x1, z.x2), Math.min(z.y1, z.y2), Math.max(z.x1, z.x2), Math.max(z.y1, z.y2)); else if (z.t === 'rect') ext(z.x, z.y, z.x + z.w, z.y + z.h); else if (z.t === 'circle') ext(z.cx - z.r, z.cy - z.r, z.cx + z.r, z.cy + z.r);
+      else if (z.t === 'text') { const w = textW(z.txt, z.size, z.bold); const l = z.anchor === 'middle' ? z.x - w / 2 : z.anchor === 'end' ? z.x - w : z.x; ext(l, z.y - z.size * 0.8, l + w, z.y + z.size * 0.2); } }
+    if (!isFinite(a)) return; const k = Math.min(1, (cw - 2) / Math.max(1, c - a), (ch - 2) / Math.max(1, d - b)); const ox = x0 + (cw - (c - a) * k) / 2 - a * k, oy = y0 + (ch - (d - b) * k) / 2 - b * k;
+    const X = (v) => ox + v * k, Y = (v) => oy + v * k;
+    for (const z of src) { if (z.t === 'line') dst.push({ ...z, x1: X(z.x1), y1: Y(z.y1), x2: X(z.x2), y2: Y(z.y2) }); else if (z.t === 'rect') dst.push({ ...z, x: X(z.x), y: Y(z.y), w: z.w * k, h: z.h * k }); else if (z.t === 'circle') dst.push({ ...z, cx: X(z.cx), cy: Y(z.cy), r: z.r * k }); else if (z.t === 'text') dst.push({ ...z, x: X(z.x), y: Y(z.y), size: z.size * k }); else dst.push(z); } };
   // key: only the symbols this diagram uses
   heatLab = 'Rad';
   if (used.size) {
     const sh = []; const y = 10; const order = ['socket', 'socketu', 'socket1', 'socket1u', 'ipsock', 'light', 'rose', 'jb', 'jbsw', 'sw1', 'sw2', 'swi', 'strap', 'cooker', 'shower', 'alarm', 'immersion', 'heater', 'ev', 'fan', 'fcu', 'sfcu', 'flex', 'appliance', 'point', 'contactor', 'coil', 'km', 'shelly', 'hive', 'relay', 'timeclock', 'iso', 'isofcu', 'isofcux', 'isosfcu', 'isosfcux', 'isoccu', 'dpu', 'dps', 'tailblock', 'swfuse', 'fanh', 'fant', 'fani', 'spd'];
     let hh = textLines(sh, 8, y, 'Key', W - 16, { bold: true });
     const S = F * 1.5; const colW = (W - 16) / 2; let col = 0, rowY = y + hh + 4, rowH = 0; const KW = 2 * loadR('socket', S); // v0.43.9: icon column fits the widest (twin) outlet
+    const CW = S * 1.7, CH = S * 1.4; void KW; // v0.44.3: every key symbol gets the same cell; labels line up
     for (const k of order.filter((k) => used.has(k) && !(k === 'isofcu' && used.has('fcu')))) { // v0.43.9: one FCU entry, same faceplate
-      const x = 8 + col * colW; const name = SWITCH_NAME[k] || KEY_EXTRA[k] || (k === 'contactor' ? 'Contactor contact (KM), in line on the circuit it switches' : k === 'coil' ? 'Contactor coil (A1/A2)' : k === 'timeclock' ? 'Time clock' : k === 'spd' ? 'Surge protection (SPD)' : KIND_NAME[k]);
-      if (k === 'contactor') { nocH(sh, x - S * 0.1, rowY + S * 0.65, S * 1.2); }
-      else if (k === 'coil') { coilSym(sh, x + S * 0.2, rowY + S * 0.1, S * 0.8, S * 0.75); }
-      else if (k === 'timeclock') { clockSym(sh, x + S / 2, rowY + S / 2, S * 0.42); }
-      else if (k === 'iso') isoPlateH(sh, x - S * 0.1, rowY + S / 2, S * 1.2, false, true, false);
-      else if (k === 'isoccu') isoPlateH(sh, x - S * 0.1, rowY + S / 2, S * 2.0, false, true, true);
-      else if (k === 'dpu' || k === 'dps') { const ky = rowY + S * 1.75; L(sh, x, ky, x + S * 0.17, ky, { w: 1.1 }); L(sh, x + S * 1.03, ky, x + S * 1.2, ky, { w: 1.1 }); /* cable meets the plate's sides, not through it */ symbol(sh, k, x + S * 0.6, rowY + S * 1.75, S); }
-      else if (SOCK[k]) symbol(sh, k, x + KW / 2, rowY + S * 0.1, S);
-      else if (k === 'ipsock') { symbol(sh, 'socket', x + KW / 2, rowY + S * 0.1, S); ipMark(sh, x + KW / 2, rowY + S * 0.1, 'socket', S); }
-      else if (k === 'km') kmCoil(sh, x + S * 0.5, rowY + S * 0.6, S / 2, null);
-      else if (k === 'shelly' || k === 'hive' || k === 'relay') symbol(sh, k, x + S * 0.65, rowY + S / 2, S, k === 'relay' ? 'Ctrl' : null);
-      else if (k === 'tailblock') { tailBlockSym(sh, x + S * 0.5, rowY + S * 0.15, S * 0.8); }
-      else if (k === 'swfuse') { isoSym(sh, x + S * 0.5, rowY - S * 0.1, S * 1.2, true, true); }
-      else if (/^isos?fcux?$/.test(k)) isoPlateH(sh, x - S * 0.1, rowY + S / 2, S * 1.2, true, k.startsWith('isosfcu'), false, k.endsWith('x'));
-      else if (k === 'fanh' || k === 'fant' || k === 'fani') { fanCtlSym(sh, x - S * 0.1, rowY + S / 2, S, k === 'fanh' ? '%RH' : k === 'fant' ? 'T' : 'ISO'); }
-      else if (k === 'spd') { spdSym(sh, x + S / 2, rowY - 2, F * 0.75); }
-      else if (k === 'rose') { L(sh, x + S / 2 - S * 0.6, rowY + S / 2, x + S / 2 + S * 0.6, rowY + S / 2, { w: 0.9, color: COL.grey }); C(sh, x + S / 2, rowY + S / 2, S * 0.17, { fill: COL.line, lw: 0.8 }); }
-      else if (k === 'jb') { R(sh, x - S * 0.2, rowY + S * 0.05, S * 1.4, S * 0.9, { fill: [255, 255, 255] }); T(sh, x + S * 0.5, rowY + S * 0.5 + small * 0.3, 'JB', { anchor: 'middle', bold: true, size: small * 0.85 }); }
-      else if (k === 'jbsw') { const yy = rowY + S / 2; R(sh, x - S * 0.2, yy - S * 0.3, S * 0.7, S * 0.6, { fill: [255, 255, 255] }); L(sh, x + S * 0.5, yy, x + S * 0.75, yy, { w: 0.9, color: COL.grey }); symbol(sh, 'sw1', x + S * 1.05, yy, S * 0.7); }
-      else if (k === 'strap') { L(sh, x - S * 0.1, rowY + S * 0.38, x + S * 1.1, rowY + S * 0.38, { w: 1, color: COL.brand }); L(sh, x - S * 0.1, rowY + S * 0.66, x + S * 1.1, rowY + S * 0.66, { w: 1, color: COL.brand }); }
-      else symbol(sh, k, x + S / 2, rowY + S / 2, S);
-      const iw = k === 'shelly' || k === 'hive' || k === 'relay' ? S * 1.4 : k === 'isoccu' ? S * 1.95 : SOCK[k] || k === 'ipsock' ? KW - 2 : k === 'dpu' || k === 'dps' ? S * 2.3 : S + 2; const th = textLines(sh, x + iw + 6, rowY + S / 2 - small * 0.95, name, colW - iw - 12, { size: small });
-      rowH = Math.max(rowH, k === 'dpu' || k === 'dps' ? S * 2.3 : SOCK[k] || k === 'ipsock' ? S * 1.15 : S, th + (S / 2 - small * 0.95) ); col++;
+      const cx = 8 + col * colW; const name = SWITCH_NAME[k] || KEY_EXTRA[k] || (k === 'contactor' ? 'Contactor contact (KM), in line on the circuit it switches' : k === 'coil' ? 'Contactor coil (A1/A2)' : k === 'timeclock' ? 'Time clock' : k === 'spd' ? 'Surge protection (SPD)' : KIND_NAME[k]);
+      const sym = []; { const x = 0, rowY = 0; // v0.44.3: draw at the origin, then fit into a fixed cell
+      if (k === 'contactor') { nocH(sym, x - S * 0.1, rowY + S * 0.65, S * 1.2); }
+      else if (k === 'coil') { coilSym(sym, x + S * 0.2, rowY + S * 0.1, S * 0.8, S * 0.75); }
+      else if (k === 'timeclock') { clockSym(sym, x + S / 2, rowY + S / 2, S * 0.42); }
+      else if (k === 'iso') isoPlateH(sym, x - S * 0.1, rowY + S / 2, S * 1.2, false, true, false);
+      else if (k === 'isoccu') isoPlateH(sym, x - S * 0.1, rowY + S / 2, S * 2.0, false, true, true);
+      else if (k === 'dpu' || k === 'dps') { const ky = rowY + S * 1.75; L(sym, x, ky, x + S * 0.17, ky, { w: 1.1 }); L(sym, x + S * 1.03, ky, x + S * 1.2, ky, { w: 1.1 }); /* cable meets the plate's sides, not through it */ symbol(sym, k, x + S * 0.6, rowY + S * 1.75, S); }
+      else if (SOCK[k]) symbol(sym, k, x + KW / 2, rowY + S * 0.1, S);
+      else if (k === 'ipsock') { symbol(sym, 'socket', x + KW / 2, rowY + S * 0.1, S); ipMark(sym, x + KW / 2, rowY + S * 0.1, 'socket', S); }
+      else if (k === 'km') kmCoil(sym, x + S * 0.5, rowY + S * 0.6, S / 2, null);
+      else if (k === 'shelly' || k === 'hive' || k === 'relay') symbol(sym, k, x + S * 0.65, rowY + S / 2, S, k === 'relay' ? 'Ctrl' : null);
+      else if (k === 'tailblock') { tailBlockSym(sym, x + S * 0.5, rowY + S * 0.15, S * 0.8); }
+      else if (k === 'swfuse') { isoSym(sym, x + S * 0.5, rowY - S * 0.1, S * 1.2, true, true); }
+      else if (/^isos?fcux?$/.test(k)) isoPlateH(sym, x - S * 0.1, rowY + S / 2, S * 1.2, true, k.startsWith('isosfcu'), false, k.endsWith('x'));
+      else if (k === 'fanh' || k === 'fant' || k === 'fani') { fanCtlSym(sym, x - S * 0.1, rowY + S / 2, S, k === 'fanh' ? '%RH' : k === 'fant' ? 'T' : 'ISO'); }
+      else if (k === 'spd') { spdSym(sym, x + S / 2, rowY - 2, F * 0.75); }
+      else if (k === 'rose') { L(sym, x + S / 2 - S * 0.6, rowY + S / 2, x + S / 2 + S * 0.6, rowY + S / 2, { w: 0.9, color: COL.grey }); C(sym, x + S / 2, rowY + S / 2, S * 0.17, { fill: COL.line, lw: 0.8 }); }
+      else if (k === 'jb') { R(sym, x - S * 0.2, rowY + S * 0.05, S * 1.4, S * 0.9, { fill: [255, 255, 255] }); T(sym, x + S * 0.5, rowY + S * 0.5 + small * 0.3, 'JB', { anchor: 'middle', bold: true, size: small * 0.85 }); }
+      else if (k === 'jbsw') { const yy = rowY + S / 2; R(sym, x - S * 0.2, yy - S * 0.3, S * 0.7, S * 0.6, { fill: [255, 255, 255] }); L(sym, x + S * 0.5, yy, x + S * 0.75, yy, { w: 0.9, color: COL.grey }); symbol(sym, 'sw1', x + S * 1.05, yy, S * 0.7); }
+      else if (k === 'strap') { L(sym, x - S * 0.1, rowY + S * 0.38, x + S * 1.1, rowY + S * 0.38, { w: 1, color: COL.brand }); L(sym, x - S * 0.1, rowY + S * 0.66, x + S * 1.1, rowY + S * 0.66, { w: 1, color: COL.brand }); }
+      else symbol(sym, k, x + S / 2, rowY + S / 2, S);
+      }
+      fitCell(sym, sh, cx, rowY, CW, CH);
+      const tx = cx + CW + 6, tw = colW - CW - 12; const th = textLines([], tx, 0, name, tw, { size: small }); const ty = rowY + Math.max(0, (CH - th) / 2);
+      textLines(sh, tx, ty, name, tw, { size: small });
+      rowH = Math.max(rowH, CH, th); col++;
       if (col === 2) { col = 0; rowY += rowH + 8; rowH = 0; }
     }
     const h = rowY + (col ? rowH + 8 : 0) + 4;

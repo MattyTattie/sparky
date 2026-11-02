@@ -893,7 +893,8 @@ export function controllersEditor(c, all, onset) {
 }
 
 // ---- v0.44.2: one simple "what's on this circuit" editor -------------------------------------------
-const ico = (k) => { const sp = h('span', { class: 'pico', style: 'width:36px;height:36px;flex:none;display:inline-flex;align-items:center;justify-content:center' }); sp.innerHTML = iconSvg(k); return sp; };
+const ico = (k) => { const sp = h('span', { class: 'pico', style: 'width:32px;height:32px;flex:none;display:inline-flex;align-items:center;justify-content:center' }); sp.innerHTML = iconSvg(k); return sp; };
+const tinyBtn = (txt, aria, fn) => h('button', { class: 'btn ghost mv tb', type: 'button', 'aria-label': aria, style: 'min-width:38px;width:38px;min-height:38px;height:38px;padding:0;flex:none;font-size:16px;line-height:1;border-radius:10px', onclick: fn }, txt);
 const smallBtn = (txt, aria, fn, extra = '') => h('button', { class: 'btn ghost mv', type: 'button', 'aria-label': aria, style: 'min-width:44px;min-height:44px;padding:0 6px;flex:none;font-size:18px;line-height:1' + extra, onclick: fn }, txt);
 // big tiles with an icon, one tap picks. Resolves the value, or null.
 export function pickTiles(title, opts) {
@@ -919,12 +920,13 @@ const moveIn = (arr, from, to) => { const a = [...arr]; const [x] = a.splice(fro
 const handle = (aria) => h('span', { class: 'drag', role: 'img', 'aria-label': aria, style: 'touch-action:none;cursor:grab;min-width:28px;min-height:44px;display:inline-flex;align-items:center;justify-content:center;color:#9aa0aa;font-size:20px;flex:none' }, '\u2261');
 // one line: icon, name, - n +, up, down, x
 function itemLine({ icon, label, n, min = 0, max = 10, onN, onUp, onDown, onX, aria, extra }) {
-  const step = () => (n != null ? h('div', { class: 'rstep', style: 'display:flex;align-items:center;gap:4px;flex:none' }, smallBtn('\u2212', aria + ', one fewer', () => onN(Math.max(min, n - 1))), h('span', { class: 'stepval', style: 'min-width:1.4em;text-align:center;font-weight:700' }, String(n)), smallBtn('+', aria + ', one more', () => onN(Math.min(max, n + 1)))) : null);
-  return h('div', { class: 'iline', style: 'display:flex;align-items:center;gap:6px;min-height:48px;border-top:1.5px solid var(--boxline);padding:2px 0;flex-wrap:wrap' },
-    onUp || onDown ? handle('Drag ' + aria) : null, icon ? ico(icon) : null,
-    h('span', { class: 'ilabel', style: 'flex:1 1 90px;min-width:0;white-space:normal;overflow-wrap:break-word;font-size:15px' }, label),
-    (onUp || onDown) ? null : step(), (onUp || onDown) ? null : (onX ? smallBtn('\u2715', 'Remove ' + aria, onX) : null), (onUp || onDown) ? null : (extra || null),
-    (onUp || onDown) ? h('div', { class: 'moverow', style: 'display:flex;align-items:center;gap:6px;width:100%;padding-left:26px' }, step(), h('span', { style: 'flex:1' }), onUp ? smallBtn('\u2191', 'Move up ' + aria, onUp) : null, onDown ? smallBtn('\u2193', 'Move down ' + aria, onDown) : null, onX ? smallBtn('\u2715', 'Remove ' + aria, onX) : null, extra || null) : null);
+  const step = n != null ? h('div', { class: 'rstep', style: 'display:flex;align-items:center;gap:2px;flex:none' }, tinyBtn('\u2212', aria + ', one fewer', () => onN(Math.max(min, n - 1))), h('span', { class: 'stepval', style: 'min-width:1.3em;text-align:center;font-weight:700' }, String(n)), tinyBtn('+', aria + ', one more', () => onN(Math.min(max, n + 1)))) : null;
+  // v0.44.3: compact, everything on one line (arrows inline, no drag handle on items)
+  return h('div', { class: 'iline', style: 'display:flex;align-items:center;gap:4px;min-height:44px;border-top:1px solid var(--boxline);padding:3px 0' },
+    icon ? ico(icon) : null,
+    h('span', { class: 'ilabel', style: 'flex:1 1 auto;min-width:0;white-space:normal;overflow-wrap:break-word;font-size:14px;line-height:1.2;color:var(--ink)' }, label),
+    step, onUp !== undefined || onDown !== undefined ? h('div', { style: 'display:flex;gap:2px;flex:none' }, onUp ? tinyBtn('\u2191', 'Move up ' + aria, onUp) : null, onDown ? tinyBtn('\u2193', 'Move down ' + aria, onDown) : null) : null,
+    onX ? tinyBtn('\u2715', 'Remove ' + aria, onX) : null, extra || null);
 }
 // what a room can hold, by circuit type: [field, label, icon, max]
 const NATIVE = {
@@ -968,15 +970,15 @@ export function whatsOn(c, mode, redraw, again, usedNames = () => [], otherMap =
     const l = rooms(); const putRoom = (i) => (patch) => store({ roomList: rooms().map((x, j) => (j === i ? clean({ ...x, ...patch }) : x)) });
     const moveRoom = (a, b) => store({ roomList: moveIn(rooms(), a, b) });
     const list = h('div', { class: 'roomlist' }, l.map((r, i) => { const put = putRoom(i); const nm = r.name || 'Room ' + (i + 1);
-      return h('div', { class: 'roomcard', style: 'border:1.5px solid var(--boxline);border-radius:12px;padding:6px 8px;margin:0 0 10px' },
-        h('div', { style: 'display:flex;align-items:center;gap:6px' }, handle('Drag room ' + nm), h('b', { style: 'flex:1;min-width:0;white-space:normal;word-break:break-word;font-size:16px' }, (i + 1) + '. ' + nm),
-          i > 0 ? smallBtn('\u2191', 'Move up room ' + nm, () => moveRoom(i, i - 1)) : null, i < l.length - 1 ? smallBtn('\u2193', 'Move down room ' + nm, () => moveRoom(i, i + 1)) : null,
-          smallBtn('\u2715', 'Remove room ' + nm, async () => { if (await confirmBox('Remove ' + nm + '?', 'Everything in this room comes off the drawing.', 'Remove')) store({ roomList: rooms().filter((_, j) => j !== i) }); })),
+      return h('div', { class: 'roomcard', style: 'border:1.5px solid var(--boxline);border-radius:12px;padding:2px 8px 6px;margin:0 0 8px;background:var(--card,#fff)' },
+        h('div', { style: 'display:flex;align-items:center;gap:4px;min-height:44px' }, handle('Drag room ' + nm), h('b', { style: 'flex:1;min-width:0;white-space:normal;overflow-wrap:break-word;font-size:16px;color:var(--ink)' }, (i + 1) + '. ' + nm),
+          i > 0 ? tinyBtn('\u2191', 'Move up room ' + nm, () => moveRoom(i, i - 1)) : null, i < l.length - 1 ? tinyBtn('\u2193', 'Move down room ' + nm, () => moveRoom(i, i + 1)) : null,
+          tinyBtn('\u2715', 'Remove room ' + nm, async () => { if (await confirmBox('Remove ' + nm + '?', 'Everything in this room comes off the drawing.', 'Remove')) store({ roomList: rooms().filter((_, j) => j !== i) }); })),
         ...linesFor(r, mode, nm, put),
         mode === 'light' && (+r.lights || +r.fans) ? seg1([['loop-in', 'Loop-in'], ['junction box', 'JB', 'Junction box'], ['jb-switch', 'JB\u2192sw', 'JB to switch']], ['junction box', 'jb-switch'].includes(r.wiring) ? r.wiring : 'loop-in', nm + ' wiring', (v) => put({ wiring: v })) : null,
         mode === 'light' && +r.fans > 0 ? seg1([['humidistat', 'Humidistat'], ['timer', 'Timer', 'Timer (overrun)'], ['switch', 'Light sw', 'Light switch'], ['isolator', 'Isolator', 'Isolator only']], r.fanCtl || 'humidistat', nm + ' fan control', (v) => put({ fanCtl: v })) : null,
         mode === 'socket' && +r.spurs > 0 ? seg1([['socket', 'Spur: single socket'], ['fcu', 'Spur: FCU', 'Fused spur (FCU)']], r.spurKind === 'fcu' ? 'fcu' : 'socket', nm + ' spur type', (v) => put({ spurKind: v })) : null,
-        h('button', { class: 'btn ghost addin', type: 'button', style: 'width:100%;min-height:48px;margin-top:6px', 'aria-label': 'Add to ' + nm, onclick: () => addTo(r, mode === 'other' ? null : mode, put, 'Add to ' + nm) }, '+ Add to ' + nm)); }));
+        h('button', { class: 'btn ghost addin', type: 'button', style: 'width:100%;min-height:42px;margin-top:4px', 'aria-label': 'Add to ' + nm, onclick: () => addTo(r, mode === 'other' ? null : mode, put, 'Add to ' + nm) }, '+ Add to ' + nm)); }));
     dragRows(list, '.roomcard', moveRoom);
     const addRoom = async () => { const other = otherMap(); const have = l.map((r) => r.name);
       const names = [...new Set([...usedNames(), ...Object.keys(other), ...TICK_ROOMS])].filter((n) => isRoomName(n) && !have.includes(n));
@@ -1002,24 +1004,38 @@ export function chainEditor(c, bcs, onset) {
   const others = bcs.filter((o) => o && o !== c && !isSpareC(o) && String(o.num || '').trim());
   const set = (l) => onset(l);
   const ICON = { sfcu: 'sfcu', fcu: 'fcu', iso: 'iso', shelly: 'shelly', hive: 'hive', timeclock: 'timeclock', other: 'other', km: 'km' };
-  const rows = h('div', { class: 'chainlist' }, list.map((it, i) => { const title = it.k === 'km' ? 'Contactor ' + tagOf(i) : it.k === 'other' ? (it.name || 'Other controller') : CHAIN_KINDS[it.k];
-    const owner = it.k === 'km' ? [...list.slice(0, i)].reverse().find((x) => x.k !== 'km') : null; const under = it.k === 'km' && owner && !CHAIN_SUPPLY[owner.k];
-    const body = [];
-    if (it.k === 'km') {
-      for (const n of it.circuits) { const o = others.find((v) => String(v.num).trim() === n); body.push(h('div', { class: 'ctlpick', style: 'display:flex;align-items:center;gap:6px;min-height:44px' }, h('span', { style: 'flex:1;min-width:0;white-space:normal;word-break:break-word;color:var(--brand,#2952ff);font-weight:600' }, 'Switches circuit ' + n + (o && o.desc ? ' ' + o.desc : '')), smallBtn('\u2715', 'Remove circuit ' + n + ' from ' + title, () => set(list.map((x, j) => (j === i ? { ...x, circuits: x.circuits.filter((v) => v !== n) } : x)))))); }
-      body.push(h('select', { 'aria-label': title + ' switches circuit', style: 'width:100%;min-height:48px;white-space:normal;margin-top:4px', onchange: (e) => { const v = e.target.value; if (v) set(list.map((x, j) => (j === i ? { ...x, circuits: [...x.circuits, v] } : x))); } },
-        h('option', { value: '' }, it.circuits.length ? '+ Another circuit it switches\u2026' : 'Switches circuit\u2026'), others.filter((o) => !it.circuits.includes(String(o.num).trim())).map((o) => h('option', { value: String(o.num).trim() }, String(o.num).trim() + '  ' + (o.desc || 'No description')))));
-      body.push(h('input', { 'aria-label': title + ' label', placeholder: 'Label (optional), e.g. Hot water', style: 'width:100%;min-height:44px;margin-top:4px', value: it.label || '', onchange: (e) => set(list.map((x, j) => (j === i ? { ...x, label: e.target.value.trim() } : x))) }));
-    } else body.push(h('input', { 'aria-label': title + ' name or rating', placeholder: CHAIN_SUPPLY[it.k] ? 'Rating (optional), e.g. 3A' : it.k === 'other' ? 'Name, e.g. Wiser hub' : 'Note (optional)', style: 'width:100%;min-height:44px;margin-top:4px', value: it.name || '', onchange: (e) => set(list.map((x, j) => (j === i ? { ...x, name: e.target.value.trim() } : x))) }));
-    return h('div', { class: 'chainrow', style: 'border:1.5px solid var(--boxline);border-radius:12px;padding:4px 8px 8px;margin:0 0 8px' + (under ? ';margin-left:22px;border-left:4px solid var(--brand,#2952ff)' : '') },
-      h('div', { style: 'display:flex;align-items:center;gap:6px;min-height:48px' }, handle('Drag ' + title), ico(ICON[it.k]), h('b', { style: 'flex:1;min-width:0;white-space:normal;overflow-wrap:break-word;font-size:16px' }, (i + 1) + '. ' + title),
-        smallBtn('\u2715', 'Remove ' + title, () => set(list.filter((_, j) => j !== i)))),
-      list.length > 1 ? h('div', { class: 'moverow', style: 'display:flex;justify-content:flex-end;gap:6px' }, i > 0 ? smallBtn('\u2191', 'Move up ' + title, () => set(moveIn(list, i, i - 1))) : null, i < list.length - 1 ? smallBtn('\u2193', 'Move down ' + title, () => set(moveIn(list, i, i + 1))) : null) : null, ...body); }));
-  dragRows(rows, '.chainrow', (a, b) => set(moveIn(list, a, b)));
+  const nameOf = (it) => (it.k === 'other' ? (it.name || 'Other controller') : CHAIN_KINDS[it.k]);
+  // v0.44.3: groups = a supply item or controller plus the contactors under it, each in ONE box
+  const groups = []; list.forEach((it, i) => { if (it.k === 'km' && groups.length) groups[groups.length - 1].kms.push(i); else groups.push({ i, kms: it.k === 'km' ? [i] : [], lone: it.k === 'km' }); });
+  const span = (g) => [g.lone ? g.kms[0] : g.i, ...(g.lone ? g.kms.slice(1) : g.kms)];
+  const moveGroup = (gi, to) => { const order = moveIn(groups.map((_, k) => k), gi, to); set(order.flatMap((k) => span(groups[k]).map((ix) => list[ix]))); };
+  const edit = (i, patch) => set(list.map((x, j) => (j === i ? { ...x, ...patch } : x)));
+  const inp = (style) => 'width:100%;min-height:40px;margin-top:4px;' + (style || '');
+  const kmRow = (i) => { const it = list[i]; const tag = tagOf(i);
+    return h('div', { class: 'kmrow', style: 'border-top:1px solid var(--boxline);padding:2px 0 6px;margin-top:2px' },
+      h('div', { style: 'display:flex;align-items:center;gap:4px;min-height:42px' }, ico('km'), h('b', { style: 'flex:1;min-width:0;font-size:15px;color:var(--ink)' }, 'Contactor ' + tag),
+        i > 0 ? tinyBtn('\u2191', 'Move up contactor ' + tag, () => set(moveIn(list, i, i - 1))) : null, i < list.length - 1 ? tinyBtn('\u2193', 'Move down contactor ' + tag, () => set(moveIn(list, i, i + 1))) : null,
+        tinyBtn('\u2715', 'Remove contactor ' + tag, () => set(list.filter((_, j) => j !== i)))),
+      ...it.circuits.map((n) => { const o = others.find((v) => String(v.num).trim() === n);
+        return h('div', { class: 'ctlpick', style: 'display:flex;align-items:flex-start;gap:8px;padding:4px 0' },
+          h('span', { class: 'swtxt', style: 'flex:1 1 auto;min-width:0;white-space:normal;overflow-wrap:break-word;color:var(--ink);font-weight:600;font-size:14px;line-height:1.3;padding-top:9px' }, 'Switches circuit ' + n + (o && o.desc ? ' ' + o.desc : '')),
+          tinyBtn('\u2715', 'Remove circuit ' + n + ' from contactor ' + tag, () => edit(i, { circuits: it.circuits.filter((v) => v !== n) }))); }),
+      h('select', { 'aria-label': 'Contactor ' + tag + ' switches circuit', style: inp(), onchange: (e) => { const v = e.target.value; if (v) edit(i, { circuits: [...it.circuits, v] }); } },
+        h('option', { value: '' }, it.circuits.length ? '+ Another circuit it switches' : 'Pick the circuit it switches'), others.filter((o) => !it.circuits.includes(String(o.num).trim())).map((o) => h('option', { value: String(o.num).trim() }, String(o.num).trim() + '  ' + (o.desc || 'No description')))),
+      h('input', { 'aria-label': 'Contactor ' + tag + ' label', placeholder: 'Label (optional), e.g. Hot water', style: inp(), value: it.label || '', onchange: (e) => edit(i, { label: e.target.value.trim() }) })); };
+  const rows = h('div', { class: 'chainlist' }, groups.map((g, gi) => { const it = g.lone ? null : list[g.i]; const title = it ? nameOf(it) : 'Contactor';
+    return h('div', { class: 'chainrow', style: 'border:1.5px solid var(--boxline);border-radius:12px;padding:2px 8px 6px;margin:0 0 8px;background:var(--card,#fff)' },
+      it ? h('div', { style: 'display:flex;align-items:center;gap:4px;min-height:44px' }, handle('Drag ' + title), ico(ICON[it.k]), h('b', { style: 'flex:1;min-width:0;white-space:normal;overflow-wrap:break-word;font-size:15px;color:var(--ink)' }, title),
+        gi > 0 ? tinyBtn('\u2191', 'Move up ' + title, () => moveGroup(gi, gi - 1)) : null, gi < groups.length - 1 ? tinyBtn('\u2193', 'Move down ' + title, () => moveGroup(gi, gi + 1)) : null,
+        tinyBtn('\u2715', 'Remove ' + title, () => set(list.filter((_, j) => j !== g.i)))) : null,
+      it ? h('input', { 'aria-label': title + ' name or rating', placeholder: CHAIN_SUPPLY[it.k] ? 'Rating (optional), e.g. 3A' : it.k === 'other' ? 'Name, e.g. Wiser hub' : 'Note (optional)', style: inp('margin-top:0'), value: it.name || '', onchange: (e) => edit(g.i, { name: e.target.value.trim() }) }) : null,
+      ...g.kms.map(kmRow),
+      it && !CHAIN_SUPPLY[it.k] ? h('button', { class: 'btn ghost addkm', type: 'button', style: 'width:100%;min-height:40px;margin-top:6px', onclick: () => { const at = (g.kms.length ? g.kms[g.kms.length - 1] : g.i) + 1; set([...list.slice(0, at), { k: 'km', circuits: [] }, ...list.slice(at)]); } }, '+ Add contactor to ' + title) : null); }));
+  dragRows(rows, '.chainrow', (a, b) => moveGroup(a, b));
   const add = async () => { const v = await pickTiles('Add to the control circuit', Object.entries(CHAIN_KINDS).map(([k, t]) => [k, t, ICON[k], k === 'km' ? 'Goes under the controller above it' : null])); if (v) set([...list, { k: v, ...(v === 'km' ? { circuits: [] } : {}) }]); };
   return h('div', { class: 'ctled', id: 'ctlrows', style: 'margin-top:10px' },
     h('b', { style: 'display:block;font-size:17px' }, 'Control circuit, in wiring order'),
-    h('p', { class: 'note', style: 'margin:2px 0 8px' }, 'Top is nearest the breaker. A contactor belongs to the controller above it. Use \u2191 \u2193 or drag \u2261 to move.'),
+    h('p', { class: 'note', style: 'margin:2px 0 8px' }, 'Top is nearest the breaker. Each controller has its own box with its contactors. Use \u2191 \u2193 or drag \u2261 to move.'),
     list.length ? rows : h('p', { class: 'note' }, 'Nothing added yet.'),
-    h('button', { class: 'btn addctl', type: 'button', style: 'width:100%;min-height:52px', onclick: add }, '+ Add'));
+    h('button', { class: 'btn addctl', type: 'button', style: 'width:100%;min-height:48px', onclick: add }, '+ Add'));
 }
