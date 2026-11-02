@@ -14,6 +14,7 @@ import { TYPES, newCert, sectionsFor, sectionDone, missingFields, visible, get, 
 import { INTAKE_NOTE_10, INTAKE_NOTES, INTAKE_NOTIFIED, migrateIntake, EIC_ITEMS, EIC_OUTCOMES, EICR_ITEMS, EICR_OUTCOMES, CODE_TEXT, OBSERVATIONS, OBS_CATS, EIC_HELP, EICR_HELP } from './inspections.js';
 import { checkCircuit, isSpare } from './checks.js';
 import { CHECK_NOTE } from './limits.js';
+import { ITEM_KINDS, itemRoomsOf } from './wiring.js';
 import { diagramSvg, diagramInPdf, diagramHasCircuits, SPUR_FEEDS, CONTROL_VIA, switchInfo, roomListOf, roomPointsNote, socketRoomsOf, roomPointTotal, pointKind, socketSingles, arrangedOrder, feedInfo, ISOLATORS } from './wiring.js';
 import { limitOn, limitBar } from './limitbar.js';
 import { circuitReadings, makeTemplate, applyTemplate, nextRoom, tidyLayouts, BUILTIN_TEMPLATES, TEMPLATE_KEY } from './diagrampro.js';
@@ -287,7 +288,7 @@ function extrasCard(cert, redraw) {
   const all = cert.type === 'MW' ? (cert.mw.circuit ? [cert.mw.circuit] : []) : (cert.boards || []).flatMap((b) => b.circuits || []);
   const live = all.filter((c) => c && !isSpareC(c));
   const name = (c) => `${c.num || '?'}  ${c.desc || 'No description'}`;
-  const nset = live.filter((c) => c.diagram && (c.diagram.rooms || (c.diagram.roomList || []).length || ['sw1', 'sw2', 'swi', 'singles', 'isolator'].some((k) => c.diagram[k] !== undefined && c.diagram[k] !== ''))).length;
+  const nset = live.filter((c) => c.diagram && (c.diagram.rooms || (c.diagram.roomList || []).length || ['sw1', 'sw2', 'swi', 'singles', 'isolator', 'items'].some((k) => c.diagram[k] !== undefined && c.diagram[k] !== ''))).length;
   const body = h('div', { id: 'extrasrows' });
   const save = (c, k, v) => { const d = { ...(c.diagram || {}) }; if (v === '' || v == null) delete d[k]; else d[k] = v; if (Object.keys(d).length) c.diagram = d; else delete c.diagram; changed(); redraw(); };
   const key = cert.id || 'x';
@@ -308,9 +309,12 @@ function extrasCard(cert, redraw) {
         h('div', { class: 'foldin' }, h('label', { class: 'f' }, h('span', {}, 'Rooms (text)'), h('input', { placeholder: 'e.g. Kitchen, Hall', 'aria-label': 'Rooms, circuit ' + (c.num || ''), value: d.rooms || '', onchange: (e) => save(c, 'rooms', e.target.value.trim()) })),
           h('div', { style: 'display:flex;gap:8px' }, numIn('sw1', '1-way'), numIn('sw2', '2-way pairs'), numIn('swi', 'Intermediate')))) : null,
       pointKind(c) === 'socket' ? roomsEditor(c, redraw, () => jobRoomNames(all, c), () => roomsOnOtherCircuits(all, c), 'socket') : null, // v0.43.5: rooms on rings and radials
-      !isLight && (pointKind(c) !== 'socket' || (d.rooms && !socketRoomsOf(c))) ? h('label', { class: 'f' }, h('span', {}, 'Rooms'), h('input', { placeholder: 'e.g. Kitchen, Hall', 'aria-label': 'Rooms, circuit ' + (c.num || ''), value: d.rooms || '', onchange: (e) => save(c, 'rooms', e.target.value.trim()) })) : null,
+      !isLight && pointKind(c) !== 'socket' ? roomsEditor(c, redraw, () => jobRoomNames(all, c), () => roomsOnOtherCircuits(all, c), 'other') : null, // v0.44.0: room tick boxes on every circuit
+      !isLight && ((pointKind(c) === 'socket' && d.rooms && !socketRoomsOf(c)) || (pointKind(c) !== 'socket' && d.rooms && !itemRoomsOf(c))) ? h('label', { class: 'f' }, h('span', {}, 'Rooms'), h('input', { placeholder: 'e.g. Kitchen, Hall', 'aria-label': 'Rooms, circuit ' + (c.num || ''), value: d.rooms || '', onchange: (e) => save(c, 'rooms', e.target.value.trim()) })) : null,
       pointKind(c) === 'socket' && !socketRoomsOf(c) ? singlesRow(c, save) : null,
-      isolatorRow(c, save)]);
+      isolatorRow(c, save),
+      h('b', { style: 'display:block;margin:10px 0 0' }, 'Other items on this circuit'), h('p', { class: 'note', style: 'margin:2px 0 0' }, 'Anything not in a room, e.g. a Shelly relay on a control circuit.'),
+      itemsEditor(d.items, 'circuit ' + (c.num || ''), (m) => { save(c, 'items', Object.keys(m).length ? m : ''); drawOne(); })]);
   };
   const pick = h('select', { id: 'extrascircuit', 'aria-label': 'Circuit', style: 'width:100%;white-space:normal', onchange: (e) => { pickedCircuit.set(key, +e.target.value); arranging = false; drawOne(); } },
     live.map((c, i) => h('option', { value: String(i), selected: i === pickedCircuit.get(key) ? true : null }, name(c) + (c.diagram && (c.diagram.roomList || []).length ? ` (${c.diagram.roomList.length} room${c.diagram.roomList.length === 1 ? '' : 's'})` : ''))));
@@ -324,7 +328,7 @@ function extrasCard(cert, redraw) {
   drawOne();
   fill(body, [h('p', { class: 'note', style: 'margin:4px 0 8px' }, 'Optional. Pick a circuit, then add its rooms. Lighting circuits get one 1-way switch unless you set them here.'),
     h('label', { class: 'f' }, h('span', {}, 'Circuit'), pick), navRow, one]);
-  return h('div', { class: 'card', id: 'extrascard' }, h('details', { class: 'fold' }, h('summary', {}, h('span', { class: 'foldt' }, 'Switches and rooms', h('span', { class: 'folds' }, 'Light switches, rooms, sockets, isolators')), nset ? h('span', { class: 'fbadge' }, `${nset} set`) : null, h('span', { class: 'foldic' }, '\u203a')), h('div', { class: 'foldin' }, body)));
+  return h('div', { class: 'card', id: 'extrascard' }, h('details', { class: 'fold' }, h('summary', {}, h('span', { class: 'foldt' }, 'Switches and rooms', h('span', { class: 'folds' }, 'Light switches, rooms, sockets, isolators, other items')), nset ? h('span', { class: 'fbadge' }, `${nset} set`) : null, h('span', { class: 'foldic' }, '\u203a')), h('div', { class: 'foldin' }, body)));
 }
 
 // v0.41 (test): saved diagram templates (app settings, not the certificate).
@@ -426,8 +430,21 @@ export function roomsOnOtherCircuits(all, except) {
   return m;
 }
 export const isRoomName = (n) => { const t = String(n ?? '').trim(); return t.length > 0 && t.length <= 40 && /[a-z]/i.test(t); };
-export function defaultRoom(name, wiring = 'loop-in', mode = 'light') { return mode === 'socket' ? { name, sockets: 2 } : { name, lights: 1, sw1: 1, sw2pairs: 0, swi: 0, wiring }; }
-export function roomIsDefault(r, wiring = 'loop-in', mode = 'light') { if (mode === 'socket') return String(r.sockets ?? '') === '2' && !(+r.spurs > 0) && !(+r.singles > 0) && !(+r.dpsw > 0) && !(+r.dpsws > 0) && !(+r.unsw > 0); const d = defaultRoom(r.name, wiring); return !(+r.fans > 0) && ['lights', 'sw1', 'sw2pairs', 'swi', 'wiring'].every((k) => String(r[k] ?? '') === String(d[k])); }
+const noItems = (r) => !(r && r.items && Object.values(r.items).some((n) => +n > 0));
+export function defaultRoom(name, wiring = 'loop-in', mode = 'light') { return mode === 'other' ? { name } : mode === 'socket' ? { name, sockets: 2 } : { name, lights: 1, sw1: 1, sw2pairs: 0, swi: 0, wiring }; }
+export function roomIsDefault(r, wiring = 'loop-in', mode = 'light') { if (!noItems(r)) return false; if (mode === 'other') return true; if (mode === 'socket') return String(r.sockets ?? '') === '2' && !(+r.spurs > 0) && !(+r.singles > 0) && !(+r.dpsw > 0) && !(+r.dpsws > 0) && !(+r.unsw > 0); const d = defaultRoom(r.name, wiring); return !(+r.fans > 0) && ['lights', 'sw1', 'sw2pairs', 'swi', 'wiring'].every((k) => String(r[k] ?? '') === String(d[k])); }
+// v0.44.0: add any item (sockets, FCUs, lights, fans, contactors, Shelly ...) to a room or a circuit. items = { kind: count }
+export function cleanItems(m) { const o = {}; for (const k of Object.keys(ITEM_KINDS)) { const n = Math.max(0, Math.min(10, parseInt(m && m[k], 10) || 0)); if (n) o[k] = n; } return o; }
+export function itemsEditor(cur, label, onset) {
+  const m = cleanItems(cur);
+  const step = (k) => { const out = h('span', { class: 'stepval', style: 'min-width:1.4em;text-align:center;font-weight:700' }, String(m[k]));
+    const b = (t, dv, a) => h('button', { class: 'stepbtn', type: 'button', style: 'width:40px;height:40px;min-width:40px;padding:0', 'aria-label': label + ' ' + ITEM_KINDS[k] + ', one ' + a, onclick: () => onset(cleanItems({ ...m, [k]: (m[k] || 0) + dv })) }, t);
+    return h('div', { class: 'rstep', style: 'display:flex;align-items:center;gap:4px;flex:none' }, b('\u2212', -1, 'fewer'), out, b('+', 1, 'more')); };
+  return h('div', { class: 'itemsed', style: 'margin-top:6px' },
+    Object.keys(m).map((k) => h('div', { class: 'itemrow', style: 'display:flex;align-items:center;gap:8px;min-height:44px' }, h('span', { style: 'flex:1;min-width:0;white-space:normal;word-break:break-word;font-size:14px' }, ITEM_KINDS[k]), step(k))),
+    h('select', { class: 'additem', 'aria-label': 'Add an item, ' + label, style: 'width:100%;min-height:44px;white-space:normal;margin-top:4px', onchange: (e) => { const k = e.target.value; if (k) onset(cleanItems({ ...m, [k]: (m[k] || 0) + 1 })); } },
+      h('option', { value: '' }, '+ Add an item\u2026'), Object.entries(ITEM_KINDS).map(([k, t]) => h('option', { value: k }, t))));
+}
 function roomsEditor(c, redraw, usedNames = () => [], otherMap = () => ({}), mode = 'light') {
   const box = h('div', { class: 'roomsed', style: 'margin:8px 0 4px' });
   const list = () => (c.diagram && Array.isArray(c.diagram.roomList) ? c.diagram.roomList : []);
@@ -444,7 +461,7 @@ function roomsEditor(c, redraw, usedNames = () => [], otherMap = () => ({}), mod
     const extra = names.filter((n) => n && !TICK_ROOMS.includes(n) && !job.includes(n));
     const tick = async (n) => { const i = names.indexOf(n);
       if (i < 0) { store([...list(), defaultRoom(n, defW(), mode)]); draw(); return; }
-      const r = l[i]; if (!roomIsDefault(r, defW(), mode)) { const ok = await modal('Remove ' + n + '?', h('p', { class: 'note' }, mode === 'socket' ? 'Its sockets, spurs and DP switches will be cleared.' : 'Its lights, switches and wiring will be cleared.'), [{ label: 'Keep', value: false }, { label: 'Remove', value: true, cls: 'primary' }]); if (!ok) return; }
+      const r = l[i]; if (!roomIsDefault(r, defW(), mode)) { const ok = await modal('Remove ' + n + '?', h('p', { class: 'note' }, mode === 'other' ? 'Its items will be cleared.' : mode === 'socket' ? 'Its sockets, spurs and DP switches will be cleared.' : 'Its lights, switches and wiring will be cleared.'), [{ label: 'Keep', value: false }, { label: 'Remove', value: true, cls: 'primary' }]); if (!ok) return; }
       store(list().filter((x) => x.name !== n)); draw(); };
     const seg1 = (opts, cur, label, pick) => h('div', { class: 'seg1', role: 'group', 'aria-label': label, style: 'display:flex;align-items:stretch;margin-top:6px;padding:0;border:1px solid var(--line);border-radius:10px;overflow:hidden' },
       opts.map(([v, t, aria], j) => h('button', { type: 'button', class: 'segb' + (v === cur ? ' on' : ''), 'aria-pressed': String(v === cur), 'aria-label': aria || t, style: 'flex:1 1 0;min-width:0;min-height:40px;padding:4px 2px;font-size:14px;font-weight:600;white-space:normal;line-height:1.1;border:0;' + (j ? 'border-left:1px solid var(--line);' : '') + (v === cur ? 'background:var(--brand,#2952ff);color:#fff' : 'background:transparent;color:inherit'), onclick: () => pick(v) }, t)));
@@ -454,6 +471,8 @@ function roomsEditor(c, redraw, usedNames = () => [], otherMap = () => ({}), mod
       return h('div', { class: 'rstep', style: 'display:flex;align-items:center;gap:4px' }, b('\u2212', -1, 'fewer'), out, b('+', 1, 'more')); };
     const roomRow = (r) => { const i = list().findIndex((x) => x.name === r.name);
       const upd = (patch, again = false) => { const nl = list().map((x, j) => (j === i ? { ...x, ...patch } : x)); store(nl); if (again) draw(); };
+      const setItems = (m) => upd({ items: Object.keys(m).length ? m : undefined }, true);
+      if (mode === 'other') return h('div', { class: 'roomrow otherrow', style: 'border:1px solid var(--line);border-radius:10px;padding:6px 8px;margin:0 0 8px' }, itemsEditor(r.items, r.name, setItems));
       if (mode === 'socket') { const grp = (t, el) => h('div', { style: 'display:flex;align-items:center;gap:3px;min-width:0' }, h('span', { style: 'font-size:13px' }, t), el); // v0.43.5: sockets (doubles) and optional spurs
         return h('div', { class: 'roomrow sockrow', style: 'border:1px solid var(--line);border-radius:10px;padding:6px 8px;margin:0 0 8px' },
           h('div', { style: 'display:flex;flex-wrap:wrap;gap:4px 12px;align-items:center;justify-content:space-between' },
@@ -464,7 +483,8 @@ function roomsEditor(c, redraw, usedNames = () => [], otherMap = () => ({}), mod
             grp('DP + skt', mini(+r.dpsw || 0, r.name + ' DP switch with unswitched socket', (n) => upd({ dpsw: n }), 0, 4)),
             grp('DP + sw skt', mini(+r.dpsws || 0, r.name + ' DP switch with switched socket', (n) => upd({ dpsws: n }), 0, 4)),
             i > 0 ? h('button', { type: 'button', class: 'linkbtn copylast', 'aria-label': 'Copy last room into ' + r.name, style: 'background:none;border:0;padding:8px 2px;min-height:40px;color:var(--brand,#2952ff);font-weight:600;font-size:14px', onclick: () => { const p = list()[i - 1]; const cp = {}; for (const f of ['sockets', 'singles', 'spurs', 'spurKind', 'dpsw', 'dpsws', 'unsw']) cp[f] = p[f]; upd(cp, true); toast('Copied from ' + p.name); } }, 'Copy last room') : null),
-          +r.spurs > 0 ? seg1([['socket', 'Single socket'], ['fcu', 'FCU', 'Fused spur (FCU)']], r.spurKind === 'fcu' ? 'fcu' : 'socket', r.name + ' spur type', (v) => upd({ spurKind: v }, true)) : null); }
+          +r.spurs > 0 ? seg1([['socket', 'Single socket'], ['fcu', 'FCU', 'Fused spur (FCU)']], r.spurKind === 'fcu' ? 'fcu' : 'socket', r.name + ' spur type', (v) => upd({ spurKind: v }, true)) : null,
+          itemsEditor(r.items, r.name, setItems)); }
       const k = swKind(r);
       const swCount = k === 'sw1' ? ['1-way', '1-way switches', +r.sw1 || 1, (n) => upd({ sw1: n }), 1, 4] : k === 'sw2' ? ['Pairs', '2-way pairs', +r.sw2pairs || 1, (n) => upd({ sw2pairs: n }), 1, 3] : k === 'sw2i' ? ['Int', 'Intermediates', +r.swi || 1, (n) => upd({ swi: n }), 1, 4] : null;
       const grp = (t, el) => h('div', { style: 'display:flex;align-items:center;gap:6px' }, h('span', { style: 'font-size:14px' }, t), el);
@@ -477,7 +497,8 @@ function roomsEditor(c, redraw, usedNames = () => [], otherMap = () => ({}), mod
           i > 0 ? h('button', { type: 'button', class: 'linkbtn copylast', 'aria-label': 'Copy last room into ' + r.name, style: 'background:none;border:0;padding:8px 2px;min-height:40px;color:var(--brand,#2952ff);font-weight:600;font-size:14px', onclick: () => { const p = list()[i - 1]; const cp = {}; for (const f of ['lights', 'sw1', 'sw2pairs', 'swi', 'wiring', 'fans', 'fanCtl', 'split']) if (p[f] !== undefined) cp[f] = Array.isArray(p[f]) ? [...p[f]] : p[f]; else cp[f] = undefined; upd(cp, true); toast('Copied from ' + p.name); } }, 'Copy last room') : null),
         seg1([['sw1', '1-way'], ['sw2', '2-way'], ['sw2i', '2W+int', '2-way + intermediate'], ['none', 'None']], k, r.name + ' switch type', (v) => upd(v === 'sw1' ? { sw1: Math.max(1, +r.sw1 || 1), sw2pairs: 0, swi: 0 } : v === 'sw2' ? { sw1: 0, sw2pairs: Math.max(1, +r.sw2pairs || 1), swi: 0 } : v === 'sw2i' ? { sw1: 0, sw2pairs: Math.max(1, +r.sw2pairs || 1), swi: Math.max(1, +r.swi || 1) } : { sw1: 0, sw2pairs: 0, swi: 0 }, true)),
         seg1([['loop-in', 'Loop-in'], ['junction box', 'JB', 'Junction box'], ['jb-switch', 'JB\u2192sw', 'JB to switch']], ['junction box', 'jb-switch'].includes(r.wiring) ? r.wiring : 'loop-in', r.name + ' wiring', (v) => upd({ wiring: v }, true)),
-        +r.fans > 0 ? seg1([['humidistat', 'Humidistat'], ['timer', 'Timer', 'Timer (overrun)'], ['switch', 'Light sw', 'Light switch'], ['isolator', 'Isolator', 'Isolator only']], r.fanCtl || 'humidistat', r.name + ' fan control', (v) => upd({ fanCtl: v }, true)) : null); };
+        +r.fans > 0 ? seg1([['humidistat', 'Humidistat'], ['timer', 'Timer', 'Timer (overrun)'], ['switch', 'Light sw', 'Light switch'], ['isolator', 'Isolator', 'Isolator only']], r.fanCtl || 'humidistat', r.name + ' fan control', (v) => upd({ fanCtl: v }, true)) : null,
+        itemsEditor(r.items, r.name, setItems)); };
     const tickRow = (n) => { const on = names.includes(n); const elsewhere = other[n];
       return [h('label', { class: 'roomtick', style: 'display:flex;align-items:center;gap:10px;min-height:48px;padding:4px 2px;border-top:1px solid var(--line)' + (elsewhere && !on ? ';color:#9aa0aa' : '') },
         h('input', { type: 'checkbox', checked: on ? true : null, 'aria-label': n, style: 'width:24px;height:24px;flex:none', onchange: (e) => { e.target.checked = on; tick(n); } }),
