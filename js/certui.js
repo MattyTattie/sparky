@@ -15,7 +15,7 @@ import { INTAKE_NOTE_10, INTAKE_NOTES, INTAKE_NOTIFIED, migrateIntake, EIC_ITEMS
 import { checkCircuit, isSpare } from './checks.js';
 import { CHECK_NOTE } from './limits.js';
 import { ITEM_KINDS, itemRoomsOf, isControlCircuit, chainOf, migrateChain, kmNumbers, CHAIN_KINDS, CHAIN_SUPPLY, iconSvg, itemsOf } from './wiring.js';
-import { diagramSvg, diagramInPdf, diagramHasCircuits, SPUR_FEEDS, CONTROL_VIA, switchInfo, roomListOf, roomPointsNote, socketRoomsOf, roomPointTotal, pointKind, socketSingles, arrangedOrder, feedInfo, ISOLATORS } from './wiring.js';
+import { diagramSvg, diagramInPdf, diagramHasCircuits, SPUR_FEEDS, CONTROL_VIA, switchInfo, roomListOf, roomPointsNote, socketRoomsOf, roomPointTotal, pointKind, socketSingles, arrangedOrder, feedInfo, ISOLATORS, guessedItems } from './wiring.js';
 import { limitOn, limitBar } from './limitbar.js';
 import { circuitReadings, makeTemplate, applyTemplate, nextRoom, tidyLayouts, BUILTIN_TEMPLATES, TEMPLATE_KEY } from './diagrampro.js';
 import { dangerCodes, noticeForObs, noticesOf, noticeMissing, noticeNo } from './dangermodel.js';
@@ -298,9 +298,10 @@ function extrasCard(cert, redraw) {
     const c = live[pickedCircuit.get(key)]; if (!c) { fill(one, []); return; }
     const bcs = cert.type === 'MW' ? all : ((cert.boards || []).find((b) => (b.circuits || []).includes(c)) || {}).circuits || all;
     const ctlC = isControlCircuit(c, bcs); if (ctlC && !Array.isArray((c.diagram || {}).chain)) { migrateChain(c, bcs); changed(); redraw(); } // v0.44.2: one ordered list
+    if (!ctlC) { const g = guessedItems(c); if (g) { c.diagram = { ...(c.diagram || {}), ...g }; changed(); redraw(); } } // v0.44.4: no hidden guesses: what the name implies becomes real, editable items
     const d = c.diagram || {}; const isLight = switchInfo(c) !== null && !ctlC;
     const si = isLight ? switchInfo(c) : null;
-    const ins = {}; const cur = { sw1: si ? String(si.list.filter((x) => x === 'sw1').length) : '1', sw2: si ? String(si.list.filter((x) => x === 'sw2').length / 2) : '0', swi: si ? String(si.list.filter((x) => x === 'swi').length) : '0' };
+    let isoSum = null; const ins = {}; const cur = { sw1: si ? String(si.list.filter((x) => x === 'sw1').length) : '1', sw2: si ? String(si.list.filter((x) => x === 'sw2').length / 2) : '0', swi: si ? String(si.list.filter((x) => x === 'swi').length) : '0' };
     const numIn = (k, label) => h('label', { class: 'f', style: 'flex:1;min-width:0' }, h('span', {}, label), ins[k] = h('input', { type: 'number', min: '0', max: '10', inputmode: 'numeric', 'aria-label': label + ', circuit ' + (c.num || ''), value: cur[k], onchange: () => { for (const o of ['sw1', 'sw2', 'swi']) { const n = Math.max(0, Math.min(10, parseInt(ins[o].value, 10) || 0)); ins[o].value = String(n); save(c, o, String(n)); } } }));
     fill(one, [h('b', { class: 'pickname', style: 'display:block;margin:8px 0 4px;word-break:break-word;white-space:normal' }, name(c)),
       isLight && arranging ? arrangeRooms(c, redraw, () => { arranging = false; drawOne(); }) : null,
@@ -313,7 +314,7 @@ function extrasCard(cert, redraw) {
           h('div', { style: 'display:flex;gap:8px' }, numIn('sw1', '1-way'), numIn('sw2', '2-way pairs'), numIn('swi', 'Intermediate')))) : null,
       !isLight && !ctlC && ((pointKind(c) === 'socket' && d.rooms && !socketRoomsOf(c)) || (pointKind(c) !== 'socket' && d.rooms && !itemRoomsOf(c))) ? h('label', { class: 'f' }, h('span', {}, 'Rooms'), h('input', { placeholder: 'e.g. Kitchen, Hall', 'aria-label': 'Rooms, circuit ' + (c.num || ''), value: d.rooms || '', onchange: (e) => save(c, 'rooms', e.target.value.trim()) })) : null,
       pointKind(c) === 'socket' && !socketRoomsOf(c) && !ctlC ? singlesRow(c, save) : null,
-      ctlC ? null : h('details', { class: 'fold', style: 'margin-top:8px' }, h('summary', {}, h('span', { class: 'foldt' }, 'Local isolator', h('span', { class: 'folds' }, d.isolator && d.isolator.type ? ISOLATORS[d.isolator.type] || 'Set' : 'None')), h('span', { class: 'foldic' }, '\u203a')), h('div', { class: 'foldin' }, isolatorRow(c, save)))]);
+      ctlC ? null : h('details', { class: 'fold', style: 'margin-top:8px' }, h('summary', {}, h('span', { class: 'foldt' }, 'Local switch / isolator', isoSum = h('span', { class: 'folds', id: 'isosum-' + (c.num || '') }, isoSummary(d.isolator))), h('span', { class: 'foldic' }, '\u203a')), h('div', { class: 'foldin' }, isolatorRow(c, save, (v) => { isoSum.textContent = isoSummary(v); })))]);
   };
   const pick = h('select', { id: 'extrascircuit', 'aria-label': 'Circuit', style: 'width:100%;white-space:normal', onchange: (e) => { pickedCircuit.set(key, +e.target.value); arranging = false; drawOne(); } },
     live.map((c, i) => h('option', { value: String(i), selected: i === pickedCircuit.get(key) ? true : null }, name(c) + (c.diagram && (c.diagram.roomList || []).length ? ` (${c.diagram.roomList.length} room${c.diagram.roomList.length === 1 ? '' : 's'})` : ''))));
@@ -363,13 +364,15 @@ function singlesRow(c, save) {
     h('p', { class: 'note', style: 'margin:2px 0 0' }, 'Sockets draw as twins. Set how many are singles.'));
 }
 // v0.43 (test): optional local isolator by the load (circuit.diagram.isolator = { type, rating }).
-function isolatorRow(c, save) {
+// v0.44.4: header summary, e.g. 'Switched FCU 13A' (was stuck on 'None' until a full redraw)
+export function isoSummary(i) { if (!i || !i.type) return 'None'; const t = ISOLATORS[i.type] || 'Set'; const r = String(i.rating || '').trim(); return r ? t + ' ' + r : t; }
+function isolatorRow(c, save, onSet) {
   const cur = (c.diagram && c.diagram.isolator) || {};
-  const sel = h('select', { id: 'isotype-' + (c.num || ''), 'aria-label': 'Local isolator, circuit ' + (c.num || ''), style: 'width:100%;white-space:normal', onchange: () => put() },
+  const sel = h('select', { id: 'isotype-' + (c.num || ''), 'aria-label': 'Local switch / isolator, circuit ' + (c.num || ''), style: 'width:100%;white-space:normal', onchange: () => put() },
     [h('option', { value: '' }, 'None'), ...Object.entries(ISOLATORS).map(([k, v]) => h('option', { value: k, selected: cur.type === k ? true : null }, v))]);
-  const rt = h('input', { id: 'isorating-' + (c.num || ''), placeholder: 'Rating (optional), e.g. 20A', 'aria-label': 'Isolator rating, circuit ' + (c.num || ''), value: cur.rating || '', onchange: () => put() });
-  const put = () => save(c, 'isolator', sel.value ? { type: sel.value, ...(rt.value.trim() ? { rating: rt.value.trim() } : {}) } : '');
-  return h('div', { class: 'isorow', style: 'margin-top:8px' }, h('label', { class: 'f' }, h('span', {}, 'Local isolator'), sel), h('label', { class: 'f' }, h('span', {}, 'Isolator rating'), rt),
+  const rt = h('input', { id: 'isorating-' + (c.num || ''), placeholder: 'Rating (optional), e.g. 20A', 'aria-label': 'Isolator rating, circuit ' + (c.num || ''), value: cur.rating || '', onchange: () => put(), oninput: () => { if (onSet) onSet(sel.value ? { type: sel.value, rating: rt.value } : ''); } });
+  const put = () => { const v = sel.value ? { type: sel.value, ...(rt.value.trim() ? { rating: rt.value.trim() } : {}) } : ''; save(c, 'isolator', v); if (onSet) onSet(v); };
+  return h('div', { class: 'isorow', style: 'margin-top:8px' }, h('label', { class: 'f' }, h('span', {}, 'Type'), sel), h('label', { class: 'f' }, h('span', {}, 'Rating'), rt),
     h('p', { class: 'note', style: 'margin:2px 0 0' }, 'The switch by the load, e.g. a 20 A DP switch next to an immersion. Drawn just before the load.'));
 }
 const SW_KIND = { sw1: '1-way', sw2: '2-way', sw2i: '2-way + intermediate', none: 'No switch' };
@@ -902,8 +905,8 @@ export function pickTiles(title, opts) {
     const close = (v) => { bg.remove(); res(v); };
     const bg = h('div', { class: 'modal-bg', onclick: (e) => { if (e.target === bg) close(null); } },
       h('div', { class: 'modal picker', role: 'dialog', style: 'max-height:85vh;overflow:auto' }, h('h3', {}, title),
-        h('div', { class: 'tiles', style: 'display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px' }, opts.map(([v, label, icon, note]) => h('button', { type: 'button', class: 'tile', 'data-v': v, style: 'display:grid;grid-template-columns:36px minmax(0,1fr);align-items:center;gap:8px;width:100%;min-height:60px;padding:6px 8px;text-align:left;white-space:normal;border:1.5px solid #dfe3ec;border-radius:14px;background:#fff;color:inherit;font:inherit', onclick: () => close(v) },
-          icon ? ico(icon) : h('span', {}), h('span', { style: 'display:block;min-width:0;overflow-wrap:break-word;font-size:15px;font-weight:600;line-height:1.2' }, label, note ? h('span', { class: 'note', style: 'display:block;margin:0;font-size:12px' }, note) : null)))),
+        h('div', { class: 'tiles', style: 'display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px' }, opts.map(([v, label, icon, note]) => h('button', { type: 'button', class: 'tile', 'data-v': v, style: 'display:grid;grid-template-columns:36px minmax(0,1fr);align-items:center;gap:8px;width:100%;min-height:60px;padding:6px 8px;text-align:left;white-space:normal;border-radius:14px;font:inherit', onclick: () => close(v) },
+          icon ? ico(icon) : h('span', {}), h('span', { style: 'display:block;min-width:0;overflow-wrap:break-word;font-size:15px;font-weight:600;line-height:1.2' }, label, note ? h('span', { class: 'note tnote', style: 'display:block;margin:0;font-size:12px' }, note) : null)))),
         h('div', { class: 'btns full' }, h('button', { class: 'btn', type: 'button', onclick: () => close(null) }, 'Cancel'))));
     document.body.append(bg);
   });
@@ -946,9 +949,9 @@ function linesFor(o, mode, label, put, after = {}) { // v0.44.3: after[f] = a co
   const its = itemsOf(o); const keys = its.map(([k]) => k);
   const setOrd = (ks) => ({ itemOrder: ks.length > 1 ? ks : undefined });
   its.forEach(([k, n], i) => out.push(itemLine({ icon: ITEM_ICON(k), label: ITEM_KINDS[k], n, aria: label + ' ' + ITEM_KINDS[k],
-    onN: (v) => { const m = { ...(o.items || {}) }; if (v) m[k] = v; else delete m[k]; put({ items: Object.keys(m).length ? m : undefined, ...setOrd(keys.filter((x) => m[x])) }); },
+    onN: (v) => { const m = { ...(o.items || {}) }; if (v) m[k] = v; else delete m[k]; put({ items: m, ...setOrd(keys.filter((x) => m[x])) }); },
     onUp: i > 0 ? () => put(setOrd(moveIn(keys, i, i - 1))) : null, onDown: i < keys.length - 1 ? () => put(setOrd(moveIn(keys, i, i + 1))) : null,
-    onX: () => { const m = { ...(o.items || {}) }; delete m[k]; put({ items: Object.keys(m).length ? m : undefined, ...setOrd(keys.filter((x) => x !== k)) }); } })));
+    onX: () => { const m = { ...(o.items || {}) }; delete m[k]; put({ items: m, ...setOrd(keys.filter((x) => x !== k)) }); } })));
   return out;
 }
 async function addTo(o, mode, put, title) {

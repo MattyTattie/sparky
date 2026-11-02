@@ -16,7 +16,7 @@ test('immersion with contactor and 20A DP draws label, key, screen and PDF', () 
   hw.diagram = { ...(hw.diagram || {}), isolator: { type: 'dp20' } };
   for (const o of [{ W: 380, font: 12, screen: true }, { W: 560, font: 11 }]) {
     const t = texts(layout(diagramModel(c), o));
-    assert.ok(t.includes('20A DP')); assert.ok(t.some((x) => /^Local isolator/.test(x))); assert.ok(t.includes('KM1'));
+    assert.ok(t.includes('20A DP')); assert.ok(t.some((x) => /^Local switch \/ isolator/.test(x))); assert.ok(t.includes('KM1'));
   }
   const before = JSON.stringify(diagramEICSwitches()); assert.ok(!before.includes('isolator'), 'sample unchanged');
 });

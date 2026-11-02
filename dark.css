@@ -378,3 +378,7 @@ html.dark .card h2, html.dark h2.sec, html.dark .ans-k, html.dark .ringhd, html.
 html.dark .banner.info { background: var(--brandbg) !important; border-color: #2f3c6e !important; color: #cdd6ff !important; }
 
 html.dark .pico { background: #fff; border-radius: 6px; } /* v0.44.3: symbols are drawn in ink, keep them readable */
+/* v0.44.4: Add-to-circuit picker tiles = compact dark boxes, white text */
+html.dark .modal.picker .tile { background: #1d2230 !important; color: #fff !important; border: 1.5px solid #5a6884 !important; }
+html.dark .modal.picker .tile .tnote { color: #c9d0de !important; }
+html.dark .modal.picker .tile:active { background: #2a3350 !important; }

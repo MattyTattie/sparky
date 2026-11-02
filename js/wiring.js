@@ -95,17 +95,29 @@ const KIND_PLURAL = { heater: 'heaters', socket: 'sockets', light: 'lights', coo
 const KIND_ONE = { heater: 'heater', socket: 'socket', light: 'light', cooker: 'cooker', shower: 'shower', alarm: 'alarm', immersion: 'immersion', ev: 'EV charger', fan: 'fan', fcu: 'FCU', sfcu: 'SFCU', km: 'contactor', shelly: 'Shelly relay', flex: 'flex outlet', appliance: 'fixed appliance', point: 'point' };
 // Optional per-circuit diagram extras: circuit.diagram = { rooms, sw1, sw2, swi }.
 // Old certs have none; a lighting circuit then gets one 1-way switch.
-const KEY_EXTRA = { ipsock: 'Outdoor socket, weatherproof (IP rated)', fanh: 'Humidistat (%RH) switching a fan', fant: 'Fan timer / overrun (T)', fani: 'Fan isolator', heater: 'Heater / radiator', tailblock: 'Meter tail connector block', swfuse: 'Switch fuse / isolator (supplying a board)', jbsw: 'Switch-fed: JB to switch, looped switch to switch, each to its own lights', socket: 'Twin socket (switched)', socketu: 'Twin socket (unswitched)', socket1: 'Single socket (switched)', socket1u: 'Single socket (unswitched)', rose: 'Ceiling rose (loop-in)', jb: 'Junction box (JB)', strap: '2-way strappers (two wires)', iso: 'Local isolator: DP switch', fcu: 'Unswitched fused connection unit (FCU)', isofcu: 'Unswitched fused connection unit (FCU)', isosfcu: 'Switched fused connection unit (SFCU)', isofcux: 'Unswitched fused connection unit (FCU) with flex outlet', isosfcux: 'Switched fused connection unit (SFCU) with flex outlet', isoccu: 'Cooker control unit (CCU): 45 A DP switch with a 13 A socket', dpu: 'DP switch in the ring, spurring an unswitched single socket (washer, dishwasher etc.)', dps: 'DP switch in the ring, spurring a switched single socket' };
+const KEY_EXTRA = { ipsock: 'Outdoor socket, weatherproof (IP rated)', fanh: 'Humidistat (%RH) switching a fan', fant: 'Fan timer / overrun (T)', fani: 'Fan isolator', heater: 'Heater / radiator', tailblock: 'Meter tail connector block', swfuse: 'Switch fuse / isolator (supplying a board)', jbsw: 'Switch-fed: JB to switch, looped switch to switch, each to its own lights', socket: 'Twin socket (switched)', socketu: 'Twin socket (unswitched)', socket1: 'Single socket (switched)', socket1u: 'Single socket (unswitched)', rose: 'Ceiling rose (loop-in)', jb: 'Junction box (JB)', strap: '2-way strappers (two wires)', iso: 'Local switch / isolator: DP switch', fcu: 'Unswitched fused connection unit (FCU)', isofcu: 'Unswitched fused connection unit (FCU)', isosfcu: 'Switched fused connection unit (SFCU)', isofcux: 'Unswitched fused connection unit (FCU) with flex outlet', isosfcux: 'Switched fused connection unit (SFCU) with flex outlet', isoccu: 'Cooker control unit (CCU): 45 A DP switch with a 13 A socket', dpu: 'DP switch in the ring, spurring an unswitched single socket (washer, dishwasher etc.)', dps: 'DP switch in the ring, spurring a switched single socket' };
 // v0.43 (test): optional local isolator next to the load: circuit.diagram.isolator = { type, rating }.
 export const ISOLATORS = { dp20: '20 A DP switch', dp45: '45 A DP switch (cooker / shower)', sfcu: 'Switched FCU', ufcu: 'Unswitched FCU', rotary: 'Rotary isolator', ccu: 'Cooker control unit (CCU)' };
 const ISO_SHORT = { dp20: '20A DP', dp45: '45A DP', sfcu: 'SFCU', ufcu: 'FCU', rotary: 'Rotary isolator', ccu: '45A CCU' };
 // v0.43.3: points recorded as an FCU / spur on a named load (towel rail, heater...): the FCU is the isolator, the load comes after it
 const isTowel = (c) => /towel/i.test(String((c && c.desc) || ''));
 export function impliedFcu(c) {
-  if ((c && c.diagram && c.diagram.isolator && ISOLATORS[c.diagram.isolator.type]) || pointKind(c) !== 'fcu') return null;
+  if ((c && c.diagram && c.diagram.isolator && ISOLATORS[c.diagram.isolator.type]) || pointKind(c) !== 'fcu' || listedItems(c)) return null;
   const d = String((c && c.desc) || '').toLowerCase(); const named = d.replace(/\b(s?fcu|fused|connection|unit|spurs?|switched|unswitched|13 ?a|outlet|flex)\b/g, '').replace(/[^a-z]/g, '');
   if (!named) return null; const sw = /\bsfcu\b|\bswitched\b/.test(d) && !/unswitched/.test(d);
   return { type: sw ? 'sfcu' : 'ufcu', rating: '', fcu: true, ccu: false, switched: sw, flex: /\bflex\b/.test(d), label: '13A ' + (sw ? 'SFCU' : 'FCU'), name: ISOLATORS[sw ? 'sfcu' : 'ufcu'], implied: true };
+}
+// v0.44.4: once the circuit has its own item list (even emptied), nothing is guessed from the name
+export const listedItems = (c) => !!(c && c.diagram && c.diagram.items && typeof c.diagram.items === 'object' && !Array.isArray(c.diagram.items));
+// v0.44.4: what the drawing would guess from the circuit name/points, as real list items { items, itemOrder } (or null)
+export function guessedItems(c) {
+  if (!c || listedItems(c) || roomListOf(c) || switchInfo(c) !== null || pointKind(c) === 'socket') return null;
+  const pc = pointCount(c); const n = Math.min(10, pc.shown || 0); if (!n) return null;
+  const k = loadKind(c); if (!ITEM_KINDS[k]) return null;
+  const imp = impliedFcu(c); const items = {}; const order = [];
+  if (imp && k !== 'fcu') { const fk = imp.switched ? 'sfcu' : 'fcu'; items[fk] = 1; order.push(fk); }
+  items[k] = (items[k] || 0) + n; if (!order.includes(k)) order.push(k);
+  return { items, ...(order.length > 1 ? { itemOrder: order } : {}) };
 }
 export const isoFor = (c) => isolatorOf(c) || impliedFcu(c);
 export function loadKind(c, iso = isoFor(c)) { const k0 = pointKind(c);
@@ -750,7 +762,7 @@ export function layout(model, { W = 380, font = 12, screen = false, cableTable =
       hh = res.bottom - y + 6; feedTop = res.lastY; ctlChained = true;
     }
     // points
-    const pc0 = pointCount(c); const pc = (fed && !ctl && !iso) || (ctlChained && /^(point|appliance)$/.test(pointKind(c))) ? { ...pc0, shown: 0, more: 0 } : pc0; /* v0.44.0: a control circuit's points are its contactor coils, drawn in the chain */ /* v0.43.1: a sub-main draws no load, it feeds the board */ const kind0 = pointKind(c); const kind = loadKind(c, iso); void kind0; /* v0.43.3: heaters, radiators, towel rails get the heating-element symbol */ // v0.43.1: the FCU isolator IS the spur, the load is the heater itself
+    const pc0 = pointCount(c); const pc = (fed && !ctl && !iso) || listedItems(c) || (ctlChained && /^(point|appliance)$/.test(pointKind(c))) ? { ...pc0, shown: 0, more: 0 } : pc0; /* v0.44.0: a control circuit's points are its contactor coils, drawn in the chain */ /* v0.43.1: a sub-main draws no load, it feeds the board */ const kind0 = pointKind(c); const kind = loadKind(c, iso); void kind0; /* v0.43.3: heaters, radiators, towel rails get the heating-element symbol */ // v0.43.1: the FCU isolator IS the spur, the load is the heater itself
     const sgl = Math.min(socketSingles(c), pc.shown); const kindAt = (i) => (kind === 'socket' && i >= pc.shown - sgl ? 'socket1' : kind);
     let ph = 0;
     if (!info.spare && !info.spd && info.rooms) {
@@ -823,7 +835,7 @@ export function layout(model, { W = 380, font = 12, screen = false, cableTable =
       ph = sh0 + 6;
     }
     const cItems = !info.spare && !info.spd && !ctlChained && c.diagram ? itemList(c.diagram) : [];
-    if (cItems.length) { const S = F * 1.5; const top0 = y + hh + 6 + ph + (ph ? 8 : 0); const t0 = textLines(sh, tx, top0, 'Also on this circuit', tw, { size: small, color: COL.grey });
+    if (cItems.length) { const S = F * 1.5; const top0 = y + hh + 6 + ph + (ph ? 8 : 0); const t0 = textLines(sh, tx, top0, listedItems(c) && !ph ? 'On this circuit' : 'Also on this circuit', tw, { size: small, color: COL.grey });
       const res = chain(sh, cItems.map((k) => ({ k })), { S, inX: tx - gap / 2, fromY: feedTop, x0: tx + F * 0.6, xMax: W - 6, top: top0 + t0 + 2, wrapX: tx + 2 });
       ph = res.bottom - (y + hh + 6) + 4; }
     if (screen && !info.spare && !info.spd && info.noPoints && !info.rooms && !info.sockRooms && !info.itemRooms && !cItems.length && !fed) ph += textLines(sh, tx, y + hh + (ph ? 6 + ph : 2), 'Add points served to draw sockets/lights', tw, { size: small, color: COL.amber }) + 4;
