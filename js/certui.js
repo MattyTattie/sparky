@@ -130,6 +130,16 @@ async function makePdf(cert, btn, how) {
   btn.disabled = false; btn.textContent = label;
   return ok;
 }
+// v0.44.6: PDF of just the wiring diagram; same viewer as the certificate PDF (works in the Android app too)
+async function makeDiagramPdf(cert, btn) {
+  await flush(); const label = btn.textContent; btn.disabled = true; btn.textContent = 'Making PDF\u2026';
+  try {
+    const { diagramOnlyPdf, pdfName } = await import('./pdf.js');
+    const blob = await diagramOnlyPdf(cert, { profile: await getProfile() }); const name = pdfName(cert, '-diagram');
+    (await import('./pdfview.js')).viewPdf(blob, name, { shareText: `Wiring diagram ${cert.number}` });
+  } catch (e) { console.error(e); toast('Couldn\u2019t make the PDF: ' + ((e && e.message) || 'unknown error')); }
+  btn.disabled = false; btn.textContent = label;
+}
 async function makeChart(cert, btn) {
   await flush(); btn.disabled = true;
   try {
@@ -220,6 +230,7 @@ route(/^\/cert\/([^/]+)\/diagram$/, async (id) => {
     diagramHasCircuits(cert) ? (extrasEl = extrasCard(cert, () => { draw(); drawIssues(); })) : null,
     diagramHasCircuits(cert) && !(cert.boards || []).some((b) => (b.circuits || []).some((c) => isControlCircuit(c, b.circuits))) ? controlCard(cert, () => { draw(); drawIssues(); }) : null, // v0.44.2: control lives in the circuit's list
     h('div', { class: 'card' }, h('div', { class: 'switchrow', style: 'border-top:0;margin-top:0' }, h('span', {}, 'Include in the PDF (after the schedules)'), sw)),
+    diagramHasCircuits(cert) ? h('div', { class: 'btns', style: 'margin:4px 4px 14px' }, h('button', { class: 'btn primary', type: 'button', id: 'diagrampdfbtn', style: 'width:100%;min-height:48px', onclick: (e) => makeDiagramPdf(cert, e.currentTarget) }, 'View PDF')) : null, // v0.44.6: just the diagram
   ], { back: '#/cert/' + id, sub: cert.number });
 });
 

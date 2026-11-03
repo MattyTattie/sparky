@@ -393,3 +393,10 @@ Auto single-line wiring diagram from the cert (EIC/EICR whole board, MWC just th
 ## v0.44.5 (live 2 Nov 2026)
 - New items Hob, Oven, Combi oven (item keys `hob`, `oven`, `combi`; nothing else in the stored format changed). Own symbols in the Cooker box style: hob = two rings; oven = handle bar over a door window; combi = oven window with a microwave zigzag. Grey "Hob" / "Oven" / "Combi" labels above on the diagram/PDF (not on picker icons); key entries Hob / Oven / Combi oven. Cooker unchanged. A single picked one draws inline (SOLO_OK).
 - Tests: tests/v445_cooking.test.mjs. Cache sparky-v0.44.5.
+
+## v0.44.6 (branch v0.44.6, NOT published — waiting for Matthew's "go live")
+- Grey labels above Immersion, Cooker, Shower (like Rad). Slots widen to fit each label, so neighbours never collide (LOAD_LAB / labW in wiring.js).
+- New items: Hybrid inverter (`hybinv`), DC rotary isolator (`dciso`), AC rotary isolator (`aciso`), PV panels (PV array) (`pvarray`). Own box-style symbols; labels Inverter / DC iso / AC iso / PV; AC/DC marked inside the isolator. Picker, diagram, PDF, key. Only drawn when picked.
+- Room summaries never show 0 counts (sockets and lighting rooms); full names: "1 double socket", "2 single sockets".
+- "View PDF" button at the foot of the Wiring diagram screen: diagram-only PDF (pdf.js diagramOnlyPdf, same drawDiagramPdf), opened in the app's PDF viewer (Share / print), same as certificate PDFs.
+- Tests: tests/v446_labels_solar.test.mjs, tests/v446_diagram_pdf.test.mjs. Cache sparky-v0.44.6.

@@ -27,7 +27,7 @@ test('socket circuits use the one-list editor in socket mode (v0.44.2)', () => {
 test('singles per room count towards points and draw as single sockets on the ring', () => {
   const c = { ...ring, diagram: { roomList: [{ name: 'Kitchen', sockets: 2, singles: 3 }, { name: 'Hall', sockets: 1, singles: 99 }] } };
   const r = W.socketRoomsOf(c); assert.equal(r[0].singles, 3); assert.equal(r[1].singles, 10); assert.equal(W.roomSocketTotal(c), 16);
-  const L = lay(c); const t = txt(L); assert.ok(t.some((x) => /2 doubles \u00b7 3 singles/.test(x)));
+  const L = lay(c); const t = txt(L); assert.ok(t.some((x) => /2 double sockets \u00b7 3 single sockets/.test(x)));
   assert.ok(L.blocks.some((b) => b.shapes.some((z) => z.k === 'socket1' || z.sym === 'socket1' || JSON.stringify(z).includes('socket1'))) || t.includes('Single socket (switched)'));
   assert.match(ui, /grp\('Singles'/); assert.match(ui, /\['sockets', 'singles', 'spurs', 'spurKind', 'dpsw', 'dpsws', 'unsw'\]/);
 });

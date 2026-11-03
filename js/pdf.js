@@ -417,8 +417,8 @@ function schedules(k, cert, certNo) {
   diagramSheet(k, cert, certNo);
 }
 // v0.38 (prototype): single-line wiring diagram, after the schedules.
-export function diagramSheet(k, cert, certNo) {
-  if (!diagramInPdf(cert)) return;
+export function diagramSheet(k, cert, certNo, force = false) {
+  if (!force && !diagramInPdf(cert)) return;
   const tag = 'Single-line diagram drawn from the schedule of circuit details. Not to scale; rooms are shown as boxes, not a floor plan.';
   const pages = [];
   k.addPage('p'); pages.push(k.doc.getNumberOfPages()); contTitle(k, 'WIRING DIAGRAM', certNo, tag); k.y += 3;
@@ -936,6 +936,17 @@ export async function certificatePdf(cert, { profile = {}, photos = [] } = {}) {
   else if (cert.type === 'EICR') { k.noLabel = 'Report No.'; eicr(k, cert, profile); guidancePage(k, 'EICR'); }
   else { mw(k, cert, profile); diagramSheet(k, cert, cert.number); guidancePage(k, 'MW'); }
   photosPages(k, photos, cert.number);
+  k.footers(cert.number);
+  return k.blob();
+}
+// v0.44.6: just the wiring diagram sheets (View PDF on the diagram screen), drawn by the same code as the certificate's diagram pages
+export async function diagramOnlyPdf(cert, { profile = {} } = {}) {
+  const { jsPDF } = await loadJsPDF();
+  cert = normaliseCert(structuredClone(cert || {})); profile = profile || {};
+  const k = new Kit(jsPDF, { orientation: 'p', footer: FOOT + (profile.business ? '  Issued by ' + profile.business + '.' : '') });
+  k.profile = profile;
+  diagramSheet(k, cert, cert.number, true);
+  if (k.doc.getNumberOfPages() > 1) k.doc.deletePage(1); // the Kit's blank first page
   k.footers(cert.number);
   return k.blob();
 }
