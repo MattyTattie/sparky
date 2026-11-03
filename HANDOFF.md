@@ -408,6 +408,6 @@ Auto single-line wiring diagram from the cert (EIC/EICR whole board, MWC just th
 - Diagram: with a hybrid inverter, its DC side is one trunk down from the inverter with parallel branches: one string per DC iso (max 3, labelled MPPT 1..3 when more than one), each to its own PV; extra PVs go on the last string; then the battery branch. No series DC isolators.
 - Tests: tests/v447_strings_order.test.mjs. Cache sparky-v0.44.7.
 
-## v0.44.8 (branch v0.44.8, NOT published — waiting for Matthew's "go live")
+## v0.44.8 — PUBLISHED 3 Nov 2026 (Matthew: 'Go live')
 - Solar wiring: every MPPT string and the battery now has its own separate cable from its own point on the inverter's bottom edge (down, then across). No shared vertical bus, no junction dots. The first branch leaves furthest right so no cables cross (screen and PDF).
 - Tests: tests/v448_own_cables.test.mjs (one drop per branch, no dots, no crossings; 2 and 3 strings + battery, screen W380 and PDF W560).
