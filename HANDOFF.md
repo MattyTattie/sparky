@@ -400,3 +400,10 @@ Auto single-line wiring diagram from the cert (EIC/EICR whole board, MWC just th
 - Room summaries never show 0 counts (sockets and lighting rooms); full names: "1 double socket", "2 single sockets".
 - "View PDF" button at the foot of the Wiring diagram screen: diagram-only PDF (pdf.js diagramOnlyPdf, same drawDiagramPdf), opened in the app's PDF viewer (Share / print), same as certificate PDFs.
 - Tests: tests/v446_labels_solar.test.mjs, tests/v446_diagram_pdf.test.mjs. Cache sparky-v0.44.6.
+
+## v0.44.7 (branch v0.44.7, NOT published — waiting for Matthew's "go live")
+- Items editor: each item's icon + full name on its own line; controls beneath, right-aligned, in fixed slots (- n + | ↑ | ↓ | ✕) with a blank slot where an arrow can't go, so every row lines up. Rooms' item lists share it.
+- Drag: big ≡ grip on each movable item (pointer events with capture + pointercancel, works in the Android app); the row follows the finger with a shadow, a blue line shows where it lands. Arrows kept.
+- Adding solar items puts them in wiring order from the board (insertKind in wiring.js): AC iso → Inverter → DC iso → PV. Already-placed items are never moved; everything else goes on the end.
+- Diagram: with a hybrid inverter, its DC side is one trunk down from the inverter with parallel branches: one string per DC iso (max 3, labelled MPPT 1..3 when more than one), each to its own PV; extra PVs go on the last string; then the battery branch. No series DC isolators.
+- Tests: tests/v447_strings_order.test.mjs. Cache sparky-v0.44.7.

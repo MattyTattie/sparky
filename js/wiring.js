@@ -211,6 +211,13 @@ export const roomSocketTotal = (c) => (socketRoomsOf(c) || []).reduce((a, r) => 
 export const roomLightTotal = (c) => (roomListOf(c) || []).reduce((a, r) => a + r.lights, 0);
 // v0.43.1: optional room fan: room.fans (0-2), room.fanCtl (how it is switched)
 // v0.44.0: any item on any circuit or in any room: obj.items = { kind: count } (optional)
+// v0.44.7: where a newly added item goes in the list (wiring order from the board). Solar parts: AC iso, inverter, DC iso, PV.
+// Everything else (and battery, which hangs off the inverter) goes on the end. Never moves what's already there.
+const SOLAR_RANK = { aciso: 0, hybinv: 1, dciso: 2, pvarray: 3 };
+export function insertKind(keys, k) { const a = [...keys]; if (a.includes(k)) return a; const rk = SOLAR_RANK[k]; if (rk == null) return [...a, k];
+  let at = -1; a.forEach((x, i) => { if (SOLAR_RANK[x] != null && SOLAR_RANK[x] <= rk) at = i; });
+  if (at < 0) { const nx = a.findIndex((x) => SOLAR_RANK[x] != null && SOLAR_RANK[x] > rk); at = nx < 0 ? a.length - 1 : nx - 1; }
+  a.splice(at + 1, 0, k); return a; }
 export const ITEM_KINDS = { socket: 'Double socket (switched)', socketu: 'Double socket (unswitched)', socket1: 'Single socket (switched)', socket1u: 'Single socket (unswitched)', dpu: 'DP switch + socket', dps: 'DP switch + switched socket', fcu: 'Fused spur (FCU)', sfcu: 'Switched fused spur (SFCU)', flex: 'Flex outlet', light: 'Light', fan: 'Fan', heater: 'Heater / radiator', cooker: 'Cooker', hob: 'Hob', oven: 'Oven', combi: 'Combi oven', hybinv: 'Hybrid inverter', dciso: 'DC rotary isolator', aciso: 'AC rotary isolator', pvarray: 'PV panels (PV array)', battery: 'Battery (home storage)', shower: 'Shower', immersion: 'Immersion heater', ev: 'EV charger', alarm: 'Smoke / heat alarm', appliance: 'Fixed appliance', km: 'Contactor', shelly: 'Shelly smart relay' };
 export function itemsOf(o) { const m = o && o.items; if (!m || typeof m !== 'object') return []; const ord = Array.isArray(o.itemOrder) ? o.itemOrder.filter((k) => ITEM_KINDS[k]) : []; /* v0.44.2: user's order first */
   return [...new Set([...ord, ...Object.keys(ITEM_KINDS)])].map((k) => [k, cnt(m[k], 10)]).filter(([, n]) => n > 0); }
@@ -915,7 +922,13 @@ export function layout(model, { W = 380, font = 12, screen = false, cableTable =
   function chain(sh, list, o) {
     const S = o.S, r = S / 2, g = { w: 1.1, color: COL.line };
     // v0.44.6: with a hybrid inverter, batteries hang below it on its DC side (not in the AC run)
-    const nBat = list.some((it) => it.k === 'hybinv') ? list.filter((it) => it.k === 'battery').length : 0; if (nBat) list = list.filter((it) => it.k !== 'battery'); const invI = nBat ? list.findIndex((it) => it.k === 'hybinv') : -1; const batH = nBat ? nBat * (2 * r + 10) + 2 : 0; const dp = (k) => k === 'dpu' || k === 'dps';
+    // v0.44.6/7: with a hybrid inverter, its DC side branches down off it: one string per DC isolator (MPPT 1-3, each DC iso -> its own PV), then the battery
+    const hasInv = list.some((it) => it.k === 'hybinv'); const cntK = (k) => list.filter((it) => it.k === k).length;
+    const branches = []; if (hasInv) { const nDc = cntK('dciso'), nPv = cntK('pvarray'), nB = cntK('battery'); const ns = Math.min(3, Math.max(nDc, nPv ? 1 : 0));
+      for (let j = 0; j < ns; j++) { const pv = j < ns - 1 ? (nPv >= ns ? Math.floor(nPv / ns) : (j < nPv ? 1 : 0)) : Math.max(0, nPv - (ns - 1) * (nPv >= ns ? Math.floor(nPv / ns) : 1)); branches.push({ ks: [...(j < nDc ? ['dciso'] : []), ...Array(Math.min(pv, 4)).fill('pvarray')], tag: ns > 1 ? 'MPPT ' + (j + 1) : '' }); }
+      for (let j = 0; j < Math.min(nB, 3); j++) branches.push({ ks: ['battery'], tag: '' });
+      list = list.filter((it) => !['dciso', 'pvarray', 'battery'].includes(it.k)); }
+    const nBat = branches.length; const invI = nBat ? list.findIndex((it) => it.k === 'hybinv') : -1; const brH = r * 2 + small * 1.3 + 8; const batH = nBat ? nBat * brH + 4 : 0; const dp = (k) => k === 'dpu' || k === 'dps';
     const wOf = (k) => (dp(k) ? r * 4.4 : Math.max(2 * loadR(k, S), labW(k, S)));
     const up = list.some((it) => dp(it.k)) ? r * 3.5 : list.some((it) => ['heater', 'hob', 'oven', 'combi', 'immersion', 'cooker', 'shower', 'hybinv', 'dciso', 'aciso', 'pvarray', 'battery'].includes(it.k)) ? r + small * 1.2 + 2 : r + 2; /* heater: room for its Rad label */ const down = list.some((it) => SOCK[it.k]) ? r * 2.3 + 4 : r + 2; const rowH = up + down + 10;
     let x = o.x0; let row = 0; const pos = [];
@@ -928,10 +941,13 @@ export function layout(model, { W = 380, font = 12, screen = false, cableTable =
       symbol(sh, it.k, p.x, cy, S, it.tag); used.add(it.k); if (o.ip) ipMark(sh, p.x, cy, it.k, S);
       prev = { x: p.x, r: kr, cy, row: p.row }; });
     let batBottom = 0;
-    if (nBat) { const ix = pos[invI].x, iy = rowY(invRow); const keep = heatLab; let by = iy;
-      for (let j = 0; j < nBat; j++) { const ny = by + (j ? r : r) + 10 + r; L(sh, ix, by + r, ix, ny - r, g); heatLab = ''; symbol(sh, 'battery', ix, ny, S); heatLab = keep; used.add('battery');
-        const bls = Math.max(r * 0.8, small * 0.85), right = ix + r + 4 + textW('Battery', bls, true) <= o.xMax; T(sh, right ? ix + r + 4 : ix - r - 4, ny + small * 0.3, 'Battery', { anchor: right ? 'start' : 'end', bold: true, size: Math.max(r * 0.8, small * 0.85), color: COL.grey }); by = ny; }
-      batBottom = by + r + 4; }
+    if (nBat) { const ix = pos[invI].x, iy = rowY(invRow); let ty = iy + r, lastCy = iy;
+      const ty0 = iy + r; branches.forEach((br) => { const cy = lastCy + brH; lastCy = cy; let px = ix; let x = ix + 8;
+        br.ks.forEach((k, j) => { const half = Math.max(loadR(k, S), labW(k, S) / 2); const cx = x + half; const kr = loadR(k, S); L(sh, px, cy, cx - kr, cy, g); symbol(sh, k, cx, cy, S); used.add(k); px = cx + kr; x = cx + half + 8; });
+        if (br.tag) T(sh, px + 6, cy + small * 0.3, br.tag, { bold: true, size: small * 0.85, color: COL.grey });
+        ty = cy; });
+      L(sh, ix, ty0, ix, ty, g); /* one trunk down the inverter's DC side; every branch tees off it to the right */
+      batBottom = lastCy + r + 4; }
     return { bottom: Math.max(batBottom, prev ? prev.cy + down : o.top), lastY: prev ? prev.cy : o.fromY, firstY: o.top + up };
   }
   // v0.44.0: rooms on any other circuit: the feed runs down the left, into each room box and through its items

@@ -14,7 +14,7 @@ import { TYPES, newCert, sectionsFor, sectionDone, missingFields, visible, get, 
 import { INTAKE_NOTE_10, INTAKE_NOTES, INTAKE_NOTIFIED, migrateIntake, EIC_ITEMS, EIC_OUTCOMES, EICR_ITEMS, EICR_OUTCOMES, CODE_TEXT, OBSERVATIONS, OBS_CATS, EIC_HELP, EICR_HELP } from './inspections.js';
 import { checkCircuit, isSpare } from './checks.js';
 import { CHECK_NOTE } from './limits.js';
-import { ITEM_KINDS, itemRoomsOf, isControlCircuit, chainOf, migrateChain, kmNumbers, CHAIN_KINDS, CHAIN_SUPPLY, iconSvg, itemsOf } from './wiring.js';
+import { ITEM_KINDS, itemRoomsOf, isControlCircuit, chainOf, migrateChain, kmNumbers, CHAIN_KINDS, CHAIN_SUPPLY, iconSvg, itemsOf, insertKind } from './wiring.js';
 import { diagramSvg, diagramInPdf, diagramHasCircuits, SPUR_FEEDS, CONTROL_VIA, switchInfo, roomListOf, roomPointsNote, socketRoomsOf, roomPointTotal, pointKind, socketSingles, arrangedOrder, feedInfo, ISOLATORS } from './wiring.js';
 import { limitOn, limitBar } from './limitbar.js';
 import { circuitReadings, makeTemplate, applyTemplate, nextRoom, tidyLayouts, BUILTIN_TEMPLATES, TEMPLATE_KEY } from './diagrampro.js';
@@ -931,15 +931,32 @@ function dragRows(list, rowSel, onMove) {
 }
 const moveIn = (arr, from, to) => { const a = [...arr]; const [x] = a.splice(from, 1); a.splice(Math.max(0, Math.min(a.length, to)), 0, x); return a; };
 const handle = (aria) => h('span', { class: 'drag', role: 'img', 'aria-label': aria, style: 'touch-action:none;cursor:grab;min-width:28px;min-height:44px;display:inline-flex;align-items:center;justify-content:center;color:#9aa0aa;font-size:20px;flex:none' }, '\u2261');
-// one line: icon, name, - n +, up, down, x
-function itemLine({ icon, label, n, min = 0, max = 10, onN, onUp, onDown, onX, aria, extra }) {
-  const step = n != null ? h('div', { class: 'rstep', style: 'display:flex;align-items:center;gap:2px;flex:none' }, tinyBtn('\u2212', aria + ', one fewer', () => onN(Math.max(min, n - 1))), h('span', { class: 'stepval', style: 'min-width:1.3em;text-align:center;font-weight:700' }, String(n)), tinyBtn('+', aria + ', one more', () => onN(Math.min(max, n + 1)))) : null;
-  // v0.44.3: compact, everything on one line (arrows inline, no drag handle on items)
-  return h('div', { class: 'iline', style: 'display:flex;align-items:center;gap:4px;min-height:44px;border-top:1px solid var(--boxline);padding:3px 0' },
-    icon ? ico(icon) : null,
-    h('span', { class: 'ilabel', style: 'flex:1 1 auto;min-width:0;white-space:normal;overflow-wrap:break-word;font-size:14px;line-height:1.2;color:var(--ink)' }, label),
-    step, onUp !== undefined || onDown !== undefined ? h('div', { style: 'display:flex;gap:2px;flex:none' }, onUp ? tinyBtn('\u2191', 'Move up ' + aria, onUp) : null, onDown ? tinyBtn('\u2193', 'Move down ' + aria, onDown) : null) : null,
-    onX ? tinyBtn('\u2715', 'Remove ' + aria, onX) : null, extra || null);
+// v0.44.7: name (with icon, and a grip on movable items) on its own line across the width; controls beneath, right-aligned,
+// in fixed slots (- n + | up | down | x) so every row's buttons sit in the same columns. Blank slot where an arrow can't go.
+const slot = () => h('span', { class: 'tbslot', 'aria-hidden': 'true', style: 'display:inline-block;width:38px;height:38px;flex:none' });
+function itemLine({ icon, label, n, min = 0, max = 10, onN, onUp, onDown, onX, aria, extra, move }) {
+  const step = h('div', { class: 'rstep', style: 'display:flex;align-items:center;gap:2px;flex:none' }, ...(n != null ? [tinyBtn('\u2212', aria + ', one fewer', () => onN(Math.max(min, n - 1))), h('span', { class: 'stepval', style: 'width:1.6em;text-align:center;font-weight:700' }, String(n)), tinyBtn('+', aria + ', one more', () => onN(Math.min(max, n + 1)))] : [slot(), h('span', { style: 'width:1.6em' }), slot()]));
+  const grip = move ? h('span', { class: 'idrag', role: 'img', 'aria-label': 'Drag to move ' + aria, style: 'touch-action:none;cursor:grab;width:40px;min-height:40px;display:inline-flex;align-items:center;justify-content:center;color:#9aa0aa;font-size:24px;flex:none;border-radius:10px' }, '\u2261') : null;
+  const row = h('div', { class: 'iline' + (move ? ' itm' : ''), style: 'border-top:1px solid var(--boxline);padding:4px 0' },
+    h('div', { class: 'ihead', style: 'display:flex;align-items:center;gap:6px;min-height:36px' }, grip, icon ? ico(icon) : null,
+      h('span', { class: 'ilabel', style: 'flex:1 1 auto;min-width:0;white-space:normal;overflow-wrap:break-word;font-size:15px;line-height:1.25;color:var(--ink)' }, label)),
+    h('div', { class: 'ictl', style: 'display:flex;align-items:center;justify-content:flex-end;gap:4px;margin-top:2px' },
+      step, onUp ? tinyBtn('\u2191', 'Move up ' + aria, onUp) : slot(), onDown ? tinyBtn('\u2193', 'Move down ' + aria, onDown) : slot(),
+      onX ? tinyBtn('\u2715', 'Remove ' + aria, onX) : slot(), extra || null));
+  if (move) row._move = move; return row;
+}
+// v0.44.7: drag an item row by its big grip (pointer events: works with touch in the Android app); line shows where it lands
+function dragItems(box) {
+  box.addEventListener('pointerdown', (e) => { const hd = e.target.closest('.idrag'); if (!hd) return; const row = hd.closest('.itm'); if (!row || !row._move) return; e.preventDefault();
+    try { hd.setPointerCapture(e.pointerId); } catch (_) {}
+    const rows = [...row.parentElement.children].filter((r) => r.classList.contains('itm')); const from = rows.indexOf(row); let to = from; const y0 = e.clientY;
+    row.style.opacity = '0.85'; row.style.position = 'relative'; row.style.zIndex = '5'; { let el = row.parentElement, bg = ''; while (el && (!bg || bg === 'rgba(0, 0, 0, 0)' || bg === 'transparent')) { bg = getComputedStyle(el).backgroundColor; el = el.parentElement; } row.style.background = bg || '#fff'; } row.style.boxShadow = '0 4px 14px rgba(0,0,0,.25)';
+    const mark = (i) => rows.forEach((r, k) => { r.style.borderTop = k === i ? '4px solid var(--brand,#2952ff)' : ''; r.style.borderBottom = ''; });
+    const mv = (ev) => { const y = ev.clientY; row.style.transform = `translateY(${y - y0}px)`; to = rows.filter((r) => r !== row && (() => { const b = r.getBoundingClientRect(); return b.top + b.height / 2 < y; })()).length;
+      if (to === from) mark(-1); else if (to >= rows.length - 1) { mark(-1); rows[rows.length - 1].style.borderBottom = '4px solid var(--brand,#2952ff)'; } else mark(to > from ? to + 1 : to); };
+    const up = () => { hd.removeEventListener('pointermove', mv); hd.removeEventListener('pointerup', up); hd.removeEventListener('pointercancel', up);
+      rows.forEach((r) => { r.style.borderTop = ''; r.style.borderBottom = ''; }); Object.assign(row.style, { opacity: '', transform: '', position: '', zIndex: '', background: '', boxShadow: '' }); if (to !== from) row._move(from, to); };
+    hd.addEventListener('pointermove', mv); hd.addEventListener('pointerup', up); hd.addEventListener('pointercancel', up); });
 }
 // what a room can hold, by circuit type: [field, label, icon, max]
 const NATIVE = {
@@ -960,6 +977,7 @@ function linesFor(o, mode, label, put, after = {}) { // v0.44.3: after[f] = a co
   const setOrd = (ks) => ({ itemOrder: ks.length > 1 ? ks : undefined });
   its.forEach(([k, n], i) => out.push(itemLine({ icon: ITEM_ICON(k), label: ITEM_KINDS[k], n, aria: label + ' ' + ITEM_KINDS[k],
     onN: (v) => { const m = { ...(o.items || {}) }; if (v) m[k] = v; else delete m[k]; put({ items: m, ...setOrd(keys.filter((x) => m[x])) }); },
+    move: keys.length > 1 ? (a, b) => put(setOrd(moveIn(keys, a, b))) : null,
     onUp: i > 0 ? () => put(setOrd(moveIn(keys, i, i - 1))) : null, onDown: i < keys.length - 1 ? () => put(setOrd(moveIn(keys, i, i + 1))) : null,
     onX: () => { const m = { ...(o.items || {}) }; delete m[k]; put({ items: m, ...setOrd(keys.filter((x) => x !== k)) }); } })));
   return out;
@@ -968,11 +986,11 @@ async function addTo(o, mode, put, title) {
   const opts = [...(mode ? NATIVE[mode] : []).map(([f, t, ic]) => ['n:' + f, t, ic]), ...Object.entries(ITEM_KINDS).filter(([k]) => !(mode === 'socket' && ['socket', 'socketu', 'socket1', 'dpu', 'dps'].includes(k)) && !(mode === 'light' && ['light', 'fan'].includes(k))).map(([k, t]) => ['i:' + k, t, k])];
   const v = await pickTiles(title, opts); if (!v) return;
   if (v.startsWith('n:')) { const f = v.slice(2); put(natSet(o, f, natGet(o, f) + 1)); return; }
-  const k = v.slice(2); const m = { ...(o.items || {}) }; m[k] = Math.min(10, (+m[k] || 0) + 1); const ks = itemsOf(o).map(([x]) => x); put({ items: m, itemOrder: ks.includes(k) ? (ks.length > 1 ? ks : undefined) : [...ks, k].length > 1 ? [...ks, k] : undefined });
+  const k = v.slice(2); const m = { ...(o.items || {}) }; m[k] = Math.min(10, (+m[k] || 0) + 1); const ks = itemsOf(o).map(([x]) => x); const nk = ks.includes(k) ? ks : insertKind(ks, k); /* v0.44.7: solar items land in wiring order */ put({ items: m, itemOrder: nk.length > 1 ? nk : undefined });
 }
 // Everything on a circuit in one place: rooms in feed order (each with its items), then anything not in a room.
 export function whatsOn(c, mode, redraw, again, usedNames = () => [], otherMap = () => ({})) {
-  const box = h('div', { class: 'whatson', id: 'whatson', style: 'margin:8px 0 4px' });
+  const box = h('div', { class: 'whatson', id: 'whatson', style: 'margin:8px 0 4px' }); dragItems(box);
   const rooms = () => (c.diagram && Array.isArray(c.diagram.roomList) ? c.diagram.roomList : []);
   const store = (patch) => { const d = { ...(c.diagram || {}), ...patch }; for (const k of Object.keys(d)) if (d[k] === undefined || (Array.isArray(d[k]) && !d[k].length && k === 'roomList')) delete d[k]; if (patch.roomList) delete d.layout; if (Object.keys(d).length) c.diagram = d; else delete c.diagram; changed(); redraw(); draw(); };
   const clean = (o) => { const x = { ...o }; for (const k of Object.keys(x)) if (x[k] === undefined) delete x[k]; return x; };
@@ -999,7 +1017,7 @@ export function whatsOn(c, mode, redraw, again, usedNames = () => [], otherMap =
       if (n && !rooms().some((x) => x.name === n)) store({ roomList: [...rooms(), defaultRoom(n, defW(), mode)] }); };
     const d = c.diagram || {}; const putC = (patch) => store(patch);
     fill(box, [h('b', { style: 'display:block;font-size:17px' }, "What's on this circuit"),
-      h('p', { class: 'note', style: 'margin:2px 0 8px' }, 'In wiring order. Use \u2191 \u2193 or drag \u2261 to move, \u2715 to remove.'),
+      h('p', { class: 'note', style: 'margin:2px 0 8px' }, 'In wiring order, from the board. Use \u2191 \u2193 or drag \u2261 to move, \u2715 to remove.'),
       l.length ? list : null,
       h('button', { class: 'btn addroom', type: 'button', id: 'roomother-' + (c.num || ''), style: 'width:100%;min-height:52px;margin:0 0 10px', onclick: addRoom }, '+ Add a room'),
       h('div', { class: 'notroom', style: 'border:1.5px dashed var(--boxline);border-radius:12px;padding:6px 8px' }, h('b', { style: 'display:block' }, l.length ? 'Not in a room' : 'Items'),
