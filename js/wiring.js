@@ -941,12 +941,13 @@ export function layout(model, { W = 380, font = 12, screen = false, cableTable =
       symbol(sh, it.k, p.x, cy, S, it.tag); used.add(it.k); if (o.ip) ipMark(sh, p.x, cy, it.k, S);
       prev = { x: p.x, r: kr, cy, row: p.row }; });
     let batBottom = 0;
-    if (nBat) { const ix = pos[invI].x, iy = rowY(invRow); let ty = iy + r, lastCy = iy;
-      const ty0 = iy + r; branches.forEach((br) => { const cy = lastCy + brH; lastCy = cy; let px = ix; let x = ix + 8;
-        br.ks.forEach((k, j) => { const half = Math.max(loadR(k, S), labW(k, S) / 2); const cx = x + half; const kr = loadR(k, S); L(sh, px, cy, cx - kr, cy, g); symbol(sh, k, cx, cy, S); used.add(k); px = cx + kr; x = cx + half + 8; });
-        if (br.tag) T(sh, px + 6, cy + small * 0.3, br.tag, { bold: true, size: small * 0.85, color: COL.grey });
-        ty = cy; });
-      L(sh, ix, ty0, ix, ty, g); /* one trunk down the inverter's DC side; every branch tees off it to the right */
+    if (nBat) { const ix = pos[invI].x, iy = rowY(invRow); let lastCy = iy; const nb = branches.length;
+      // v0.44.8: every string and the battery has its own cable from its own point on the inverter's bottom edge: down, then across.
+      // The first branch leaves furthest right, later ones further left, so no cable crosses another; no shared bus, no junction dots.
+      const sp = nb > 1 ? Math.min(r * 0.5, (r * 1.6) / (nb - 1)) : 0; const xs0 = ix + (sp * (nb - 1)) / 2; const x0 = ix + r + 8;
+      branches.forEach((br, bi) => { const cy = lastCy + brH; lastCy = cy; const ex = xs0 - bi * sp; L(sh, ex, iy + r, ex, cy, g); let px = ex; let x = x0;
+        br.ks.forEach((k) => { const half = Math.max(loadR(k, S), labW(k, S) / 2); const cx = x + half; const kr = loadR(k, S); L(sh, px, cy, cx - kr, cy, g); symbol(sh, k, cx, cy, S); used.add(k); px = cx + kr; x = cx + half + 8; });
+        if (br.tag) T(sh, px + 6, cy + small * 0.3, br.tag, { bold: true, size: small * 0.85, color: COL.grey }); });
       batBottom = lastCy + r + 4; }
     return { bottom: Math.max(batBottom, prev ? prev.cy + down : o.top), lastY: prev ? prev.cy : o.fromY, firstY: o.top + up };
   }
