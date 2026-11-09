@@ -135,7 +135,7 @@ function boardDetails(cert, b) {
     h('summary', { style: 'font-weight:700' }, 'Board details', b.zdb ? h('span', { class: 'note' }, `  Zdb ${b.zdb} Ω · Ipf ${b.ipf || '–'} kA`) : null),
     h('div', { style: 'margin-top:10px' },
       F('ref', 'DB reference'), F('location', 'Location'),
-      cert.boards.indexOf(b) > 0 ? supplyChips(cert, b) : null,
+      cert.boards.indexOf(b) > 0 ? supplyChips(cert, b) : db1SupplyChips(b),
       F('suppliedFrom', 'Supplied from'),
       h('div', { class: 'grid3' }, F('ocpdBs', 'Supplying device BS (EN)'), F('ocpdType', 'Type'), F('ocpdRating', 'Rating (A)', 'num')),
       h('div', { class: 'grid3' }, F('zdb', 'Zdb (Ω)', 'num'), F('ipf', 'Ipf (kA)', 'num'), F('maxDemand', 'Max demand (A)', 'num')),
@@ -156,6 +156,17 @@ function boardMainSwitch(b) {
 function msPointer(cert) {
   const s = mainSummary(cert, 'parts.');
   return h('div', { class: 'note msptr', style: 'margin-top:12px' }, h('b', {}, 'Main switch: '), s ? s + '. Entered in ' : 'not filled in yet. Add it in ', h('a', { href: `#/cert/${cert.id}/s/parts` }, 'Earthing, bonding and main switch'), '.');
+}
+// v0.45.3: board 1's 'Supplied from' chips, same look as the other boards'. Straight from the meter unless
+// 'Connector block' is tapped (board.supplyKind = 'tails', never guessed from the text). The text box is left as typed.
+function db1SupplyChips(b) {
+  const box = h('div', { class: 'supplychips db1', style: 'margin:4px 0 8px' });
+  const draw = () => { const on = b.supplyKind === 'tails';
+    const chip = (v, t) => h('button', { type: 'button', class: 'segb' + (on === v ? ' on' : ''), 'aria-pressed': String(on === v), style: 'flex:1 1 0;min-width:0;min-height:44px;padding:4px 4px;font-size:14px;font-weight:600;white-space:normal;line-height:1.15;border:0;' + (v ? 'border-left:1px solid var(--line);' : '') + (on === v ? 'background:var(--brand,#2952ff);color:#fff' : 'background:transparent;color:inherit'),
+      onclick: () => { if (v) b.supplyKind = 'tails'; else delete b.supplyKind; changed(); draw(); } }, t);
+    fill(box, [h('div', { class: 'note', style: 'margin:0 0 4px' }, 'Supplied from'),
+      h('div', { role: 'group', 'aria-label': 'Supplied from', style: 'display:flex;align-items:stretch;padding:0;border:1px solid var(--line);border-radius:10px;overflow:hidden' }, chip(false, 'Straight from meter'), chip(true, 'Connector block'))]); };
+  draw(); return box;
 }
 // v0.43.3: one-tap 'Supplied from' for an extra board (optional board.supplyKind; the text field still works)
 function supplyChips(cert, b) {

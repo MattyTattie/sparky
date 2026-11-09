@@ -437,7 +437,7 @@ export function diagramModel(cert) {
     type: cert.type,
     supply: { earthing: val(sup.earthing), lines: [[val(sup.conductors), val(sup.u) && val(sup.u) + ' V', val(sup.f) && val(sup.f) + ' Hz'].filter(Boolean).join(', '), [val(sup.ze) && `Ze ${val(sup.ze)} Ω`, val(sup.ipf) && `Ipf ${val(sup.ipf)} kA`].filter(Boolean).join(', '), ].filter(Boolean), fuse },
     main: { label: 'Main switch', detail: ms },
-    boards: (cert.boards || []).map((b, bi) => ({ ref: val(b.ref) || 'DB', location: val(b.location), from: val(b.suppliedFrom), items: groupCircuits(b.circuits, b), links: controlLinks(b.circuits), tags: boardTags(b.circuits), bi, src: b.circuits || [], main: boardMainLine(cert, bi),
+    boards: (cert.boards || []).map((b, bi) => ({ ref: val(b.ref) || 'DB', location: val(b.location), from: val(b.suppliedFrom), items: groupCircuits(b.circuits, b), links: controlLinks(b.circuits), tags: boardTags(b.circuits), bi, src: b.circuits || [], main: boardMainLine(cert, bi), viaTails: bi === 0 && b.supplyKind === 'tails',
       feed: feedInfo(cert.boards, bi), raw: { supplyKind: b.supplyKind, suppliedFrom: b.suppliedFrom }, outbuilding: bi > 0 && isOutbuilding(b), ctx: { earthing: sup.earthing, zdb: b.zdb },
       feeds: (cert.boards || []).reduce((m, o, oi) => { const f = oi !== bi && feedInfo(cert.boards, oi); if (f && f.state === 'ok' && f.bi === bi && f.circuit) (m[f.circuit.toLowerCase()] = m[f.circuit.toLowerCase()] || []).push(val(o.ref) + (val(o.location) ? ' (' + val(o.location) + ')' : '')); return m; }, {}) })),
   };
@@ -523,17 +523,28 @@ export function layout(model, { W = 380, font = 12, screen = false, cableTable =
   let heatLab = 'Rad'; // v0.43.3: label over the heater symbol (Rail for a towel rail)
   const earthSym = (sh, x, y, s) => { L(sh, x, y, x, y + s * 0.6); L(sh, x - s * 0.6, y + s * 0.6, x + s * 0.6, y + s * 0.6); L(sh, x - s * 0.4, y + s * 0.85, x + s * 0.4, y + s * 0.85); L(sh, x - s * 0.2, y + s * 1.1, x + s * 0.2, y + s * 1.1); };
 
-  const head = [];
+  const head = []; let headTails = false;
   if (model.type !== 'MW') {
     const e = model.supply.earthing;
     head.push(chainBox('Supply' + (e ? ': ' + e : ''), [...model.supply.lines.map((t) => ({ text: t })), { text: 'Supply fuse: ' + (model.supply.fuse || NA), na: !model.supply.fuse }, ...(e ? [] : [{ text: 'Earthing: ' + NA, na: true }])], { earth: e || ' ' }));
     head.push(chainBox('Meter', [{ text: 'kWh meter (supplier\u2019s)' }]));
+    // v0.45.3: DB1 fed via a meter tail connector block (board 1's supplyKind 'tails', only when tapped; never guessed from text): the block on the main chain
+    if (model.boards[0] && model.boards[0].viaTails) {
+      const sh = []; const y = 8; const tx = devX + 2, tw = W - tx - 8; headTails = true;
+      const also = model.boards.filter((o, i) => i > 0 && supplyKindOf(o.raw || {}) === 'tails').map((o) => o.ref);
+      const lab = SUPPLY_KINDS.tails + (also.length ? ': feeds ' + [model.boards[0].ref, ...also].join(' and ').replace(/ and (?=.* and )/g, ', ') : '');
+      tailBlockSym(sh, busX, y, F); const lh1 = textLines(sh, tx, y - 1, lab, tw, { size: small, color: COL.grey });
+      const h = y + Math.max(F * 0.9, lh1) + 6;
+      L(sh, busX, 0, busX, y - 4, { w: 2.4, color: COL.brand }); L(sh, busX, y + F * 0.9, busX, h, { w: 2.4, color: COL.brand });
+      head.push({ sh, h, custom: true });
+    }
     // v0.45.3: no separate main switch box: it's drawn inside the DB1 block (see the board header below)
   } else {
     const e = model.supply.earthing;
     head.push(chainBox('Earthing: ' + (e || NA), model.supply.lines.map((t) => ({ text: t })), { earth: ' ' }));
   }
   head.forEach((b, i) => { // bus runs down through the chain
+    if (b.custom) { blocks.push({ h: b.h, shapes: b.sh, kind: 'head' }); return; } // draws its own bus
     // same weight and colour as the board bus, so the chain reads as one line
     L(b.sh, busX, i > 0 ? 0 : b.mid, busX, b.h, { w: 2.4, color: COL.brand });
     blocks.push({ h: b.h, shapes: b.sh, kind: 'head' });
@@ -541,7 +552,7 @@ export function layout(model, { W = 380, font = 12, screen = false, cableTable =
 
   const feedCable = (fd, bd) => { const dest = bd.ref + (bd.location ? ' (' + bd.location + ')' : ''); const got = fd.circuit && cableOf[fd.ref.toLowerCase() + '|' + String(fd.circuit).toLowerCase()]; if (got) { got.to += ', on to ' + dest; return got.label; }
     return cable(fd.ref + (fd.circuit ? ' circuit ' + fd.circuit : ''), dest, cableLabel(((model.boards[fd.bi] || {}).src || []).find((c) => val(c.num).toLowerCase() === String(fd.circuit).toLowerCase()))); };
-  let links = {}; let tags = {}; let curSrc = []; const bdSrc = () => curSrc; const used = new Set();
+  let links = {}; let tags = {}; let curSrc = []; const bdSrc = () => curSrc; const used = new Set(); if (headTails) used.add('tailblock');
   model.boards.forEach((bd, bi) => {
     links = bd.links || {}; tags = bd.tags || {}; ctx = bd.ctx || {}; feeds = bd.feeds || {}; curBoard = bd.ref; curSrc = bd.src || [];
     // board header: v0.43.3 every board starts the same way as the main chain: a boxed heading on the bus.
@@ -556,7 +567,7 @@ export function layout(model, { W = 380, font = 12, screen = false, cableTable =
         const ok = fd && (fd.state === 'ok' || fd.state === 'origin');
         const cl0 = fd && fd.state === 'ok' ? feedCable(fd, bd) : '';
         let lab; let symH = F * 1.4;
-        if (sk === 'tails') { used.add('tailblock'); tailBlockSym(sh, busX, y + 2, F); lab = SUPPLY_KINDS.tails + (fd.text && !/henley|connector block/i.test(fd.text) ? ' (' + fd.text + ')' : ''); top = y + 2; }
+        if (sk === 'tails') { used.add('tailblock'); tailBlockSym(sh, busX, y + 2, F); lab = SUPPLY_KINDS.tails + (fd.text && !/henley|connector block/i.test(fd.text) ? ' (' + fd.text + ')' : '') + (model.boards[0] && model.boards[0].viaTails ? ' (the same block as ' + model.boards[0].ref + ')' : ''); top = y + 2; }
         else if (sk === 'switchfuse') { used.add('swfuse'); isoSym(sh, busX, y, symH, true, true); lab = 'Switch fuse / isolator' + (fd.text && !/switch ?fuse|isolator/i.test(fd.text) ? ' (' + fd.text + ')' : ''); top = y; }
         else { lab = fd && fd.state === 'ok' ? `Sub-main from ${fd.ref}${fd.circuit ? ' circuit ' + fd.circuit : ''}${cl0 ? ' by cable ' + cl0 : ''} (see ${fd.ref}${fd.circuit ? ' circuit ' + fd.circuit : ''})` : fd && fd.state === 'origin' ? 'Supplied from: ' + fd.text : !fd || fd.state === 'blank' ? 'Supplied from: not recorded, so the link is drawn dashed' : `Supplied from: ${fd.why}, so the link is drawn dashed`;
           symH = small * 1.2; top = 0;
