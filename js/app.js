@@ -331,7 +331,9 @@ route(/^\/job\/([^/]+)(?:\/(photos|details|next|pdfs|backup|dc|parts))?$/, async
       !res.boards.length ? emptyState('clipboard', 'No boards yet. Fill in a schedule on a certificate and the parts show here.') : [
         h('p', { class: 'note' }, `From the schedules on ${res.from.join(', ')}. Spare ways with no device fitted are left out.`),
         res.boards.map((b) => h('div', { class: 'card parts' }, h('h2', {}, b.ref + (b.location ? ' \u00b7 ' + b.location : '')), h('div', { class: 'note' }, `${b.ways} way(s)${b.spares ? `, ${b.spares} spare` : ''}${res.from.length > 1 ? ' \u00b7 ' + b.cert : ''}`),
-          b.items.length ? h('div', { class: 'plist' }, b.items.map(qrow)) : h('p', { class: 'note' }, 'No devices filled in on this board.'))),
+          b.items.length ? h('div', { class: 'plist' }, b.items.map(qrow)) : h('p', { class: 'note' }, 'No devices filled in on this board.'),
+          // v0.45.1: say where to add a missing main switch
+          b.noMain ? h('p', { class: 'note nomain' }, 'No main switch listed: add it in ', b.bi === 0 ? h('a', { href: `#/cert/${b.certId}/s/parts` }, 'Earthing, bonding and main switch') : h('a', { href: `#/cert/${b.certId}/b/${b.bi}` }, `${b.ref}\u2019s board details`), '.') : null)),
         res.boards.length > 1 ? h('div', { class: 'card parts' }, h('h2', {}, 'Total for the job'), h('div', { class: 'plist' }, res.totals.map(qrow))) : null,
         h('div', { class: 'btns full' }, h('button', { class: 'btn primary', onclick: share }, withIcon('share', 'Share')), h('button', { class: 'btn', onclick: (e) => pdf(e.currentTarget) }, withIcon('fileText', 'PDF')))],
     ], { back, sub: job.title });

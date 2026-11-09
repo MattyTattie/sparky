@@ -124,17 +124,31 @@ const SUPPLY = { id: 'supply', title: 'Supply and earthing', form: 'F / I', fiel
 // function (cert) => boolean. Hidden fields print N/A and are not needed for
 // the green dot. opt: true = can be left blank (e.g. "if any").
 export const isElectrode = (c) => /electrode/i.test(get(c, 'parts.means') || '');
-const anyOf = (c, ks) => ks.some((k) => String(get(c, 'parts.' + k) ?? '').trim());
+const anyOf = (c, ks, pre = 'parts.') => ks.some((k) => String(get(c, pre + k) ?? '').trim());
 // "Main switch is an RCD" / "...is a breaker or fuse": old jobs have no tick, so
 // work it out from the boxes (anything filled in = on), so nothing disappears.
-export const msIsRcd = (c) => { const v = get(c, 'parts.msIsRcd'); return v == null ? anyOf(c, ['rcdType', 'rcdIdn', 'rcdDelay', 'rcdMs']) : Boolean(v); };
-export const msIsOcpd = (c) => { const v = get(c, 'parts.msIsOcpd'); return v == null ? anyOf(c, ['msType', 'msRating', 'msKa']) : Boolean(v); };
+// v0.45.1: the same boxes work for a later board's own main switch (board.main.*), so pre = 'main.' there.
+export const msIsRcdAt = (pre) => (c) => { const v = get(c, pre + 'msIsRcd'); return v == null ? anyOf(c, ['rcdType', 'rcdIdn', 'rcdDelay', 'rcdMs'], pre) : Boolean(v); };
+export const msIsOcpdAt = (pre) => (c) => { const v = get(c, pre + 'msIsOcpd'); return v == null ? anyOf(c, ['msType', 'msRating', 'msKa'], pre) : Boolean(v); };
+export const msIsRcd = msIsRcdAt('parts.');
+export const msIsOcpd = msIsOcpdAt('parts.');
 // Bonded services, each with its own optional csa (v0.8, blank = same as the main bonding csa).
 export const BOND_SERVICES = [['Water', 'water installation pipes'], ['Gas', 'gas installation pipes'], ['Oil', 'oil installation pipes'], ['Steel', 'structural steel'], ['Lightning', 'lightning protection system']];
 export const bondTicked = (c, svc) => (svc === 'Other' ? Boolean(String(get(c, 'parts.bondOther') || '').trim()) : Boolean(get(c, 'parts.bond' + svc)));
 export const bondCsaFor = (c, svc) => String(get(c, `parts.bond${svc}Csa`) ?? '').trim() || String(get(c, 'parts.bondCsa') ?? '').trim();
 export const bondNone = (c) => Boolean(get(c, 'parts.bondNone'));
 const svcCsa = (svc, name) => f(`parts.bond${svc}Csa`, `${name} bonding csa (mm²)`, 'num', { showIf: (c) => bondTicked(c, svc), placeholder: (c) => (get(c, 'parts.bondCsa') ? 'Same as main: ' + get(c, 'parts.bondCsa') : ''), opt: true, indent: true });
+// v0.45.1: the main switch boxes (Section J), for the certificate (pre 'parts.') or a later board (pre 'main.').
+export function mainSwitchFields(pre) {
+  const isOcpd = msIsOcpdAt(pre), isRcd = msIsRcdAt(pre);
+  return [
+  f(pre + 'msLocation', 'Main switch location'), f(pre + 'msBs', 'Main switch BS (EN)'), f(pre + 'msPoles', 'No. of poles', 'num'), f(pre + 'msCurrent', 'Current rating (A)', 'num'), f(pre + 'msVoltage', 'Voltage rating (V)', 'num'),
+  f(pre + 'msIsOcpd', 'Main switch is a breaker or fuse (OCPD)', 'check', { dflt: isOcpd, redraw: true }),
+  f(pre + 'msType', 'Device type (MCCB / ACB / fuse…)', 'text', { showIf: isOcpd, indent: true }), f(pre + 'msRating', 'Device rating/setting (A)', 'num', { showIf: isOcpd, indent: true }), f(pre + 'msKa', 'Breaking capacity (kA)', 'num', { showIf: isOcpd, indent: true }),
+  f(pre + 'msIsRcd', 'Main switch is an RCD', 'check', { dflt: isRcd, redraw: true }),
+  f(pre + 'rcdType', 'RCD type (AC/A/F/B)', 'text', { showIf: isRcd, indent: true }), f(pre + 'rcdIdn', 'IΔn (mA)', 'num', { showIf: isRcd, indent: true }), f(pre + 'rcdDelay', 'Rated time delay (ms)', 'num', { showIf: isRcd, indent: true, hint: '0 if not time-delayed.' }), f(pre + 'rcdMs', 'Measured operating time (ms)', 'num', { showIf: isRcd, indent: true }), f(pre + 'rcdKa', 'Breaking capacity (kA)', 'num', { showIf: isRcd, indent: true, opt: true })
+  ];
+}
 const PARTS = { id: 'parts', title: 'Earthing, bonding and main switch', form: 'G / J', fields: [
   f('parts.means', 'Means of earthing', 'chips', { opts: ['Distributor\u2019s facility', 'Installation earth electrode'], redraw: true }),
   f('parts.maxDemand', 'Maximum demand', 'num', { action: { label: 'Work it out from the loads', href: (c) => '#/calc/md/' + c.id } }), f('parts.mdUnit', 'Unit', 'chips', { opts: ['A', 'kVA'] }),
@@ -152,11 +166,7 @@ const PARTS = { id: 'parts', title: 'Earthing, bonding and main switch', form: '
   f('parts.bondSteel', 'Structural steel', 'check', { redraw: true, hideIf: 'parts.bondNone' }), svcCsa('Steel', 'Structural steel'),
   f('parts.bondLightning', 'Lightning protection', 'check', { redraw: true, hideIf: 'parts.bondNone' }), svcCsa('Lightning', 'Lightning protection'),
   f('parts.bondOther', 'Other (specify)', 'text', { redraw: 'blur', opt: true, hideIf: 'parts.bondNone' }), svcCsa('Other', 'Other'),
-  f('parts.msLocation', 'Main switch location'), f('parts.msBs', 'Main switch BS (EN)'), f('parts.msPoles', 'No. of poles', 'num'), f('parts.msCurrent', 'Current rating (A)', 'num'), f('parts.msVoltage', 'Voltage rating (V)', 'num'),
-  f('parts.msIsOcpd', 'Main switch is a breaker or fuse (OCPD)', 'check', { dflt: msIsOcpd, redraw: true }),
-  f('parts.msType', 'Device type (MCCB / ACB / fuse…)', 'text', { showIf: msIsOcpd, indent: true }), f('parts.msRating', 'Device rating/setting (A)', 'num', { showIf: msIsOcpd, indent: true }), f('parts.msKa', 'Breaking capacity (kA)', 'num', { showIf: msIsOcpd, indent: true }),
-  f('parts.msIsRcd', 'Main switch is an RCD', 'check', { dflt: msIsRcd, redraw: true }),
-  f('parts.rcdType', 'RCD type (AC/A/F/B)', 'text', { showIf: msIsRcd, indent: true }), f('parts.rcdIdn', 'IΔn (mA)', 'num', { showIf: msIsRcd, indent: true }), f('parts.rcdDelay', 'Rated time delay (ms)', 'num', { showIf: msIsRcd, indent: true, hint: '0 if not time-delayed.' }), f('parts.rcdMs', 'Measured operating time (ms)', 'num', { showIf: msIsRcd, indent: true }), f('parts.rcdKa', 'Breaking capacity (kA)', 'num', { showIf: msIsRcd, indent: true, opt: true }),
+  ...mainSwitchFields('parts.'),
 ], doneIf: (c) => bondNone(c) || BOND_SERVICES.some(([s]) => bondTicked(c, s)) || bondTicked(c, 'Other') };
 
 // v0.37: on-screen order only (the order you fill them in on site). The PDF keeps the IET form order.

@@ -9,7 +9,8 @@ import { orderRows, mainSide, mainRow, settleSpdMcb } from './cuscan.js';
 import { route, page, go, render } from './app.js';
 import { openCert, changed, flush, touchJob } from './state.js';
 import { field, stateLine } from './certui.js';
-import { sectionsFor, get, set } from './certmodel.js';
+import { sectionsFor, get, set, mainSwitchFields } from './certmodel.js';
+import { mainFromScan } from './boardmain.js';
 import { supplyKindOf, feedInfo } from './wiring.js';
 const boardsLine = (cert) => { const sec = sectionsFor(cert.type).find((x) => x.special === 'boards'); if (!sec) return null; const [c, t] = stateLine(cert, sec); return h('div', { class: 'notice ' + c + ' secstate' }, t); };
 import { blankBoard } from './certmodel.js';
@@ -139,11 +140,18 @@ function boardDetails(cert, b) {
       h('div', { class: 'grid3' }, F('ocpdBs', 'Supplying device BS (EN)'), F('ocpdType', 'Type'), F('ocpdRating', 'Rating (A)', 'num')),
       h('div', { class: 'grid3' }, F('zdb', 'Zdb (Ω)', 'num'), F('ipf', 'Ipf (kA)', 'num'), F('maxDemand', 'Max demand (A)', 'num')),
       h('a', { class: 'btn small', href: `#/calc/fault/${cert.id}/${cert.boards.indexOf(b)}` }, 'Work out Ipf for a sub-board'),
+      cert.boards.indexOf(b) > 0 ? boardMainSwitch(b) : null,
       h('div', { class: 'note', style: 'margin-top:12px' }, 'Other sources'), bidiTick(cert, b),
       spdGrid(cert, b),
       h('div', { class: 'note' }, 'Main RCD of the board (if any)'), rcdGrid(b)));
 }
 
+// v0.45.1: a later board's own main switch: the same boxes as DB1's (certificate section J), kept in board.main
+function boardMainSwitch(b) {
+  const box = h('div', { class: 'boardms' });
+  const draw = () => fill(box, h('h3', { class: 'fhead' }, 'Main switch'), mainSwitchFields('main.').map((fd) => field(b, fd, (k, v, d) => { if (d.redraw) draw(); })));
+  draw(); return box;
+}
 // v0.43.3: one-tap 'Supplied from' for an extra board (optional board.supplyKind; the text field still works)
 function supplyChips(cert, b) {
   const box = h('div', { class: 'supplychips', style: 'margin:4px 0 8px' });
@@ -774,6 +782,8 @@ route(/^\/cert\/([^/]+)\/b\/(\d+)\/scan$/, async (id, bi) => {
         p.savedId = fid;
       }
     }
+    // v0.45.1: the main switch it spotted fills that board's blank main switch rating (board 1: the certificate's section)
+    const ms = rows.flatMap((r) => r.board).find((o) => o.kind === 'main' && o.rating); if (ms) mainFromScan(cert, +bi, ms);
     const sm = rows.flatMap((r) => r.ways).find((w) => w.spd && w.keep); if (sm && !b.spdDevice) b.spdDevice = `${sm.type || 'B'}${sm.rating || ''} MCB (circuit ${sm.num || ''})`.replace(' (circuit )', '');
     changed(); await flush();
     toast(`Added ${added} circuit(s)${cert.jobId ? ' · photos saved with the job' : ''}`); go(`#/cert/${id}/b/${bi}`);

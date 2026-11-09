@@ -4,7 +4,7 @@
 // spare way with a breaker in it still counts (the breaker is a real part).
 import { deviceById } from './limits.js';
 import { isSpareCircuit } from './templates.js';
-import { msIsRcd, msIsOcpd } from './certmodel.js';
+import { mainAt, hasMainSwitch, mainSwitchParts } from './boardmain.js';
 
 const real = (v) => v != null && String(v).trim() !== '' && !/^n\/?a$/i.test(String(v).trim());
 const hasDevice = (c) => !c.noDevice && (real(c.device) || real(c.bs)) && real(c.rating);
@@ -21,7 +21,7 @@ const rcdName = (o) => `RCD ${real(o.rcdRating) ? o.rcdRating + ' A ' : ''}${o.r
 
 function add(list, name, circ) { let it = list.find((x) => x.name === name); if (!it) list.push((it = { name, qty: 0, circuits: [] })); it.qty++; if (circ) it.circuits.push(String(circ)); return it; }
 
-export function partsForBoard(b, cert, first = false) {
+export function partsForBoard(b, cert, first = false, bi = first ? 0 : -1) {
   const items = []; const fitted = [];
   const circuits = b.circuits || [];
   for (const c of circuits) {
@@ -31,11 +31,12 @@ export function partsForBoard(b, cert, first = false) {
   }
   items.sort((a, z) => z.qty - a.qty || a.name.localeCompare(z.name, 'en', { numeric: true }));
   const extras = [];
-  if (first && cert && cert.parts) {
-    const p = cert.parts;
-    if (real(p.msCurrent) || real(p.msBs)) extras.push({ name: `Main switch ${real(p.msCurrent) ? p.msCurrent + ' A ' : ''}${real(p.msPoles) ? p.msPoles + '-pole' : ''}${real(p.msBs) ? ' (BS EN ' + p.msBs + ')' : ''}`.replace(/\s+/g, ' ').trim(), qty: 1, circuits: [] });
-    if (msIsOcpd(cert) && real(p.msRating)) extras.push({ name: `Main ${real(p.msType) ? p.msType : 'breaker'} ${p.msRating} A`, qty: 1, circuits: [] });
-    if (msIsRcd(cert) && real(p.rcdIdn)) extras.push({ name: `Main RCD ${p.rcdIdn} mA${real(p.rcdType) ? ' Type ' + p.rcdType : ''}`, qty: 1, circuits: [] });
+  // v0.45.1: every board's main switch: board 1 from the certificate's main switch section, later boards from their own (same boxes)
+  let noMain = false;
+  if (cert && bi >= 0) {
+    const { o, pre } = mainAt(cert, bi);
+    for (const name of mainSwitchParts(o, pre)) extras.push({ name, qty: 1, circuits: [] });
+    noMain = !hasMainSwitch(o, pre);
   }
   const spd = ['spdT1', 'spdT2', 'spdT3'].filter((k) => b[k]).map((k) => k.slice(-1));
   if (spd.length && !b.spdNA) extras.push({ name: `SPD Type ${spd.join('+')}`, qty: 1, circuits: [] });
@@ -49,7 +50,7 @@ export function partsForBoard(b, cert, first = false) {
   }
   rcds.forEach((r) => (r.qty = 1, r.rcd = true));
   const spares = circuits.filter((c) => isSpareCircuit(c) && !hasDevice(c)).length;
-  return { ref: b.ref || 'Board', location: b.location || '', ways: circuits.length, spares, items: [...extras, ...rcds, ...items] };
+  return { ref: b.ref || 'Board', location: b.location || '', ways: circuits.length, spares, noMain, items: [...extras, ...rcds, ...items] };
 }
 
 // Which certificates count: the EICs (new work). If there are none, the EICRs.
@@ -61,7 +62,7 @@ export function certsForParts(certs) {
 
 export function partsForJob(certs) {
   const use = certsForParts(certs);
-  const boards = use.flatMap((c) => (c.boards || []).map((b, i) => ({ ...partsForBoard(b, c, i === 0), cert: c.number || c.type })));
+  const boards = use.flatMap((c) => (c.boards || []).map((b, i) => ({ ...partsForBoard(b, c, i === 0, i), cert: c.number || c.type, certId: c.id, bi: i })));
   const totals = [];
   for (const b of boards) for (const it of b.items) { const t = totals.find((x) => x.name === it.name); if (t) t.qty += it.qty; else totals.push({ name: it.name, qty: it.qty }); }
   totals.sort((a, z) => z.qty - a.qty || a.name.localeCompare(z.name, 'en', { numeric: true }));

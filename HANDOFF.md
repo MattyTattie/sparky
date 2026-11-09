@@ -438,3 +438,10 @@ Tests
 - restore_mock.py clicks #restore-new (or opens More for the small button). sync_v26.py also skips the "Zs Pro" root folder.
 - Shots: /workspace/polish-review/zspro-next/{before,after} (shots.py, interact.py).
 Android: TWA versionCode 5 / versionName 0.45.0, same package io.github.mattytattie.sparky and key, so it installs over the old app. Released 9 Nov as GitHub release app-v5 (asset ZsPro-0.45.0.apk, sha256 e8884d16…4554). See /workspace/sparky-android/BUILD-NOTES.txt.
+
+## v0.45.1 (built 9 Nov 2026 on branch `v0.45.1`, NOT pushed / not live)
+- DB2 and later boards: board details now have a "Main switch" block, the same boxes as DB1's (location, BS, poles, current, voltage, "breaker or fuse" and "is an RCD" ticks that show more boxes). Stored in optional `board.main` (same keys as `cert.parts` ms fields). Shared via `mainSwitchFields(pre)` in certmodel.js.
+- Parts list lists every board's main switch (js/boardmain.js). A BS EN 60947-3 switch that isn't a breaker or RCD reads "Main switch: 100 A DP isolator (BS EN 60947-3)" (DB1 too).
+- Board photo scan fills that board's blank main switch rating (never overwrites).
+- Parts list says "No main switch listed: add it in DB2's board details" (link) when a board has none.
+- Web-only. No APK rebuild needed. Tests: tests/v451.test.mjs (616 pass).
