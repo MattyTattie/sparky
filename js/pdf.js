@@ -1,6 +1,6 @@
 import { pdfFlagsOn } from './certmodel.js';
 import { showRcdType } from './rcdtype.js';
-import { drawDiagramPdf, diagramInPdf } from './wiring.js';
+import { drawDiagramPdf, diagramInPdf, sourcesText } from './wiring.js';
 // =====================================================================
 // pdf.js — certificates as PDFs, laid out like the IET model forms
 // (BS 7671:2018+A4:2026, 15 April 2026). No IET logo (their terms).
@@ -9,9 +9,9 @@ import { Kit, loadJsPDF, VALUE, GREY, INK, RED } from './pdfkit.js';
 import { TYPES, get, eicrOverall, isElectrode, msIsRcd, msIsOcpd, BOND_SERVICES, bondTicked, bondCsaFor, bondNone, sourceRows, isNewInstall, SECTION_I_NA, normaliseCert } from './certmodel.js';
 import { EIC_ITEMS, EICR_ITEMS, CODE_TEXT, INTAKE_NOTE_10, INTAKE_NOTES, INTAKE_NOTIFIED, migrateIntake } from './inspections.js';
 import { GUIDANCE } from './guidance.js';
-import { limitZs, isSpare } from './checks.js';
-import { mainSwitchRow } from './boardmain.js';
-import { FIELDS, autoNA } from './templates.js';
+import { limitZs, isSpare, boardCtx, boardIsTT, fmtZs } from './checks.js';
+import { mainSwitchRow, boardRcdView } from './boardmain.js';
+import { FIELDS, autoNA, boardFedBySource } from './templates.js';
 const AUTO_GREY = [170, 170, 170]; // v0.10: automatic N/A on spare ways
 import { STANDARD, deviceById } from './limits.js';
 import { noticeFor, withNotices } from './dangermodel.js';
@@ -83,11 +83,16 @@ export function textBlock(k, x, w, label, value, { minLines = 1 } = {}) {
   }
   k.y += n * 4.2 + 1;
 }
-export function sig(k, x, y, w, s, label = 'Signature') {
+// v0.47.0: maxH (mm) caps the signature's height so it can't run up over the text above; the drawing
+// keeps its shape (fitted in the box, sitting on the line).
+export function sig(k, x, y, w, s, label = 'Signature', maxH = 8.5) {
   k.t(label + ':', x, y, { size: 7.5 });
   const lx = x + k.tw(label + ':', 7.5) + 1.5;
   k.line(lx, y + 0.9, x + w, y + 0.9, { w: 0.15, color: [150, 150, 150], dash: [0.4, 0.6] });
-  if (s && s.img) k.image(s.img, lx + 1, y - 7.2, Math.min(34, w - (lx - x) - 2), 8.5, 'PNG');
+  if (!(s && s.img)) return;
+  const bw = Math.min(34, w - (lx - x) - 2); let iw = bw, ih = maxH;
+  try { const p = !k.dry && k.doc.getImageProperties ? k.doc.getImageProperties(s.img) : null; if (p && p.width > 0 && p.height > 0) { const r = p.width / p.height; if (bw / maxH > r) iw = maxH * r; else ih = bw / r; } } catch {}
+  k.image(s.img, lx + 1, y + 1.3 - ih, iw, ih, 'PNG');
 }
 
 // ---------- shared sections ----------
@@ -142,9 +147,12 @@ function particularsSection(k, cert, letter) {
       // v0.33: the A4 unit "kVA / A": strike through the one not used (only when a value is filled in)
       if (String(p.maxDemand ?? '').trim()) { const ux = x + c + fw - (k.tw(un, 7.5) + 1.5) + 1; const kva = p.mdUnit === 'kVA'; const sx = kva ? ux + k.tw('kVA / ', 7.5) : ux; k.line(sx - 0.3, y - 0.9, sx + k.tw(kva ? 'A' : 'kVA', 7.5) + 0.3, y - 0.9, { w: 0.25, color: INK }); } }
     k.t('Details of Installation Earth Electrode (where applicable)', x + c, y + 4.6, { size: 7, bold: true });
-    k.field('Type (rod(s), tape etc)', el ? p.elType : NA, x + c, y + 9.2, w - c - 2);
-    k.field('Location', el ? p.elLocation : NA, x + c, y + 13.8, w - c - 2);
-    k.field('Electrode resistance/impedance, RA/ZA (delete as appropriate)', el ? p.elRa : NA, x + c, y + 18.4, w - c - 2, { unit: 'Ω' });
+    // v0.47.0: boards on their own TT earth electrode are listed here too (by board), after the origin's
+    const tts = (cert.boards || []).filter(boardIsTT); const tv = (k2) => tts.map((b) => String(b[k2] ?? '').trim() ? `${b.ref || 'Board'}: ${String(b[k2]).trim()}` : '').filter(Boolean).join('; ');
+    const plus = (a, k2) => { const t = tv(k2); return t ? (a && a !== NA ? a + '; ' : el ? '' : 'N/A at origin; ') + t : a; };
+    k.field('Type (rod(s), tape etc)', plus(el ? p.elType : NA, 'elType'), x + c, y + 9.2, w - c - 2);
+    k.field('Location', plus(el ? p.elLocation : NA, 'elLocation'), x + c, y + 13.8, w - c - 2);
+    k.field('Electrode resistance/impedance, RA/ZA (delete as appropriate)', plus(el ? p.elRa : NA, 'ra'), x + c, y + 18.4, w - c - 2, { unit: 'Ω' });
     k.y = y + 21;
     k.t('Main Protective Conductors', x, k.y + 3.2, { size: 7, bold: true }); k.y += 3.6;
     row(k, x, w, [['Earthing conductor   Material', p.ecMat, 0.45], ['csa', p.ecCsa, 0.25, { unit: 'mm²' }]]);
@@ -247,14 +255,20 @@ function boardHeaderDetails(k, cert, b, certNo) {
   const y0 = k.y; const x = k.x0 + 2;
   k.t('Distribution board/Consumer unit details', x, k.y + 3.6, { size: 8, bold: true }); k.y += 4.2;
   const w = k.cw - 4;
+  const bi = (cert.boards || []).findIndex((o) => o === b || (b.id != null && o.id === b.id));
   row(k, x, w, [['DB/CU reference:', b.ref, 0.3], ['Location:', b.location, 0.35], ['Supplied from:', b.suppliedFrom, 0.35]]);
-  row(k, x, w, [['Distribution circuit OCPD: BS (EN):', b.ocpdBs, 0.45], ['Type:', b.ocpdType, 0.2], ['Rating/Setting:', b.ocpdRating, 0.35, { unit: 'A' }]]);
+  // v0.47.0: the origin board (and a board on the meter tails) has no distribution circuit: blank prints N/A
+  const naO = (v) => (bi === 0 || b.supplyKind === 'tails') && !String(v ?? '').trim() ? 'N/A' : v;
+  row(k, x, w, [['Distribution circuit OCPD: BS (EN):', naO(b.ocpdBs), 0.45], ['Type:', naO(b.ocpdType), 0.2], ['Rating/Setting:', naO(b.ocpdRating), 0.35, { unit: 'A' }]]);
   checks(k, x, [['T1', b.spdT1], ['T2', b.spdT2], ['T3†', b.spdT3], ['N/A', b.spdNA]], { label: 'SPD Details: Type(s)*:' });
-  row(k, x, w, [['RCD:  BS (EN)', b.rcdBs, 0.3], ['Type', showRcdType(b.rcdType), 0.15], ['Rating', b.rcdRating, 0.18, { unit: 'A' }], ['Rated residual operating current (IΔn):', b.rcdIdn, 0.37, { unit: 'mA' }]]);
+  const rv = bi >= 0 ? boardRcdView(cert, bi) : b; // v0.47.0: an RCD main switch's details fill the board RCD row
+  row(k, x, w, [['RCD:  BS (EN)', rv.rcdBs, 0.3], ['Type', showRcdType(rv.rcdType), 0.15], ['Rating', rv.rcdRating, 0.18, { unit: 'A' }], ['Rated residual operating current (IΔn):', rv.rcdIdn, 0.37, { unit: 'mA' }]]);
+  // v0.47.0: a board on its own TT earth electrode, and generation feeding the board
+  if (boardIsTT(b)) row(k, x, w, [['Earthing (this board):', 'TT', 0.25], ['RA:', b.ra, 0.17, { unit: '\u03a9' }], ['Earth electrode:', [b.elType, b.elLocation].map((v) => String(v ?? '').trim()).filter(Boolean).join(', '), 0.58]]);
+  if (boardFedBySource(b)) row(k, x, w, [['Fed by:', (sourcesText(cert) || 'Battery / PV / generator') + ' (power can flow both ways; see other sources of supply)', 1]]);
   // v0.32: optional per-board maximum demand (only printed when filled in).
   if (String(b.maxDemand ?? '').trim()) row(k, x, w, [['Maximum demand (this board):', b.maxDemand, 0.4, { unit: 'A' }]]);
   // v0.45.2: a later board's own main switch (board 1's is in the certificate). Only when filled in.
-  const bi = (cert.boards || []).findIndex((o) => o === b || (b.id != null && o.id === b.id));
   const ms = bi > 0 ? mainSwitchRow(b, 'main.', showRcdType) : null; if (ms) row(k, x, w, ms);
   k.rect(k.x0, y0, k.cw, k.y - y0 + 0.5, { lw: 0.35, color: INK });
   k.y += 2;
@@ -366,11 +380,11 @@ export function adjRemark(c) {
   return `${d.adj === 'mpcb' ? 'MPCB' : 'MCCB'} ${parts.join(', ')}`;
 }
 export function scheduleRows(cert, b, flags = false) {
-  const ctx = { earthing: cert.supply && cert.supply.earthing, zdb: b.zdb };
+  const ctx = boardCtx(cert, b);
   return b.circuits.map((c) => {
     const spare = isSpare(c);
     const lim = spare ? { value: null } : limitZs(c, ctx);
-    const r = { ...c, maxZs: spare ? (c.maxZsOverride || '') : (lim.value != null ? lim.value.toFixed(2) : (c.maxZsOverride || '')) };
+    const own = String(c.maxZsOverride ?? '').trim(); const r = { ...c, maxZs: spare ? own : own ? own : (lim.value != null ? fmtZs(lim.value) : '') }; // v0.47.0: your own figure prints as typed
     // v0.10: spare way: empty boxes print an automatic N/A in light grey (typed values as typed).
     // v0.18.4: also the ring boxes (r1, rn, r2) of a circuit that isn't a ring final.
     for (const f of FIELDS) if (autoNA(c, f.k)) r[f.k] = { v: 'N/A', auto: true };
@@ -589,7 +603,7 @@ function eic(k, cert, profile) {
   k.section('SECTION C: CERTIFICATION SIGNATORIES', (k, x, w) => {
     const decl = (who, what) => `I${who === 'design' ? '/We' : ''}, being the person${who === 'design' ? '(s)' : ''} responsible for the ${what} of the electrical installation (as indicated by my${who === 'design' ? '/our' : ''} signature${who === 'design' ? 's' : ''} below), particulars of which are described above, having exercised reasonable skill and care when carrying out the ${what}, hereby CERTIFY that the ${who === 'inspection' ? 'work' : what + ' work'} for which I${who === 'design' ? '/we have' : ' have'} been responsible is to the best of my${who === 'design' ? '/our' : ''} knowledge and belief in accordance with BS 7671:2018, amended to ${cert.amendedTo} (date) except for the departures, if any, detailed as follows:`;
     const signLine = (s, name, role) => {
-      const y = k.y + 7.5; sig(k, x, y, w * 0.30, s); k.field('Date:', fmtDate(s && s.date), x + w * 0.32, y, w * 0.14); k.field('Name (IN BLOCK CAPITALS):', (name || '').toUpperCase(), x + w * 0.48, y, w * 0.405); k.t(role, x + w, y, { size: 7, bold: true, align: 'right' }); k.y += 9;
+      const y = k.y + 7.5; sig(k, x, y, w * 0.30, s, 'Signature', 5.4); k.field('Date:', fmtDate(s && s.date), x + w * 0.32, y, w * 0.14); k.field('Name (IN BLOCK CAPITALS):', (name || '').toUpperCase(), x + w * 0.48, y, w * 0.405); k.t(role, x + w, y, { size: 7, bold: true, align: 'right' }); k.y += 9;
     };
     // v0.33: the liability line and 'For … of the installation:' under each signatory, as on the A4 form
     const liab = (what) => { k.t('The extent of liability of the signatory or signatories is limited to the work described above as the subject of this Certificate.', x, k.y + 2.5, { size: 6.5 }); k.y += 3; k.t(`For ${what} of the installation:`, x, k.y + 2.8, { size: 7 }); k.y += 1; };
@@ -885,7 +899,7 @@ function mw(k, cert, profile) {
     const y3 = k.y; checks(k, x, [['AFDD satisfactory test button operation:', /✓/.test(c.afddBtn) ? true : false]]); k.y = y3; k.t('NOTE: Not all AFDDs have a test button', x + L, k.y + 3.4, { size: 7 }); k.y += 4.6;
     const y4 = k.y; checks(k, x, [['SPD functionality confirmed:', /✓/.test(M.spdOk) ? true : false]]); k.y = y4; k.t('NOTE: Not all SPDs have visible functionality indication', x + L, k.y + 3.4, { size: 7 }); k.y += 4.6;
     row(k, x, w, [['Test instruments used (serial and/or asset numbers):', mwInstruments(cert), 1]]); // v0.26
-    if (lim.value != null) { k.t(`Maximum permitted Zs for this device: ${lim.value.toFixed(2)} Ω (${lim.source}).`, x, k.y + 2.6, { size: 6.4, color: GREY }); k.y += 3.2; }
+    if (lim.value != null) { k.t(`Maximum permitted Zs for this device: ${fmtZs(lim.value)} Ω (${lim.source}).`, x, k.y + 2.6, { size: 6.4, color: GREY }); k.y += 3.2; }
   });
   k.section('SECTION E: Declaration', (k, x, w) => {
     k.y += k.para(`I certify that the work covered by this certificate does not impair the safety of the existing installation and the work has been designed, constructed, inspected and tested in accordance with BS 7671:2018 amended to ${cert.amendedTo} (date) and that to the best of my knowledge and belief, at the time of my inspection, complied with BS 7671 except as detailed in Section A.`, x, k.y + 3, w, { size: 7.5 });

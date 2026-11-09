@@ -19,9 +19,23 @@ export function num(v) {
 const isGreater = (v) => /^\s*[>≥]/.test(String(v || ''));
 const isLess = (v) => /^\s*[<≤]/.test(String(v || '')); // v0.45: '<1' means below 1
 
-import { isSpareCircuit, isRingCircuit } from './templates.js';
+import { isSpareCircuit, isRingCircuit, evMissing } from './templates.js';
+import { isSType } from './rcdtype.js';
 export const isSpare = isSpareCircuit;
 
+// v0.47.0: a board can be TT (its own earth electrode, e.g. an outbuilding) when the supply isn't.
+// board.earthing 'TT' (optional), board.ra (Ω), board.elType / board.elLocation. Blank = same as the supply.
+export const boardIsTT = (b) => !!b && String(b.earthing || '').trim().toUpperCase() === 'TT';
+export const boardEarthing = (cert, b) => (boardIsTT(b) ? 'TT' : ((cert && cert.supply) || {}).earthing);
+const realV = (v) => v != null && String(v).trim() !== '' && !/^n\/?a$/i.test(String(v).trim());
+// The check context for a board's circuits: earthing, Zdb, RA (TT) and the board's own RCD.
+export function boardCtx(cert, b) {
+  b = b || {}; const tt = boardIsTT(b); const sup = (cert && cert.supply) || {};
+  const ra = tt ? b.ra : (String(sup.earthing || '').toUpperCase() === 'TT' ? ((cert && cert.parts) || {}).elRa : '');
+  return { earthing: boardEarthing(cert, b), zdb: b.zdb, ra, boardTT: tt, boardRcd: realV(b.rcdIdn) ? { rcdBs: b.rcdBs, rcdType: b.rcdType, rcdIdn: b.rcdIdn, rcdRating: b.rcdRating } : null };
+}
+// v0.47.0: max Zs as printed: 2 decimals, but whole ohms from 100 Ω up (Table 41.5's 1667, not 1667.00)
+export const fmtZs = (v) => (v == null || !isFinite(v) ? '' : v >= 100 ? String(Math.round(v)) : v.toFixed(2));
 // The max Zs used for a circuit: your own figure (e.g. from the maker's
 // data) wins; otherwise the BS 7671 table; on TT with an RCD, Table 41.5.
 export function limitZs(c, ctx = {}) {
@@ -110,11 +124,25 @@ export function checkCircuit(c, ctx = {}) {
   // --- RCD time at IΔn
   const ms = num(c.rcdMs);
   if (ms != null) {
-    const t = rcdTimeLimit(!!c.rcdS);
-    if (isGreater(c.rcdMs) && ms >= t.maxMs) put('rcdMs', 'red', `Over ${ms} ms: it didn\u2019t trip within the ${t.maxMs} ms limit for ${c.rcdS ? 'an S-type' : 'a general'} RCD at IΔn.`);
-    else if (ms > t.maxMs) put('rcdMs', 'red', `${ms} ms is over the ${t.maxMs} ms limit for ${c.rcdS ? 'an S-type' : 'a general'} RCD at IΔn.`);
+    const sT = !!c.rcdS || isSType(c.rcdType); const t = rcdTimeLimit(sT);
+    if (isGreater(c.rcdMs) && ms >= t.maxMs) put('rcdMs', 'red', `Over ${ms} ms: it didn\u2019t trip within the ${t.maxMs} ms limit for ${sT ? 'an S-type' : 'a general'} RCD at IΔn.`);
+    else if (ms > t.maxMs) put('rcdMs', 'red', `${ms} ms is over the ${t.maxMs} ms limit for ${sT ? 'an S-type' : 'a general'} RCD at IΔn.`);
     else if (t.minMs && ms < t.minMs) put('rcdMs', 'amber', `${ms} ms is faster than the ${t.minMs} ms an S-type should take. Is it really an S-type?`);
   }
+  // v0.47.0: TT: every circuit needs an RCD, and RA × IΔn ≤ 50 V (Reg 411.5.3)
+  const dev = deviceById(c.device) || {}; const idnN = num(c.rcdIdn) || (dev.rcd ? 30 : null);
+  if (ctx.earthing === 'TT' && c.device && !idnN) put('rcdIdn', 'amber', 'TT earthing: this circuit needs RCD protection (Reg 411.5.2). Fill in its RCD, or the board\u2019s RCD.');
+  const raN = num(ctx.ra);
+  if (ctx.earthing === 'TT' && raN != null && idnN) { const v = raN * idnN / 1000; if (v > 50) put('rcdIdn', 'red', `RA ${raN} \u03a9 \u00d7 I\u0394n ${idnN} mA = ${+v.toFixed(1)} V, over 50 V (Reg 411.5.3). Lower RA or use a more sensitive RCD.`); }
+  // v0.47.0: on the board's RCD but its S (time delay) doesn't match the board's
+  const br = ctx.boardRcd;
+  if (br && !dev.rcd && !c.noDevice && String(c.rcdIdn ?? '').trim() === String(br.rcdIdn ?? '').trim() && (!realV(c.rcdRating) || !realV(br.rcdRating) || String(c.rcdRating).trim() === String(br.rcdRating).trim())) {
+    const bs = isSType(br.rcdType), cs = !!c.rcdS || isSType(c.rcdType);
+    if (bs !== cs) put('rcdType', 'amber', bs ? 'The board\u2019s RCD is S-type (time-delayed), but this circuit\u2019s RCD isn\u2019t marked S. Is it the same RCD?' : 'This circuit\u2019s RCD is marked S-type, but the board\u2019s RCD isn\u2019t. Is it the same RCD?');
+  }
+  // v0.47.0: EV charger (Section 722)
+  const ev = evMissing(c, ctx.earthing);
+  if (ev.length) put('remarks', 'amber', 'EV charger: ' + [ev.includes('dc') ? 'say how DC faults are covered (RDC-DD 6 mA DC in the charger, or a Type B RCD, Reg 722.531.3.101)' : '', ev.includes('pen') ? 'on PME, say how an open PEN is covered (protection in the charger, or a TT electrode, Reg 722.411.4.1)' : ''].filter(Boolean).join('; ') + '. Tap a chip on the circuit to add it to Remarks.');
   for (const f of ['rcdBtn', 'afddBtn']) if (/^(x|✗|✘|fail|no)$/i.test(String(c[f] || '').trim())) put(f, 'red', 'Test button did not work.');
 
   // --- Ring final circuit end-to-end readings (rule of thumb)

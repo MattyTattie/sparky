@@ -3,7 +3,7 @@
 // time (remembered in c.autoF), are filled or changed. Anything typed by hand
 // is left alone. Max Zs isn't a stored box: it's always worked out from the table.
 import { deviceById, deviceFromBs } from './limits.js';
-import { isSType, showRcdType } from './rcdtype.js';
+import { isSType, showRcdType, parseRcdType as _p, formatRcdType as _f } from './rcdtype.js';
 
 export const DEFAULT_KA = '6';
 // Standard breaking capacities (kA) where the product standard sets one.
@@ -54,4 +54,39 @@ export function typed(c, k) { if (c && c.autoF && k in c.autoF) delete c.autoF[k
 export function fillBoardRcd(b, isSpare = () => false) {
   let n = 0; for (const c of (b && b.circuits) || []) if (!isSpare(c) && autoFillOcpd(c, { board: b }).length) n++;
   return n;
+}
+
+// v0.47.0: RCBO -> MCB (or fuse). An RCBO's own RCD values (61009, its rating, Type A 30 mA) left in the
+// boxes are stale for an MCB: let the app replace them (with the board's RCD, or blank). Values that
+// don't look like the RCBO's own are left alone. Returns the keys released.
+export function releaseRcboRcd(c, oldDev, newDev) {
+  if (!c || !oldDev || !oldDev.rcd || !newDev || newDev.rcd) return [];
+  const own = { rcdBs: ['61009', '62423'], rcdType: ['A', 'AC', 'F', 'B'], rcdIdn: ['30'], rcdRating: [String(c.rating ?? '').trim()] };
+  if (String(c.rcdBs ?? '').trim() && !own.rcdBs.includes(String(c.rcdBs).trim())) return []; // a real RCCB number was typed: theirs
+  const af = { ...(c.autoF || {}) }; const out = [];
+  for (const k of RCD4) { const v = String(c[k] ?? '').trim(); if (v && own[k].includes(v) && !(k in af && String(af[k]) === v)) { af[k] = v; out.push(k); } }
+  c.autoF = af; return out;
+}
+// Does the board have its own RCD (a real IΔn)?
+export const boardHasRcd = (b) => { const v = String((b && b.rcdIdn) ?? '').trim(); return !!v && !/^n\/?a$/i.test(v); };
+const realS = (v) => String(v ?? '').trim();
+// v0.47.0: the board RCD's S (time delay) carries down to the circuits that are on it: MCB / fuse lines
+// whose RCD boxes match the board's (BS, IΔn, rating; S ignored). Returns how many changed.
+export function syncBoardS(b) {
+  if (!boardHasRcd(b)) return 0; const s = isSType(b.rcdType); let n = 0;
+  for (const c of (b && b.circuits) || []) {
+    const d = deviceById(c.device) || deviceFromBs(c.bs); if (c.noDevice || (d && d.rcd)) continue;
+    if (realS(c.rcdIdn) !== realS(b.rcdIdn) || (realS(c.rcdRating) && realS(b.rcdRating) && realS(c.rcdRating) !== realS(b.rcdRating))) continue;
+    if (realS(c.rcdBs) && realS(b.rcdBs) && realS(c.rcdBs) !== realS(b.rcdBs)) continue;
+    const want = s ? formatS(c.rcdType || b.rcdType, true) : formatS(c.rcdType, false);
+    if (!!c.rcdS !== s || realS(c.rcdType) !== want) { c.rcdS = s; if (realS(c.rcdType) || s) c.rcdType = want; n++; }
+  }
+  return n;
+}
+const formatS = (t, s) => { const p = _p(t); return _f(p.wave, s); };
+// The board RCD a circuit is on, when its RCD boxes match the board's (else null).
+export function onBoardRcd(c, b) {
+  if (!boardHasRcd(b) || !c) return false;
+  const d = deviceById(c.device) || deviceFromBs(c.bs); if (d && d.rcd) return false;
+  return realS(c.rcdIdn) === realS(b.rcdIdn) && (!realS(c.rcdRating) || !realS(b.rcdRating) || realS(c.rcdRating) === realS(b.rcdRating));
 }

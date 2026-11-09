@@ -462,3 +462,24 @@ Android: TWA versionCode 5 / versionName 0.45.0, same package io.github.mattytat
 - Quick fill on a circuit's Test results (js/quickfill.js): Ring / Radial / Lights. Empty boxes only: IR 500 V, >999, >999, polarity ✓, R2 N/A, RCD test button ✓ (or N/A + trip time N/A when no RCD), AFDD button N/A when no AFDD; Ring ticks "Ring final circuit", Radial/Lights untick it (so r1/rn/r2 show N/A). Typed values that differ are listed with Cancel / Only empty boxes / Replace these too. "Undo <name>" button puts back exactly what was there.
 - Same RCD trip time (js/rcdreuse.js): on Test across circuits, RCD step, one card per shared RCD (groupCircuits rule, 2+ circuits, RCBOs left out). One time box, circuits ticked (untick ones on another identical RCD), "Apply to ticked circuits"; typed times listed with Cancel / Only empty ones / Replace; Undo.
 - No new stored fields (only existing circuit keys, and c.ring which already existed). DB name, section ids, backup/sync format unchanged. Web-only, no APK rebuild. Tests: tests/v460.test.mjs (645 pass).
+
+## v0.47.0 beta (9 Nov 2026, branch `v0.47.0`, committed locally, NOT pushed / not live)
+Fixes all 19 findings from the fake 4-DB EIC walk-through (/workspace/polish-review/eic-walkthrough/findings.md).
+New optional fields only (old jobs open and print unchanged): board.earthing ('TT'), board.ra, board.elType,
+board.elLocation, circuit.rcdNo ('1'/'2'/'3', which RCD on a split-load board). No DB, key or backup format change.
+- TT per board (checks.js boardCtx/boardIsTT): Table 41.5 + RA × IΔn ≤ 50 V, amber if no RCD; prints in the board
+  header, section G (by board) and the diagram (earth symbol). All ctx builders use boardCtx.
+- RCD main switch = the board RCD: one set of boxes (main switch's, with type + S chips, field type 'rcdtype'),
+  mirrored into board.rcd* (boardmain.js mirrorMainRcd / liftBoardRcdToMain / boardRcdView). PDF row keeps location.
+- Parts list: one line per physical RCD (BS/IΔn/rating/rcdNo, S ignored), RCD main switch is one "Main switch:" line,
+  SPD device line, meter tail connector block line (once), "Circuit 8" singular, it.label for "RCD 1: …".
+- Templates: ring final sets ring:true, "Ring final: sockets", cable picker; template device boxes recorded in autoF
+  so RCBO→MCB refills from the board RCD; releaseRcboRcd for older circuits; "Is this MCB on an RCD?" prompt.
+- Board RCD S carries down (syncBoardS) + amber on mismatch; S trip window used when type says S.
+- Chips are radio-like (no clear on second tap); optional chips get a small Clear.
+- Generation: "Fed by:" row on the schedule, diagram board line + "Source:" on the circuit; battery chips (570.6.2.2,
+  570.6.7.203 / PAS 63100). EV chips (722.531.3.101, 722.411.4.1) + amber check in checkCircuit.
+- "Use my details (blanks only)" on signatory sections (certmodel fillPeopleBlanks).
+- Signature capped/fitted on page 1; max Zs fmtZs (1667 not 1667.00; own figure as typed); "(outbuilding)" only on
+  sub-main/TT boards; empty board not "Section complete"; section letters per cert type; DB1 OCPD blank → N/A.
+Tests: tests/v470.test.mjs. Walk-through re-run: /workspace/polish-review/eic-walkthrough-v0470/.

@@ -24,7 +24,7 @@ export async function partsPdf(res, { title = 'Job', profile = {}, base } = {}) 
   for (const b of res.boards) {
     head(`${b.ref}${b.location ? ' · ' + b.location : ''}`, `${b.ways} way(s)${b.spares ? ', ' + b.spares + ' spare' : ''}${res.boards.length > 1 && res.from.length > 1 ? ' · ' + b.cert : ''}`);
     if (!b.items.length) { k.t('No devices filled in on this board.', k.x0 + 2, k.y + 3.4, { size: 8.5, color: GREY }); k.y += 6; }
-    for (const it of b.items) row(it.qty, it.name, it.circuits.length ? (it.rcd ? 'covers ' : 'circuits ') + it.circuits.join(', ') : '');
+    for (const it of b.items) row(it.qty, it.label || it.name, it.circuits.length ? (it.rcd ? 'covers ' : it.circuits.length === 1 ? 'circuit ' : 'circuits ') + it.circuits.join(', ') : '');
   }
   if (res.boards.length > 1) { head('Total for the job'); for (const t of res.totals) row(t.qty, t.name); }
   k.footers('');

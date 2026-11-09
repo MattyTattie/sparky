@@ -98,7 +98,7 @@ test('the RCD step of Test across circuits shows it', () => {
   assert.match(src('js/testacross.js'), /step\.id === 'rcd' \? rcdReuse\(b/);
 });
 test('version and cache are 0.46.0, new files cached', () => {
-  assert.match(src('js/config.js'), /APP_VERSION = '0\.46\.0 beta'/);
-  const sw = src('sw.js'); assert.match(sw, /const CACHE = 'sparky-v0\.46\.0'/);
+  assert.match(src('js/config.js'), /APP_VERSION = '0\.4[6-9]\.\d beta'/);
+  const sw = src('sw.js'); assert.match(sw, /const CACHE = 'sparky-v0\.4[6-9]\.\d'/);
   for (const f of ['certcheck', 'quickfill', 'rcdreuse']) assert.ok(sw.includes(`./js/${f}.js`), f);
 });

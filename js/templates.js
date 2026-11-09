@@ -48,9 +48,11 @@ export function blankCircuit(n = 1) {
 }
 
 // Templates fill the circuit-details side only; test readings stay blank.
-const T = (name, o) => ({ name, ...o });
+// v0.47.0: twin & earth templates also set the Cable picker (6242Y) when the sizes match it.
+const TE = { 1: 1, 1.5: 1, 2.5: 1.5, 4: 1.5, 6: 2.5, 10: 4, 16: 6 };
+const T = (name, o) => ({ name, ...(o.wiring === 'A' && !o.cable && TE[o.live] != null && Number(o.cpc) === TE[o.live] ? { cable: 'te', cableSize: o.live } : {}), ...o });
 export const TEMPLATES = [
-  T('Ring final (sockets)', { desc: 'Sockets', wiring: 'A', ref: 'C', live: '2.5', cpc: '1.5', device: 'rcbo', bs: '61009', type: 'B', rating: '32', bka: '6', rcdBs: '61009', rcdType: 'A', rcdIdn: '30', rcdRating: '32' }),
+  T('Ring final (sockets)', { desc: 'Ring final: sockets', ring: true, wiring: 'A', ref: 'C', live: '2.5', cpc: '1.5', device: 'rcbo', bs: '61009', type: 'B', rating: '32', bka: '6', rcdBs: '61009', rcdType: 'A', rcdIdn: '30', rcdRating: '32' }),
   T('Radial 20 A (sockets)', { desc: 'Sockets radial', wiring: 'A', ref: 'C', live: '2.5', cpc: '1.5', device: 'rcbo', bs: '61009', type: 'B', rating: '20', bka: '6', rcdBs: '61009', rcdType: 'A', rcdIdn: '30', rcdRating: '20' }),
   T('Radial 32 A, 4 mm²', { desc: 'Sockets radial', wiring: 'A', ref: 'C', live: '4', cpc: '1.5', device: 'rcbo', bs: '61009', type: 'B', rating: '32', bka: '6', rcdBs: '61009', rcdType: 'A', rcdIdn: '30', rcdRating: '32' }),
   T('Lighting', { desc: 'Lights', wiring: 'A', ref: '101', live: '1.5', cpc: '1.0', device: 'rcbo', bs: '61009', type: 'B', rating: '6', bka: '6', rcdBs: '61009', rcdType: 'A', rcdIdn: '30', rcdRating: '6' }),
@@ -63,9 +65,13 @@ export const TEMPLATES = [
   T('Sub-main / outbuilding (SWA)', { desc: 'Sub-main to garage', wiring: 'F', ref: 'D1', live: '6', cpc: '6', device: 'mcb', bs: '60898', type: 'C', rating: '32', bka: '6', time: 5, points: '1' }),
   T('Battery / inverter AC', { desc: 'Inverter AC', wiring: 'F', ref: 'C', live: '6', cpc: '6', device: 'mcb', bs: '60898', type: 'B', rating: '32', bka: '6', points: '1' }),
 ];
+// v0.47.0: the device boxes a template fills count as app-filled (c.autoF), so changing the
+// device or rating later updates them (e.g. RCBO -> MCB takes the board's RCD, not 61009 / 32).
+const AUTO_KEYS = ['bs', 'type', 'bka', 'rcdBs', 'rcdType', 'rcdIdn', 'rcdRating'];
 export function applyTemplate(c, t) {
   const { name, ...vals } = t;
-  return { ...c, ...vals, spare: false };
+  const autoF = { ...(c.autoF || {}) }; for (const k of AUTO_KEYS) if (k in vals && String(vals[k]) !== '') autoF[k] = String(vals[k]);
+  return { ...c, ...vals, spare: false, autoF };
 }
 export const RESULT_KEYS = ['r1', 'rn', 'r2', 'r1r2', 'R2', 'irLL', 'irLE', 'pol', 'zs', 'rcdMs', 'rcdBtn', 'afddBtn', 'remarks'];
 const newCircuitId = () => 'c' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
@@ -234,6 +240,38 @@ export function bidiCircuits(b) {
   const fed = list.filter(circuitFedBySource);
   return fed.length ? fed : b && b.fedBySource ? list.filter((c) => !isSpareCircuit(c)) : [];
 }
-export function addBidiRemark(c) { const t = String(c.remarks || '').trim(); if (!hasBidiNote(t)) c.remarks = (t ? t + '; ' : '') + BIDI_REMARK; return c; }
+export function addBidiRemark(c) { const t = String(c.remarks || '').trim(); if (!hasBidiNote(t)) c.remarks = (t ? t + (/[.;:]$/.test(t) ? ' ' : '; ') : '') + BIDI_REMARK; return c; }
 export const bidiRemarksDone = (list) => list.length > 0 && list.every((c) => hasBidiNote(c.remarks));
 export function addBidiNote(text) { const t = String(text || '').trim(); return hasBidiNote(t) ? t : (t ? t + '\n' : '') + BIDI_NOTE; }
+
+// v0.47.0: battery / generation and EV charger prompts. Tapping a chip adds the line to the
+// circuit's Remarks (never twice). Nothing is added unless tapped.
+const joinRemark = (t, text) => (t ? t + (/[.;:]$/.test(t) ? ' ' : '; ') : '') + text; // 'Done.' + ' Next' (no '.;')
+const addTo = (c, text, has) => { const t = String(c.remarks || '').trim(); if (!has(t)) c.remarks = joinRemark(t, text); return c; };
+export const GEN_NOTES = [
+  { id: 'battB', label: 'Battery: Type B RCD, or PCE gives separation', text: 'Battery: Type B RCD, or PCE gives simple separation / maker says Type B not needed (Reg 570.6.2.2).', has: (t) => /570\.6\.2/.test(t) },
+  { id: 'battLoc', label: 'Battery location to PAS 63100', text: 'Battery location suitable (Reg 570.6.7.203, PAS 63100).', has: (t) => /570\.6\.7|PAS ?63100/i.test(t) },
+];
+export const isBatteryCircuit = (c) => !!c && /\b(battery|batteries|storage|hybrid)\b/i.test(String(c.desc || ''));
+export const EV_RE = /\b(ev|e\.v\.|evse|car charg\w*|charge ?point|ev charg\w*)\b/i;
+export const isEvCircuit = (c) => !!c && !isSpareCircuit(c) && EV_RE.test(String(c.desc || ''));
+export const EV_DC_HAS = (t) => /722\.531|RDC-?DD|6 ?mA ?(d\.?c|dc)|type b rcd/i.test(t);
+export const EV_PEN_HAS = (t) => /722\.411|open[- ]?pen|pen[- ]?fault|\bTT\b/i.test(t);
+export const EV_NOTES = [
+  { id: 'evDc', group: 'dc', label: '6 mA DC detection (RDC-DD) in charger', text: 'DC fault protection: RDC-DD (6 mA DC) in the charger (Reg 722.531.3.101).', has: EV_DC_HAS },
+  { id: 'evB', group: 'dc', label: 'Type B RCD', text: 'DC fault protection: Type B RCD (Reg 722.531.3.101).', has: EV_DC_HAS },
+  { id: 'evPen', group: 'pen', label: 'Open-PEN protection in charger', text: 'PME: open-PEN protection in the charger (Reg 722.411.4.1).', has: EV_PEN_HAS },
+  { id: 'evTT', group: 'pen', label: 'Charger on its own TT electrode', text: 'Charger on its own TT earth electrode (Reg 722.411.4.1).', has: EV_PEN_HAS },
+];
+export function addNote(c, n) { return addTo(c, n.text, n.has); }
+export const noteDone = (c, n) => n.has(String((c && c.remarks) || ''));
+const isTNCS = (e) => /TN-C-S|PME/i.test(String(e || ''));
+// What an EV circuit is still missing: 'dc' (no Type B RCD and nothing in Remarks), 'pen' (PME and nothing in Remarks).
+export function evMissing(c, earthing) {
+  if (!isEvCircuit(c)) return [];
+  const t = String(c.remarks || ''); const out = [];
+  const typeB = /^\s*B\b/i.test(String(c.rcdType || ''));
+  if (!typeB && !EV_DC_HAS(t)) out.push('dc');
+  if (isTNCS(earthing) && !EV_PEN_HAS(t)) out.push('pen');
+  return out;
+}

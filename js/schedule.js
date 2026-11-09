@@ -10,16 +10,17 @@ import { route, page, go, render } from './app.js';
 import { openCert, changed, flush, touchJob } from './state.js';
 import { field, stateLine } from './certui.js';
 import { sectionsFor, get, set, mainSwitchFields } from './certmodel.js';
-import { mainFromScan, mainSummary } from './boardmain.js';
+import { mainFromScan, mainSummary, mirrorMainRcd, liftBoardRcdToMain, mainAt } from './boardmain.js';
+import { msIsRcdAt } from './certmodel.js';
 import { QUICK, planQuick, applyQuick, undoQuick } from './quickfill.js';
 import { supplyKindOf, feedInfo } from './wiring.js';
 const boardsLine = (cert) => { const sec = sectionsFor(cert.type).find((x) => x.special === 'boards'); if (!sec) return null; const [c, t] = stateLine(cert, sec); return h('div', { class: 'notice ' + c + ' secstate' }, t); };
 import { blankBoard } from './certmodel.js';
 import * as presets from './presets.js';
-import { FIELDS, FIELD, TEMPLATES, blankCircuit, applyTemplate, copyCircuit, copyBoard, copyBoardToCert, makeSpare, autoNA, descChanged, rcdGroupChanged, spdGroupChanged, SPD_HIDE, spdHidden, spdObservation, circuitFedBySource, boardFedBySource, bidiTarget, hasBidiNote, addBidiNote, bidiCircuits, addBidiRemark, bidiRemarksDone, spareLine, copyToNextWay, laterSequential, deleteCircuitAt } from './templates.js';
-import { checkCircuit, limitZs, isSpare } from './checks.js';
+import { FIELDS, FIELD, TEMPLATES, blankCircuit, applyTemplate, copyCircuit, copyBoard, copyBoardToCert, makeSpare, autoNA, descChanged, rcdGroupChanged, spdGroupChanged, SPD_HIDE, spdHidden, spdObservation, circuitFedBySource, boardFedBySource, bidiTarget, hasBidiNote, addBidiNote, bidiCircuits, addBidiRemark, bidiRemarksDone, GEN_NOTES, EV_NOTES, addNote, noteDone, isEvCircuit, evMissing, isBatteryCircuit, spareLine, copyToNextWay, laterSequential, deleteCircuitAt } from './templates.js';
+import { checkCircuit, limitZs, isSpare, boardCtx, boardIsTT, fmtZs } from './checks.js';
 import { WAVES, parseRcdType, formatRcdType, isSType } from './rcdtype.js';
-import { autoFillOcpd as autoFill0, typed, fillBoardRcd } from './ocpdfill.js';
+import { autoFillOcpd as autoFill0, typed, fillBoardRcd, releaseRcboRcd, boardHasRcd, syncBoardS } from './ocpdfill.js';
 // v0.35.2: MCB / fuse lines take the RCD boxes from their board's main RCD.
 const boardOf = (cert, c) => ((cert && cert.boards) || []).find((x) => (x.circuits || []).includes(c)) || null;
 import { DEVICES, deviceById, deviceFromBs, ratingsFor, CHECK_NOTE } from './limits.js';
@@ -39,7 +40,7 @@ import { cableCheck, isRingLike, applyCable, ringCheck, circuitAdiabatic } from 
 
 const LAND = window.matchMedia('(orientation: landscape) and (min-width: 600px)');
 LAND.addEventListener('change', () => { if (/\/b\/\d+$/.test(location.hash)) render(); });
-const ctxFor = (cert, b) => ({ earthing: cert.supply.earthing, zdb: b.zdb });
+const ctxFor = (cert, b) => boardCtx(cert, b);
 const TESTS = FIELDS.filter((f) => f.test);
 const isTick = (k) => FIELD[k] && FIELD[k].tick;
 
@@ -114,6 +115,8 @@ route(/^\/cert\/([^/]+)\/b\/(\d+)$/, async (id, bi) => {
   const cert = await openCert(id); if (!cert) return go('#/');
   const b = cert.boards[+bi]; if (!b) return go('#/cert/' + id);
   const back = cert.boards.length > 1 ? `#/cert/${id}/boards` : '#/cert/' + id;
+  // v0.47.0: an RCD main switch is the board's RCD: one set of boxes (the main switch's), copied into the board's
+  if (liftBoardRcdToMain(cert, +bi).length + mirrorMainRcd(cert, +bi).length) changed();
   if (fillBoardRcd(b, isSpare)) changed(); // v0.35.2: older jobs pick up the board's RCD on MCB lines
   const tools = boardTools(cert, b, +bi);
   if (LAND.matches) return page(`${b.ref || 'Board'} · schedule of test results`, [boardDetails(cert, b), tools, scheduleTable(cert, b, +bi),
@@ -131,6 +134,7 @@ route(/^\/cert\/([^/]+)\/b\/(\d+)$/, async (id, bi) => {
 
 function boardDetails(cert, b) {
   const F = (k, label, type = 'text') => field(b, { k, label, type: type });
+  const rcdBox = boardRcdBox(cert, b);
   // v0.45: open only on a new board (no circuits yet and Zdb not filled in)
   return h('details', { class: 'card boarddetails', open: !b.zdb && !(b.circuits || []).length ? true : null },
     h('summary', { style: 'font-weight:700' }, 'Board details', b.zdb ? h('span', { class: 'note' }, `  Zdb ${b.zdb} Ω · Ipf ${b.ipf || '–'} kA`) : null),
@@ -141,16 +145,40 @@ function boardDetails(cert, b) {
       h('div', { class: 'grid3' }, F('ocpdBs', 'Supplying device BS (EN)'), F('ocpdType', 'Type'), F('ocpdRating', 'Rating (A)', 'num')),
       h('div', { class: 'grid3' }, F('zdb', 'Zdb (Ω)', 'num'), F('ipf', 'Ipf (kA)', 'num'), F('maxDemand', 'Max demand (A)', 'num')),
       h('a', { class: 'btn small', href: `#/calc/fault/${cert.id}/${cert.boards.indexOf(b)}` }, 'Work out Ipf for a sub-board'),
-      cert.boards.indexOf(b) > 0 ? boardMainSwitch(b) : msPointer(cert),
+      cert.boards.indexOf(b) > 0 ? boardEarthing(cert, b) : null,
+      cert.boards.indexOf(b) > 0 ? boardMainSwitch(cert, b, () => rcdBox.redraw()) : msPointer(cert),
       h('div', { class: 'note', style: 'margin-top:12px' }, 'Other sources'), bidiTick(cert, b),
       spdGrid(cert, b),
-      h('div', { class: 'note' }, 'Main RCD of the board (if any)'), rcdGrid(b)));
+      rcdBox));
+}
+// v0.47.0: when the main switch is an RCD, its boxes are the board's RCD (no second set to fill in)
+function boardRcdBox(cert, b) {
+  const box = h('div'); const draw = () => fill(box, boardRcdInner(cert, b)); draw(); box.redraw = draw; return box;
+}
+function boardRcdInner(cert, b) {
+  const bi = cert.boards.indexOf(b); const { o, pre } = mainAt(cert, bi);
+  if (msIsRcdAt(pre)(o)) return h('div', { class: 'note msisrcd', style: 'margin-top:12px' }, h('b', {}, 'Board RCD: '), 'the main switch is this board\u2019s RCD, so its details are the ones under Main switch' + (bi === 0 ? ' (in ' : '.'), bi === 0 ? [h('a', { href: `#/cert/${cert.id}/s/parts` }, 'Earthing, bonding and main switch'), ').'] : null);
+  return h('div', {}, h('div', { class: 'note' }, 'Main RCD of the board (if any)'), rcdGrid(b));
+}
+// v0.47.0: a board can have its own TT earth (e.g. an outbuilding on an earth rod). Blank = same as the supply.
+function boardEarthing(cert, b) {
+  const box = h('div', { class: 'boardearth', style: 'margin:12px 0 4px' });
+  const draw = () => { const tt = boardIsTT(b);
+    const chip = (v, t) => h('button', { type: 'button', class: 'segb' + (tt === v ? ' on' : ''), 'aria-pressed': String(tt === v), style: 'flex:1 1 0;min-width:0;min-height:44px;padding:4px 4px;font-size:14px;font-weight:600;white-space:normal;line-height:1.15;border:0;' + (v ? 'border-left:1px solid var(--line);' : '') + (tt === v ? 'background:var(--brand,#2952ff);color:#fff' : 'background:transparent;color:inherit'),
+      onclick: () => { if (tt === v) return; if (v) b.earthing = 'TT'; else delete b.earthing; changed(); draw(); } }, t);
+    fill(box, h('div', { class: 'note', style: 'margin:0 0 4px' }, 'Earthing at this board'),
+      h('div', { role: 'group', 'aria-label': 'Earthing at this board', style: 'display:flex;align-items:stretch;padding:0;border:1px solid var(--line);border-radius:10px;overflow:hidden' }, chip(false, 'Same as supply' + (cert.supply.earthing ? ' (' + cert.supply.earthing + ')' : '')), chip(true, 'TT (own earth electrode)')),
+      tt ? h('div', { style: 'margin-top:8px' }, h('div', { class: 'grid2' }, field(b, { k: 'ra', label: 'Electrode RA (\u03a9)', type: 'num' }), field(b, { k: 'elType', label: 'Electrode type (rod, tape\u2026)' })), field(b, { k: 'elLocation', label: 'Electrode location' }),
+        h('div', { class: 'note' }, 'Circuits here are checked to Table 41.5 (TT, with an RCD) and RA \u00d7 I\u0394n \u2264 50 V. It prints on the schedule, in section G and on the diagram.')) : null); };
+  draw(); return box;
 }
 
 // v0.45.1: a later board's own main switch: the same boxes as DB1's (certificate section J), kept in board.main
-function boardMainSwitch(b) {
-  const box = h('div', { class: 'boardms' });
-  const draw = () => fill(box, h('h3', { class: 'fhead' }, 'Main switch'), mainSwitchFields('main.').map((fd) => field(b, fd, (k, v, d) => { if (d.redraw) draw(); })));
+function boardMainSwitch(cert, b, onRcd = () => {}) {
+  const box = h('div', { class: 'boardms' }); const bi = cert.boards.indexOf(b);
+  // v0.47.0: the RCD boxes here are the board's RCD: keep the board's copy in step (and its circuits)
+  const sync = (k) => { if (mirrorMainRcd(cert, bi).length) { fillBoardRcd(b, isSpare); syncBoardS(b); } if (k === 'main.msIsRcd') { if (b.main && b.main.msIsRcd) mirrorMainRcd(cert, bi); onRcd(); } };
+  const draw = () => fill(box, h('h3', { class: 'fhead' }, 'Main switch'), mainSwitchFields('main.').map((fd) => field(b, fd, (k, v, d) => { sync(k); if (d.redraw) draw(); })));
   draw(); return box;
 }
 // v0.45.2: board 1's main switch lives in the certificate: say so, with a link and a short summary
@@ -245,14 +273,14 @@ const F0 = (b, k, label) => field(b, { k, label, type: 'check' });
 function rcdTypeChips(get, set) {
   const box = h('div', { class: 'chips rcdtypechips' });
   const draw = () => { const p = parseRcdType(get());
-    fill(box, ...WAVES.map((w) => h('button', { type: 'button', class: 'chip' + (p.wave === w ? ' on' : ''), onclick: () => { set(formatRcdType(p.wave === w ? '' : w, p.s)); draw(); } }, w)),
+    fill(box, ...WAVES.map((w) => h('button', { type: 'button', class: 'chip' + (p.wave === w ? ' on' : ''), onclick: () => { if (p.wave === w) return; set(formatRcdType(w, p.s)); draw(); } }, w)), // v0.47.0: the chosen type stays chosen
       h('button', { type: 'button', class: 'chip' + (p.s ? ' on' : ''), title: 'Time-delayed (S-type)', onclick: () => { set(formatRcdType(p.wave, !p.s)); draw(); } }, 'S (time-delayed)')); };
   draw(); box.redraw = draw; return box;
 }
 // v0.31: N/A in one main RCD box fills the blank others; a real value clears them.
 function rcdGrid(b) {
   const els = {}; let dirty = false;
-  const on = (k) => { if (fillBoardRcd(b, isSpare)) { changed(); dirty = true; } for (const x of rcdGroupChanged(b, k)) { const i = els[x] && els[x].querySelector('input'); if (i) i.value = b[x] ?? ''; } if (chips) chips.redraw(); };
+  const on = (k) => { if (fillBoardRcd(b, isSpare)) { changed(); dirty = true; } if (syncBoardS(b)) { changed(); dirty = true; } for (const x of rcdGroupChanged(b, k)) { const i = els[x] && els[x].querySelector('input'); if (i) i.value = b[x] ?? ''; } if (chips) chips.redraw(); };
   let chips = null;
   const R = (k, label, type = 'text') => (els[k] = field(b, { k, label, type }, on));
   // the circuit lines redraw once you leave the RCD boxes (not while typing)
@@ -417,6 +445,36 @@ function presetPicker(c, after, cert) {
   };
   draw(); box.redraw = draw; return box;
 }
+// v0.47.0: 'Which RCD' on a board with two (or more) of the same RCD (split load): RCD 1 / RCD 2 / RCD 3.
+// Optional c.rcdNo; blank = the only one. Shown on MCB / fuse lines with RCD details.
+function whichRcd(cert, c) {
+  const box = h('div', { class: 'whichrcd' });
+  const draw = () => { const d = deviceById(c.device) || deviceFromBs(c.bs); const b = boardOf(cert, c);
+    const realIdn = String(c.rcdIdn ?? '').trim() && !/^n\/?a$/i.test(String(c.rcdIdn).trim());
+    const many = b && (b.circuits || []).filter((x) => { const dx = deviceById(x.device) || deviceFromBs(x.bs); return !(dx && dx.rcd) && String(x.rcdIdn ?? '').trim() && !/^n\/?a$/i.test(String(x.rcdIdn).trim()); }).length > 1;
+    if ((d && d.rcd) || !realIdn || (!many && boardHasRcd(b) && !String(c.rcdNo || '').trim())) return fill(box); // shown on boards with RCCBs in them
+    const cur = String(c.rcdNo || '').trim();
+    fill(box, h('div', { class: 'note', style: 'margin:8px 0 4px' }, 'Which RCD (split-load board with two the same)'),
+      h('div', { class: 'chips' }, [['', 'Only one'], ['1', 'RCD 1'], ['2', 'RCD 2'], ['3', 'RCD 3']].map(([v, t]) => h('button', { type: 'button', class: 'chip' + (cur === v ? ' on' : ''), 'aria-pressed': String(cur === v), onclick: () => { if (cur === v) return; if (v) c.rcdNo = v; else delete c.rcdNo; changed(); draw(); } }, t)))); };
+  draw(); box.redraw = draw; return box;
+}
+// v0.47.0: EV charger (722) and battery (Chapter 57) prompts: chips that write the line into Remarks.
+function notePrompts(cert, c, after) {
+  const box = h('div');
+  const draw = () => {
+    const parts = [];
+    if (isEvCircuit(c)) {
+      const miss = evMissing(c, boardCtx(cert, boardOf(cert, c)).earthing);
+      parts.push(h('div', { class: 'notice ' + (miss.length ? 'amber' : 'info') + ' evnotes' }, h('div', {}, h('b', {}, 'EV charger (Section 722): '), miss.length ? 'say how ' + [miss.includes('dc') ? 'DC faults are covered (722.531.3.101)' : '', miss.includes('pen') ? 'an open PEN is covered on PME (722.411.4.1)' : ''].filter(Boolean).join(' and ') + '. Tap to add it to Remarks.' : '\u2713 DC fault and PEN protection noted.'),
+        h('div', { class: 'chips', style: 'margin-top:6px' }, EV_NOTES.map((n) => h('button', { type: 'button', class: 'chip' + (c.remarks && String(c.remarks).includes(n.text) ? ' on' : ''), onclick: () => { if (noteDone(c, n) && String(c.remarks || '').includes(n.text)) return; if (!noteDone(c, n)) { addNote(c, n); toast('Added to Remarks'); } after(); draw(); } }, n.label)))));
+    }
+    const bat = isBatteryCircuit(c) || (circuitFedBySource(c) && ((cert.otherSources || []).some((o) => /battery/i.test(o.type || ''))));
+    if (bat) parts.push(h('div', { class: 'notice info battnotes' }, h('div', {}, h('b', {}, 'Battery (BS 7671 A4:2026, Chapter 57): '), 'tap to add to Remarks.'),
+      h('div', { class: 'chips', style: 'margin-top:6px' }, GEN_NOTES.map((n) => h('button', { type: 'button', class: 'chip' + (noteDone(c, n) ? ' on' : ''), onclick: () => { if (noteDone(c, n)) return; addNote(c, n); toast('Added to Remarks'); after(); draw(); } }, n.label)))));
+    fill(box, parts);
+  };
+  draw(); box.redraw = draw; return box;
+}
 const isAutoBs = (c) => !String(c.bs || '').trim() || !!(c.autoF && c.autoF.bs === c.bs) || !!deviceFromBs(c.bs); // a standard number is replaced by the new device's
 function circuitEditor({ cert, c, ctx, back, title, prev, next, extra = [], more = [], mw = false }) {
   const autoFillOcpd = (x) => autoFill0(x, { board: boardOf(cert, x) });
@@ -426,7 +484,7 @@ function circuitEditor({ cert, c, ctx, back, title, prev, next, extra = [], more
   // an older circuit with only the flag ticked shows the chip on.
   const cTypeChips = rcdTypeChips(() => (c.rcdS && !isSType(c.rcdType) ? formatRcdType(parseRcdType(c.rcdType).wave, true) : c.rcdType), (v) => { c.rcdType = v; typed(c, 'rcdType'); if (inputs.rcdType) inputs.rcdType.value = v; c.rcdS = isSType(v); typed(c, 'rcdS'); changed(); refresh(); });
   const typeTyped = () => { if (!!c.rcdS !== isSType(c.rcdType)) { c.rcdS = isSType(c.rcdType); typed(c, 'rcdS'); } cTypeChips.redraw(); };
-  const pBox = presetPicker(c, () => render(), cert);
+  const pBox = presetPicker(c, () => render(), cert); let wrBox = null, npBox = null; // v0.47.0
   const flagEls = {}; const inputs = {};
   const noDevBox = h('div');
   const limBox = h('div', { class: 'limit' });
@@ -442,8 +500,8 @@ function circuitEditor({ cert, c, ctx, back, title, prev, next, extra = [], more
     for (const [k, el] of Object.entries(inputs)) if (document.activeElement !== el && String(el.value) !== String(c[k] ?? '')) el.value = c[k] ?? ''; // v0.33.1: show values filled by the device picker
     for (const [k, el] of Object.entries(inputs)) { const na = autoNA(c, k); el.placeholder = na ? 'N/A' : ''; el.classList.toggle('autona', na); }
     fill(noDevBox, isSpare(c) ? h('label', { class: 'check nodev' }, h('input', { type: 'checkbox', checked: !!c.noDevice, onchange: (e) => { c.noDevice = e.target.checked; changed(); refresh(); } }), 'No device fitted (device boxes show N/A too)') : null);
-    if (pBox.redraw) pBox.redraw();
-    fill(limBox, isSpare(c) ? 'Spare way: no limits apply.' : lim.value != null ? h('span', {}, 'Max Zs ', h('b', {}, lim.value.toFixed(2) + ' Ω'), res.cold != null ? ` · 80% (cold reading) ${res.cold.toFixed(2)} Ω` : '', h('br'), h('span', { class: 'note' }, lim.source)) : 'Pick the device and rating to see the maximum Zs.');
+    if (pBox.redraw) pBox.redraw(); if (wrBox && wrBox.redraw) wrBox.redraw(); if (npBox && npBox.redraw) npBox.redraw();
+    fill(limBox, isSpare(c) ? 'Spare way: no limits apply.' : lim.value != null ? h('span', {}, 'Max Zs ', h('b', {}, fmtZs(lim.value) + ' Ω'), res.cold != null ? ` · 80% (cold reading) ${res.cold.toFixed(2)} Ω` : '', h('br'), h('span', { class: 'note' }, lim.source)) : 'Pick the device and rating to see the maximum Zs.');
   };
   const inp = (k, opts = {}) => {
     const fd = FIELD[k] || { label: opts.label, k };
@@ -459,13 +517,13 @@ function circuitEditor({ cert, c, ctx, back, title, prev, next, extra = [], more
     flagEls[k] = { wrap, msg }; return wrap;
   };
   // Device chooser: fills BS (EN), offers types and ratings from the tables.
-  const devBox = h('div'); let devMoreOpen = false;
+  const devBox = h('div'); let devMoreOpen = false; let askRcd = false; // v0.47.0: RCBO -> MCB with no board RCD: ask
   const drawDev = () => {
     const d = deviceById(c.device) || deviceFromBs(c.bs);
     if (d && c.device !== d.id) c.device = d.id;
     const ratings = d ? ratingsFor(d.id, c.type) : [];
     fill(devBox, 
-      h('label', { class: 'f' }, h('span', {}, 'Protective device'), h('select', { onchange: (e) => { const nd = deviceById(e.target.value); if (!nd) return; c.device = nd.id; if (isAutoBs(c)) c.bs = nd.bs; if (nd.types.length && !nd.types.includes(c.type)) c.type = nd.types.length === 1 ? nd.types[0] : nd.types[0]; autoFillOcpd(c); changed(); drawDev(); refresh(); } },
+      h('label', { class: 'f' }, h('span', {}, 'Protective device'), h('select', { onchange: (e) => { const nd = deviceById(e.target.value); if (!nd) return; const od = deviceById(c.device) || deviceFromBs(c.bs); releaseRcboRcd(c, od, nd); c.device = nd.id; askRcd = !!(od && od.rcd && !nd.rcd) && !boardHasRcd(boardOf(cert, c)); if (isAutoBs(c)) c.bs = nd.bs; if (nd.types.length && !nd.types.includes(c.type)) c.type = nd.types.length === 1 ? nd.types[0] : nd.types[0]; autoFillOcpd(c); changed(); drawDev(); refresh(); } },
         h('option', { value: '' }, '— pick —'), DEVICES.map((x) => h('option', { value: x.id, selected: d && d.id === x.id ? true : null }, x.label)))),
       d && d.types.length > 1 ? h('div', { class: 'f', style: 'margin-bottom:10px' }, h('span', { class: 'note' }, 'Type (col 9)'), h('div', { class: 'chips' }, d.types.map((t) => h('button', { class: 'chip' + (c.type === t ? ' on' : ''), onclick: () => { c.type = t; typed(c, 'type'); autoFillOcpd(c); changed(); drawDev(); refresh(); } }, t)))) : null,
       ratings.length ? h('div', { class: 'f', style: 'margin-bottom:10px' }, h('span', { class: 'note' }, 'Rating, A (col 10)'), h('div', { class: 'chips' }, ratings.map((r) => h('button', { class: 'chip' + (String(c.rating) === String(r) ? ' on' : ''), onclick: () => { c.rating = String(r); autoFillOcpd(c); changed(); drawDev(); refresh(); } }, r)))) : inp('rating'),
@@ -476,6 +534,9 @@ function circuitEditor({ cert, c, ctx, back, title, prev, next, extra = [], more
         h('label', { class: 'f' }, h('span', {}, 'Earth fault time tg, s (optional)'), h('input', { inputmode: 'decimal', 'aria-label': 'Earth fault time tg', value: c.tg || '', oninput: (e) => { c.tg = e.target.value.trim(); changed(); refresh(); } }))),
         h('div', { class: 'note imnote' }, c.ig ? `Earth faults trip on Ig, so max Zs = 230 × 0.95 ÷ ${c.ig} A (not Im).` : 'Only for MCCBs with earth fault protection (LSIG, the G setting). Leave blank if it hasn\u2019t got one.')] : null,
       h('div', { class: 'grid2' }, inp('bs'), inp('bka')),
+      askRcd ? h('div', { class: 'notice amber askrcd' }, h('div', {}, h('b', {}, 'Is this MCB on an RCD? '), 'The RCBO\u2019s own RCD details were taken off.'),
+        h('div', { class: 'btns', style: 'margin-top:6px' }, h('button', { class: 'btn small', type: 'button', onclick: () => { for (const k of ['rcdBs', 'rcdType', 'rcdIdn', 'rcdRating']) { c[k] = 'N/A'; typed(c, k); } c.rcdS = false; askRcd = false; changed(); drawDev(); refresh(); } }, 'No RCD: N/A'),
+          boardOf(cert, c) ? h('button', { class: 'btn small', type: 'button', onclick: () => { askRcd = false; drawDev(); const r = document.querySelector('.rcdgrp input'); if (r) { r.scrollIntoView({ block: 'center' }); r.focus(); } } }, 'Yes: fill in its RCD') : null)) : null,
       limBox,
       // v0.45: rarely changed, so folded (opens by itself when something's set)
       h('details', { class: 'more devmore', open: devMoreOpen || Number(c.time) >= 5 || String(c.maxZsOverride || '').trim() ? true : null, ontoggle: (e) => { devMoreOpen = e.target.open; } },
@@ -564,13 +625,14 @@ function circuitEditor({ cert, c, ctx, back, title, prev, next, extra = [], more
     // v0.14: the RCD boxes (cols 13-16) sit with the protective device, before the cable.
     sect('Circuit details', h('div', { class: 'grid2' }, inp('num'), inp('points')), inp('desc'), noDevBox, pBox, devBox,
       h('div', { class: 'rcdgrp' }, h('div', { class: 'phd' }, h('span', {}, 'RCD (if any)')),
-        h('div', { class: 'grid2' }, inp('rcdBs'), inp('rcdType'), inp('rcdIdn'), inp('rcdRating')), cTypeChips),
+        h('div', { class: 'grid2' }, inp('rcdBs'), inp('rcdType'), inp('rcdIdn'), inp('rcdRating')), cTypeChips, mw ? null : (wrBox = whichRcd(cert, c))),
       // v0.32: optional AFDD details (printed on the Minor Works form, which has the boxes). v0.45: folded.
       h('details', { class: 'rcdgrp more afddmore', open: hasAfdd ? true : null }, h('summary', { class: 'phd' }, h('span', {}, 'AFDD (if any)')),
         h('div', { class: 'grid3' }, inp('afddBs', { label: 'AFDD BS (EN)' }), inp('afddType', { label: 'AFDD type' }), inp('afddRating', { label: 'AFDD rating (A)' }))),
       mw ? h('div', { class: 'rcdgrp' }, h('div', { class: 'phd' }, h('span', {}, 'SPD (if any)')),
         h('div', { class: 'grid2' }, inp('spdBs', { label: 'SPD BS (EN)' }), inp('spdType', { label: 'SPD type' }))) : null,
       bidiBox(cert, () => circuitFedBySource(c), () => [c]),
+      mw ? null : npBox = notePrompts(cert, c, () => { if (inputs.remarks) inputs.remarks.value = c.remarks || ''; changed(); refresh(); }),
       h('div', { class: 'phd cablehd' }, h('span', {}, 'Cable and wiring')),
       cableBox),
     sect('Test results', quickFillRow(c),
@@ -593,7 +655,7 @@ function scheduleTable(cert, b, bi) {
     const upd = () => {
       const res = checkCircuit(c, ctxFor(cert, b));
       for (const [k, td] of Object.entries(cells)) { const f = res.flags[k]; td.className = (k === 'desc' ? 'desc sl2 ' : k === 'num' ? 'sl ' : '') + (f ? f.level : ''); td.title = f ? f.msg : ''; }
-      const lim = limitZs(c, ctxFor(cert, b)); maxCell.firstChild.placeholder = isSpare(c) ? (autoNA(c, 'maxZs') ? 'N/A' : '') : lim.value != null ? lim.value.toFixed(2) : '?';
+      const lim = limitZs(c, ctxFor(cert, b)); maxCell.firstChild.placeholder = isSpare(c) ? (autoNA(c, 'maxZs') ? 'N/A' : '') : lim.value != null ? fmtZs(lim.value) : '?';
       maxCell.firstChild.classList.toggle('autona', autoNA(c, 'maxZs'));
       for (const [k, td] of Object.entries(cells)) { const el = td.firstChild; const na = autoNA(c, k); el.placeholder = na ? 'N/A' : ''; el.classList.toggle('autona', na); if (k === 'irV' && document.activeElement !== el) el.value = c.irV ?? ''; }
       td0 && td0.classList.toggle('spare', isSpare(c));

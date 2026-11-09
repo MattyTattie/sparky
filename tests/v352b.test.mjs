@@ -33,6 +33,6 @@ test('v352b: options, preset names, PDF wiring', () => {
   assert.deepEqual(FIELD.rcdType.opts, ['AC', 'A', 'F', 'B', 'AC S', 'A S', 'F S', 'B S']);
   assert.equal(nameFor({ device: 'rcbo', bs: '61009', type: 'B', rating: '32', rcdIdn: '30', rcdType: 'A-S', rcdS: true }), 'B32 RCBO · 30 mA Type A S');
   assert.equal(nameFor({ device: 'rcbo', bs: '61009', type: 'B', rating: '32', rcdIdn: '30', rcdType: 'A', rcdS: true }), 'B32 RCBO · 30 mA Type A S');
-  const p = readFileSync(new URL('../js/pdf.js', import.meta.url), 'utf8'); assert.match(p, /r\.rcdType = showRcdType\(r\.rcdType\)/); assert.match(p, /showRcdType\(b\.rcdType\)/);
+  const p = readFileSync(new URL('../js/pdf.js', import.meta.url), 'utf8'); assert.match(p, /r\.rcdType = showRcdType\(r\.rcdType\)/); assert.match(p, /showRcdType\(rv\.rcdType\)/); // v0.47.0: the board RCD view
   const s = readFileSync(new URL('../js/schedule.js', import.meta.url), 'utf8'); assert.match(s, /rcdTypeChips\(\(\) => b\.rcdType/); assert.match(s, /typed\(c, 'rcdS'\)/);
 });

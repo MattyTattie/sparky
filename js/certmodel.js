@@ -26,6 +26,18 @@ export function blankBoard(n = 1) {
 
 const person = (p = {}) => ({ name: p.name || '', for: p.business || '', address: [p.address1, p.address2, p.town].filter(Boolean).join(', '), postcode: p.postcode || '', tel: p.phone || '', position: p.position || '' });
 
+// v0.47.0: Settings filled in after a certificate was started: copy your details into the BLANK
+// signatory boxes only (never over anything typed). Returns how many boxes it filled.
+export const peopleRoles = (cert) => (cert.type === 'EIC' ? ['designer', 'constructor', 'inspector'] : ['inspector']);
+export function fillPeopleBlanks(cert, profile, { dry = false } = {}) {
+  const me = person(profile || {}); if (!me.name && !me.for) return 0;
+  cert.people = cert.people || {}; let n = 0;
+  for (const r of peopleRoles(cert)) {
+    const o = cert.people[r] || (dry ? {} : (cert.people[r] = {}));
+    for (const [k, v] of Object.entries(me)) if (v && !String(o[k] ?? '').trim()) { if (!dry) o[k] = v; n++; }
+  }
+  return n;
+}
 export function newCert(type, { job = {}, customer = {}, profile = {}, instruments = {}, number = '' } = {}) {
   const today = new Date().toISOString().slice(0, 10);
   const me = person(profile);
@@ -146,7 +158,7 @@ export function mainSwitchFields(pre) {
   f(pre + 'msIsOcpd', 'Main switch is a breaker or fuse (OCPD)', 'check', { dflt: isOcpd, redraw: true }),
   f(pre + 'msType', 'Device type (MCCB / ACB / fuse…)', 'text', { showIf: isOcpd, indent: true }), f(pre + 'msRating', 'Device rating/setting (A)', 'num', { showIf: isOcpd, indent: true }), f(pre + 'msKa', 'Breaking capacity (kA)', 'num', { showIf: isOcpd, indent: true }),
   f(pre + 'msIsRcd', 'Main switch is an RCD', 'check', { dflt: isRcd, redraw: true }),
-  f(pre + 'rcdType', 'RCD type (AC/A/F/B)', 'text', { showIf: isRcd, indent: true }), f(pre + 'rcdIdn', 'IΔn (mA)', 'num', { showIf: isRcd, indent: true }), f(pre + 'rcdDelay', 'Rated time delay (ms)', 'num', { showIf: isRcd, indent: true, hint: '0 if not time-delayed.' }), f(pre + 'rcdMs', 'Measured operating time (ms)', 'num', { showIf: isRcd, indent: true }), f(pre + 'rcdKa', 'Breaking capacity (kA)', 'num', { showIf: isRcd, indent: true, opt: true })
+  f(pre + 'rcdType', 'RCD type (AC/A/F/B, S if time-delayed)', 'rcdtype', { showIf: isRcd, indent: true }), f(pre + 'rcdIdn', 'IΔn (mA)', 'num', { showIf: isRcd, indent: true }), f(pre + 'rcdDelay', 'Rated time delay (ms)', 'num', { showIf: isRcd, indent: true, hint: '0 if not time-delayed.' }), f(pre + 'rcdMs', 'Measured operating time (ms)', 'num', { showIf: isRcd, indent: true }), f(pre + 'rcdKa', 'Breaking capacity (kA)', 'num', { showIf: isRcd, indent: true, opt: true })
   ];
 }
 const PARTS = { id: 'parts', title: 'Earthing, bonding and main switch', form: 'G / J', fields: [
@@ -202,7 +214,7 @@ export function sectionsFor(type) {
       f('people.inspector.name', 'Inspector name', 'text', { hideIf: 'eic.samePerson' }), f('people.inspector.for', 'For/on behalf of', 'text', { hideIf: 'eic.samePerson' }),
       f('people.designer2.name', 'Designer No 2 (if any)', 'text', { opt: true }), f('people.designer2.for', 'Designer 2 for/on behalf of', 'text', { opt: true, showIf: 'people.designer2.name' }),
     ] },
-    SUPPLY, PARTS,
+    { ...SUPPLY, form: 'F' }, { ...PARTS, form: 'G' }, // v0.47.0: this form's letters only
     { id: 'inspections', title: 'Schedule of inspections', form: 'H', special: 'inspections' },
     { id: 'comments', title: 'Comments on existing installation', form: 'I', fields: [f('comments', 'Comments (see Regulation 644.1.2)', 'area', { opt: true, placeholder: (c) => (isNewInstall(c) ? SECTION_I_NA : ''), hint: (c) => (isNewInstall(c) ? 'New installation: leave blank and the certificate prints \u201cN/A \u2013 new installation\u201d. Describe the work in Section B, Description and extent of the installation.' : '') })] },
     { id: 'boards', title: 'Circuits and test results', form: 'Schedules', special: 'boards' },
@@ -231,7 +243,7 @@ export function sectionsFor(type) {
       f('eicr.overall', 'Overall assessment', 'chips', { opts: ['SATISFACTORY', 'UNSATISFACTORY'], opt: true, hint: 'Set automatically from the observations unless you pick one.' }),
       f('eicr.nextDate', 'Next inspection before', 'date'), f('eicr.nextReasons', 'For the following reasons', 'area', { opt: true }),
     ] },
-    SUPPLY, PARTS,
+    { ...SUPPLY, form: 'I' }, { ...PARTS, form: 'J' },
     { id: 'inspections', title: 'Schedule of inspection', form: 'Schedule', special: 'inspections' },
     { id: 'boards', title: 'Circuits and test results', form: 'Schedules', special: 'boards' },
     { id: 'bonding', title: 'Supplementary bonding', form: 'Schedule', special: 'bonding' },
@@ -284,7 +296,7 @@ const filled = (v) => String(v ?? '').trim() !== '';
 // How complete a section is (for the progress dots).
 export function sectionDone(cert, s) {
   if (s.special === 'inspections') { const v = Object.values(cert.inspections || {}); return v.length && v.every(Boolean); }
-  if (s.special === 'boards') return (cert.boards || []).some((b) => b.circuits.length) && cert.boards.every((b) => b.circuits.every((c) => isSpareCircuit(c) || c.zs));
+  if (s.special === 'boards') return (cert.boards || []).some((b) => b.circuits.length) && cert.boards.every((b) => b.circuits.length && b.circuits.every((c) => isSpareCircuit(c) || c.zs)); // v0.47.0: a board with no circuits yet isn't done
   if (s.special === 'observations') return true;
   if (s.special === 'bonding') return Boolean(cert.bondingNA || (cert.bonding || []).length || cert.status === 'issued');
   if (s.special === 'sign') return Boolean(cert.sigs && Object.values(cert.sigs).some((x) => x && x.img));

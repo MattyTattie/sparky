@@ -10,10 +10,10 @@ import { rcdGroups, commonTime, planRcdTime, applyRcdTime, undoRcdTime } from '.
 import { route, page, go } from './app.js';
 import { openCert, changed } from './state.js';
 import { FIELD, autoNA } from './templates.js';
-import { checkCircuit, limitZs } from './checks.js';
+import { checkCircuit, limitZs, boardCtx, fmtZs } from './checks.js';
 import { TEST_STEPS, stepById, prevStep, nextStep, rowMode, quickFor, progress, fillEmpty } from './testlist.js';
 
-const ctxFor = (cert, b) => ({ earthing: cert.supply.earthing, zdb: b.zdb });
+const ctxFor = (cert, b) => boardCtx(cert, b);
 const LABEL = { r1r2: 'R1+R2 Ω', R2: 'R2 Ω', r1: 'r1 Ω', rn: 'rn Ω', r2: 'r2 Ω', irV: 'Test V', irLL: 'L–L MΩ', irLE: 'L–E MΩ', pol: 'Polarity', zs: 'Zs Ω', rcdMs: 'Trip ms', rcdBtn: 'Test button' };
 const BULK = { ir: [['irV', '500', 'Test V 500 on all'], ['irLL', '>999', 'L–L >999 on all empty'], ['irLE', '>999', 'L–E >999 on all empty']], pol: [['pol', '✓', 'Polarity ✓ on all empty']], rcd: [['rcdBtn', '✓', 'Test button ✓ on all empty']] };
 
@@ -35,7 +35,7 @@ route(/^\/cert\/([^/]+)\/b\/(\d+)\/t\/([a-z0-9]+)$/, async (id, bi, tid) => {
       const res = checkCircuit(c, ctxFor(cert, b));
       for (const [k, el] of Object.entries(flagEls)) { const f = res.flags[k]; el.wrap.className = 'tf ' + (f ? f.level : ''); el.msg.textContent = f ? f.msg : ''; }
       for (const [k, el] of Object.entries(inputs)) { const na = autoNA(c, k); el.placeholder = na ? 'N/A' : ''; el.classList.toggle('autona', na); }
-      if (lim) { const l = limitZs(c, ctxFor(cert, b)); fill(lim, l.value != null ? ['Max Zs ', h('b', {}, l.value.toFixed(2) + ' \u03a9'), res.cold != null ? ` \u00b7 80% ${res.cold.toFixed(2)} \u03a9` : ''] : 'Pick the device on the circuit page to see the max Zs.'); }
+      if (lim) { const l = limitZs(c, ctxFor(cert, b)); fill(lim, l.value != null ? ['Max Zs ', h('b', {}, fmtZs(l.value) + ' \u03a9'), res.cold != null ? ` \u00b7 80% ${res.cold.toFixed(2)} \u03a9` : ''] : 'Pick the device on the circuit page to see the max Zs.'); }
       updProg();
     };
     const box = (k) => {
@@ -77,7 +77,7 @@ function rcdReuse(b, redrawList) {
   const card = h('div', { class: 'card rcdreuse' });
   const undos = new Map(); const typed = new Map(); const picks = new Map();
   const draw = () => fill(card, h('h2', {}, 'Same RCD: enter the trip time once'),
-    h('p', { class: 'note' }, 'For circuits sharing one RCD. Untick any that are on a different RCD with the same rating. RCBOs are tested on their own, below.'),
+    h('p', { class: 'note' }, 'For circuits sharing one RCD. Two RCDs the same on a split-load board? Set \u201cWhich RCD\u201d on the circuits and they get a card each (or untick them here). RCBOs are tested on their own, below.'),
     groups.map((g, gi) => {
       if (!picks.has(gi)) picks.set(gi, new Set(g.circuits)); const pick = picks.get(gi);
       const inp = h('input', { inputmode: 'decimal', value: typed.has(gi) ? typed.get(gi) : commonTime(g.circuits), oninput: (e) => typed.set(gi, e.target.value), 'aria-label': 'Trip time in ms for ' + g.label, placeholder: 'ms' });

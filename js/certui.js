@@ -9,15 +9,16 @@ import { h, fill, toast, modal, confirmBox, fmtDate, shareOrDownload, blobToData
 import { route, page, go, render } from './app.js';
 import { S, openCert, changed, flush, getProfile, defaultInstruments, defaultInstrumentIds, getInstruments, instrumentsFor, instrumentText, calibrationWarnings, INSTRUMENT_KINDS, saveSetting } from './state.js';
 import { calDateFields, CAL_DATE_WARN } from './instruments.js';
-import { screenSections, countsToward, pdfFlagsOn, formRef } from './certmodel.js';
+import { screenSections, countsToward, pdfFlagsOn, formRef, fillPeopleBlanks } from './certmodel.js';
 import { TYPES, newCert, sectionsFor, sectionDone, missingFields, visible, get, set, eicrOverall, blankBond, BOND_LOCATIONS, BOND_PARTS, SOURCE_TYPES, blankSource, sourcesMissing, isNewInstall } from './certmodel.js';
 import { INTAKE_NOTE_10, INTAKE_NOTES, INTAKE_NOTIFIED, migrateIntake, EIC_ITEMS, EIC_OUTCOMES, EICR_ITEMS, EICR_OUTCOMES, CODE_TEXT, OBSERVATIONS, OBS_CATS, EIC_HELP, EICR_HELP } from './inspections.js';
-import { checkCircuit, isSpare } from './checks.js';
+import { checkCircuit, isSpare, boardCtx } from './checks.js';
 import { CHECK_NOTE } from './limits.js';
 import { ITEM_KINDS, itemRoomsOf, isControlCircuit, chainOf, migrateChain, kmNumbers, CHAIN_KINDS, CHAIN_SUPPLY, iconSvg, itemsOf, insertKind } from './wiring.js';
 import { diagramSvg, diagramInPdf, diagramHasCircuits, SPUR_FEEDS, CONTROL_VIA, switchInfo, roomListOf, roomPointsNote, socketRoomsOf, roomPointTotal, pointKind, socketSingles, arrangedOrder, feedInfo, ISOLATORS } from './wiring.js';
 import { limitOn, limitBar } from './limitbar.js';
 import { checkCert } from './certcheck.js';
+import { WAVES, parseRcdType, formatRcdType } from './rcdtype.js';
 import { circuitReadings, makeTemplate, applyTemplate, nextRoom, tidyLayouts, BUILTIN_TEMPLATES, TEMPLATE_KEY } from './diagrampro.js';
 import { dangerCodes, noticeForObs, noticesOf, noticeMissing, noticeNo } from './dangermodel.js';
 
@@ -44,9 +45,22 @@ export function field(cert, fd, onChange) {
   if (fd.type === 'check') return h('label', { class: 'check' + cls }, h('input', { type: 'checkbox', checked: !!(val == null && fd.dflt ? fd.dflt(cert) : val), onchange: (e) => upd(e.target.checked) }), fd.label);
   if (fd.type === 'chips') {
     const box = h('div', { class: 'chips' });
-    const draw = () => fill(box, ...fd.opts.map((o) => h('button', { class: 'chip' + (get(cert, fd.k) === o ? ' on' : ''), onclick: () => { upd(get(cert, fd.k) === o ? '' : o); draw(); } }, o)));
+    // v0.47.0: like radio buttons: tapping the chosen one keeps it (no accidental clears). An optional
+    // choice gets a small 'Clear' instead.
+    const draw = () => fill(box, ...fd.opts.map((o) => h('button', { type: 'button', class: 'chip' + (get(cert, fd.k) === o ? ' on' : ''), 'aria-pressed': String(get(cert, fd.k) === o), onclick: () => { if (get(cert, fd.k) === o) return; upd(o); draw(); } }, o)),
+      fd.opt && String(get(cert, fd.k) ?? '').trim() ? h('button', { type: 'button', class: 'linkbtn chipclear', onclick: () => { upd(''); draw(); } }, 'Clear') : null);
     draw();
     return h('div', { class: 'f' + cls, style: 'margin-bottom:12px' }, h('span', { class: 'note', style: 'display:block;margin-bottom:4px' }, fd.label), box, hint);
+  }
+  // v0.47.0: an RCD type box with the AC / A / F / B chips and an S (time-delayed) chip, saved as e.g. 'A S'
+  if (fd.type === 'rcdtype') {
+    const inp = h('input', { type: 'text', value: val ?? '', 'aria-label': fd.label, oninput: (e) => { upd(e.target.value); draw(); } });
+    const box = h('div', { class: 'chips rcdtypechips' });
+    const draw = () => { const p = parseRcdType(get(cert, fd.k));
+      fill(box, ...WAVES.map((w) => h('button', { type: 'button', class: 'chip' + (p.wave === w ? ' on' : ''), onclick: () => { if (p.wave === w) return; const v = formatRcdType(w, p.s); inp.value = v; upd(v); draw(); } }, w)),
+        h('button', { type: 'button', class: 'chip' + (p.s ? ' on' : ''), 'aria-pressed': String(p.s), title: 'Time-delayed (S-type)', onclick: () => { const v = formatRcdType(p.wave, !p.s); inp.value = v; upd(v); draw(); } }, 'S (time-delayed)')); };
+    draw();
+    return h('div', { class: 'f' + cls }, h('span', {}, fd.label), inp, box, hint);
   }
   if (fd.type === 'select') return h('label', { class: 'f' + cls }, h('span', {}, fd.label), h('select', { onchange: (e) => upd(e.target.value) }, fd.opts.map((o) => h('option', { selected: o === val ? true : null }, o))), hint);
   const tag = fd.type === 'area' ? 'textarea' : 'input';
@@ -62,7 +76,7 @@ route(/^\/cert\/([^/]+)$/, async (id) => {
   const job = cert.jobId ? await db.get('jobs', cert.jobId) : null;
   const secs = screenSections(cert.type);
   const counted = secs.filter(countsToward);
-  const nFlags = (cert.boards || []).reduce((n, b) => n + b.circuits.filter((c) => checkCircuit(c, { earthing: cert.supply.earthing, zdb: b.zdb }).worst === 'red').length, 0) + (cert.type === 'MW' && checkCircuit(cert.mw.circuit, { earthing: cert.mw.earthing, zdb: cert.mw.zdb }).worst === 'red' ? 1 : 0);
+  const nFlags = (cert.boards || []).reduce((n, b) => n + b.circuits.filter((c) => checkCircuit(c, boardCtx(cert, b)).worst === 'red').length, 0) + (cert.type === 'MW' && checkCircuit(cert.mw.circuit, { earthing: cert.mw.earthing, zdb: cert.mw.zdb }).worst === 'red' ? 1 : 0);
   const done = counted.filter((s) => sectionDone(cert, s)).length;
   const nextSec = secs.find((s) => s.special !== 'sign' && countsToward(s) && !sectionDone(cert, s)) || secs.find((s) => countsToward(s) && !sectionDone(cert, s));
   const secHref = (s) => (s.special === 'boards' ? `#/cert/${id}/boards` : `#/cert/${id}/s/${s.id}`);
@@ -201,7 +215,7 @@ route(/^\/cert\/([^/]+)\/diagram$/, async (id) => {
   // v0.41 (test): tap a circuit (or a room box in it) for its readings, then Edit
   const openReadings = async (bi, ci, mw) => {
     const b = mw ? null : (cert.boards || [])[bi]; const c = mw ? cert.mw.circuit : b && b.circuits[ci]; if (!c) return;
-    const ctx = mw ? { earthing: cert.mw.earthing, zdb: cert.mw.zdb } : { earthing: cert.supply.earthing, zdb: b.zdb };
+    const ctx = mw ? { earthing: cert.mw.earthing, zdb: cert.mw.zdb } : boardCtx(cert, b);
     const COLR = { red: '#c81e1e', amber: '#b86e00' };
     const rows = circuitReadings(c, ctx).map((r) => h('div', { class: 'rdrow', style: 'display:flex;justify-content:space-between;gap:10px;padding:8px 0;border-bottom:1px solid var(--line)' },
       h('span', { style: 'color:#6b7280' }, r.label), h('span', { style: 'text-align:right;white-space:normal;word-break:break-word' }, h('b', { style: r.value ? (r.level ? 'color:' + COLR[r.level] : '') : 'color:#aaa' }, r.value || 'N/A'), r.note ? h('span', { class: 'note', style: 'display:block;margin:0' }, r.note) : null)));
@@ -583,6 +597,7 @@ function spurCard(cert, redraw) {
 route(/^\/cert\/([^/]+)\/s\/([^/]+)$/, async (id, sid) => {
   const cert = await openCert(id); if (!cert) return go('#/');
   const secs = sectionsFor(cert.type);
+  const prof = await getProfile(); // v0.47.0: 'Use my details' for signatory boxes left blank
   const i = secs.findIndex((s) => s.id === sid);
   const s = sid === 'instruments' ? { id: 'instruments', title: 'Test instruments', form: '' } : secs[i];
   if (!s) return go('#/cert/' + id);
@@ -600,10 +615,11 @@ route(/^\/cert\/([^/]+)\/s\/([^/]+)$/, async (id, sid) => {
     else if (s.special === 'inspections') content = [stateBox(cert, s), inspectionsSection(cert)];
     else if (s.special === 'observations') content = [stateBox(cert, s), observationsSection(cert, draw)];
     else if (s.special === 'bonding') content = [stateBox(cert, s), bondingSection(cert, draw)];
-    else if (s.special === 'sign') content = [stateBox(cert, s), h('div', { class: 'card' }, (s.fields || []).map((fd) => field(cert, fd))), signSection(cert, draw)];
+    else if (s.special === 'sign') content = [stateBox(cert, s), usePeople(cert, s, prof, draw), h('div', { class: 'card' }, (s.fields || []).map((fd) => field(cert, fd))), signSection(cert, draw)];
     else if (s.special === 'mwcircuit') content = [stateBox(cert, s), h('div', { class: 'card' }, s.fields.map((fd) => field(cert, fd, () => refreshState()))), h('a', { class: 'btn primary', href: `#/cert/${id}/mwc`, style: 'width:100%;margin-bottom:12px' }, 'Circuit details and test results →')];
     else {
       content = [h('div', { class: 'notice ' + stateLine(cert, s)[0] + ' secstate' }, stateLine(cert, s)[1]),
+        usePeople(cert, s, prof, draw),
         h('div', { class: 'card' }, s.fields.map((fd) => field(cert, fd, (k, v, d) => { if (k === 'comments') { const el = document.getElementById('movedesc'); if (el) fill(el, moveToDescription(cert, draw)); } if (k === 'eic.samePerson' || k.startsWith('people.designer')) { if (k === 'eic.samePerson' || get(cert, 'eic.samePerson')) syncPeople(cert); if (k === 'eic.samePerson') return draw(); } if (d.redraw) draw(); else refreshState(); }))),
         s.id === 'supply' && get(cert, 'supply.otherSources') ? sourcesSection(cert, draw) : null,
         s.id === 'comments' ? h('div', { id: 'movedesc' }, moveToDescription(cert, draw)) : null];
@@ -627,6 +643,7 @@ export function stateLine(cert, s) {
   if (s.special === 'boards') {
     const bs = cert.boards || []; if (!bs.some((b) => b.circuits.length)) return ['info', 'Still to fill in: add the circuits.'];
     const miss = bs.flatMap((b) => b.circuits.filter((c) => !isSpare(c) && !c.zs).map((c) => (bs.length > 1 ? `${b.ref || 'DB'} ` : '') + c.num));
+    const empty = bs.filter((b) => !b.circuits.length).map((b) => b.ref || 'DB'); if (empty.length && !miss.length) return ['info', `Still to fill in: the circuits on ${list(empty)}.`];
     return ['info', `Still to fill in: Zs on circuit${miss.length > 1 ? 's' : ''} ${list(miss)}.`];
   }
   if (s.special === 'bonding') return ['info', 'Still to fill in: add the supplementary bonding, or tick N/A.'];
@@ -638,6 +655,13 @@ export function stateLine(cert, s) {
   return ['info', 'Still to fill in: tick each service you bonded (it needs a size), or tick \u201cNone needed\u201d.'];
 }
 const stateBox = (cert, s) => { const [c, t] = stateLine(cert, s); return h('div', { class: 'notice ' + c + ' secstate' }, t); };
+// v0.47.0: offer your Settings details for the blank signatory boxes (typed ones are left alone)
+function usePeople(cert, s, prof, draw) {
+  if (!(s.fields || []).some((x) => /^people\./.test(x.k))) return null;
+  const n = fillPeopleBlanks(cert, prof, { dry: true }); if (!n) return null;
+  return h('div', { class: 'notice info usepeople' }, h('div', {}, 'Some boxes here are blank, but your details are in Settings.'),
+    h('button', { class: 'btn small', type: 'button', style: 'margin-top:6px', onclick: () => { const k = fillPeopleBlanks(cert, prof); changed(); toast(`Filled ${k} blank box${k === 1 ? '' : 'es'} from Settings`); draw(); } }, 'Use my details (blanks only)'));
+}
 function syncPeople(cert) {
   if (!cert.eic.samePerson) return;
   const d = cert.people.designer; cert.people.constructor = { ...d }; cert.people.inspector = { ...d }; changed();
@@ -716,7 +740,7 @@ function sourcesSection(cert, redraw) {
   const add = () => { list.push(blankSource(db.newId())); changed(); redraw(); };
   const card = (o, i) => h('div', { class: 'card srccard' },
     h('div', { class: 'cardhd' }, h('b', {}, 'Source ' + (i + 1)), h('button', { class: 'btn small warn', onclick: async () => { if (await confirmBox('Remove this source?', [o.type, o.make].filter(Boolean).join(' \u00b7 ') || 'Source ' + (i + 1), 'Remove', 'warn')) { list.splice(i, 1); changed(); redraw(); } } }, withIcon('trash', 'Remove'))),
-    h('div', { class: 'f' }, h('span', { class: 'note' }, 'Type of source'), h('div', { class: 'chips' }, SOURCE_TYPES.map((t) => h('button', { class: 'chip' + (o.type === t ? ' on' : ''), type: 'button', onclick: () => { o.type = o.type === t ? '' : t; changed(); redraw(); } }, t)))),
+    h('div', { class: 'f' }, h('span', { class: 'note' }, 'Type of source'), h('div', { class: 'chips' }, SOURCE_TYPES.map((t) => h('button', { class: 'chip' + (o.type === t ? ' on' : ''), type: 'button', onclick: () => { if (o.type === t) return; o.type = t; changed(); redraw(); } }, t)))), // v0.47.0: no clear on a second tap
     o.type === 'Other' ? inp(o, 'typeOther', 'Describe the source', { placeholder: 'e.g. wind turbine' }) : null,
     inp(o, 'make', 'Make and model', { placeholder: 'e.g. GivEnergy 5 kW hybrid' }),
     h('div', { class: 'grid2' }, inp(o, 'kw', 'Rating (kW)', { inputmode: 'decimal', placeholder: 'e.g. 5' }), inp(o, 'ref', 'G98 / G99 notification ref', { placeholder: 'DNO ref, if any' })),

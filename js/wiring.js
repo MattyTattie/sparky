@@ -5,8 +5,9 @@
 // One layout (plain shapes) feeds two renderers: SVG for the screen and
 // jsPDF lines/text for the PDF, so both always match.
 // =====================================================================
-import { isSpareCircuit } from './templates.js';
-import { checkCircuit } from './checks.js';
+import { isSpareCircuit, circuitFedBySource } from './templates.js';
+import { showRcdType } from './rcdtype.js';
+import { checkCircuit, boardCtx, boardIsTT } from './checks.js';
 
 const NA = 'N/A';
 const isNAv = (v) => /^\s*n\s*[\/.]?\s*a\s*\.?\s*$/i.test(String(v ?? ''));
@@ -49,7 +50,9 @@ export function feedInfo(boards, bi) {
   if (cn && !(boards[si].circuits || []).some((c) => val(c.num).toLowerCase() === cn.toLowerCase())) return { state: 'mismatch', text: from, why: `${val(boards[si].ref)} has no circuit ${cn}` };
   return { state: 'ok', text: from, bi: si, ref: val(boards[si].ref), circuit: cn };
 }
-export const isOutbuilding = (b) => OUTBUILDING.test(val(b && b.location));
+// v0.47.0: only a board fed by a sub-main (or on its own TT earth) can be in another building; 'Garage wall' on a
+// board fed from the meter tails isn't an outbuilding. b.outbuilding (optional) true / false wins.
+export const isOutbuilding = (b) => !!b && (b.outbuilding === true || (b.outbuilding !== false && OUTBUILDING.test(val(b.location)) && !/\bwall\b/i.test(val(b.location)) && (supplyKindOf(b) === 'submain' || (!supplyKindOf(b) && !!val(b.suppliedFrom) && !/meter|tail|origin|intake|cut.?out/i.test(val(b.suppliedFrom))) || boardIsTT(b))));
 // v0.41 (pro): red problems drawn on the diagram (Zs over max, low IR, slow RCD, polarity).
 const RED_FIELDS = { zs: 'Zs', irLL: 'IR L-L', irLE: 'IR L-E', rcdMs: 'RCD time', pol: 'Polarity', rcdBtn: 'RCD button' };
 export function diagramFlags(c, ctx = {}) {
@@ -254,10 +257,11 @@ export function pointCount(c) {
 // ---------- the model ----------
 const isRcbo = (c) => c.device === 'rcbo' || /61009|62423.*rcbo/i.test(String(c.bs || ''));
 const hasRcd = (c) => Boolean(val(c.rcdIdn) || val(c.rcdType));
-const rcdKey = (c) => [val(c.rcdBs), val(c.rcdType), val(c.rcdIdn), val(c.rcdRating)].join('|');
+// v0.47.0: c.rcdNo (optional, 'which RCD' on a split-load board) keeps two identical RCCBs apart
+const rcdKey = (c) => [val(c.rcdBs), showRcdType(val(c.rcdType)), val(c.rcdIdn), val(c.rcdRating), val(c.rcdNo)].join('|');
 export function rcdLabel(c) {
-  const p = [val(c.rcdIdn) && val(c.rcdIdn) + ' mA', val(c.rcdType) && 'Type ' + val(c.rcdType), val(c.rcdRating) && val(c.rcdRating) + ' A'].filter(Boolean);
-  return 'RCD' + (p.length ? ' ' + p.join(', ') : '');
+  const p = [val(c.rcdIdn) && val(c.rcdIdn) + ' mA', val(c.rcdType) && 'Type ' + showRcdType(val(c.rcdType)), val(c.rcdRating) && val(c.rcdRating) + ' A'].filter(Boolean);
+  return 'RCD' + (val(c.rcdNo) ? ' ' + val(c.rcdNo) + ':' : '') + (p.length ? ' ' + p.join(', ') : '');
 }
 // Circuits on MCBs that share the same RCD (same RCD details, next to each
 // other on the schedule) hang off one RCD; RCBOs and plain MCBs hang off the bus.
@@ -413,7 +417,9 @@ export function boardTags(circuits) {
   return { ...m, _km: km, _by: by };
 }
 // v0.45.3: a main switch as one line ("100 A, 2-pole, BS EN 60947-3"); '' when not filled in.
-export const msDetail = (o) => { o = o || {}; return [val(o.msCurrent) && val(o.msCurrent) + ' A', val(o.msPoles) && val(o.msPoles) + '-pole', val(o.msBs) && 'BS EN ' + val(o.msBs).replace(/^BS\s*(EN)?\s*/i, '')].filter(Boolean).join(', '); };
+// v0.47.0: a main switch that is an RCD also says its IΔn and type ("63 A, 2-pole, BS EN 61008, RCD 100 mA Type A S")
+const msRcd = (o) => (o.msIsRcd == null ? ['rcdType', 'rcdIdn', 'rcdDelay', 'rcdMs'].some((k) => val(o[k])) : !!o.msIsRcd);
+export const msDetail = (o) => { o = o || {}; return [val(o.msCurrent) && val(o.msCurrent) + ' A', val(o.msPoles) && val(o.msPoles) + '-pole', val(o.msBs) && 'BS EN ' + val(o.msBs).replace(/^BS\s*(EN)?\s*/i, ''), msRcd(o) && val(o.rcdIdn) ? 'RCD ' + val(o.rcdIdn) + ' mA' + (val(o.rcdType) ? ' Type ' + showRcdType(val(o.rcdType)) : '') : ''].filter(Boolean).join(', '); };
 // v0.45.3: the main switch drawn inside each board block (in a consumer unit it's part of the board).
 // Board 1: the certificate's main switch (blank shows "not recorded" in the light N/A grey, as the old chain box did).
 // Later boards: their own board.main, only when filled in.
@@ -421,6 +427,16 @@ export function boardMainLine(cert, bi) {
   const d = bi === 0 ? msDetail(cert.parts) : msDetail((cert.boards[bi] || {}).main);
   if (d) return { text: 'Main switch: ' + d, na: false };
   return bi === 0 ? { text: 'Main switch: not recorded', na: true } : null;
+}
+// v0.47.0: extra lines in a board's heading: its own TT earth, and generation feeding it.
+export function sourcesText(cert) { const t = [...new Set(((cert && cert.otherSources) || []).map((o) => val(o.type) === 'Other' ? val(o.typeOther) || 'other source' : val(o.type)).filter(Boolean))]; return t.join(' + '); }
+export function boardExtraLines(cert, b) {
+  const out = []; b = b || {};
+  if (boardIsTT(b)) out.push({ text: 'Earthing: TT' + (val(b.ra) ? ', RA ' + val(b.ra) + ' \u03a9' : '') + (val(b.elType) ? ' (' + val(b.elType) + (val(b.elLocation) ? ', ' + val(b.elLocation) : '') + ')' : val(b.elLocation) ? ' (' + val(b.elLocation) + ')' : ''), earth: true });
+  const fed = b.fedBySource === true || (b.circuits || []).some((c) => circuitFedBySource(c) && !isSpareCircuit(c));
+  if (fed) { const src = sourcesText(cert); const circs = (b.circuits || []).filter((c) => circuitFedBySource(c) && !isSpareCircuit(c)).map((c) => val(c.num)).filter(Boolean);
+    out.push({ text: 'Fed by: ' + (src || 'battery / PV / generator') + (circs.length ? ` (circuit${circs.length > 1 ? 's' : ''} ${circs.join(', ')})` : '') + ', power can flow both ways', gen: true }); }
+  return out;
 }
 export function diagramModel(cert) {
   cert = cert || {}; const sup = cert.supply || {}; const parts = cert.parts || {};
@@ -436,9 +452,9 @@ export function diagramModel(cert) {
   return {
     type: cert.type,
     supply: { earthing: val(sup.earthing), lines: [[val(sup.conductors), val(sup.u) && val(sup.u) + ' V', val(sup.f) && val(sup.f) + ' Hz'].filter(Boolean).join(', '), [val(sup.ze) && `Ze ${val(sup.ze)} Ω`, val(sup.ipf) && `Ipf ${val(sup.ipf)} kA`].filter(Boolean).join(', '), ].filter(Boolean), fuse },
-    main: { label: 'Main switch', detail: ms },
+    main: { label: 'Main switch', detail: ms }, sources: sourcesText(cert),
     boards: (cert.boards || []).map((b, bi) => ({ ref: val(b.ref) || 'DB', location: val(b.location), from: val(b.suppliedFrom), items: groupCircuits(b.circuits, b), links: controlLinks(b.circuits), tags: boardTags(b.circuits), bi, src: b.circuits || [], main: boardMainLine(cert, bi), viaTails: bi === 0 && b.supplyKind === 'tails',
-      feed: feedInfo(cert.boards, bi), raw: { supplyKind: b.supplyKind, suppliedFrom: b.suppliedFrom }, outbuilding: bi > 0 && isOutbuilding(b), ctx: { earthing: sup.earthing, zdb: b.zdb },
+      feed: feedInfo(cert.boards, bi), raw: { supplyKind: b.supplyKind, suppliedFrom: b.suppliedFrom }, outbuilding: bi > 0 && isOutbuilding(b), ctx: boardCtx(cert, b), extra: boardExtraLines(cert, b), tt: boardIsTT(b),
       feeds: (cert.boards || []).reduce((m, o, oi) => { const f = oi !== bi && feedInfo(cert.boards, oi); if (f && f.state === 'ok' && f.bi === bi && f.circuit) (m[f.circuit.toLowerCase()] = m[f.circuit.toLowerCase()] || []).push(val(o.ref) + (val(o.location) ? ' (' + val(o.location) + ')' : '')); return m; }, {}) })),
   };
 }
@@ -576,6 +592,7 @@ export function layout(model, { W = 380, font = 12, screen = false, cableTable =
         y += Math.max(symH, lh1) + 6; }
       let hh = textLines(sh, tx, y + 4, title, tw, { bold: true });
       if (bd.main) hh += textLines(sh, tx, y + 4 + hh + 1, bd.main.text, tw, { size: small, color: bd.main.na ? COL.na : COL.grey }) + 1; // v0.45.3
+      for (const ex of bd.extra || []) { const ew = ex.earth ? tw - F * 1.6 : tw; const lh = textLines(sh, tx, y + 4 + hh + 1, ex.text, ew, { size: small, color: ex.gen ? COL.brand : COL.grey, bold: !!ex.gen }); if (ex.earth) earthSym(sh, bx + bw - F * 1.1, y + 4 + hh + 1, F * 0.7); hh += Math.max(lh, ex.earth ? F * 0.95 : 0) + 1; } // v0.47.0: TT earth rod, generation
       if (bd.note) hh += textLines(sh, tx, y + 4 + hh, bd.note, tw, { size: small, color: COL.grey });
       const bh = hh + 12; R(sh, bx, y, bw, bh, { fill: COL.fill }); sh.unshift(sh.pop());
       L(sh, busX, y + bh / 2, bx, y + bh / 2);
@@ -706,6 +723,7 @@ export function layout(model, { W = 380, font = 12, screen = false, cableTable =
     if (reds.length) hh += textLines(sh, tx, y - 2 + hh, 'Check: ' + reds.join('; '), tw, { size: small, bold: true, color: COL.red });
     const fed = !info.spare && feeds[String(val(c.num)).toLowerCase()];
     if (!screen && !info.spare && !info.spd && info.noPoints && !info.rooms && !info.sockRooms && !info.itemRooms && !spur && !fed && !(c.diagram && itemsOf(c.diagram).length)) hh += textLines(sh, tx, y - 2 + hh, 'Points served not recorded', tw, { size: small, bold: screen, color: COL.amber });
+    if (!info.spare && circuitFedBySource(c)) hh += textLines(sh, tx, y - 2 + hh, 'Source: ' + (model.sources || 'battery / PV / generator') + ' (power can flow both ways)', tw, { size: small, bold: true, color: COL.brand }); // v0.47.0
     if (fed) hh += textLines(sh, tx, y - 2 + hh, 'Feeds ' + fed.join(', ') + ' (see ' + fed.map((x) => x.split(' (')[0]).join(', ') + ')', tw, { size: small, bold: true, color: COL.brand });
     // contactor (or time clock) between the breaker and the load
     const fx0 = tx - gap / 2; let feedTop = y + F * 0.6; let kh0 = 0;

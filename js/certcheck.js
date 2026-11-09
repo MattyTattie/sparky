@@ -7,7 +7,7 @@
 // Nothing is stored; it only reads the certificate.
 // =====================================================================
 import { screenSections, sectionDone, missingFields, eicrOverall } from './certmodel.js';
-import { checkCircuit, isSpare } from './checks.js';
+import { checkCircuit, isSpare, boardCtx } from './checks.js';
 
 const MAX_LIST = 4;
 const listOf = (a) => (a.length > MAX_LIST ? a.slice(0, MAX_LIST).join(', ') + ` and ${a.length - MAX_LIST} more` : a.join(', '));
@@ -19,7 +19,7 @@ export function checkCert(cert) {
   // 1. Readings outside the limits (red flags): Zs over max, IR below the minimum, RCD too slow, polarity, test button
   const flagItems = (c, ctx, where, href) => { const r = checkCircuit(c, ctx); for (const f of Object.values(r.flags)) if (f.level === 'red') fix.push({ text: `${where}: ${f.msg}`, href }); };
   if (cert.type === 'MW') { const M = cert.mw || {}; if (M.circuit) flagItems(M.circuit, { earthing: M.earthing, zdb: M.zdb }, 'Circuit ' + (M.circuit.num || ''), `#/cert/${id}/mwc`); }
-  else (cert.boards || []).forEach((b, bi) => (b.circuits || []).forEach((c, ci) => flagItems(c, { earthing: (cert.supply || {}).earthing, zdb: b.zdb }, `${b.ref || 'Board'} circuit ${c.num || ci + 1}`, `#/cert/${id}/b/${bi}/c/${ci}`)));
+  else (cert.boards || []).forEach((b, bi) => (b.circuits || []).forEach((c, ci) => flagItems(c, boardCtx(cert, b), `${b.ref || 'Board'} circuit ${c.num || ci + 1}`, `#/cert/${id}/b/${bi}/c/${ci}`)));
   // 2. EICR: the overall assessment against the codes
   if (cert.type === 'EICR') {
     const codes = (cert.observations || []).map((o) => o && o.code);
