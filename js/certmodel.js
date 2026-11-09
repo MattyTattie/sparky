@@ -309,3 +309,6 @@ export const sourcesOk = (cert) => !sourcesMissing(cert).length;
 export const pdfFlagsDefault = () => { try { return localStorage.getItem('sparky.pdfFlags') !== 'off'; } catch { return true; } };
 export const setPdfFlagsDefault = (on) => { try { localStorage.setItem('sparky.pdfFlags', on ? 'on' : 'off'); } catch {} };
 export const pdfFlagsOn = (cert) => (typeof cert.pdfFlags === 'boolean' ? cert.pdfFlags : pdfFlagsDefault());
+
+// v0.45: "On the IET form: section A", but "schedules" rather than "section Schedules"
+export const formRef = (f) => (/^schedule/i.test(f) ? String(f).toLowerCase() : 'section ' + f);

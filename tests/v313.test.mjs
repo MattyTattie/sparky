@@ -57,5 +57,5 @@ test('v0.31.4: Not operational tick only shown when the cert type has observatio
   const { sectionsFor } = await import('../js/certmodel.js');
   const has = (t) => sectionsFor(t).some((x) => x.special === 'observations');
   assert.equal(has('EICR'), true); assert.equal(has('EIC'), false); assert.equal(has('MW'), false);
-  assert.match(readFileSync(new URL('../js/schedule.js', import.meta.url), 'utf8'), /hasObs \? S\('spdNotOp', 'Not operational', 'check'\) : null/);
+  assert.match(readFileSync(new URL('../js/schedule.js', import.meta.url), 'utf8'), /hasObs \? h\('div', \{ class: 'grid2' \}, S\('spdOk'[^\n]*S\('spdNotOp', 'Not operational', 'check'\)\) : S\('spdOk'/);
 });

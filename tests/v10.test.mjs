@@ -4,7 +4,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 const require = createRequire(import.meta.url);
-globalThis.jspdf ||= require('/workspace/sparky-work/npm/package/dist/jspdf.node.min.js');
+globalThis.jspdf ||= require('./jspdf-node.cjs');
 const T = await import('../js/templates.js');
 const M = await import('../js/certmodel.js');
 const P = await import('../js/pdf.js');

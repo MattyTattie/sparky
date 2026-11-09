@@ -43,7 +43,7 @@ test('other sources: optional, status, PDF continuation sheet', async () => {
   assert.deepEqual(M.sourcesMissing(c), ['rating kW']);
   c.otherSources[0].kw = '3.6';
   assert.deepEqual(M.sourcesMissing(c), []);
-  globalThis.jspdf = require('/workspace/sparky-work/npm/package/dist/jspdf.node.min.js');
+  globalThis.jspdf = require('./jspdf-node.cjs');
   const P = await import('../js/pdf.js');
   c.otherSources.push({ ...M.blankSource('s2'), type: 'Battery storage', kw: '5', isolation: 'Isolator beside the battery' });
   assert.equal(P.sourceSheetCount(c), 1);

@@ -3,7 +3,7 @@
 import { createRequire } from 'node:module';
 import fs from 'node:fs';
 const require = createRequire(import.meta.url);
-globalThis.jspdf ||= require('/workspace/sparky-work/npm/package/dist/jspdf.node.min.js');
+globalThis.jspdf ||= require('./jspdf-node.cjs');
 const { certificatePdf } = await import('../js/pdf.js');
 const S = await import('./sample-data.mjs');
 export const ADDR = 'Unit 4, Example Trade Park\nSample Industrial Estate\nLong Lane Road\nFaketown, Testshire';

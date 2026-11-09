@@ -1421,8 +1421,8 @@ export function drawDiagramPdf(k, cert, newPage, { bottom = 16 } = {}) {
     draw(b, y0, b.h); k.y += (b.h - y0) * s;
   });
 }
-// On by default; cert.diagramPdf === false leaves it out of the PDF.
-export const diagramInPdf = (cert) => Boolean(cert) && cert.diagramPdf !== false && diagramHasCircuits(cert);
+// v0.45: off by default; only a certificate with diagramPdf === true (ticked on) gets the diagram sheet.
+export const diagramInPdf = (cert) => Boolean(cert) && cert.diagramPdf === true && diagramHasCircuits(cert);
 export const diagramHasCircuits = (cert) => (cert && cert.type === 'MW' ? Boolean(cert.mw && cert.mw.circuit && (cert.mw.circuit.desc || cert.mw.circuit.rating)) : (cert && cert.boards || []).some((b) => (b.circuits || []).length));
 
 // v0.44.2: small SVG of one symbol, for the editor's "+ Add" picker

@@ -56,15 +56,16 @@ test('long text wraps in full inside its box', () => {
   assert.ok(L.blocks.every((b) => b.h > 0));
 });
 test('PDF: diagram sheet after the schedules (EIC) and after the form (MW), and can be left out', async () => {
-  globalThis.jspdf = require('/workspace/sparky-work/npm/package/dist/jspdf.node.min.js');
+  globalThis.jspdf = require('./jspdf-node.cjs');
   const { certificatePdf } = await import('../js/pdf.js');
   const text = async (c) => Buffer.from(await (await certificatePdf(c, { profile: PROFILE })).arrayBuffer()).toString('latin1');
   const pages = async (c) => { const s = await text(c); return (s.match(/\/Type \/Page\b/g) || []).length; };
-  const e = diagramEIC(); const n1 = await pages(e);
+  const e = diagramEIC(); e.diagramPdf = true; const n1 = await pages(e); // v0.45: off by default, ticked on here
   e.diagramPdf = false; assert.equal(diagramInPdf(e), false); const n0 = await pages(e);
   assert.ok(n1 >= n0 + 1 && n1 <= n0 + 3, `${n0} -> ${n1}`);
-  const m = diagramMW(); const m1 = await pages(m); m.diagramPdf = false; assert.equal(await pages(m), m1 - 1);
-  assert.equal(diagramInPdf(sampleMW()), true);
+  const m = diagramMW(); m.diagramPdf = true; const m1 = await pages(m); m.diagramPdf = false; assert.equal(await pages(m), m1 - 1);
+  assert.equal(diagramInPdf(sampleMW()), false); // v0.45: untouched certificates leave it out
+  const t = sampleMW(); t.diagramPdf = true; assert.equal(diagramInPdf(t), true);
 });
 
 // v0.38 fixes (made-up data only)

@@ -6,7 +6,7 @@ second. If the app is closed in that gap, a copy goes into the browser's local s
 straight away and is put back next time. Nothing waits for a Save button.
 
 **Sync and files.** Settings has two cards:
-1. *Sync:* each job gets its own folder in "Sparky jobs" in your Drive, holding
+1. *Sync:* each job gets its own folder in "Zs Pro" in your Drive (it used to be called "Sparky jobs"; the app renames it), holding
    the job's data (`job.json`), its photos and its PDFs, and every change goes up by
    itself and comes down on your other devices. The app uses the `drive.file`
    permission, so it can only see files it made itself. Under "More": back up all jobs

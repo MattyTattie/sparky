@@ -76,7 +76,7 @@ test('6: templates save rooms/wiring/switches/control, apply, built-in JB to eac
 });
 test('7: PDF title block on each diagram sheet', async () => {
   const require = createRequire(import.meta.url);
-  let jsp; try { jsp = require('/workspace/sparky-work/npm/package/dist/jspdf.node.min.js'); } catch { return; }
+  let jsp; try { jsp = require('./jspdf-node.cjs'); } catch { return; }
   globalThis.jspdf = jsp;
   const { diagramTitleInfo } = await import('../js/pdf.js');
   const c = diagramEICPro(); c.people = { inspector: { name: 'A. Sample' } }; c.sigs = { inspector: { date: '2026-10-30' } };

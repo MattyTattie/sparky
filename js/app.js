@@ -172,7 +172,7 @@ route(/^\/$/, async () => {
     list,
     h('p', { class: 'note' }, `${APP_NAME} ${APP_VERSION}. Everything is saved on this device as you type. `, sync.getStatus().state === 'off' ? [h('a', { href: '#/settings' }, 'Sync with your other devices through Google Drive'), '.'] : 'Synced to your Google Drive.'),
     jobs.length ? h('button', { class: 'btn primary fab', onclick: () => go('#/newjob') }, '+ New job') : null,
-  ], { actions: [h('button', { class: 'iconbtn', 'aria-label': 'Settings', onclick: () => go('#/settings') }, icon('settings', { size: 20 }))] });
+  ]); // v0.45: no gear up top; Settings is in the bar at the bottom
 });
 
 // v0.9 look: three quick numbers at the top of the jobs page.
@@ -215,7 +215,7 @@ route(/^\/newjob(?:\/(.+))?$/, async (custId) => {
   const v = { title: '', name: '', address: '', postcode: '', phone: '', email: '', siteSame: true, siteAddress: '', sitePostcode: '', notes: '', customerId: custId || '' };
   const fillFrom = (c) => { Object.assign(v, { customerId: c.id, name: c.name || '', address: c.address || '', postcode: c.postcode || '', phone: c.phone || '', email: c.email || '' }); };
   if (custId) { const c = customers.find((x) => x.id === custId); if (c) fillFrom(c); }
-  const form = h('div');
+  const form = h('div'); let moreOpen = false;
   const inp = (k, label, type = 'text', x = {}) => h('label', { class: 'f' }, h('span', {}, label), h(type === 'area' ? 'textarea' : 'input', { type: type === 'area' ? null : type, value: v[k], oninput: (e) => { v[k] = e.target.value; if (k === 'name') suggest(e.target.value); }, ...x }));
   const sugg = h('div', { class: 'list', style: 'display:none' });
   const suggest = (q) => {
@@ -229,11 +229,14 @@ route(/^\/newjob(?:\/(.+))?$/, async (custId) => {
       h('div', { class: 'card' }, h('h2', {}, 'Customer'),
         customers.length ? h('label', { class: 'f' }, h('span', {}, 'Saved customer'), h('select', { onchange: (e) => { const c = customers.find((x) => x.id === e.target.value); if (c) fillFrom(c); else Object.assign(v, { customerId: '', name: '', address: '', postcode: '', phone: '', email: '' }); draw(); } },
           h('option', { value: '' }, '— New customer —'), customers.map((c) => h('option', { value: c.id, selected: c.id === v.customerId ? true : null }, c.name)))) : null,
-        inp('name', 'Name'), sugg, inp('address', 'Address', 'area'), inp('postcode', 'Postcode'),
-        h('div', { class: 'grid2' }, inp('phone', 'Phone', 'tel'), inp('email', 'Email', 'email'))),
+        inp('name', 'Name'), sugg, inp('address', 'Address', 'area'), inp('postcode', 'Postcode')),
       h('div', { class: 'card' }, h('h2', {}, 'Where the work is'),
         h('label', { class: 'check' }, h('input', { type: 'checkbox', checked: v.siteSame, onchange: (e) => { v.siteSame = e.target.checked; draw(); } }), 'Same as the customer\u2019s address'),
-        v.siteSame ? null : [inp('siteAddress', 'Installation address', 'area'), inp('sitePostcode', 'Postcode')],
+        v.siteSame ? null : [inp('siteAddress', 'Installation address', 'area'), inp('sitePostcode', 'Postcode')]),
+      // v0.45: phone, email and notes folded (opens by itself when a saved customer has them)
+      h('details', { class: 'card more', id: 'moredetails', open: moreOpen || v.phone || v.email || v.notes ? true : null, ontoggle: (e) => { moreOpen = e.target.open; } },
+        h('summary', {}, 'More details: phone, email, notes'),
+        h('div', { class: 'grid2' }, inp('phone', 'Phone', 'tel'), inp('email', 'Email', 'email')),
         inp('notes', 'Notes', 'area')),
       h('div', { class: 'btns full' }, h('button', { class: 'btn primary', onclick: create }, 'Create job')));
   };

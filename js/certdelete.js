@@ -21,9 +21,9 @@ async function removePdfs(files, certIds = []) {
   const del = (await db.getMeta(DELETED)) || { certs: {}, files: {} };
   del.certs = del.certs || {}; del.files = del.files || {};
   for (const id of certIds) del.certs[id] = at;
-  const queue = (await db.getMeta(TRASH_QUEUE)) || [];
-  for (const f of files) { del.files[f.id] = at; if (f.driveId) queue.push(f.driveId); await db.del('files', f.id); }
-  await db.setMeta(DELETED, del); await db.setMeta(TRASH_QUEUE, queue);
+  const ids = [];
+  for (const f of files) { del.files[f.id] = at; if (f.driveId) ids.push(f.driveId); await db.del('files', f.id); }
+  await db.setMeta(DELETED, del); await queueTrash(ids);
   flushTrash().catch(() => {});
 }
 // v0.17.2: tidy saved PDFs left behind by certificates deleted before v0.17.1 (orphans).
@@ -38,11 +38,19 @@ export async function cleanOrphans(when) {
   return orphans.length;
 }
 // Move queued Drive copies to the bin (when signed in; otherwise next sync).
-export async function flushTrash() {
+// v0.45: one flush at a time (a sync waits for a flush a delete started), and ids queued
+// meanwhile are kept, so a sync never runs while a folder is still on its way to the bin.
+let flushing = Promise.resolve(0);
+// Every change to the bin queue goes through here, one at a time (no lost ids between a delete and a flush).
+let qLock = Promise.resolve();
+function editQueue(fn) { const run = qLock.then(async () => { const q = (await db.getMeta(TRASH_QUEUE)) || []; const next = fn(q); await db.setMeta(TRASH_QUEUE, next); return next; }); qLock = run.catch(() => {}); return run; }
+export const queueTrash = (ids) => editQueue((q) => [...q, ...ids.filter((id) => id && !q.includes(id))]);
+export function flushTrash() { const run = flushing.then(flushOnce, flushOnce); flushing = run.catch(() => 0); return run; }
+async function flushOnce() {
   const queue = (await db.getMeta(TRASH_QUEUE)) || [];
   if (!queue.length || !G.isConfigured() || !G.hasToken() || !navigator.onLine) return 0;
-  const left = [];
-  for (const id of queue) { try { await G.trash(id); } catch (e) { if (!(e instanceof G.NotFoundError)) left.push(id); } }
-  await db.setMeta(TRASH_QUEUE, left);
-  return queue.length - left.length;
+  const done = new Set();
+  for (const id of queue) { try { await G.trash(id); done.add(id); } catch (e) { if (e instanceof G.NotFoundError) done.add(id); } }
+  await editQueue((now) => now.filter((id) => !done.has(id)));
+  return done.size;
 }

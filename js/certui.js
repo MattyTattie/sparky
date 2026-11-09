@@ -9,7 +9,7 @@ import { h, fill, toast, modal, confirmBox, fmtDate, shareOrDownload, blobToData
 import { route, page, go, render } from './app.js';
 import { S, openCert, changed, flush, getProfile, defaultInstruments, defaultInstrumentIds, getInstruments, instrumentsFor, instrumentText, calibrationWarnings, INSTRUMENT_KINDS, saveSetting } from './state.js';
 import { calDateFields, CAL_DATE_WARN } from './instruments.js';
-import { screenSections, countsToward, pdfFlagsOn } from './certmodel.js';
+import { screenSections, countsToward, pdfFlagsOn, formRef } from './certmodel.js';
 import { TYPES, newCert, sectionsFor, sectionDone, missingFields, visible, get, set, eicrOverall, blankBond, BOND_LOCATIONS, BOND_PARTS, SOURCE_TYPES, blankSource, sourcesMissing, isNewInstall } from './certmodel.js';
 import { INTAKE_NOTE_10, INTAKE_NOTES, INTAKE_NOTIFIED, migrateIntake, EIC_ITEMS, EIC_OUTCOMES, EICR_ITEMS, EICR_OUTCOMES, CODE_TEXT, OBSERVATIONS, OBS_CATS, EIC_HELP, EICR_HELP } from './inspections.js';
 import { checkCircuit, isSpare } from './checks.js';
@@ -66,26 +66,31 @@ route(/^\/cert\/([^/]+)$/, async (id) => {
   const nextSec = secs.find((s) => s.special !== 'sign' && countsToward(s) && !sectionDone(cert, s)) || secs.find((s) => countsToward(s) && !sectionDone(cert, s));
   const secHref = (s) => (s.special === 'boards' ? `#/cert/${id}/boards` : `#/cert/${id}/s/${s.id}`);
   const warns = await calibrationWarnings();
+  const testBi = cert.type === 'MW' ? -1 : (cert.boards || []).findIndex((b) => (b.circuits || []).length);
+  const hasDiagram = diagramHasCircuits(cert);
   page(TYPES[cert.type].name, [
     h('div', { class: 'card' },
       h('div', { style: 'display:flex;justify-content:space-between;align-items:center' }, h('b', {}, cert.number), cert.status === 'issued' ? h('span', { class: 'pill green' }, 'Issued ' + fmtDate(cert.issuedAt)) : h('span', { class: 'pill' }, 'Draft')),
       h('div', { class: 'note' }, [cert.client.name, (cert.install.address || '').split(/[,\n]/)[0]].filter(Boolean).join(' · ')),
       limitOn() ? limitBar(done, counted.length) : h('div', { class: 'prog', style: 'margin-top:10px' }, h('i', { style: `width:${Math.round((done / counted.length) * 100)}%` })),
       h('div', { class: 'note', style: 'margin-top:4px' }, `${done} of ${counted.length} sections filled in`),
-      cert.status !== 'issued' && nextSec ? h('a', { class: 'btn primary', id: 'continuebtn', style: 'display:block;margin-top:10px;text-align:center', href: secHref(nextSec) }, 'Continue: ' + nextSec.title + ' \u203a') : null),
-    nFlags ? h('div', { class: 'notice red' }, `${nFlags} circuit(s) have a reading outside the limits. Check the schedule before issuing.`) : null,
+      cert.status !== 'issued' && nextSec ? h('a', { class: 'btn primary', id: 'continuebtn', style: 'display:flex;margin-top:10px;justify-content:center;text-align:center', href: secHref(nextSec) }, 'Continue: ' + nextSec.title + ' \u203a') : null,
+      // v0.45: straight to testing (the first board with circuits)
+      testBi >= 0 ? h('a', { class: 'btn', id: 'testacrossbtn', style: 'display:flex;margin-top:8px;justify-content:center', href: `#/cert/${id}/b/${testBi}/t/r1r2` }, withIcon('gauge', 'Test across circuits')) : null),
+    nFlags ? h('div', { class: 'notice red' }, `${nFlags} circuit${nFlags === 1 ? ' has a reading' : 's have readings'} outside the limits. Check the schedule before issuing.`) : null,
     warns.map((w) => h('div', { class: 'notice ' + w.level }, w.text)),
     h('div', { class: 'list' }, secs.map((s) => h('a', { class: 'row', href: s.special === 'boards' ? `#/cert/${id}/boards` : `#/cert/${id}/s/${s.id}` },
-      h('span', { class: 'dot ' + (sectionDone(cert, s) ? 'ok' : '') }), h('div', { class: 'main' }, h('div', { class: 't' }, s.title), h('div', { class: 's faint' }, 'On the IET form: section ' + s.form)), h('span', { class: 'go' }, '›'))),
+      h('span', { class: 'dot ' + (sectionDone(cert, s) ? 'ok' : '') }), h('div', { class: 'main' }, h('div', { class: 't' }, s.title), s.form ? h('div', { class: 's faint' }, 'On the IET form: ' + formRef(s.form)) : null), h('span', { class: 'go' }, '›'))),
       h('a', { class: 'row', href: `#/cert/${id}/s/instruments` }, h('span', { class: 'dot ' + (Object.values(cert.instruments || {}).some(Boolean) ? 'ok' : '') }), h('div', { class: 'main' }, h('div', { class: 't' }, 'Test instruments'), h('div', { class: 's' }, 'From your settings; change for this certificate')), h('span', { class: 'go' }, '›')),
       job ? h('a', { class: 'row', href: `#/cert/${id}/photos` }, h('span', { class: 'dot ' + ((cert.photoIds || []).length ? 'ok' : '') }), h('div', { class: 'main' }, h('div', { class: 't' }, 'Photos on the certificate'), h('div', { class: 's' }, `${(cert.photoIds || []).length} chosen`)), h('span', { class: 'go' }, '›')) : null),
     h('div', { class: 'card' }, h('h2', {}, 'PDF'),
       h('p', { class: 'note' }, 'Laid out like the IET forms. Nothing is sent until you pick who it goes to.'),
+      // v0.45: one Share button (email, WhatsApp, Drive…), with the email subject and message filled in
+      hasDiagram ? h('label', { class: 'check', id: 'diagrampdfcheck' }, h('input', { type: 'checkbox', checked: cert.diagramPdf === true, onchange: (e) => { cert.diagramPdf = e.target.checked; changed(); } }), 'Add the wiring diagram to the PDF') : null,
       h('div', { class: 'btns full' }, h('button', { class: 'btn primary', id: 'sharebtn', onclick: async (e) => { const ok = await makePdf(cert, e.currentTarget, 'share'); if (ok && cert.status !== 'issued') await askIssued(cert); } }, 'Share PDF')),
-      h('div', { class: 'btns small3' }, h('button', { class: 'btn small', onclick: (e) => makePdf(cert, e.currentTarget, 'view') }, 'View PDF'),
-        h('button', { class: 'btn small', id: 'emailbtn', onclick: async (e) => { const ok = await makePdf(cert, e.currentTarget, 'email'); if (ok && cert.status !== 'issued') await askIssued(cert); } }, withIcon('mail', 'Email')),
+      h('div', { class: 'btns' + (cert.type !== 'MW' ? ' small2' : '') }, h('button', { class: 'btn small', onclick: (e) => makePdf(cert, e.currentTarget, 'view') }, 'View PDF'),
         cert.type !== 'MW' ? h('button', { class: 'btn small', onclick: (e) => makeChart(cert, e.currentTarget) }, 'Circuit chart') : null),
-      h('p', { class: 'note' }, 'Email opens your own mail app' + (cert.client.email ? ' (to ' + cert.client.email + ')' : '') + '. You press send yourself.' + (pdfFlagsOn(cert) ? ' Readings over the limit show in red (change in Settings).' : '')),
+      h('p', { class: 'note' }, 'Share opens your phone\u2019s list: pick email, WhatsApp or anything else' + (cert.client.email ? ' (client email: ' + cert.client.email + ')' : '') + '. You press send yourself.' + (pdfFlagsOn(cert) ? ' Readings over the limit show in red (change in Settings).' : '')),
       cert.status !== 'issued' ? h('button', { class: 'btn', onclick: () => askIssued(cert, true) }, 'Mark as issued') : null),
     h('div', { class: 'card', id: 'dangercard' }, h('h2', {}, 'Danger notices'),
       h('p', { class: 'note' }, 'A one-page notice to hand over when you find something dangerous (C1) or potentially dangerous (C2). It prints as its own PDF.'),
@@ -123,9 +128,7 @@ async function makePdf(cert, btn, how) {
     const blob = await certificatePdf(cert, { profile: await getProfile(), photos: await pdfPhotos(cert) });
     const name = pdfName(cert); await savePdf(cert, blob, name);
     if (how === 'view') (await import('./pdfview.js')).viewPdf(blob, name, { shareText: `${TYPES[cert.type].name} ${cert.number}`, email: () => emailFor(cert, blob, name) });
-    else if (how === 'email') await emailFor(cert, blob, name);
-    else { const r = await shareOrDownload(blob, name, `${TYPES[cert.type].name} ${cert.number}`); if (r === 'downloaded') toast('Saved to your downloads'); }
-    ok = how !== 'view';
+    else ok = (await emailFor(cert, blob, name)) !== 'cancelled'; // v0.45: Share and Email are one button
   } catch (e) { console.error(e); toast('Couldn\u2019t make the PDF: ' + ((e && e.message) || 'the browser wouldn\u2019t save it (private browsing?)')); }
   btn.disabled = false; btn.textContent = label;
   return ok;
@@ -219,7 +222,7 @@ route(/^\/cert\/([^/]+)\/diagram$/, async (id) => {
     const ok = await modal('Tidy up the diagram', h('div', {}, h('p', {}, 'Puts every room box back into neat slots and clears any odd moves. Your room order is kept.'), h('label', { style: 'display:flex;gap:10px;align-items:center' }, cb, h('span', {}, 'Also put rooms back in the order they were added'))), [{ label: 'Cancel', value: false }, { label: 'Tidy up', value: true, cls: 'primary' }]);
     if (!ok) return; const n = tidyLayouts(cert, { resetOrder: cb.checked }); if (n) changed(); draw(); toast(n ? `Tidied ${n} circuit${n === 1 ? '' : 's'}` : 'Already tidy');
   };
-  const sw = h('button', { class: 'switch' + (cert.diagramPdf !== false ? ' on' : ''), type: 'button', role: 'switch', id: 'diagrampdf', 'aria-label': 'Include in the PDF', 'aria-checked': String(cert.diagramPdf !== false), onclick: () => { cert.diagramPdf = cert.diagramPdf === false; changed(); sw.classList.toggle('on', cert.diagramPdf !== false); sw.setAttribute('aria-checked', String(cert.diagramPdf !== false)); } }, h('span', {}));
+  const sw = h('button', { class: 'switch' + (cert.diagramPdf === true ? ' on' : ''), type: 'button', role: 'switch', id: 'diagrampdf', 'aria-label': 'Include in the PDF', 'aria-checked': String(cert.diagramPdf === true), onclick: () => { cert.diagramPdf = cert.diagramPdf !== true; changed(); sw.classList.toggle('on', cert.diagramPdf === true); sw.setAttribute('aria-checked', String(cert.diagramPdf !== false)); } }, h('span', {}));
   page('Wiring diagram', [
     h('p', { class: 'note' }, cert.type === 'MW' ? 'Drawn from the circuit on this certificate. It fills in as you add the details.' : 'Drawn from the supply, the board and each circuit. It fills in as you add the details. Number of points served sets how many sockets or lights are drawn.'),
     topIssues,

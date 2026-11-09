@@ -17,6 +17,7 @@ export function num(v) {
   return m ? Number(m[1]) : null;
 }
 const isGreater = (v) => /^\s*[>≥]/.test(String(v || ''));
+const isLess = (v) => /^\s*[<≤]/.test(String(v || '')); // v0.45: '<1' means below 1
 
 import { isSpareCircuit, isRingCircuit } from './templates.js';
 export const isSpare = isSpareCircuit;
@@ -30,8 +31,9 @@ export function limitZs(c, ctx = {}) {
   // v0.25: MCCB earth fault setting Ig (LSIG), when put in, is what trips on an earth fault.
   if ((deviceById(c.device) || {}).adj === 'mccb' && num(c.ig) > 0) return { value: maxZsForTrip(num(c.ig)), source: `Uo × Cmin ÷ earth fault setting Ig ${num(c.ig)} A (maker\u2019s setting)`, byIg: true };
   if ((deviceById(c.device) || {}).adj && num(c.im) > 0) return { value: maxZsForTrip(num(c.im)), source: `Uo × Cmin ÷ magnetic trip ${num(c.im)} A (maker\u2019s setting)` };
-  if (ctx.earthing === 'TT' && (c.rcdIdn || (deviceById(c.device) || {}).rcd)) {
-    const idn = Number(c.rcdIdn) || 30;
+  // v0.45: only a real IΔn counts ('N/A' in the RCD boxes = no RCD, so the Table 41.3 figure applies)
+  if (ctx.earthing === 'TT' && (num(c.rcdIdn) > 0 || (deviceById(c.device) || {}).rcd)) {
+    const idn = num(c.rcdIdn) || 30;
     if (RCD_ZS[idn]) return { value: RCD_ZS[idn], source: RCD_ZS.source, tt: true };
   }
   const v = maxZs({ device: c.device, type: c.type, rating: c.rating, time: c.time || 0.4 });
@@ -94,7 +96,7 @@ export function checkCircuit(c, ctx = {}) {
   const min = irMinFor(testV);
   for (const f of ['irLL', 'irLE']) {
     const v = num(c[f]); if (v == null) continue;
-    if (v < min) put(f, 'red', `${v} MΩ is below the ${min} MΩ minimum at ${testV} V (${IR_TABLE.source}).`);
+    if (v < min || (isLess(c[f]) && v <= min)) put(f, 'red', `${isLess(c[f]) ? `Under ${v} MΩ: below` : `${v} MΩ is below`} the ${min} MΩ minimum at ${testV} V (${IR_TABLE.source}).`);
     else if (!isGreater(c[f]) && v < IR_TABLE.adviseBelow) put(f, 'amber', `Below ${IR_TABLE.adviseBelow} MΩ. Not a fail, but worth looking into (GN3 rule of thumb).`);
   }
   if (c.irV && ![250, 500, 1000].includes(testV)) put('irV', 'amber', 'Table 64 test voltages are 250 V, 500 V or 1000 V.');
@@ -109,7 +111,8 @@ export function checkCircuit(c, ctx = {}) {
   const ms = num(c.rcdMs);
   if (ms != null) {
     const t = rcdTimeLimit(!!c.rcdS);
-    if (ms > t.maxMs) put('rcdMs', 'red', `${ms} ms is over the ${t.maxMs} ms limit for ${c.rcdS ? 'an S-type' : 'a general'} RCD at IΔn.`);
+    if (isGreater(c.rcdMs) && ms >= t.maxMs) put('rcdMs', 'red', `Over ${ms} ms: it didn\u2019t trip within the ${t.maxMs} ms limit for ${c.rcdS ? 'an S-type' : 'a general'} RCD at IΔn.`);
+    else if (ms > t.maxMs) put('rcdMs', 'red', `${ms} ms is over the ${t.maxMs} ms limit for ${c.rcdS ? 'an S-type' : 'a general'} RCD at IΔn.`);
     else if (t.minMs && ms < t.minMs) put('rcdMs', 'amber', `${ms} ms is faster than the ${t.minMs} ms an S-type should take. Is it really an S-type?`);
   }
   for (const f of ['rcdBtn', 'afddBtn']) if (/^(x|✗|✘|fail|no)$/i.test(String(c[f] || '').trim())) put(f, 'red', 'Test button did not work.');

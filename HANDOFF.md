@@ -1,6 +1,7 @@
 # Handoff notes
 
-Status: beta v0.1, built on the box in /workspace/sparky-app. **Not published.**
+Status: live is **v0.44.8 beta** (https://mattytattie.github.io/sparky/, main cb2ba14). Next: **v0.45.0 beta** on branch `v0.45.0`, built and tested, **not pushed / not live** (waits for Matthew's "go live"). The app is called Zs Pro; repo, data keys, cache prefix and Android package still say sparky on purpose (see RENAME.md).
+Run the tests with `node --test tests/*.test.mjs tests/*.test.js` (plain `node --test tests/` doesn't work on Node 24). PDF tests find jsPDF's Node build through tests/jspdf-node.cjs; if it's missing it runs tests/setup-jspdf.sh (npm, into tests/.jspdf, git-ignored).
 
 Open points
 - Pick the final name: change `APP_NAME` in js/config.js, plus manifest.json and the
@@ -411,3 +412,29 @@ Auto single-line wiring diagram from the cert (EIC/EICR whole board, MWC just th
 ## v0.44.8 — PUBLISHED 3 Nov 2026 (Matthew: 'Go live')
 - Solar wiring: every MPPT string and the battery now has its own separate cable from its own point on the inverter's bottom edge (down, then across). No shared vertical bus, no junction dots. The first branch leaves furthest right so no cables cross (screen and PDF).
 - Tests: tests/v448_own_cables.test.mjs (one drop per branch, no dots, no crossings; 2 and 3 strings + battery, screen W380 and PDF W560).
+
+## v0.37.0 beta — PUBLISHED 30 Oct 2026, main 6180334 (Matthew said go live): polish-intuitive
+Continue button, "On the IET form" lines, on-site section order (screen only), simpler PDF card, issued prompt after sharing, red readings setting (on by default), setup card, single Add certificate, fairer progress, level circuit boxes. Cache sparky-v0.37.0. (Note restored 9 Nov 2026 from an uncommitted edit on the old v0.36.5 checkout.)
+
+## v0.45.0 beta — 9 Nov 2026, branch `v0.45.0` (from main cb2ba14), NOT pushed / not live
+Cache sparky-v0.45.0. No change to data or sync formats.
+Fixes
+- checks.js limitZs: on TT only a real IΔn (`num(rcdIdn) > 0`) or an RCD device gives the 50 V / IΔn figure. "N/A" in the RCD boxes used to give 1667 Ω (no red flag, and the PDF printed 1667).
+- checks.js: RCD time ">300" (tester stopped) is red when the number is at or over the limit ("Over 300 ms: it didn't trip…"). IR "<1" (or "<0.5" at 250 V) is red when the number is at or under the minimum ("Under 1 MΩ: below…").
+- Presets: remembered when you really leave a circuit (hash differs from the one it opened on), quietly. The old hashchange listener fired after the next circuit had drawn, so opening a circuit popped "Saved … as a device preset". Card shows "✓ Saved as a preset" or "saved when you leave the circuit · Save now".
+- Continue button: display flex, so the text sits in the middle.
+- SPD "operational status confirmed": full width when there's no "Not operational" box (EIC/MW).
+- certdelete.js: flushTrash runs one at a time and every queue change goes through editQueue/queueTrash, so a delete during a flush can't wipe a queued folder id (sync_v26 step 4 failed about 1 in 5).
+Streamlining
+- Circuit page: Copy to next way + SPARE / N/A up top; Copy circuit, Template, Delete, Say readings under "More". Disconnection time + own max Zs folded under the max Zs box (opens itself when 5 s or an own figure is set). AFDD folded (opens itself when filled). One S-type control: the S chip sets rcdType 'x S' and rcdS together; the old tick is gone (an older circuit with only rcdS shows the chip on).
+- Board page: Test across / + Circuit / Scan first, then Board details (open only on a new board: no circuits and no Zdb), then circuits. "Fill the empty boxes on every circuit:" chips only once there are circuits.
+- Certificate page: "Test across circuits" button (first board with circuits; not MW). One "Share PDF" (the email share: subject and message filled in; mailto fallback), View PDF, Circuit chart. Tick "Add the wiring diagram to the PDF".
+- Wiring diagram: off in the PDF unless ticked. `diagramInPdf` = `cert.diagramPdf === true`. Same per-certificate field as before, so existing jobs follow the new default; one where he'd switched it off and on again (true) keeps it.
+- Jobs page: no gear up top (Settings is in the bottom bar). New job: Phone, Email, Notes under "More details" (opens itself if a saved customer fills them).
+- Wording: "On the IET form: schedules" (formRef in certmodel.js), "1 circuit has a reading / 2 circuits have readings".
+Tests
+- New tests/v450.test.mjs. Updated for the new diagram default: v05, v380 (diagram ticked on). v313 regex for the SPD row.
+- tests/jspdf-node.cjs + tests/setup-jspdf.sh replace the hard-coded /workspace/sparky-work/npm path (old path still used if it's there).
+- restore_mock.py clicks #restore-new (or opens More for the small button). sync_v26.py also skips the "Zs Pro" root folder.
+- Shots: /workspace/polish-review/zspro-next/{before,after} (shots.py, interact.py).
+Android: TWA versionCode 5 / versionName 0.45.0, same package io.github.mattytattie.sparky and key, so it installs over the old app. See /workspace/sparky-android/BUILD-NOTES.txt.

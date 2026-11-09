@@ -5,7 +5,6 @@
 // devices remove it on their next sync (sync.js, syncmerge.planGone).
 // =====================================================================
 import * as db from './db.js';
-import { TRASH_QUEUE } from './pdflist.js';
 
 const TOMBS = 'sync.deleted';
 // Only this device: the job, its certificates and files, plus a note so sync won't bring it back.
@@ -18,9 +17,8 @@ export async function deleteJobHere(id) {
 export async function deleteJob(job) {
   await deleteJobHere(job.id);
   if (job.driveFolderId) {
-    const q = (await db.getMeta(TRASH_QUEUE)) || [];
-    if (!q.includes(job.driveFolderId)) q.push(job.driveFolderId);
-    await db.setMeta(TRASH_QUEUE, q);
-    import('./certdelete.js').then((m) => m.flushTrash()).catch(() => {});
+    const m = await import('./certdelete.js'); // v0.45: queued through certdelete, one change at a time
+    await m.queueTrash([job.driveFolderId]);
+    m.flushTrash().catch(() => {});
   }
 }

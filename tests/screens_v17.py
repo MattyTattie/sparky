@@ -38,7 +38,7 @@ async def main():
         await page.evaluate("document.querySelector('.dnrow').scrollIntoView({block:'center'})"); await page.wait_for_timeout(300)
         await snap('v17-5-observation-notice-issued.png')
         await go('#/cert/cert-eicr', 1200)
-        await page.evaluate("document.querySelector('#emailbtn').scrollIntoView({block:'center'})"); await page.wait_for_timeout(300)
+        await page.evaluate("document.querySelector('#sharebtn').scrollIntoView({block:'center'})"); await page.wait_for_timeout(300)
         await snap('v17-6-cert-email-button-and-notices.png')
         await page.click('button:has-text("View PDF") >> nth=0'); await page.wait_for_timeout(5000)
         await page.evaluate("document.querySelector('.pdfpages').scrollTo(0, 0)")

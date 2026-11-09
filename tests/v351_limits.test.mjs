@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 import * as D from '../js/dcplan.js';
 import { wiringModel, connections, connectionText } from '../js/dcwire.js';
-globalThis.jspdf ||= createRequire(import.meta.url)('/workspace/sparky-work/npm/package/dist/jspdf.node.min.js');
+globalThis.jspdf ||= createRequire(import.meta.url)('./jspdf-node.cjs');
 const { dcPlanPdf, dcPartsPdf } = await import('../js/dcplanpdf.js');
 const { Kit } = await import('../js/pdfkit.js');
 

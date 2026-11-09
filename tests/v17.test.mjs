@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { createRequire } from 'node:module';
-globalThis.jspdf ||= createRequire(import.meta.url)('/workspace/sparky-work/npm/package/dist/jspdf.node.min.js');
+globalThis.jspdf ||= createRequire(import.meta.url)('./jspdf-node.cjs');
 const S = await import('./sample-data.mjs');
 const D = await import('../js/dangermodel.js');
 const { dangerPdf } = await import('../js/dangerpdf.js');

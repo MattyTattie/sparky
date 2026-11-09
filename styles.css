@@ -938,3 +938,19 @@ a.row.setupcard { display: flex; text-decoration: none; border: 2px solid var(--
 .modal.picker .tile { background: #fff; color: #10131a; border: 1.5px solid #c9cfdc; }
 .modal.picker .tile .tnote { color: #4a5160; }
 .modal.picker .tile:active { background: #eef1ff; }
+/* v0.45: quieter circuit and board pages */
+.linkbtn { background: none; border: 0; padding: 0; color: var(--brand); font: inherit; font-weight: 600; text-decoration: underline; cursor: pointer; }
+details.card.more { margin-top: 0; border-top: 0; padding-top: 14px; }
+details.card.more > summary { font-size: 15px; color: var(--brand); }
+.circtools { align-items: flex-start; }
+details.circmore { margin-top: 0; border-top: 0; padding-top: 0; }
+details.circmore > summary { padding: 9px 4px; }
+details.circmore[open] { flex-basis: 100%; }
+details.devmore, details.afddmore { margin-top: 6px; }
+details.afddmore > summary.phd { display: block; }
+.fillempty { margin-top: 10px; }
+.fillempty .note { margin-bottom: 4px; }
+.presetsaved { color: var(--ok, #1a7f37); font-weight: 600; margin-top: 6px; }
+.presetauto { margin-top: 6px; }
+.btns.small2 > .btn { flex: 1 1 0; }
+.boarddetails { margin-top: 12px; }

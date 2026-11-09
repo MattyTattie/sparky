@@ -8,7 +8,7 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { createRequire } from 'node:module';
 const require = createRequire(import.meta.url);
-globalThis.jspdf ||= require('/workspace/sparky-work/npm/package/dist/jspdf.node.min.js');
+globalThis.jspdf ||= require('./jspdf-node.cjs');
 const P = await import('../js/dcplan.js');
 const { dcPlanPdf } = await import('../js/dcplanpdf.js');
 

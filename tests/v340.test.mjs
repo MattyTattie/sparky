@@ -82,7 +82,7 @@ test('v340: Esc closes the top overlay (backnav)', () => {
 test('v340: version', () => { assert.match(src('js/config.js'), /APP_VERSION = '0\.(?:3[4-9]|4\d)\.\d+ beta'/); assert.match(src('sw.js'), /sparky-v0\.(?:3[4-9]|4\d)\.\d+/); });
 
 // PDF: real render with the Node jsPDF build, read back with pdftotext.
-const JSPDF = '/workspace/sparky-work/npm/package/dist/jspdf.node.min.js';
+const JSPDF = './jspdf-node.cjs';
 async function pdfPages(cert) {
   globalThis.jspdf = createRequire(import.meta.url)(JSPDF);
   const { certificatePdf } = await import('../js/pdf.js');

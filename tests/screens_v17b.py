@@ -66,7 +66,7 @@ async def main():
         await go('#/cert/cert-eicr/s/observations'); await obs_btn(1)
         await snap('v17b-8-observations-on-notice.png')
         await go('#/cert/cert-eicr', 1200)
-        await page.evaluate("document.querySelector('#emailbtn').scrollIntoView({block:'center'})"); await page.wait_for_timeout(300)
+        await page.evaluate("document.querySelector('#sharebtn').scrollIntoView({block:'center'})"); await page.wait_for_timeout(300)
         await snap('v17b-9-cert-email-and-notices.png')
         await b.close()
     print('errors:', errors)

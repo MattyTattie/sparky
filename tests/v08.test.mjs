@@ -9,7 +9,7 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { createRequire } from 'node:module';
 const require = createRequire(import.meta.url);
-globalThis.jspdf ||= require('/workspace/sparky-work/npm/package/dist/jspdf.node.min.js');
+globalThis.jspdf ||= require('./jspdf-node.cjs');
 const M = await import('../js/certmodel.js');
 const { certificatePdf } = await import('../js/pdf.js');
 const { EIC_ITEMS, EICR_ITEMS, EIC_HELP, EICR_HELP } = await import('../js/inspections.js');

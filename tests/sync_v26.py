@@ -82,7 +82,7 @@ async def main():
         await mac.evaluate("async () => { const db = await import('/js/db.js'); const j = await db.get('jobs', 'job-d2'); j.notes = 'Mac edit, not sent'; j.updatedAt = new Date().toISOString(); j.version++; await db.put('jobs', j); }")
         await phone.evaluate("async () => { const db = await import('/js/db.js'); const { deleteJob } = await import('/js/jobdelete.js'); for (const id of ['job-d1', 'job-d2']) await deleteJob(await db.get('jobs', id)); }")
         await phone.evaluate(SYNC)
-        folders = [f for f in FILES.values() if f['mimeType'] == 'application/vnd.google-apps.folder' and f['name'] != 'Sparky jobs']
+        folders = [f for f in FILES.values() if f['mimeType'] == 'application/vnd.google-apps.folder' and f['name'] not in ('Sparky jobs', 'Zs Pro')]
         res['4_binned_folders'] = sum(1 for f in folders if f.get('trashed')); check(res['4_binned_folders'] == 2, 'job folders not binned on Drive')
         check(len(await phone.evaluate(JOBS)) == 0, 'phone still has deleted jobs')
         await mac.evaluate(NOGAP); await mac.evaluate(SYNC); mj = await mac.evaluate(JOBS); res['5_mac_jobs'] = mj

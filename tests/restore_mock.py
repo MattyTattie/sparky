@@ -66,7 +66,11 @@ async def main():
         await pg.reload(); await pg.wait_for_timeout(600)
         await pg.evaluate('''(mode) => { window.__gsiMode = mode; new MutationObserver((ms) => ms.forEach((m) => m.addedNodes.forEach((n) => { if (n.classList && n.classList.contains('toast')) window.__toastSeen(n.textContent); }))).observe(document.body, { childList: true }); }''', {'blocked': 'blocked', 'never': 'never'}.get(SCEN, 'ok'))
         await pg.goto(URL + '#/settings'); await pg.wait_for_timeout(700)
-        await pg.click('button:has-text("Restore from Drive")'); await pg.wait_for_timeout(14000 if SCEN == 'never' else 1500)
+        # v0.45: since v0.25 a device with sync off shows the big "Restore from Google Drive" (#restore-new);
+        # the small "Restore from Drive" sits under the closed "More" fold. Use whichever this screen shows.
+        if await pg.locator('#restore-new').count(): await pg.click('#restore-new')
+        else: await pg.click('#drive details.more > summary'); await pg.click('button:has-text("Restore from Drive")')
+        await pg.wait_for_timeout(14000 if SCEN == 'never' else 1500)
         out['modal'] = await pg.locator('.modal').count() and await pg.locator('.modal').inner_text()
         out['msg1'] = await pg.locator('.drivemsg').inner_text()
         await pg.screenshot(path=f'/tmp/restore-{ENGINE}-{SCEN}-1.png')

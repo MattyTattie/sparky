@@ -8,7 +8,7 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { createRequire } from 'node:module';
 const require = createRequire(import.meta.url);
-globalThis.jspdf ||= require('/workspace/sparky-work/npm/package/dist/jspdf.node.min.js');
+globalThis.jspdf ||= require('./jspdf-node.cjs');
 const { designCurrent, sizeCircuit } = await import('../js/design.js');
 const { Kit } = await import('../js/pdfkit.js');
 const { certificatePdf, scheduleSheets, bondRows, PER_SHEET } = await import('../js/pdf.js');
@@ -52,7 +52,7 @@ test('PDF field: a long value in a narrow one-line field shrinks, keeps whole wo
   assert.ok(k.field('Address:', 'A very long address line that will need to wrap onto a second line inside a narrow box', 10, 70, 60, { grow: true }) > 0);
 });
 test('PDF: schedules grouped (all circuit details, then all test results), labelled sheets', async () => {
-  const c = stressify(S.sampleEIC(), 40);
+  const c = stressify(S.sampleEIC(), 40); c.diagramPdf = true; // v0.45: diagram is off by default; ticked on here
   assert.equal(scheduleSheets(c).length, Math.ceil(40 / PER_SHEET));
   const pages = pageTitles(await save('eic.pdf', await certificatePdf(c, { profile: S.PROFILE })));
   const kinds = pages.map((t) => (/SCHEDULE OF CIRCUIT DETAILS/.test(t) ? 'D' : /SCHEDULE OF TEST RESULTS/.test(t) ? 'T' : /SUPPLEMENTARY BONDING/.test(t) ? 'B' : /WIRING DIAGRAM/.test(t) ? 'W' : '-')).join('');

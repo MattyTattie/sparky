@@ -169,13 +169,13 @@
 - Jobs table sorts text alphabetically (status sorts by its wording, not by urgency).
 - Max demand boxes are in order of each kind's first line, not the order of the "Add" chips.
 
-- [NEXT UPDATE] Spare ways (Matthew 25 Oct): spare circuit card shows "Spare way · B16 A" and drops the device type even when he picked RCBO. Show the full device like live ways ("Spare way · B16 A RCBO"); if no device picked, show just "Spare way" (no default B16).
+- [DONE v0.31, live] Spare ways (Matthew 25 Oct): spare circuit card shows "Spare way · B16 A" and drops the device type even when he picked RCBO. Show the full device like live ways ("Spare way · B16 A RCBO"); if no device picked, show just "Spare way" (no default B16).
 
-- [NEXT UPDATE] Board main RCD (Matthew 25 Oct): setting any one of RCD BS (EN) / RCD type / IΔn / Rating to N/A fills all four with N/A (only blanks; typing a real value later clears the N/As).
+- [DONE v0.31, live] Board main RCD (Matthew 25 Oct): setting any one of RCD BS (EN) / RCD type / IΔn / Rating to N/A fills all four with N/A (only blanks; typing a real value later clears the N/As).
 
-- [NEXT UPDATE] Parts list PDF (Matthew 25 Oct): PDF button currently goes straight to share/download; give it the same View / Share choice as the DC plan PDF (pdfview.js viewPdf).
+- [DONE v0.31, live] Parts list PDF (Matthew 25 Oct): PDF button currently goes straight to share/download; give it the same View / Share choice as the DC plan PDF (pdfview.js viewPdf).
 
-- [NEXT UPDATE] (Matthew 25 Oct) Version shown in Settings. "Copy to next way" for a circuit (breaker, cable, etc; not test results). Mark several ways spare at once. Cert PDFs get View / Share choice. Mac: Tab/Enter move quickly through test boxes.
+- [DONE v0.31, live] (Matthew 25 Oct) Version shown in Settings. "Copy to next way" for a circuit (breaker, cable, etc; not test results). Mark several ways spare at once. Cert PDFs get View / Share choice. Mac: Tab/Enter move quickly through test boxes.
 
 ## v0.31.1 notes (Drive folder renamed to "Zs Pro", Matthew 25 Oct)
 - The app renames its own "Sparky jobs" folder to "Zs Pro" (same folder id, so jobs/photos/settings stay put). Don't rename it by hand.
@@ -201,3 +201,7 @@
 
 ## v0.31.4 notes (Matthew 25 Oct)
 - "Not operational" SPD tick and its auto observation only on cert types with an observations section (EICR). EIC and Minor Works don't show the tick at all, so nothing is added. Old EICs with spdNotOp ticked keep the data (hidden, prints the status box unticked); observations already saved on EICs are left alone.
+
+## v0.45.0 (9 Nov 2026, branch v0.45.0, NOT live)
+- Done: TT with N/A in the RCD boxes now uses the Table 41.3 max Zs (was 1667 Ω, no red); RCD time ">300" and IR "<1" go red; no "Saved as device preset" pop-up on opening a circuit; Continue text centred; SPD "operational status confirmed" full width on EIC/MW; Drive bin queue no longer drops a folder when two jobs are deleted fast.
+- Streamlined: circuit page (Copy to next way + SPARE up top, the rest under More; disconnection time / own max Zs and AFDD folded; one S-type control), board page (buttons and circuits first, details folded once filled, "Fill the empty boxes" chips only when there are circuits), Test across button on the certificate page, wiring diagram off in the PDF unless ticked, one Share PDF button (Email merged), no second Settings gear, presets saved quietly, new job phone/email/notes under More details.

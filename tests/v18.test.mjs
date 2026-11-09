@@ -3,7 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { createRequire } from 'node:module';
-globalThis.jspdf ||= createRequire(import.meta.url)('/workspace/sparky-work/npm/package/dist/jspdf.node.min.js');
+globalThis.jspdf ||= createRequire(import.meta.url)('./jspdf-node.cjs');
 const S = await import('./sample-data.mjs');
 const { nextStep, certProgress } = await import('../js/jobnext.js');
 const { Kit, loadJsPDF } = await import('../js/pdfkit.js');
