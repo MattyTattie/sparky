@@ -451,3 +451,7 @@ Android: TWA versionCode 5 / versionName 0.45.0, same package io.github.mattytat
 - DB1's board details: "Main switch: 100 A DP isolator (BS EN 60947-3). Entered in Earthing, bonding and main switch." (link). Blank: "not filled in yet. Add it in …".
 - Board page: the Board details card now has the same 12px gap above it as the other blocks (it was touching the fill chips).
 - Web-only. No APK rebuild needed. Tests: tests/v452.test.mjs (621 pass).
+
+## v0.45.3 (built 9 Nov 2026 on branch `v0.45.3`, NOT pushed / not live)
+- Wiring diagram (screen and PDF): no separate "Main switch" box between Meter and DB1. Each board block shows its main switch under its title: DB1 from the certificate's main switch section ("Main switch: 100 A, 2-pole, BS EN 60947-3"; blank = "Main switch: not recorded" in the light N/A grey, as the old box showed N/A); DB2+ from board.main, only when filled in. A sub-main board with a blank main switch keeps the old "Main switch: isolator" on its supply line; when filled in, that suffix goes (the block line says what it is). wiring.js msDetail / boardMainLine.
+- Web-only. No APK rebuild needed. Tests: tests/v453.test.mjs (625 pass).

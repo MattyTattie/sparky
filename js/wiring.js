@@ -412,6 +412,16 @@ export function boardTags(circuits) {
   let tc = 0; for (const c of circuits || []) { const ci = controlInfo(c); const k = val(c.num) || '?'; if (ci && !m[k]) m[k] = ci.tag === 'TC' ? 'TC' + (++tc) : 'KM' + (++n); }
   return { ...m, _km: km, _by: by };
 }
+// v0.45.3: a main switch as one line ("100 A, 2-pole, BS EN 60947-3"); '' when not filled in.
+export const msDetail = (o) => { o = o || {}; return [val(o.msCurrent) && val(o.msCurrent) + ' A', val(o.msPoles) && val(o.msPoles) + '-pole', val(o.msBs) && 'BS EN ' + val(o.msBs).replace(/^BS\s*(EN)?\s*/i, '')].filter(Boolean).join(', '); };
+// v0.45.3: the main switch drawn inside each board block (in a consumer unit it's part of the board).
+// Board 1: the certificate's main switch (blank shows "not recorded" in the light N/A grey, as the old chain box did).
+// Later boards: their own board.main, only when filled in.
+export function boardMainLine(cert, bi) {
+  const d = bi === 0 ? msDetail(cert.parts) : msDetail((cert.boards[bi] || {}).main);
+  if (d) return { text: 'Main switch: ' + d, na: false };
+  return bi === 0 ? { text: 'Main switch: not recorded', na: true } : null;
+}
 export function diagramModel(cert) {
   cert = cert || {}; const sup = cert.supply || {}; const parts = cert.parts || {};
   if (cert.type === 'MW') {
@@ -419,7 +429,7 @@ export function diagramModel(cert) {
     return { type: 'MW', supply: { earthing: val(M.earthing), lines: [val(M.zdb) && `Zdb ${val(M.zdb)} Ω`].filter(Boolean) }, main: null,
       boards: [{ ref: val(M.dbRef) || 'DB', location: val(M.dbLocation), from: '', ctx: { earthing: M.earthing, zdb: M.zdb }, items: groupCircuits(M.circuit ? [M.circuit] : [], null).map((it) => (it.kind === 'circuit' && spurInfo(M) ? { ...it, spur: spurInfo(M) } : it)), note: 'Only the circuit covered by this certificate is shown.' }] };
   }
-  const ms = [val(parts.msCurrent) && val(parts.msCurrent) + ' A', val(parts.msPoles) && val(parts.msPoles) + '-pole', val(parts.msBs) && 'BS EN ' + val(parts.msBs).replace(/^BS\s*(EN)?\s*/i, '')].filter(Boolean).join(', ');
+  const ms = msDetail(parts);
   // A new cert pre-fills the supply fuse standard (BS 88-3). On its own that's
   // just the default, so the fuse is only shown once a type or rating is in.
   const fuse = (val(sup.spType) || val(sup.spRating)) ? [val(sup.spBs), val(sup.spType), val(sup.spRating) && val(sup.spRating) + ' A'].filter(Boolean).join(' ') : '';
@@ -427,7 +437,7 @@ export function diagramModel(cert) {
     type: cert.type,
     supply: { earthing: val(sup.earthing), lines: [[val(sup.conductors), val(sup.u) && val(sup.u) + ' V', val(sup.f) && val(sup.f) + ' Hz'].filter(Boolean).join(', '), [val(sup.ze) && `Ze ${val(sup.ze)} Ω`, val(sup.ipf) && `Ipf ${val(sup.ipf)} kA`].filter(Boolean).join(', '), ].filter(Boolean), fuse },
     main: { label: 'Main switch', detail: ms },
-    boards: (cert.boards || []).map((b, bi) => ({ ref: val(b.ref) || 'DB', location: val(b.location), from: val(b.suppliedFrom), items: groupCircuits(b.circuits, b), links: controlLinks(b.circuits), tags: boardTags(b.circuits), bi, src: b.circuits || [],
+    boards: (cert.boards || []).map((b, bi) => ({ ref: val(b.ref) || 'DB', location: val(b.location), from: val(b.suppliedFrom), items: groupCircuits(b.circuits, b), links: controlLinks(b.circuits), tags: boardTags(b.circuits), bi, src: b.circuits || [], main: boardMainLine(cert, bi),
       feed: feedInfo(cert.boards, bi), raw: { supplyKind: b.supplyKind, suppliedFrom: b.suppliedFrom }, outbuilding: bi > 0 && isOutbuilding(b), ctx: { earthing: sup.earthing, zdb: b.zdb },
       feeds: (cert.boards || []).reduce((m, o, oi) => { const f = oi !== bi && feedInfo(cert.boards, oi); if (f && f.state === 'ok' && f.bi === bi && f.circuit) (m[f.circuit.toLowerCase()] = m[f.circuit.toLowerCase()] || []).push(val(o.ref) + (val(o.location) ? ' (' + val(o.location) + ')' : '')); return m; }, {}) })),
   };
@@ -518,7 +528,7 @@ export function layout(model, { W = 380, font = 12, screen = false, cableTable =
     const e = model.supply.earthing;
     head.push(chainBox('Supply' + (e ? ': ' + e : ''), [...model.supply.lines.map((t) => ({ text: t })), { text: 'Supply fuse: ' + (model.supply.fuse || NA), na: !model.supply.fuse }, ...(e ? [] : [{ text: 'Earthing: ' + NA, na: true }])], { earth: e || ' ' }));
     head.push(chainBox('Meter', [{ text: 'kWh meter (supplier\u2019s)' }]));
-    head.push(chainBox(model.main.label, [{ text: model.main.detail || NA, na: !model.main.detail }]));
+    // v0.45.3: no separate main switch box: it's drawn inside the DB1 block (see the board header below)
   } else {
     const e = model.supply.earthing;
     head.push(chainBox('Earthing: ' + (e || NA), model.supply.lines.map((t) => ({ text: t })), { earth: ' ' }));
@@ -550,10 +560,11 @@ export function layout(model, { W = 380, font = 12, screen = false, cableTable =
         else if (sk === 'switchfuse') { used.add('swfuse'); isoSym(sh, busX, y, symH, true, true); lab = 'Switch fuse / isolator' + (fd.text && !/switch ?fuse|isolator/i.test(fd.text) ? ' (' + fd.text + ')' : ''); top = y; }
         else { lab = fd && fd.state === 'ok' ? `Sub-main from ${fd.ref}${fd.circuit ? ' circuit ' + fd.circuit : ''}${cl0 ? ' by cable ' + cl0 : ''} (see ${fd.ref}${fd.circuit ? ' circuit ' + fd.circuit : ''})` : fd && fd.state === 'origin' ? 'Supplied from: ' + fd.text : !fd || fd.state === 'blank' ? 'Supplied from: not recorded, so the link is drawn dashed' : `Supplied from: ${fd.why}, so the link is drawn dashed`;
           symH = small * 1.2; top = 0;
-          if (fd && fd.state === 'ok') { used.add('iso'); L(sh, busX, 0, busX, y, busSt); isoSym(sh, busX, y, F * 1.4, false, true); symH = F * 1.4; top = y; lab += '. Main switch: isolator'; } } // v0.44.3: the sub-board's own main switch
+          if (fd && fd.state === 'ok') { used.add('iso'); L(sh, busX, 0, busX, y, busSt); isoSym(sh, busX, y, F * 1.4, false, true); symH = F * 1.4; top = y; if (!bd.main) lab += '. Main switch: isolator'; } } // v0.45.3: not when the board's own main switch line says what it is // v0.44.3: the sub-board's own main switch
         const lh1 = textLines(sh, tx, y - 1, lab, tw, { size: small, color: ok ? COL.grey : COL.amber, bold: !ok });
         y += Math.max(symH, lh1) + 6; }
       let hh = textLines(sh, tx, y + 4, title, tw, { bold: true });
+      if (bd.main) hh += textLines(sh, tx, y + 4 + hh + 1, bd.main.text, tw, { size: small, color: bd.main.na ? COL.na : COL.grey }) + 1; // v0.45.3
       if (bd.note) hh += textLines(sh, tx, y + 4 + hh, bd.note, tw, { size: small, color: COL.grey });
       const bh = hh + 12; R(sh, bx, y, bw, bh, { fill: COL.fill }); sh.unshift(sh.pop());
       L(sh, busX, y + bh / 2, bx, y + bh / 2);
