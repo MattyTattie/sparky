@@ -209,4 +209,4 @@
 - v0.45.2 (PUBLISHED 9 Nov 15:28 GMT): DB2's main switch now prints on its schedule header; DB1's board details point to where its main switch is entered.
 - v0.45.2 (PUBLISHED 9 Nov 15:28 GMT): Board details card sat touching the fill chips (0 px gap); now 12 px like the other blocks.
 - v0.45.3 (not live): diagram drew the main switch as its own box between Meter and DB1; now it's inside each board block (DB1 from the certificate, DB2+ from board details).
-- v0.45.3 (not live): DB1 can be set to 'Connector block' (meter tail connector block) like the other boards; off by default, never guessed; drawn on the diagram.
+- v0.45.3 (not live): DB1 can be set to 'Meter via connector block' like the other boards; off by default, never guessed; drawn on the diagram.

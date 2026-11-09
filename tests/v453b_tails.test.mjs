@@ -28,9 +28,9 @@ test('three boards on one block read as a list', () => {
   const c = cert({ supplyKind: 'tails' }); c.boards.push({ ref: 'DB3', supplyKind: 'tails', circuits: [] });
   assert.ok(texts(diagramSvg(c)).includes('Meter tail connector block: feeds DB1, DB2 and DB3'));
 });
-test('DB1 board details: Straight from meter / Connector block chips; off removes the key; text box untouched', () => {
+test('DB1 board details: Meter / Meter via connector block chips; off removes the key; text box untouched', () => {
   const s = src('schedule.js');
   assert.match(s, /cert\.boards\.indexOf\(b\) > 0 \? supplyChips\(cert, b\) : db1SupplyChips\(b\)/);
-  assert.match(s, /chip\(false, 'Straight from meter'\), chip\(true, 'Connector block'\)/);
+  assert.match(s, /chip\(false, 'Meter'\), chip\(true, 'Meter via connector block'\)/);
   assert.match(s, /if \(v\) b\.supplyKind = 'tails'; else delete b\.supplyKind;/);
 });

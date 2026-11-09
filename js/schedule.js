@@ -165,7 +165,7 @@ function db1SupplyChips(b) {
     const chip = (v, t) => h('button', { type: 'button', class: 'segb' + (on === v ? ' on' : ''), 'aria-pressed': String(on === v), style: 'flex:1 1 0;min-width:0;min-height:44px;padding:4px 4px;font-size:14px;font-weight:600;white-space:normal;line-height:1.15;border:0;' + (v ? 'border-left:1px solid var(--line);' : '') + (on === v ? 'background:var(--brand,#2952ff);color:#fff' : 'background:transparent;color:inherit'),
       onclick: () => { if (v) b.supplyKind = 'tails'; else delete b.supplyKind; changed(); draw(); } }, t);
     fill(box, [h('div', { class: 'note', style: 'margin:0 0 4px' }, 'Supplied from'),
-      h('div', { role: 'group', 'aria-label': 'Supplied from', style: 'display:flex;align-items:stretch;padding:0;border:1px solid var(--line);border-radius:10px;overflow:hidden' }, chip(false, 'Straight from meter'), chip(true, 'Connector block'))]); };
+      h('div', { role: 'group', 'aria-label': 'Supplied from', style: 'display:flex;align-items:stretch;padding:0;border:1px solid var(--line);border-radius:10px;overflow:hidden' }, chip(false, 'Meter'), chip(true, 'Meter via connector block'))]); };
   draw(); return box;
 }
 // v0.43.3: one-tap 'Supplied from' for an extra board (optional board.supplyKind; the text field still works)
