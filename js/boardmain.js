@@ -28,6 +28,20 @@ export function mainSwitchParts(o, pre) {
   return out;
 }
 
+// v0.45.2: one schedule-header line for a later board's main switch, or null when it isn't filled in.
+// [[label, value, fraction, opts], ...] for pdf.js row(); the last box is the breaker / RCD details if ticked, else the location.
+export function mainSwitchRow(o, pre, rcdType = (t) => t) {
+  if (!hasMainSwitch(o, pre)) return null;
+  const g = (k) => (real(get(o, pre + k)) ? String(get(o, pre + k)).trim() : '');
+  const extra = [];
+  if (msIsOcpdAt(pre)(o)) extra.push([g('msType') || 'Breaker', g('msRating') && g('msRating') + ' A', g('msKa') && g('msKa') + ' kA'].filter(Boolean).join(' '));
+  if (msIsRcdAt(pre)(o)) extra.push(['RCD', g('rcdType') && 'Type ' + rcdType(g('rcdType')), g('rcdIdn') && g('rcdIdn') + ' mA', g('rcdDelay') && 'delay ' + g('rcdDelay') + ' ms'].filter(Boolean).join(' '));
+  return [['Main switch: BS (EN)', g('msBs'), 0.22], ['Poles', g('msPoles'), 0.1], ['Current', g('msCurrent'), 0.14, { unit: 'A' }], ['Voltage', g('msVoltage'), 0.16, { unit: 'V' }],
+    extra.length ? ['If OCPD / RCD:', extra.join(' · '), 0.38] : ['Location:', g('msLocation'), 0.38]];
+}
+// DB1's board details: a short summary of the certificate's main switch ('' when not filled in).
+export const mainSummary = (o, pre) => mainSwitchParts(o, pre).map((s) => s.replace(/^Main switch:?\s*/, '')).filter(Boolean).join(' · ');
+
 // Board photo scan: the main switch it spotted (e.g. "100A") goes into the blank rating box.
 export function mainFromScan(cert, bi, found) {
   const rating = String((found && found.rating) || '').trim(); if (!rating) return [];

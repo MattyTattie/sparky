@@ -10,6 +10,7 @@ import { TYPES, get, eicrOverall, isElectrode, msIsRcd, msIsOcpd, BOND_SERVICES,
 import { EIC_ITEMS, EICR_ITEMS, CODE_TEXT, INTAKE_NOTE_10, INTAKE_NOTES, INTAKE_NOTIFIED, migrateIntake } from './inspections.js';
 import { GUIDANCE } from './guidance.js';
 import { limitZs, isSpare } from './checks.js';
+import { mainSwitchRow } from './boardmain.js';
 import { FIELDS, autoNA } from './templates.js';
 const AUTO_GREY = [170, 170, 170]; // v0.10: automatic N/A on spare ways
 import { STANDARD, deviceById } from './limits.js';
@@ -252,6 +253,9 @@ function boardHeaderDetails(k, cert, b, certNo) {
   row(k, x, w, [['RCD:  BS (EN)', b.rcdBs, 0.3], ['Type', showRcdType(b.rcdType), 0.15], ['Rating', b.rcdRating, 0.18, { unit: 'A' }], ['Rated residual operating current (IΔn):', b.rcdIdn, 0.37, { unit: 'mA' }]]);
   // v0.32: optional per-board maximum demand (only printed when filled in).
   if (String(b.maxDemand ?? '').trim()) row(k, x, w, [['Maximum demand (this board):', b.maxDemand, 0.4, { unit: 'A' }]]);
+  // v0.45.2: a later board's own main switch (board 1's is in the certificate). Only when filled in.
+  const bi = (cert.boards || []).findIndex((o) => o === b || (b.id != null && o.id === b.id));
+  const ms = bi > 0 ? mainSwitchRow(b, 'main.', showRcdType) : null; if (ms) row(k, x, w, ms);
   k.rect(k.x0, y0, k.cw, k.y - y0 + 0.5, { lw: 0.35, color: INK });
   k.y += 2;
 }

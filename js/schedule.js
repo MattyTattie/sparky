@@ -10,7 +10,7 @@ import { route, page, go, render } from './app.js';
 import { openCert, changed, flush, touchJob } from './state.js';
 import { field, stateLine } from './certui.js';
 import { sectionsFor, get, set, mainSwitchFields } from './certmodel.js';
-import { mainFromScan } from './boardmain.js';
+import { mainFromScan, mainSummary } from './boardmain.js';
 import { supplyKindOf, feedInfo } from './wiring.js';
 const boardsLine = (cert) => { const sec = sectionsFor(cert.type).find((x) => x.special === 'boards'); if (!sec) return null; const [c, t] = stateLine(cert, sec); return h('div', { class: 'notice ' + c + ' secstate' }, t); };
 import { blankBoard } from './certmodel.js';
@@ -140,7 +140,7 @@ function boardDetails(cert, b) {
       h('div', { class: 'grid3' }, F('ocpdBs', 'Supplying device BS (EN)'), F('ocpdType', 'Type'), F('ocpdRating', 'Rating (A)', 'num')),
       h('div', { class: 'grid3' }, F('zdb', 'Zdb (Ω)', 'num'), F('ipf', 'Ipf (kA)', 'num'), F('maxDemand', 'Max demand (A)', 'num')),
       h('a', { class: 'btn small', href: `#/calc/fault/${cert.id}/${cert.boards.indexOf(b)}` }, 'Work out Ipf for a sub-board'),
-      cert.boards.indexOf(b) > 0 ? boardMainSwitch(b) : null,
+      cert.boards.indexOf(b) > 0 ? boardMainSwitch(b) : msPointer(cert),
       h('div', { class: 'note', style: 'margin-top:12px' }, 'Other sources'), bidiTick(cert, b),
       spdGrid(cert, b),
       h('div', { class: 'note' }, 'Main RCD of the board (if any)'), rcdGrid(b)));
@@ -151,6 +151,11 @@ function boardMainSwitch(b) {
   const box = h('div', { class: 'boardms' });
   const draw = () => fill(box, h('h3', { class: 'fhead' }, 'Main switch'), mainSwitchFields('main.').map((fd) => field(b, fd, (k, v, d) => { if (d.redraw) draw(); })));
   draw(); return box;
+}
+// v0.45.2: board 1's main switch lives in the certificate: say so, with a link and a short summary
+function msPointer(cert) {
+  const s = mainSummary(cert, 'parts.');
+  return h('div', { class: 'note msptr', style: 'margin-top:12px' }, h('b', {}, 'Main switch: '), s ? s + '. Entered in ' : 'not filled in yet. Add it in ', h('a', { href: `#/cert/${cert.id}/s/parts` }, 'Earthing, bonding and main switch'), '.');
 }
 // v0.43.3: one-tap 'Supplied from' for an extra board (optional board.supplyKind; the text field still works)
 function supplyChips(cert, b) {

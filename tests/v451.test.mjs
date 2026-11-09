@@ -18,7 +18,7 @@ test('DB2 has the same main switch boxes as DB1 (board.main instead of cert.part
   const db2 = mainSwitchFields('main.');
   assert.deepEqual(db2.map((f) => f.k.replace('main.', '')), db1.map((f) => f.k.replace('parts.', '')));
   assert.deepEqual(db2.map((f) => f.label), db1.map((f) => f.label));
-  assert.match(src('schedule.js'), /cert\.boards\.indexOf\(b\) > 0 \? boardMainSwitch\(b\) : null/);
+  assert.match(src('schedule.js'), /cert\.boards\.indexOf\(b\) > 0 \? boardMainSwitch\(b\) : msPointer\(cert\)/);
 });
 test('parts list: DB2 with no main switch gets the hint flag; filled in, it lists isolator, SPD, RCD, MCB', () => {
   const c = cert();
