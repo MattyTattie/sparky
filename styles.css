@@ -954,3 +954,6 @@ details.afddmore > summary.phd { display: block; }
 .presetauto { margin-top: 6px; }
 .btns.small2 > .btn { flex: 1 1 0; }
 .boarddetails { margin-top: 12px; }
+/* v0.45.2: the Board details fold under the board's buttons gets the same 12px gap as the other blocks
+   (main > .card sets margin-top: 0 and the buttons above have no bottom margin, so it was touching). */
+main > div:not([class]) + .card.boarddetails { margin-top: var(--s3); }

@@ -449,4 +449,5 @@ Android: TWA versionCode 5 / versionName 0.45.0, same package io.github.mattytat
 ## v0.45.2 (built 9 Nov 2026 on branch `v0.45.2`, NOT pushed / not live)
 - PDF (EIC and EICR): a later board's main switch (board.main) prints as one extra line in its circuit details header: BS, poles, current, voltage, then breaker / RCD details if ticked, else its location. Only when filled in; DB1 and older certificates print exactly as before (sample PDF text identical).
 - DB1's board details: "Main switch: 100 A DP isolator (BS EN 60947-3). Entered in Earthing, bonding and main switch." (link). Blank: "not filled in yet. Add it in …".
+- Board page: the Board details card now has the same 12px gap above it as the other blocks (it was touching the fill chips).
 - Web-only. No APK rebuild needed. Tests: tests/v452.test.mjs (621 pass).
