@@ -202,6 +202,6 @@
 ## v0.31.4 notes (Matthew 25 Oct)
 - "Not operational" SPD tick and its auto observation only on cert types with an observations section (EICR). EIC and Minor Works don't show the tick at all, so nothing is added. Old EICs with spdNotOp ticked keep the data (hidden, prints the status box unticked); observations already saved on EICs are left alone.
 
-## v0.45.0 (9 Nov 2026, branch v0.45.0, NOT live)
+## v0.45.0 (PUBLISHED 9 Nov 2026 13:48 GMT)
 - Done: TT with N/A in the RCD boxes now uses the Table 41.3 max Zs (was 1667 Ω, no red); RCD time ">300" and IR "<1" go red; no "Saved as device preset" pop-up on opening a circuit; Continue text centred; SPD "operational status confirmed" full width on EIC/MW; Drive bin queue no longer drops a folder when two jobs are deleted fast.
 - Streamlined: circuit page (Copy to next way + SPARE up top, the rest under More; disconnection time / own max Zs and AFDD folded; one S-type control), board page (buttons and circuits first, details folded once filled, "Fill the empty boxes" chips only when there are circuits), Test across button on the certificate page, wiring diagram off in the PDF unless ticked, one Share PDF button (Email merged), no second Settings gear, presets saved quietly, new job phone/email/notes under More details.

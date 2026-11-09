@@ -1,6 +1,6 @@
 # Handoff notes
 
-Status: live is **v0.44.8 beta** (https://mattytattie.github.io/sparky/, main cb2ba14). Next: **v0.45.0 beta** on branch `v0.45.0`, built and tested, **not pushed / not live** (waits for Matthew's "go live"). The app is called Zs Pro; repo, data keys, cache prefix and Android package still say sparky on purpose (see RENAME.md).
+Status: live is **v0.45.0 beta** (https://mattytattie.github.io/sparky/, main 605886d), PUBLISHED 9 Nov 2026 13:48 GMT (Matthew: "Go live" 13:47). Android: Zs Pro v5 (0.45.0) APK at https://github.com/MattyTattie/sparky/releases/download/app-v5/ZsPro-0.45.0.apk (release app-v5, Latest). The app is called Zs Pro; repo, data keys, cache prefix and Android package still say sparky on purpose (see RENAME.md).
 Run the tests with `node --test tests/*.test.mjs tests/*.test.js` (plain `node --test tests/` doesn't work on Node 24). PDF tests find jsPDF's Node build through tests/jspdf-node.cjs; if it's missing it runs tests/setup-jspdf.sh (npm, into tests/.jspdf, git-ignored).
 
 Open points
@@ -416,7 +416,7 @@ Auto single-line wiring diagram from the cert (EIC/EICR whole board, MWC just th
 ## v0.37.0 beta — PUBLISHED 30 Oct 2026, main 6180334 (Matthew said go live): polish-intuitive
 Continue button, "On the IET form" lines, on-site section order (screen only), simpler PDF card, issued prompt after sharing, red readings setting (on by default), setup card, single Add certificate, fairer progress, level circuit boxes. Cache sparky-v0.37.0. (Note restored 9 Nov 2026 from an uncommitted edit on the old v0.36.5 checkout.)
 
-## v0.45.0 beta — 9 Nov 2026, branch `v0.45.0` (from main cb2ba14), NOT pushed / not live
+## v0.45.0 beta — PUBLISHED 9 Nov 2026 13:48 GMT, main 605886d (Matthew: 'Go live' 13:47)
 Cache sparky-v0.45.0. No change to data or sync formats.
 Fixes
 - checks.js limitZs: on TT only a real IΔn (`num(rcdIdn) > 0`) or an RCD device gives the 50 V / IΔn figure. "N/A" in the RCD boxes used to give 1667 Ω (no red flag, and the PDF printed 1667).
@@ -437,4 +437,4 @@ Tests
 - tests/jspdf-node.cjs + tests/setup-jspdf.sh replace the hard-coded /workspace/sparky-work/npm path (old path still used if it's there).
 - restore_mock.py clicks #restore-new (or opens More for the small button). sync_v26.py also skips the "Zs Pro" root folder.
 - Shots: /workspace/polish-review/zspro-next/{before,after} (shots.py, interact.py).
-Android: TWA versionCode 5 / versionName 0.45.0, same package io.github.mattytattie.sparky and key, so it installs over the old app. See /workspace/sparky-android/BUILD-NOTES.txt.
+Android: TWA versionCode 5 / versionName 0.45.0, same package io.github.mattytattie.sparky and key, so it installs over the old app. Released 9 Nov as GitHub release app-v5 (asset ZsPro-0.45.0.apk, sha256 e8884d16…4554). See /workspace/sparky-android/BUILD-NOTES.txt.
