@@ -210,3 +210,6 @@
 - v0.45.2 (PUBLISHED 9 Nov 15:28 GMT): Board details card sat touching the fill chips (0 px gap); now 12 px like the other blocks.
 - v0.45.3 (not live): diagram drew the main switch as its own box between Meter and DB1; now it's inside each board block (DB1 from the certificate, DB2+ from board details).
 - v0.45.3 (not live): DB1 can be set to 'Meter via connector block' like the other boards; off by default, never guessed; drawn on the diagram.
+- v0.46.0 (not live): Check certificate before the PDF (missing fields, Zs/IR/RCD over limits, Satisfactory with C1/C2), each with a link; can still make the PDF.
+- v0.46.0 (not live): Ring / Radial / Lights quick fill on a circuit’s test results; empty boxes only unless you say so; Undo.
+- v0.46.0 (not live): enter a shared RCD’s trip time once on the RCD step and apply it to its circuits (RCBOs stay per circuit).

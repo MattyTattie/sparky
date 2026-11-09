@@ -5,7 +5,8 @@
 // so everything stays in step. Red/amber flags come from checks.js.
 // Route: #/cert/<id>/b/<board>/t/<test>
 // =====================================================================
-import { h, fill, toast } from './ui.js';
+import { h, fill, toast, modal } from './ui.js';
+import { rcdGroups, commonTime, planRcdTime, applyRcdTime, undoRcdTime } from './rcdreuse.js';
 import { route, page, go } from './app.js';
 import { openCert, changed } from './state.js';
 import { FIELD, autoNA } from './templates.js';
@@ -54,15 +55,48 @@ route(/^\/cert\/([^/]+)\/b\/(\d+)\/t\/([a-z0-9]+)$/, async (id, bi, tid) => {
   const chips = h('div', { class: 'tsteps', role: 'tablist' }, TEST_STEPS.map((s, i) => h('a', { class: 'tstep' + (s.id === step.id ? ' on' : '') + (s.dead ? '' : ' live'), href: `${base}/t/${s.id}`, role: 'tab' }, h('span', { class: 'tn' }, i + 1), s.short)));
   const bulk = (BULK[step.id] || []).map(([k, v, label]) => h('button', { class: 'btn small', type: 'button', onclick: () => { const n = k === 'irV' ? b.circuits.filter((c) => rowMode(c, step.id).mode === 'edit' && (c.irV = v)).length : fillEmpty(b, step.id, k, v); changed(); toast(`${label.split(' on')[0]}: ${n} circuit${n === 1 ? '' : 's'}`); drawList(); updProg(); } }, label));
   const p = prevStep(step.id), n = nextStep(step.id);
+  // v0.46.0: one trip time per shared RCD (RCBOs stay per circuit)
+  const reuse = step.id === 'rcd' ? rcdReuse(b, () => { drawList(); updProg(); }) : null;
   drawList(); updProg();
   setTimeout(() => { const on = chips.querySelector('.on'); if (on) on.scrollIntoView({ inline: 'center', block: 'nearest' }); }, 0);
   page('Test across circuits', [
     chips,
     h('div', { class: 'card thead' }, h('div', { class: 'tkind' }, step.dead ? 'Dead test' : 'Live test'), h('h2', {}, step.title), h('p', { class: 'note' }, step.hint), prog,
       bulk.length ? h('div', { class: 'btns' }, bulk) : null),
+    reuse,
     list,
     h('p', { class: 'note' }, 'Same readings as the circuit pages and the schedule: change it here or there. Tap a circuit name to open its full page.'),
     h('div', { class: 'stick tnav' }, p ? h('a', { class: 'btn', href: `${base}/t/${p.id}` }, '\u2190 ' + p.short) : h('a', { class: 'btn', href: base }, '\u2190 Board'),
       n ? h('a', { class: 'btn primary', href: `${base}/t/${n.id}` }, 'Next test: ' + n.short + ' \u2192') : h('a', { class: 'btn primary', href: base }, 'Done \u2713')),
   ], { back: base, sub: `${b.ref || 'Board'} \u00b7 ${cert.number}` });
 });
+
+// v0.46.0: "Same RCD: enter the trip time once". Ticked circuits get it; typed times only replaced if you say so; Undo.
+function rcdReuse(b, redrawList) {
+  const groups = rcdGroups(b); if (!groups.length) return null;
+  const card = h('div', { class: 'card rcdreuse' });
+  const undos = new Map(); const typed = new Map(); const picks = new Map();
+  const draw = () => fill(card, h('h2', {}, 'Same RCD: enter the trip time once'),
+    h('p', { class: 'note' }, 'For circuits sharing one RCD. Untick any that are on a different RCD with the same rating. RCBOs are tested on their own, below.'),
+    groups.map((g, gi) => {
+      if (!picks.has(gi)) picks.set(gi, new Set(g.circuits)); const pick = picks.get(gi);
+      const inp = h('input', { inputmode: 'decimal', value: typed.has(gi) ? typed.get(gi) : commonTime(g.circuits), oninput: (e) => typed.set(gi, e.target.value), 'aria-label': 'Trip time in ms for ' + g.label, placeholder: 'ms' });
+      const apply = async () => {
+        const ms = inp.value.trim(); if (!ms) { toast('Type the trip time first'); inp.focus(); return; }
+        const plan = planRcdTime([...pick], ms); let replace = false;
+        if (plan.clash.length) {
+          const r = await modal('Some circuits already have a time', h('div', {}, h('ul', { class: 'qfclash' }, plan.clash.map((x) => h('li', {}, `Circuit ${x.c.num}: ${x.from} ms`)))),
+            [{ label: 'Cancel', value: null }, { label: 'Only empty ones', value: 'empty' }, { label: `Replace with ${ms} ms`, value: 'all', cls: 'primary' }]);
+          if (!r) return; replace = r === 'all';
+        }
+        const u = applyRcdTime(plan, { replace }); if (!u.length) { toast('Nothing changed'); return; }
+        undos.set(gi, u); changed(); toast(`${ms} ms on ${u.length} circuit${u.length === 1 ? '' : 's'}`); draw(); redrawList();
+      };
+      return h('div', { class: 'rgrp' }, h('div', { class: 'rghd' }, h('b', {}, g.label)),
+        h('div', { class: 'chips rgc' }, g.circuits.map((c) => h('label', { class: 'check small' }, h('input', { type: 'checkbox', checked: pick.has(c), onchange: (e) => { if (e.target.checked) pick.add(c); else pick.delete(c); } }), `${c.num} ${c.desc || ''}`.trim()))),
+        h('div', { class: 'rgrow' }, h('label', { class: 'f' }, h('span', {}, 'Trip time at I\u0394n (ms)'), inp),
+          h('button', { class: 'btn small primary', type: 'button', onclick: apply }, 'Apply to ticked circuits'),
+          undos.has(gi) ? h('button', { class: 'btn small', type: 'button', onclick: () => { undoRcdTime(undos.get(gi)); undos.delete(gi); changed(); toast('Undone'); draw(); redrawList(); } }, 'Undo') : null));
+    }));
+  draw(); return card;
+}

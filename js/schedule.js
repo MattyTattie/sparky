@@ -11,6 +11,7 @@ import { openCert, changed, flush, touchJob } from './state.js';
 import { field, stateLine } from './certui.js';
 import { sectionsFor, get, set, mainSwitchFields } from './certmodel.js';
 import { mainFromScan, mainSummary } from './boardmain.js';
+import { QUICK, planQuick, applyQuick, undoQuick } from './quickfill.js';
 import { supplyKindOf, feedInfo } from './wiring.js';
 const boardsLine = (cert) => { const sec = sectionsFor(cert.type).find((x) => x.special === 'boards'); if (!sec) return null; const [c, t] = stateLine(cert, sec); return h('div', { class: 'notice ' + c + ' secstate' }, t); };
 import { blankBoard } from './certmodel.js';
@@ -156,6 +157,27 @@ function boardMainSwitch(b) {
 function msPointer(cert) {
   const s = mainSummary(cert, 'parts.');
   return h('div', { class: 'note msptr', style: 'margin-top:12px' }, h('b', {}, 'Main switch: '), s ? s + '. Entered in ' : 'not filled in yet. Add it in ', h('a', { href: `#/cert/${cert.id}/s/parts` }, 'Earthing, bonding and main switch'), '.');
+}
+// v0.46.0: Ring / Radial / Lights quick fill on a circuit's test results (only empty boxes unless you say so; Undo)
+let lastQuick = null; // { c, undo, label } (the circuit object itself: old circuits may have no id)
+function quickFillRow(c) {
+  const run = async (kind) => {
+    const plan = planQuick(c, kind); let replace = false;
+    if (plan.clash.length || plan.ringClash) {
+      const FL = (k) => (FIELD[k] ? FIELD[k].short : k);
+      const lines = [...plan.clash.map((x) => `${FL(x.k)}: ${x.from} \u2192 ${x.to}`), ...(plan.ringClash ? [plan.ring ? 'Tick \u201cRing final circuit\u201d' : 'Untick \u201cRing final circuit\u201d (r1, rn, r2 then show N/A)'] : [])];
+      const r = await modal(`${QUICK[kind]}: some boxes already have readings`, h('div', {}, h('p', { class: 'note' }, 'Empty boxes get filled either way. These already have something in them:'), h('ul', { class: 'qfclash' }, lines.map((t) => h('li', {}, t)))),
+        [{ label: 'Cancel', value: null }, { label: 'Only empty boxes', value: 'empty' }, { label: 'Replace these too', value: 'all', cls: 'primary' }]);
+      if (!r) return; replace = r === 'all';
+    }
+    const undo = applyQuick(c, plan, { replace });
+    if (!undo.n && c.ring === undo.ring) { toast('Nothing to fill: those boxes already have readings'); return; }
+    lastQuick = { c, undo, label: QUICK[kind] }; changed(); toast(`${QUICK[kind]}: filled ${undo.n} box${undo.n === 1 ? '' : 'es'}`); render();
+  };
+  const mine = lastQuick && lastQuick.c === c ? lastQuick : null;
+  return h('div', { class: 'quickfill' }, h('div', { class: 'note' }, 'Quick fill the usual results (empty boxes only):'),
+    h('div', { class: 'btns' }, Object.entries(QUICK).map(([k, t]) => h('button', { class: 'btn small', type: 'button', 'data-quick': k, onclick: () => run(k) }, t)),
+      mine ? h('button', { class: 'btn small', type: 'button', id: 'quickundo', onclick: () => { undoQuick(c, mine.undo); lastQuick = null; changed(); toast('Quick fill undone'); render(); } }, 'Undo ' + mine.label) : null));
 }
 // v0.45.3: board 1's 'Supplied from' chips, same look as the other boards'. Straight from the meter unless
 // 'Connector block' is tapped (board.supplyKind = 'tails', never guessed from the text). The text box is left as typed.
@@ -551,7 +573,7 @@ function circuitEditor({ cert, c, ctx, back, title, prev, next, extra = [], more
       bidiBox(cert, () => circuitFedBySource(c), () => [c]),
       h('div', { class: 'phd cablehd' }, h('span', {}, 'Cable and wiring')),
       cableBox),
-    sect('Test results',
+    sect('Test results', quickFillRow(c),
       ringInputs, h('div', { class: 'grid2' }, inp('r1r2'), inp('R2')), ringBox,
       inp('irV'), inp('irLL'), inp('irLE'), inp('pol'), inp('zs'), inp('rcdMs'), inp('rcdBtn'), inp('afddBtn'), inp('remarks')),
     h('div', { class: 'stick' }, prev ? h('a', { class: 'btn', href: prev }, '← Previous') : null, h('a', { class: 'btn', href: back }, 'All circuits'), next ? h('a', { class: 'btn primary', href: next }, 'Next →') : null),

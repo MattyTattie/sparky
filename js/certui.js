@@ -17,6 +17,7 @@ import { CHECK_NOTE } from './limits.js';
 import { ITEM_KINDS, itemRoomsOf, isControlCircuit, chainOf, migrateChain, kmNumbers, CHAIN_KINDS, CHAIN_SUPPLY, iconSvg, itemsOf, insertKind } from './wiring.js';
 import { diagramSvg, diagramInPdf, diagramHasCircuits, SPUR_FEEDS, CONTROL_VIA, switchInfo, roomListOf, roomPointsNote, socketRoomsOf, roomPointTotal, pointKind, socketSingles, arrangedOrder, feedInfo, ISOLATORS } from './wiring.js';
 import { limitOn, limitBar } from './limitbar.js';
+import { checkCert } from './certcheck.js';
 import { circuitReadings, makeTemplate, applyTemplate, nextRoom, tidyLayouts, BUILTIN_TEMPLATES, TEMPLATE_KEY } from './diagrampro.js';
 import { dangerCodes, noticeForObs, noticesOf, noticeMissing, noticeNo } from './dangermodel.js';
 
@@ -91,7 +92,8 @@ route(/^\/cert\/([^/]+)$/, async (id) => {
       h('div', { class: 'btns' + (cert.type !== 'MW' ? ' small2' : '') }, h('button', { class: 'btn small', onclick: (e) => makePdf(cert, e.currentTarget, 'view') }, 'View PDF'),
         cert.type !== 'MW' ? h('button', { class: 'btn small', onclick: (e) => makeChart(cert, e.currentTarget) }, 'Circuit chart') : null),
       h('p', { class: 'note' }, 'Share opens your phone\u2019s list: pick email, WhatsApp or anything else' + (cert.client.email ? ' (client email: ' + cert.client.email + ')' : '') + '. You press send yourself.' + (pdfFlagsOn(cert) ? ' Readings over the limit show in red (change in Settings).' : '')),
-      cert.status !== 'issued' ? h('button', { class: 'btn', onclick: () => askIssued(cert, true) }, 'Mark as issued') : null),
+      h('div', { class: 'btns' }, h('button', { class: 'btn small', id: 'checkcertbtn', onclick: () => certCheckDialog(cert) }, withIcon('check', 'Check certificate')),
+        cert.status !== 'issued' ? h('button', { class: 'btn small', onclick: () => askIssued(cert, true) }, 'Mark as issued') : null)),
     h('div', { class: 'card', id: 'dangercard' }, h('h2', {}, 'Danger notices'),
       h('p', { class: 'note' }, 'A one-page notice to hand over when you find something dangerous (C1) or potentially dangerous (C2). It prints as its own PDF.'),
       noticesOf(cert).length ? h('div', { class: 'list' }, noticesOf(cert).map((n) => h('a', { class: 'row', href: `#/cert/${id}/danger/${n.id}` }, h('span', { class: 'dot ' + (noticeMissing(n).length ? '' : 'ok') }), h('div', { class: 'main' }, h('div', { class: 't' }, noticeNo(cert, n) + ' · ' + n.items.length + ' item' + (n.items.length === 1 ? '' : 's') + (n.items.length ? ' · ' + [...new Set(n.items.map((i) => i.code))].join('/') : '')), h('div', { class: 's' }, (n.items.map((i) => i.text).filter(Boolean).join('; ') || 'No items yet').slice(0, 80))), h('span', { class: 'go' }, '›')))) : null,
@@ -120,8 +122,27 @@ export async function emailFor(cert, blob, name, notice = null) {
 async function askIssued(cert, direct) {
   if (await confirmBox(direct ? 'Mark as issued?' : 'Sent it? Mark as issued?', 'Records today as the issue date. You can still edit it.', 'Mark issued')) { cert.status = 'issued'; cert.issuedAt = new Date().toISOString(); changed(); await flush(); render(); }
 }
+// v0.46.0: Check certificate: problems grouped, each a link. Before a PDF it warns but lets you carry on.
+export async function certCheckDialog(cert, { pdf = false } = {}) {
+  await flush();
+  const r = checkCert(cert);
+  if (!r.count) { if (!pdf) toast('No problems found'); return true; }
+  let goTo = null; let cancelBtn = null;
+  const body = h('div', { class: 'certcheck' },
+    h('p', { class: 'note' }, pdf ? 'Worth a look before the PDF goes out. Tap one to go to it, or make the PDF anyway.' : 'Tap one to go to it.'),
+    r.groups.map((g) => h('div', { class: 'ccgroup ' + g.level },
+      h('div', { class: 'cchd' }, `${g.title} (${g.items.length})`),
+      h('div', { class: 'list' }, g.items.map((it) => h('a', { class: 'row', href: it.href, onclick: (e) => { e.preventDefault(); goTo = it.href; if (cancelBtn) cancelBtn.click(); } },
+        h('div', { class: 'main' }, h('div', { class: 't' }, it.text)), h('span', { class: 'go' }, '\u203a')))))));
+  const p = modal(`${r.count} thing${r.count === 1 ? '' : 's'} to look at` + (r.fix ? ` (${r.fix} to fix)` : ''), body,
+    pdf ? [{ label: 'Go back', value: false }, { label: 'Make PDF anyway', value: true, cls: 'primary' }] : [{ label: 'Close', value: false }]);
+  cancelBtn = [...document.querySelectorAll('.modal-bg .btns button')].find((b) => /Go back|Close/.test(b.textContent));
+  const v = await p; if (goTo) go(goTo);
+  return v === true;
+}
 async function makePdf(cert, btn, how) {
   let ok = false;
+  if (!(await certCheckDialog(cert, { pdf: true }))) return false; // v0.46.0
   await flush(); const label = btn.textContent; btn.disabled = true; btn.textContent = 'Making PDF…';
   try {
     const { certificatePdf, pdfName } = await import('./pdf.js');

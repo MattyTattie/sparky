@@ -957,3 +957,22 @@ details.afddmore > summary.phd { display: block; }
 /* v0.45.2: the Board details fold under the board's buttons gets the same 12px gap as the other blocks
    (main > .card sets margin-top: 0 and the buttons above have no bottom margin, so it was touching). */
 main > div:not([class]) + .card.boarddetails { margin-top: var(--s3); }
+/* v0.46.0: Check certificate, quick fill, same-RCD trip time */
+.certcheck { max-height: 56vh; overflow: auto; margin: 0 -4px; padding: 0 4px; }
+.certcheck .ccgroup { margin-top: 12px; }
+.certcheck .cchd { font-weight: 750; font-size: 13px; margin: 0 0 6px; }
+.certcheck .ccgroup.red .cchd { color: var(--red); }
+.certcheck .ccgroup.amber .cchd { color: var(--amber); }
+.certcheck .row { min-height: 44px; text-decoration: none; color: inherit; }
+.certcheck .row .t { white-space: normal; font-size: 14px; }
+.certcheck .row .go { font-size: 20px; opacity: .6; padding-left: 8px; }
+.quickfill { margin-bottom: 12px; }
+.quickfill .btns .btn { min-height: 44px; flex: 1 1 0; }
+.qfclash { margin: 6px 0 0 18px; padding: 0; font-size: 14px; }
+.rcdreuse .rgrp { border-top: 1px solid rgba(127,127,127,.25); padding-top: 10px; margin-top: 10px; }
+.rcdreuse .rghd { font-size: 14px; margin-bottom: 6px; }
+.rcdreuse .rgc { display: flex; flex-wrap: wrap; gap: 0 14px; }
+.rcdreuse .rgc .check { min-height: 40px; margin: 0; font-size: 14px; gap: 6px; }
+.rcdreuse .rgrow { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 8px; margin-top: 6px; }
+.rcdreuse .rgrow .f { flex: 1 1 140px; margin: 0; }
+.rcdreuse .rgrow .btn { min-height: 44px; }
