@@ -463,7 +463,7 @@ Android: TWA versionCode 5 / versionName 0.45.0, same package io.github.mattytat
 - Same RCD trip time (js/rcdreuse.js): on Test across circuits, RCD step, one card per shared RCD (groupCircuits rule, 2+ circuits, RCBOs left out). One time box, circuits ticked (untick ones on another identical RCD), "Apply to ticked circuits"; typed times listed with Cancel / Only empty ones / Replace; Undo.
 - No new stored fields (only existing circuit keys, and c.ring which already existed). DB name, section ids, backup/sync format unchanged. Web-only, no APK rebuild. Tests: tests/v460.test.mjs (645 pass).
 
-## v0.47.0 beta (9 Nov 2026, branch `v0.47.0`, committed locally, NOT pushed / not live)
+## v0.47.0 beta (PUBLISHED 9 Nov 2026 19:43 GMT, commit fd5bf77, live 19:43 GMT; Matthew: "Go live with v0.47.0")
 Fixes all 19 findings from the fake 4-DB EIC walk-through (/workspace/polish-review/eic-walkthrough/findings.md).
 New optional fields only (old jobs open and print unchanged): board.earthing ('TT'), board.ra, board.elType,
 board.elLocation, circuit.rcdNo ('1'/'2'/'3', which RCD on a split-load board). No DB, key or backup format change.
@@ -483,3 +483,6 @@ board.elLocation, circuit.rcdNo ('1'/'2'/'3', which RCD on a split-load board). 
 - Signature capped/fitted on page 1; max Zs fmtZs (1667 not 1667.00; own figure as typed); "(outbuilding)" only on
   sub-main/TT boards; empty board not "Section complete"; section letters per cert type; DB1 OCPD blank → N/A.
 Tests: tests/v470.test.mjs. Walk-through re-run: /workspace/polish-review/eic-walkthrough-v0470/.
+Live check 9 Nov 19:5x GMT: https://mattytattie.github.io/sparky/sw.js serves sparky-v0.47.0 (Pages deploy 19:43:15–19:43:40 GMT,
+last-modified 19:43:34 GMT); headless 390px smoke on live: app opens (0.47.0 beta, cache sparky-v0.47.0), cert opens, DB2 TT max Zs 1667,
+PDF builds (7 pages), no page errors. Web-only: no APK rebuild (ZsPro-0.45.0.apk still current).

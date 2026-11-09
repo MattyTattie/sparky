@@ -213,12 +213,12 @@
 - v0.46.0 (PUBLISHED 9 Nov 17:18 GMT): Check certificate before the PDF (missing fields, Zs/IR/RCD over limits, Satisfactory with C1/C2), each with a link; can still make the PDF.
 - v0.46.0 (PUBLISHED 9 Nov 17:18 GMT): Ring / Radial / Lights quick fill on a circuit’s test results; empty boxes only unless you say so; Undo.
 - v0.46.0 (PUBLISHED 9 Nov 17:18 GMT): enter a shared RCD’s trip time once on the RCD step and apply it to its circuits (RCBOs stay per circuit).
-- v0.47.0 (not live): per-board TT earthing (RA, electrode) with Table 41.5 / RA × IΔn checks; prints and draws.
-- v0.47.0 (not live): split-load boards: "Which RCD" (RCD 1 / RCD 2) keeps two identical RCCBs apart in parts, diagram and Reuse RCD times.
-- v0.47.0 (not live): parts list no longer double-counts RCDs; RCD main switch is one line; SPD MCB and meter tail connector block listed.
-- v0.47.0 (not live): RCD main switch has one set of boxes with an S chip; PDF/diagram show type, S, IΔn and location.
-- v0.47.0 (not live): ring final template ticks ring + cable; RCBO→MCB clears stale RCD details (board RCD or N/A prompt).
-- v0.47.0 (not live): board RCD S-type carries down to its circuits, amber if they differ.
-- v0.47.0 (not live): tapping a chosen chip no longer clears it.
-- v0.47.0 (not live): generation printed/drawn; battery and EV charger prompt chips; "Use my details" for blank signatory boxes.
-- v0.47.0 (not live): cosmetic: page 1 signature fits its line, max Zs 1667, outbuilding label, empty board not complete, section letters, DB1 OCPD N/A.
+- v0.47.0 (PUBLISHED 9 Nov 19:43 GMT): per-board TT earthing (RA, electrode) with Table 41.5 / RA × IΔn checks; prints and draws.
+- v0.47.0 (PUBLISHED 9 Nov 19:43 GMT): split-load boards: "Which RCD" (RCD 1 / RCD 2) keeps two identical RCCBs apart in parts, diagram and Reuse RCD times.
+- v0.47.0 (PUBLISHED 9 Nov 19:43 GMT): parts list no longer double-counts RCDs; RCD main switch is one line; SPD MCB and meter tail connector block listed.
+- v0.47.0 (PUBLISHED 9 Nov 19:43 GMT): RCD main switch has one set of boxes with an S chip; PDF/diagram show type, S, IΔn and location.
+- v0.47.0 (PUBLISHED 9 Nov 19:43 GMT): ring final template ticks ring + cable; RCBO→MCB clears stale RCD details (board RCD or N/A prompt).
+- v0.47.0 (PUBLISHED 9 Nov 19:43 GMT): board RCD S-type carries down to its circuits, amber if they differ.
+- v0.47.0 (PUBLISHED 9 Nov 19:43 GMT): tapping a chosen chip no longer clears it.
+- v0.47.0 (PUBLISHED 9 Nov 19:43 GMT): generation printed/drawn; battery and EV charger prompt chips; "Use my details" for blank signatory boxes.
+- v0.47.0 (PUBLISHED 9 Nov 19:43 GMT): cosmetic: page 1 signature fits its line, max Zs 1667, outbuilding label, empty board not complete, section letters, DB1 OCPD N/A.
