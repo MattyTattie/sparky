@@ -487,7 +487,7 @@ Live check 9 Nov 19:5x GMT: https://mattytattie.github.io/sparky/sw.js serves sp
 last-modified 19:43:34 GMT); headless 390px smoke on live: app opens (0.47.0 beta, cache sparky-v0.47.0), cert opens, DB2 TT max Zs 1667,
 PDF builds (7 pages), no page errors. Web-only: no APK rebuild (ZsPro-0.45.0.apk still current).
 
-## v0.47.1 beta (9 Nov 2026, branch `v0.47.1`, committed locally, NOT pushed / not live)
+## v0.47.1 beta (PUBLISHED 9 Nov 2026, commit b93e775 (branch v0.47.1), pushed 20:38:35 GMT, live 20:39:21 GMT; Matthew: "Go live with v0.47.1")
 Board photo scan fixes from Matthew's DB2 Garo photo ("I tried uploading this to db2, didn't work"; 20:08 GMT).
 The real photo never reached the box: reproduced with a drawn stand-in of the same board (polish-review/garo-scan/).
 What went wrong on v0.47.0: (1) a sideways photo (breakers top to bottom) read almost nothing: 2 blank "Couldn't read
@@ -515,3 +515,7 @@ nothing else. Second round (same branch):
 Result on his photo: B50 MCB circuit (on the board RCD), main switch 100 A BS EN 60947-3, RCD BS EN 61008 63 A 300 mA,
 SPD T2. Other photos (top/bottom row, crops, fakes) read exactly as live. Tests: tests/v471.test.mjs with
 tests/fixtures-garo-db2-words.json (OCR words off his photo, no image) (679 pass).
+Live check 9 Nov ~20:40 GMT: https://mattytattie.github.io/sparky/sw.js serves sparky-v0.47.1 (last-modified 20:39:02 GMT).
+Headless 390px smoke on live: app opens (0.47.1 beta, cache sparky-v0.47.1), cert opens, PDF builds (7 pages), no page errors.
+Matthew's real DB2 photo scanned on LIVE (fake job, DB2): turned upright; B50 MCB circuit on the board RCD; main switch 100 A
+BS EN 60947-3; RCD BS EN 61008 63 A 300 mA; SPD T2. Web-only: no APK rebuild (ZsPro-0.45.0.apk still current).
