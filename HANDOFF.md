@@ -486,3 +486,20 @@ Tests: tests/v470.test.mjs. Walk-through re-run: /workspace/polish-review/eic-wa
 Live check 9 Nov 19:5x GMT: https://mattytattie.github.io/sparky/sw.js serves sparky-v0.47.0 (Pages deploy 19:43:15–19:43:40 GMT,
 last-modified 19:43:34 GMT); headless 390px smoke on live: app opens (0.47.0 beta, cache sparky-v0.47.0), cert opens, DB2 TT max Zs 1667,
 PDF builds (7 pages), no page errors. Web-only: no APK rebuild (ZsPro-0.45.0.apk still current).
+
+## v0.47.1 beta (9 Nov 2026, branch `v0.47.1`, committed locally, NOT pushed / not live)
+Board photo scan fixes from Matthew's DB2 Garo photo ("I tried uploading this to db2, didn't work"; 20:08 GMT).
+The real photo never reached the box: reproduced with a drawn stand-in of the same board (polish-review/garo-scan/).
+What went wrong on v0.47.0: (1) a sideways photo (breakers top to bottom) read almost nothing: 2 blank "Couldn't read
+the rating" ways, no main switch; (2) even upright, the 63A 300mA RCCB was taken for a second main switch (63A, no curve
+marking) and merged into the 100A isolator, so the board RCD was lost; nothing filled the board's RCD or SPD boxes.
+- ocr.js: uprightPhoto(): if the quick whole-photo read finds little breaker text (<8 items), also read the photo turned
+  90 and -90 and keep the clearly better one (p.turned). Boxes drawn round a sideways row that read nothing: the same,
+  with the boxes turned (turnRect). Real upright photos read exactly as before (top/bottom row + crops checked).
+- cuscan.js: RCCB/DCCB/RCD/61008 words, or mA + >=25A with no curve marking and no RCBO word = kind 'rccb' (the board's
+  RCD, not a circuit, never merged into the main switch). 60947 = main switch (bs 60947-3); 61643 / Imax / "SPD T2" =
+  SPD (Type 2 when Imax or T2 read); GARO and DCB (Garo MCB) count as breaker faces.
+- Scan review: "Not a circuit: RCCB 63A 300mA (goes in the board's RCD)", note when the photo was turned, "Turn ↻" button
+  on each photo. On Add: board RCD boxes (all blank only) get BS EN 61008 + rating + IΔn (+ type if read), MCB circuits
+  pick it up (fillBoardRcd); SPD read as Type 2 ticks T2 if no SPD type ticked; main switch BS 60947-3 if blank.
+No new stored fields. Tests: tests/v471.test.mjs (674 pass).

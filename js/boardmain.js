@@ -75,7 +75,23 @@ export function mainFromScan(cert, bi, found) {
   const { o, pre } = mainAt(cert, bi);
   if (!blank(get(o, pre + 'msCurrent'))) return [];
   const obj = pre === 'parts.' ? (o.parts = o.parts || {}) : (o.main = o.main || {});
-  obj.msCurrent = rating; return [pre + 'msCurrent'];
+  obj.msCurrent = rating; const out = [pre + 'msCurrent'];
+  // v0.47.1: it read "60947-3" on it (an isolator / switch-disconnector): the BS box too, if blank
+  if (found.bs && blank(obj.msBs)) { obj.msBs = found.bs; out.push(pre + 'msBs'); }
+  return out;
+}
+// v0.47.1: board photo scan: an RCCB fills the board's blank RCD boxes (BS EN 61008, rating, IΔn, type if read);
+// an SPD read as Type 2 ticks T2 when no SPD type is ticked yet. Blanks only; returns the keys filled.
+export function scanBoardExtras(b, found) {
+  const out = []; if (!b) return out; const items = found || [];
+  const rc = items.find((o) => o.kind === 'rccb' && (o.rating || o.idn));
+  if (rc && [b.rcdBs, b.rcdRating, b.rcdIdn, b.rcdType].every(blank)) {
+    const set = { rcdBs: '61008', rcdRating: rc.rating || '', rcdIdn: rc.idn || '', rcdType: rc.rcdType || '' };
+    for (const [k, v] of Object.entries(set)) if (v) { b[k] = v; out.push(k); }
+  }
+  const sp = items.find((o) => o.kind === 'spd' && o.t2);
+  if (sp && !b.spdT1 && !b.spdT2 && !b.spdT3 && !b.spdNA) { b.spdT2 = true; out.push('spdT2'); }
+  return out;
 }
 // v0.47.0: what to print / check as a board's RCD: the board's own boxes, with an RCD main switch's
 // details filling any blanks (older jobs kept them only under the main switch). Doesn't change the cert.

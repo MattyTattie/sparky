@@ -10,7 +10,7 @@ import { route, page, go, render } from './app.js';
 import { openCert, changed, flush, touchJob } from './state.js';
 import { field, stateLine } from './certui.js';
 import { sectionsFor, get, set, mainSwitchFields } from './certmodel.js';
-import { mainFromScan, mainSummary, mirrorMainRcd, liftBoardRcdToMain, mainAt } from './boardmain.js';
+import { mainFromScan, mainSummary, mirrorMainRcd, liftBoardRcdToMain, mainAt, scanBoardExtras } from './boardmain.js';
 import { msIsRcdAt } from './certmodel.js';
 import { QUICK, planQuick, applyQuick, undoQuick } from './quickfill.js';
 import { supplyKindOf, feedInfo } from './wiring.js';
@@ -733,6 +733,7 @@ route(/^\/cert\/([^/]+)\/b\/(\d+)\/scan$/, async (id, bi) => {
       thumb(p),
       h('div', { class: 'btns' },
         h('button', { class: 'btn small primary', onclick: () => cropper(p) }, p.rects.length ? 'Edit row boxes' : 'Draw row boxes'),
+        h('button', { class: 'btn small', title: 'Turn the photo a quarter turn clockwise', onclick: async () => { const { turnBitmap, turnRect } = await ocr(); const W = p.bmp.width, H = p.bmp.height; p.bmp = await turnBitmap(p.bmp, 90); p.rects = p.rects.map((r) => turnRect(r, 90, W, H)); p.autoRects = null; p.turned = ((p.turned || 0) + 90) % 360; rows = null; drawStart(); } }, 'Turn \u21bb'),
         i > 0 ? h('button', { class: 'btn small', onclick: () => { parts.splice(i - 1, 0, parts.splice(i, 1)[0]); drawStart(); } }, '↑ Earlier') : null,
         h('button', { class: 'btn small warn', onclick: () => { parts.splice(i, 1); drawStart(); } }, 'Remove')))),
     parts.length ? h('div', { class: 'stick' }, h('button', { class: 'btn primary', onclick: read }, `Read ${parts.length} photo(s)`)) : null,
@@ -851,6 +852,7 @@ route(/^\/cert\/([^/]+)\/b\/(\d+)\/scan$/, async (id, bi) => {
       numbering,
       seq.map(({ row: r, ways: wsq }) => h('div', {},
         h('h2', { class: 'sec' }, `Photo ${r.part + 1}${parts[r.part].rects.length > 1 || (parts[r.part].autoRects || []).length > 1 ? ' · row ' + (r.row + 1) : ''}: ${r.ways.length} way(s)`),
+        parts[r.part].turned ? h('p', { class: 'note' }, 'The photo was sideways, so it was turned upright to read it.') : null,
         !r.ways.length ? h('div', { class: 'notice red' }, 'No breaker markings could be read here. Split the row into ways below and type them in next to each photo slice.') : null,
         h('div', { class: 'btns' }, h('button', { class: 'btn small', onclick: async () => {
           const inp = h('input', { inputmode: 'numeric', value: String(r.ways.length || 12) });
@@ -863,7 +865,7 @@ route(/^\/cert\/([^/]+)\/b\/(\d+)\/scan$/, async (id, bi) => {
         r.board.map((o, oi) => h('div', { class: 'card waycard board' + (o.kind === 'other' ? ' unsure' : '') },
           o.crop ? cropImg(parts[r.part], o.crop) : null,
           h('div', { class: 'wayform' },
-            h('b', {}, o.kind === 'main' ? 'Not a circuit: main switch' + (o.rating ? ` (${o.rating}A)` : '') : o.kind === 'spd' ? 'Not a circuit: surge protector (SPD)' : o.kind === 'spdmcb' ? `Not a circuit: ${(o.type || 'B') + (o.rating || '')} MCB protecting the SPD` : 'Not added: unknown device'),
+            h('b', {}, o.kind === 'main' ? 'Not a circuit: main switch' + (o.rating ? ` (${o.rating}A)` : '') : o.kind === 'rccb' ? `Not a circuit: RCCB${o.rating ? ' ' + o.rating + 'A' : ''}${o.idn ? ' ' + o.idn + 'mA' : ''} (goes in the board\u2019s RCD)` : o.kind === 'spd' ? 'Not a circuit: surge protector (SPD)' : o.kind === 'spdmcb' ? `Not a circuit: ${(o.type || 'B') + (o.rating || '')} MCB protecting the SPD` : 'Not added: unknown device'),
             h('span', { class: o.kind === 'other' || o.kind === 'spd' && o.why && /looks like/.test(o.why) ? 'flag' : 'note' }, (o.kind === 'other' || /looks like/.test(o.why || '') ? 'check: ' : '') + (o.why || '')),
             h('div', { class: 'btns' }, h('button', { class: 'btn tiny', onclick: () => { r.board.splice(oi, 1); const w = { ...o, kind: 'way', type: 'B', rating: '', rcbo: false, sure: false, why: 'You said this is a circuit: type it in', keep: true }; const at = r.ways.findIndex((x) => x.cx > o.cx); r.ways.splice(at < 0 ? r.ways.length : at, 0, w); review(); } }, 'It\u2019s a circuit'))))))),
       h('div', { class: 'stick' }, h('button', { class: 'btn', onclick: () => drawStart() }, 'Back to photos'), h('button', { class: 'btn primary', disabled: !total(), onclick: add }, `Add ${total()} circuit(s)`)));
@@ -884,6 +886,8 @@ route(/^\/cert\/([^/]+)\/b\/(\d+)\/scan$/, async (id, bi) => {
     }
     // v0.45.1: the main switch it spotted fills that board's blank main switch rating (board 1: the certificate's section)
     const ms = rows.flatMap((r) => r.board).find((o) => o.kind === 'main' && o.rating); if (ms) mainFromScan(cert, +bi, ms);
+    // v0.47.1: an RCCB it spotted fills the board's blank RCD boxes (then its MCB circuits pick it up); an SPD it read as Type 2 ticks T2 if no type is ticked.
+    scanBoardExtras(b, rows.flatMap((r) => r.board)); fillBoardRcd(b, isSpare);
     const sm = rows.flatMap((r) => r.ways).find((w) => w.spd && w.keep); if (sm && !b.spdDevice) b.spdDevice = `${sm.type || 'B'}${sm.rating || ''} MCB (circuit ${sm.num || ''})`.replace(' (circuit )', '');
     changed(); await flush();
     toast(`Added ${added} circuit(s)${cert.jobId ? ' · photos saved with the job' : ''}`); go(`#/cert/${id}/b/${bi}`);

@@ -85,13 +85,19 @@ export function classify(word) {
   const mk = readMarking(t); if (mk) return { ...base, kind: 'marking', ...mk };
   const ma = readMa(t); if (ma) return { ...base, kind: 'ma', idn: ma };
   if (/^rcbo$/i.test(t)) return { ...base, kind: 'rcbo' };
+  // v0.47.1: an RCCB (Garo calls theirs DCCB; its standard is EN 61008) is the board's RCD, not a circuit or a main switch.
+  if (/^(rccb|dccb|rccd|rcd)$/i.test(t) || /^(?:(?:iec|bs)?\/?(?:en)?)?61008/i.test(t.replace(/\s+/g, ''))) return { ...base, kind: 'rccb' };
   if (/^(main|switch|isolator|isol)/i.test(t)) return { ...base, kind: 'main' };
+  if (/^(?:(?:iec|bs)?\/?(?:en)?)?60947/i.test(t.replace(/\s+/g, ''))) return { ...base, kind: 'main', bs60947: true };
   if (/^spd$|^surge/i.test(t)) return { ...base, kind: 'spd' };
+  if (/^(?:(?:iec|bs)?\/?(?:en)?)?61643/i.test(t.replace(/\s+/g, ''))) return { ...base, kind: 'spd', std: true };
+  if (/^imax/i.test(t)) return { ...base, kind: 'spd', imax: true };
+  if (/^(T2|Type2)$/i.test(t) && word.prev && /^(spd|type)$/i.test(word.prev)) return { ...base, kind: 'spd', t2: true };
   if (/^(AC|A|F|B)$/.test(t) && word.prev && /^type$/i.test(word.prev)) return { ...base, kind: 'rcdtype', rcdType: t };
   const a = readAmps(t); if (a) return { ...base, kind: 'amps', amps: a };
   // Looks like a marking we couldn't make sense of: still evidence of a breaker here.
   if (/^[8BCD53][0-9OSIL]{1,2}$/.test(t) || /^[0-9OSIL]{1,2}[BCD]$/.test(t)) return { ...base, kind: 'face', unread: true };
-  if (/^test$/i.test(t) || /^fuse ?b[o0a]x/i.test(t) || /^(hager|mk|wylex|crabtree|schneider|eaton|bg|contactum|lewden|proteus)$/i.test(t)) return { ...base, kind: 'face' };
+  if (/^test$/i.test(t) || /^fuse ?b[o0a]x/i.test(t) || /^(hager|mk|wylex|crabtree|schneider|eaton|bg|contactum|lewden|proteus|garo|dcb)$/i.test(t)) return { ...base, kind: 'face' };
   return null;
 }
 // Join split words: "B" + "32" → "B32"; "Type" + "A" handled by classify(prev).
@@ -111,7 +117,7 @@ const median = (a) => { if (!a.length) return null; const s = a.slice().sort((x,
 
 // Group evidence into columns (one per breaker), left to right.
 export function columns(items) {
-  const strong = items.filter((i) => ['model', 'marking', 'ma', 'face', 'amps', 'main', 'spd', 'rcbo'].includes(i.kind)).sort((a, b) => a.cx - b.cx);
+  const strong = items.filter((i) => ['model', 'marking', 'ma', 'face', 'amps', 'main', 'spd', 'rcbo', 'rccb'].includes(i.kind)).sort((a, b) => a.cx - b.cx);
   if (!strong.length) return [];
   // Spacing between breakers, from marking/model words (one of each per breaker).
   const gapsOf = (kind) => { const xs = strong.filter((i) => i.kind === kind).map((i) => i.cx); return xs.slice(1).map((x, i) => x - xs[i]).filter((g) => g > 0); };
@@ -135,8 +141,14 @@ export function readColumn(col) {
   const main = by('main').length > 0, spd = by('spd').length > 0;
   const amps = by('amps').map((a) => a.amps);
   const solid = models.length || marks.some((m) => !m.guess);
-  if ((main && !solid) || (!solid && amps.some((a) => a >= 63))) return { kind: 'main', rating: String(Math.max(0, ...amps) || ''), cx: col.cx, items: col.items };
-  if (spd && !marks.length && !models.length) return { kind: 'spd', cx: col.cx, items: col.items };
+  // v0.47.1: RCCB: says RCCB/DCCB/61008, or has a mA rating and a big amp rating but no curve marking (an RCBO shows B/C16 etc.)
+  const ma = by('ma'), rccbWord = by('rccb').length > 0;
+  if (!solid && !by('rcbo').length && (rccbWord || (ma.length && amps.some((a) => a >= 25)))) {
+    const r = amps.filter((a) => a >= 16 && a <= 125); const idn = (ma[0] || {}).idn || '';
+    return { kind: 'rccb', rating: r.length ? String(Math.min(...r)) : '', idn, rcdType: (by('rcdtype')[0] || {}).rcdType || '', cx: col.cx, items: col.items };
+  }
+  if ((main && !solid) || (!solid && amps.some((a) => a >= 63))) return { kind: 'main', rating: String(Math.max(0, ...amps) || ''), bs: by('main').some((x) => x.bs60947) ? '60947-3' : '', cx: col.cx, items: col.items };
+  if (spd && !marks.length && !models.length) { const sp = by('spd'); return { kind: 'spd', cx: col.cx, items: col.items, t2: sp.some((x) => x.t2 || x.imax) }; }
   const vote = {};
   const add = (type, rating, w) => { const k = (type || '?') + rating; vote[k] = (vote[k] || 0) + w; };
   for (const m of marks) add(m.type, m.rating, m.guess ? 1 : 2);
@@ -188,12 +200,14 @@ export function readRow(words, labelWords = [], opts = {}) {
   const cols = columns(items);
   let read = cols.map(readColumn).map((r, i) => ({ ...r, pitch: cols[i].pitch }));
   // A main switch / isolator is two modules wide: its "100A" and "MAIN SWITCH" can land in neighbouring columns. Join them.
-  read = read.reduce((a, r) => { const l = a[a.length - 1]; if (l && l.kind === 'main' && r.kind === 'main') { l.rating = l.rating || r.rating; l.items = [...l.items, ...r.items]; l.cx = (l.cx + r.cx) / 2; l.wide = true; } else a.push(r); return a; }, []);
+  read = read.reduce((a, r) => { const l = a[a.length - 1]; if (l && ((l.kind === 'main' && r.kind === 'main') || (l.kind === 'rccb' && r.kind === 'rccb'))) { l.rating = l.rating || r.rating; l.idn = l.idn || r.idn; l.bs = l.bs || r.bs; l.items = [...l.items, ...r.items]; l.cx = (l.cx + r.cx) / 2; l.wide = true; }
+    else if (l && ((l.kind === 'main' && r.kind === 'rccb') || (l.kind === 'rccb' && r.kind === 'main')) && Math.abs(r.cx - l.cx) < (r.pitch || 100) * 0.7 && !(l.kind === 'main' ? r : l).items.some((x) => x.kind === 'rccb') && !(l.kind === 'rccb' ? l : r).idn) { l.kind = 'main'; l.rating = l.rating || r.rating; l.items = [...l.items, ...r.items]; l.wide = true; } else a.push(r); return a; }, []);
   // Past the main switch, anything we couldn't read is probably the SPD or an isolator, not a circuit: flag it, don't guess.
   const mi = read.findIndex((r) => r.kind === 'main');
   read = read.map((r, i) => {
     if (r.kind === 'main') return { ...r, why: r.rating ? `Main switch / isolator, ${r.rating}A` : 'Main switch / isolator' };
-    if (r.kind === 'spd') return { ...r, why: 'Surge protection (SPD)' };
+    if (r.kind === 'spd') return { ...r, why: 'Surge protection (SPD)' + (r.t2 ? ', Type 2' : '') };
+    if (r.kind === 'rccb') return { ...r, why: `RCCB${r.rating ? ' ' + r.rating + 'A' : ''}${r.idn ? ' ' + r.idn + 'mA' : ''}: the board\u2019s RCD, not a circuit` };
     if (r.kind === 'way' && !r.rating && mi >= 0 && i > mi) return { ...r, kind: 'other', why: 'Right of the main switch and no rating read: probably an SPD or isolator. Check it.' };
     return r;
   });
