@@ -46,7 +46,7 @@ test('photo scan: the main switch it reads fills the blank rating (board 1 → c
   assert.deepEqual(mainFromScan(c, 0, { kind: 'main', rating: '80' }), ['parts.msCurrent']); assert.equal(c.parts.msCurrent, '80');
   c.boards[1].main.msCurrent = '63'; assert.deepEqual(mainFromScan(c, 1, { rating: '100' }), []); assert.equal(c.boards[1].main.msCurrent, '63');
   assert.deepEqual(mainFromScan(c, 1, { rating: '' }), []);
-  assert.match(src('schedule.js'), /o\.kind === 'main' && o\.rating\); if \(ms\) mainFromScan\(cert, \+bi, ms\)/);
+  assert.match(src('schedule.js'), /o\.kind === 'main' && o\.rating\); if \(ms\) mainFromScan\(cert, \+bi, (?:ms|\{ \.\.\.ms, bs: ms\.bs \|\| '60947-3' \})\)/);
 });
 test('parts screen shows where to add a missing main switch', () => {
   assert.match(src('app.js'), /No main switch listed: add it in /); assert.match(src('app.js'), /\\u2019s board details/);

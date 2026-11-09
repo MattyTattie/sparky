@@ -56,7 +56,7 @@ test('turnRect: a box on a sideways photo lands on the same spot of the turned p
   assert.deepEqual(turnRect(r, -90, Wd, H), { x: 200, y: Wd - 100 - 50, w: 400, h: 50 });
 });
 test('turnScore counts breaker text the scanner understands (sideways reads score ~0)', () => {
-  assert.ok(turnScore(garo) >= 8); assert.equal(turnScore([W('OOJ', 0), W('VC6', 1), W('xx', 2)]), 0); assert.equal(turnScore([W('B32', 0, 0, 20)]), 0);
+  assert.ok(turnScore(garo) >= 14); assert.equal(turnScore([W('OOJ', 0, 100, 47), W('VC6', 1, 100, 60), W('xx', 2)]), 0); assert.equal(turnScore([W('B32', 0, 0, 20)]), 0);
 });
 test('scan screen: sideways photos turned upright, Turn button, RCCB card, board extras on add; version 0.47.1', () => {
   const sch = readFileSync(new URL('../js/schedule.js', import.meta.url), 'utf8'), ocr = readFileSync(new URL('../js/ocr.js', import.meta.url), 'utf8');
@@ -64,4 +64,34 @@ test('scan screen: sideways photos turned upright, Turn button, RCCB card, board
   assert.match(sch, /'Turn \\u21bb'/); assert.match(sch, /Not a circuit: RCCB/); assert.match(sch, /scanBoardExtras\(b, rows\.flatMap/); assert.match(sch, /turned upright to read it/);
   assert.match(readFileSync(new URL('../js/config.js', import.meta.url), 'utf8'), /0\.47\.1 beta/);
   assert.match(readFileSync(new URL('../sw.js', import.meta.url), 'utf8'), /sparky-v0\.47\.1/);
+});
+
+// From Matthew's real DB2 photo (taken sideways; read turned upright). Only the OCR words are kept here, not the photo.
+const real = JSON.parse(readFileSync(new URL('./fixtures-garo-db2-words.json', import.meta.url), 'utf8'));
+test('real Garo DB2 photo (OCR words): B50 circuit, 100A main switch, RCCB 63A 300mA, SPD Type 2', () => {
+  const r = readRow(real);
+  assert.deepEqual(r.ways.map((w) => [w.type + w.rating, w.rcbo]), [['B50', false]]);
+  const k = (kind) => r.board.filter((o) => o.kind === kind);
+  assert.equal(k('main').length, 1); assert.equal(k('main')[0].rating, '100');
+  assert.equal(k('rccb').length, 1); assert.equal(k('rccb')[0].rating, '63'); assert.equal(k('rccb')[0].idn, '300');
+  assert.equal(k('spd').length, 1); assert.equal(k('spd')[0].t2, true);
+  const b = { circuits: [] }; scanBoardExtras(b, r.board); assert.equal(b.rcdBs, '61008'); assert.equal(b.rcdRating, '63'); assert.equal(b.rcdIdn, '300'); assert.equal(b.spdT2, true);
+});
+test('OCR spellings off the real photo: In=63A, =300mA, IEC80947-3, Tmax / T2imax, ~275V', () => {
+  const k = (t) => classify(W(t, 0));
+  assert.equal(k('In=63A').amps, 63); assert.equal(k('=300mA').idn, '300'); assert.equal(k('~300mA').idn, '300');
+  assert.equal(k('IEC80947-3').kind, 'main'); assert.equal(k('Tmax').kind, 'spd'); assert.equal(k('T2imax').t2, true); assert.equal(k('~275V').kind, 'spd');
+  assert.ok(!k('230V') || k('230V').kind !== 'spd');
+});
+test('a 2-module RCCB\'s own "Test" / "300mA" columns join the RCCB, not new circuits', () => {
+  const r = readRow([W('B50', 1089), W('Test', 1592), W('300mA', 1720), W('DCCB', 2100), W('In=63A', 2134, 160), W('100A', 2700), W('61643-11', 3480)]);
+  assert.deepEqual(r.ways.map((w) => w.type + w.rating), ['B50']);
+  assert.ok(r.board.some((o) => o.kind === 'rccb' && o.rating === '63' && o.idn === '300'));
+});
+test('scan Add: main switch BS EN 60947-3 goes in a blank box even when not read', () => {
+  assert.match(readFileSync(new URL('../js/schedule.js', import.meta.url), 'utf8'), /mainFromScan\(cert, \+bi, \{ \.\.\.ms, bs: ms\.bs \|\| '60947-3' \}\)/);
+});
+test('an unread MCB next to an RCCB stays a way to type in (only its Test / mA print joins the RCCB)', () => {
+  const r = readRow([W('DCCB', 300), W('63A', 300, 160), W('300mA', 300, 200), W('GARO', 450), W('GARO', 550), W('B16', 650)]);
+  assert.deepEqual(r.ways.map((w) => w.type + w.rating), ['', '', 'B16']);
 });

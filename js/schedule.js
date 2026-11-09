@@ -784,7 +784,7 @@ route(/^\/cert\/([^/]+)\/b\/(\d+)\/scan$/, async (id, bi) => {
   }
   // Each way gets its own slice of the photo (breaker + the label strip below).
   const placeCrops = (r) => {
-    const ws = r.ways, R = r.rect; const pitch = r.pitch || R.w / Math.max(1, ws.length);
+    const ws = r.ways, R = r.rect; const pitch = Math.max(r.pitch || R.w / Math.max(1, ws.length), R.h * 0.25); // v0.47.1: never a sliver (few words read: pitch guessed small)
     ws.forEach((w, i) => {
       if (w.crop) return;
       const left = i ? (ws[i - 1].cx + w.cx) / 2 : w.cx - pitch / 2, right = i < ws.length - 1 ? (ws[i + 1].cx + w.cx) / 2 : w.cx + pitch / 2;
@@ -885,7 +885,7 @@ route(/^\/cert\/([^/]+)\/b\/(\d+)\/scan$/, async (id, bi) => {
       }
     }
     // v0.45.1: the main switch it spotted fills that board's blank main switch rating (board 1: the certificate's section)
-    const ms = rows.flatMap((r) => r.board).find((o) => o.kind === 'main' && o.rating); if (ms) mainFromScan(cert, +bi, ms);
+    const ms = rows.flatMap((r) => r.board).find((o) => o.kind === 'main' && o.rating); if (ms) mainFromScan(cert, +bi, { ...ms, bs: ms.bs || '60947-3' }); // v0.47.1: a main switch isolator is BS EN 60947-3 (blank box only)
     // v0.47.1: an RCCB it spotted fills the board's blank RCD boxes (then its MCB circuits pick it up); an SPD it read as Type 2 ticks T2 if no type is ticked.
     scanBoardExtras(b, rows.flatMap((r) => r.board)); fillBoardRcd(b, isSpare);
     const sm = rows.flatMap((r) => r.ways).find((w) => w.spd && w.keep); if (sm && !b.spdDevice) b.spdDevice = `${sm.type || 'B'}${sm.rating || ''} MCB (circuit ${sm.num || ''})`.replace(' (circuit )', '');

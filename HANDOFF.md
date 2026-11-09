@@ -502,4 +502,16 @@ marking) and merged into the 100A isolator, so the board RCD was lost; nothing f
 - Scan review: "Not a circuit: RCCB 63A 300mA (goes in the board's RCD)", note when the photo was turned, "Turn ↻" button
   on each photo. On Add: board RCD boxes (all blank only) get BS EN 61008 + rating + IΔn (+ type if read), MCB circuits
   pick it up (fillBoardRcd); SPD read as Type 2 ticks T2 if no SPD type ticked; main switch BS 60947-3 if blank.
-No new stored fields. Tests: tests/v471.test.mjs (674 pass).
+Then Matthew's real photo (polish-review/garo-scan/matthew-db2-real.jpg, NOT in the repo): live v0.47.0 gave one "B6" way and
+nothing else. Second round (same branch):
+- turnScore also counts maker/face words and clearly read words; turn when clearly better (his photo: 0 vs 10).
+- Garo prints are at the top and bottom of each device: an auto-found row that reads little is read again 6x taller, full
+  width, also in two halves (split), with the quick read's clear words (conf >= 80, e.g. "100A") added as hints.
+- OCR spellings: In=63A, =300mA / ~300mA, IEC80947-3 (60947), Tmax/Emax/T2imax (Imax, T2), ~275V (Uc) = SPD.
+- A 2-module RCCB's Test / mA / In=63A columns join the RCCB (only RCD-ish print; an unread MCB beside it stays a way).
+  Adjacent SPD items join into one. Main+main join keeps the bigger rating.
+- Add: main switch BS EN 60947-3 goes in a blank box even if not read (review says "put in if blank: check").
+- Scan crops never slivers (min width 0.25 x row height).
+Result on his photo: B50 MCB circuit (on the board RCD), main switch 100 A BS EN 60947-3, RCD BS EN 61008 63 A 300 mA,
+SPD T2. Other photos (top/bottom row, crops, fakes) read exactly as live. Tests: tests/v471.test.mjs with
+tests/fixtures-garo-db2-words.json (OCR words off his photo, no image) (679 pass).

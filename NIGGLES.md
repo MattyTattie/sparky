@@ -224,3 +224,4 @@
 - v0.47.0 (PUBLISHED 9 Nov 19:43 GMT): cosmetic: page 1 signature fits its line, max Zs 1667, outbuilding label, empty board not complete, section letters, DB1 OCPD N/A.
 - v0.47.1 (not live): board scan reads sideways photos (turns them upright), and has a Turn button.
 - v0.47.1 (not live): board scan knows an RCCB (Garo DCCB, 61008) from the main switch: fills the board's RCD (BS, A, mA) and its MCBs pick it up; SPD Type 2 and main switch BS 60947-3 filled if blank.
+- v0.47.1 (not live): checked on Matthew's real Garo DB2 photo (sideways): B50 circuit, 100 A main switch 60947-3, RCCB 61008 63 A 300 mA, SPD T2.

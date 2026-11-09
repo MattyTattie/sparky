@@ -73,8 +73,9 @@ export function readModel(word) {
   }
   return null;
 }
-export const readMa = (w) => { const m = /^([0-9OS]{2,3})m?A$/i.exec(clean(w).replace(/\s+/g, '')); if (!m || !/ma$/i.test(clean(w))) return null; const v = Number(digitsOf(m[1])); return [10, 30, 100, 300].includes(v) ? String(v) : null; };
-const readAmps = (w) => { const m = /^([0-9OSIL]{2,3})A$/i.exec(clean(w)); if (!m) return null; const v = Number(digitsOf(m[1])); return VALID.includes(v) ? v : null; };
+export const readMa = (w0) => { const w = clean(w0).replace(/\s+/g, '').replace(/^[~=:\u2248\u2014-]+/, ''); const m = /^([0-9OS]{2,3})m?A$/i.exec(w); if (!m || !/ma$/i.test(clean(w))) return null; const v = Number(digitsOf(m[1])); return [10, 30, 100, 300].includes(v) ? String(v) : null; };
+// v0.47.1: Garo prints In=63A
+const readAmps = (w) => { const m = /^(?:In[=:]|=)?([0-9OSIL]{2,3})A$/i.exec(clean(w)); if (!m) return null; const v = Number(digitsOf(m[1])); return VALID.includes(v) ? v : null; };
 
 // Classify one OCR word. bbox in photo pixels.
 export function classify(word) {
@@ -86,12 +87,13 @@ export function classify(word) {
   const ma = readMa(t); if (ma) return { ...base, kind: 'ma', idn: ma };
   if (/^rcbo$/i.test(t)) return { ...base, kind: 'rcbo' };
   // v0.47.1: an RCCB (Garo calls theirs DCCB; its standard is EN 61008) is the board's RCD, not a circuit or a main switch.
-  if (/^(rccb|dccb|rccd|rcd)$/i.test(t) || /^(?:(?:iec|bs)?\/?(?:en)?)?61008/i.test(t.replace(/\s+/g, ''))) return { ...base, kind: 'rccb' };
+  if (/^(rccb|dccb|rccd|rcd)$/i.test(t) || /6[1lI]0[0O]8/.test(t.replace(/\s+/g, ''))) return { ...base, kind: 'rccb' };
   if (/^(main|switch|isolator|isol)/i.test(t)) return { ...base, kind: 'main' };
-  if (/^(?:(?:iec|bs)?\/?(?:en)?)?60947/i.test(t.replace(/\s+/g, ''))) return { ...base, kind: 'main', bs60947: true };
+  if (/[68][0O]9[48A]7/.test(t.replace(/\s+/g, ''))) return { ...base, kind: 'main', bs60947: true };
   if (/^spd$|^surge/i.test(t)) return { ...base, kind: 'spd' };
-  if (/^(?:(?:iec|bs)?\/?(?:en)?)?61643/i.test(t.replace(/\s+/g, ''))) return { ...base, kind: 'spd', std: true };
-  if (/^imax/i.test(t)) return { ...base, kind: 'spd', imax: true };
+  if (/6[1lI]6[4A]3/.test(t.replace(/\s+/g, ''))) return { ...base, kind: 'spd', std: true };
+  if (/^(T2)?[A-Za-z1|]{0,2}max$/i.test(t)) return { ...base, kind: 'spd', imax: true, t2: /^T2/i.test(t) }; // Imax (OCR: lmax, Emax, TEimax, T2imax)
+  if (/^[~\u2248-]?(275|320|385|440)V~?$/i.test(t)) return { ...base, kind: 'spd' }; // Uc ~275V
   if (/^(T2|Type2)$/i.test(t) && word.prev && /^(spd|type)$/i.test(word.prev)) return { ...base, kind: 'spd', t2: true };
   if (/^(AC|A|F|B)$/.test(t) && word.prev && /^type$/i.test(word.prev)) return { ...base, kind: 'rcdtype', rcdType: t };
   const a = readAmps(t); if (a) return { ...base, kind: 'amps', amps: a };
@@ -199,13 +201,29 @@ export function readRow(words, labelWords = [], opts = {}) {
   const items = mergeWords(words).map(classify).filter(Boolean);
   const cols = columns(items);
   let read = cols.map(readColumn).map((r, i) => ({ ...r, pitch: cols[i].pitch }));
+  // v0.47.1 (Matthew's Garo DCCB): a 2-module RCCB's "Test" button, its "IΔn = 300mA" and its "In = 63A" can read as columns
+  // of their own. A neighbour nearer the RCCB than anything else joins it: an unrated way with only mA / face words, or
+  // (when the RCCB has no rating yet) a bare amp rating with no main switch wording.
+  const bare = (r) => r.kind === 'way' && !r.rating && !r.items.some((x) => x.kind === 'marking' || x.kind === 'model' || x.kind === 'rcbo');
+  // only RCD-ish print: a mA rating or the test button's "Test" (an unread MCB next to an RCCB stays a way to type in)
+  const rcdish = (r) => bare(r) && r.items.every((x) => x.kind === 'ma' || (x.kind === 'face' && /^(test|regularly)$/i.test(x.text)));
+  const ampsOnly = (r) => r.kind === 'main' && r.items.every((x) => x.kind === 'amps' || x.kind === 'face');
+  for (let again = true, guard = 0; again && guard++ < 8;) { again = false;
+    for (let i = 0; i < read.length; i++) {
+      const r = read[i]; const dist = (k) => (read[k] ? Math.abs(read[k].cx - r.cx) : Infinity);
+      const rcAt = [i - 1, i + 1].filter((k) => read[k] && read[k].kind === 'rccb' && (rcdish(r) || (ampsOnly(r) && !read[k].rating)) && (read[k].items.length < 12)).sort((x, y) => dist(x) - dist(y))[0];
+      if (rcAt == null) continue; const otherK = rcAt === i - 1 ? i + 1 : i - 1; if (read[otherK] && !bare(read[otherK]) && dist(rcAt) >= dist(otherK)) continue;
+      const rc = read[rcAt]; rc.idn = rc.idn || r.idn || ''; if (ampsOnly(r)) rc.rating = rc.rating || r.rating; rc.items = [...rc.items, ...r.items]; rc.wide = true;
+      rc.cx = rc.items.reduce((n, x) => n + x.cx, 0) / rc.items.length;
+      read.splice(i, 1); again = true; break;
+    } }
   // A main switch / isolator is two modules wide: its "100A" and "MAIN SWITCH" can land in neighbouring columns. Join them.
-  read = read.reduce((a, r) => { const l = a[a.length - 1]; if (l && ((l.kind === 'main' && r.kind === 'main') || (l.kind === 'rccb' && r.kind === 'rccb'))) { l.rating = l.rating || r.rating; l.idn = l.idn || r.idn; l.bs = l.bs || r.bs; l.items = [...l.items, ...r.items]; l.cx = (l.cx + r.cx) / 2; l.wide = true; }
+  read = read.reduce((a, r) => { const l = a[a.length - 1]; if (l && ((l.kind === 'main' && r.kind === 'main') || (l.kind === 'rccb' && r.kind === 'rccb') || (l.kind === 'spd' && r.kind === 'spd'))) { if (l.kind === 'spd') { l.t2 = l.t2 || r.t2; l.items = [...l.items, ...r.items]; l.cx = (l.cx + r.cx) / 2; return a; } l.rating = l.rating || r.rating; l.idn = l.idn || r.idn; l.bs = l.bs || r.bs; l.items = [...l.items, ...r.items]; l.cx = (l.cx + r.cx) / 2; l.wide = true; }
     else if (l && ((l.kind === 'main' && r.kind === 'rccb') || (l.kind === 'rccb' && r.kind === 'main')) && Math.abs(r.cx - l.cx) < (r.pitch || 100) * 0.7 && !(l.kind === 'main' ? r : l).items.some((x) => x.kind === 'rccb') && !(l.kind === 'rccb' ? l : r).idn) { l.kind = 'main'; l.rating = l.rating || r.rating; l.items = [...l.items, ...r.items]; l.wide = true; } else a.push(r); return a; }, []);
   // Past the main switch, anything we couldn't read is probably the SPD or an isolator, not a circuit: flag it, don't guess.
   const mi = read.findIndex((r) => r.kind === 'main');
   read = read.map((r, i) => {
-    if (r.kind === 'main') return { ...r, why: r.rating ? `Main switch / isolator, ${r.rating}A` : 'Main switch / isolator' };
+    if (r.kind === 'main') return { ...r, why: (r.rating ? `Main switch / isolator, ${r.rating}A` : 'Main switch / isolator') + (r.bs ? ', BS EN 60947-3' : ' (BS EN 60947-3 put in if blank: check)') };
     if (r.kind === 'spd') return { ...r, why: 'Surge protection (SPD)' + (r.t2 ? ', Type 2' : '') };
     if (r.kind === 'rccb') return { ...r, why: `RCCB${r.rating ? ' ' + r.rating + 'A' : ''}${r.idn ? ' ' + r.idn + 'mA' : ''}: the board\u2019s RCD, not a circuit` };
     if (r.kind === 'way' && !r.rating && mi >= 0 && i > mi) return { ...r, kind: 'other', why: 'Right of the main switch and no rating read: probably an SPD or isolator. Check it.' };

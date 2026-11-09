@@ -42,19 +42,21 @@ export async function turnBitmap(bmp, deg) {
 export function turnRect(r, deg, W, H) { return deg === 90 ? { x: H - r.y - r.h, y: r.x, w: r.h, h: r.w } : { x: r.y, y: W - r.x - r.w, w: r.h, h: r.w }; }
 const SEEN = ['model', 'marking', 'ma', 'main', 'spd', 'rccb', 'amps', 'rcbo'];
 // How much breaker text a quick read found (words the scanner understands, read with some confidence).
-export const turnScore = (ws) => mergeWords((ws || []).filter((w) => (w.conf ?? 100) >= 45)).map(classify).filter((x) => x && SEEN.includes(x.kind)).length;
+// v0.47.1 (Matthew's Garo photo): maker / face words count too, and so do clearly read words (a wrong-way-round read is mostly junk).
+export const turnScore = (ws) => { const ok = (ws || []).filter((w) => (w.conf ?? 100) >= 45);
+  return mergeWords(ok).map(classify).filter((x) => x && (SEEN.includes(x.kind) || x.kind === 'face')).length * 2 + ok.filter((w) => (w.conf ?? 0) >= 85 && /[A-Za-z0-9]{3,}/.test(w.text)).length; };
 const quickRead = (bmp) => words(bmp, { x: 0, y: 0, w: bmp.width, h: bmp.height }, { s: Math.min(1, 2000 / Math.max(bmp.width, bmp.height)), tag: 'find' });
 // The upright photo if it reads clearly better turned a quarter either way. Returns { bmp, turned, words }.
 export async function uprightPhoto(bmp, msg = () => {}) {
   const w0 = await quickRead(bmp); const s0 = turnScore(w0);
   let best = { bmp, turned: 0, words: w0, score: s0 };
-  if (s0 >= 8) return best;
+  if (s0 >= 14) return best;
   for (const deg of [90, -90]) {
     msg('Photo looks sideways: trying it turned\u2026');
     const b2 = await turnBitmap(bmp, deg); const w2 = await quickRead(b2); const sc = turnScore(w2);
     if (sc > best.score) best = { bmp: b2, turned: deg, words: w2, score: sc };
   }
-  return best.turned && best.score >= Math.max(3, s0 + 2, s0 * 1.5) ? best : { bmp, turned: 0, words: w0, score: s0 };
+  return best.turned && best.score >= Math.max(4, s0 + 3, s0 * 1.5) ? best : { bmp, turned: 0, words: w0, score: s0 };
 }
 // Crop rect (photo pixels) → canvas scaled by s, rotated by rot (0, 90, -90), cleaned up.
 // v0.13: sy (optional) scales the crop's height separately: label tape fonts are tall and narrow, and
@@ -114,12 +116,19 @@ const clampRect = (r, W, H) => { const x = Math.max(0, Math.round(r.x)), y = Mat
 
 // Read one row of breakers inside rect (photo pixels). Label strips are
 // looked for in the band just below it (or labelRect if given).
-export async function readRowRect(bmp, rect, { labelRect = null, labels = true } = {}) {
+export async function readRowRect(bmp, rect, { labelRect = null, labels = true, hint = null, split = false } = {}) {
   const r = clampRect(rect, bmp.width, bmp.height); const out0 = {};
+  // v0.47.1: clear words from the quick whole-photo read that sit in this row (small print the row read can miss, e.g. "100A")
+  const inR = (w) => w.cx >= r.x && w.cx <= r.x + r.w && (w.bbox.y0 + w.bbox.y1) / 2 >= r.y && (w.bbox.y0 + w.bbox.y1) / 2 <= r.y + r.h;
+  const hints = (hint || []).filter((w) => (w.conf ?? 0) >= 80 && inR(w) && classify(w));
   // Scale so the row is ~650 px tall: breaker text then ends up ~40-60 px high.
   // v0.13: ~500 px tall (was 650) and the second (thresholded) pass only when the first one read few ratings.
   const s = Math.max(0.4, Math.min(2.5, FACE_H / r.h, 4200 / r.w));
   const face = await words(bmp, r, { s, mode: 'thresh', tag: 'face' });
+  for (const w of hints) if (!face.some((f) => f.text === w.text && Math.abs(f.cx - w.cx) < 30)) face.push({ ...w, order: face.length });
+  // v0.47.1: a tall box (the breakers' print at the top and the bottom of each device) is also read in two halves, larger.
+  if (split) for (const k of [0, 1]) { const hr = clampRect({ x: r.x, y: r.y + k * r.h * 0.45, w: r.w, h: r.h * 0.55 }, bmp.width, bmp.height);
+    face.push(...await words(bmp, hr, { s: Math.max(0.4, Math.min(2.5, FACE_H / hr.h, 4200 / hr.w)), mode: 'thresh', tag: 'half' })); }
   const useful = (ws) => mergeWords(ws).map(classify).filter((x) => x && ['model', 'marking', 'ma'].includes(x.kind)).length;
   const rated = (ws) => readRow(ws).ways.filter((w) => w.rating).length, ways1 = readRow(face).ways;
   if (!ways1.length || rated(face) < ways1.length * 0.85) face.push(...await words(bmp, r, { s, mode: 'stretch', tag: 'face2' }));
@@ -224,12 +233,20 @@ export async function readBoard(parts, progress = () => {}) {
       // v0.47.1: a sideways photo (breakers top to bottom) is turned upright first
       const up = await uprightPhoto(p.bmp, (m) => progress(done / total, m));
       if (up.turned) { p.bmp = up.bmp; p.turned = ((p.turned || 0) + up.turned + 360) % 360; }
-      rects = await findRows(p.bmp, up.words); if (!rects.length) rects = [{ x: 0, y: 0, w: p.bmp.width, h: p.bmp.height }]; p.autoRects = rects;
+      rects = await findRows(p.bmp, up.words); if (!rects.length) rects = [{ x: 0, y: 0, w: p.bmp.width, h: p.bmp.height }]; p.autoRects = rects; p.hint = up.words;
     }
-    const readAll = async (bm, rs) => { const out = []; for (const [ri, r] of rs.entries()) { phase = `Reading the breakers${rs.length > 1 ? ' (row ' + (ri + 1) + ')' : ''}…`; out.push({ ...await readRowRect(bm, r), part: pi, row: ri }); } return out; };
-    let got = await readAll(p.bmp, rects);
-    // v0.47.1: boxes drawn round a sideways row read nothing useful: try the photo turned a quarter each way.
     const useful = (rs) => rs.reduce((n, r) => n + r.ways.filter((w) => w.rating).length + r.board.filter((o) => o.kind !== 'other').length, 0);
+    const readAll = async (bm, rs, hint = null) => { const out = []; for (const [ri, r] of rs.entries()) {
+      phase = `Reading the breakers${rs.length > 1 ? ' (row ' + (ri + 1) + ')' : ''}…`; let res = await readRowRect(bm, r, { hint });
+      // v0.47.1: a row found automatically that reads little may be just one band of the breakers' print (Garo: words at
+      // the top and the bottom of each device): read it again taller and keep the better read.
+      if (!(p.rects && p.rects.length) && rs.length === 1 && useful([res]) < 3 && r.h < bm.height / 3) {
+        const big = clampRect({ x: 0, y: r.y - r.h * 2, w: bm.width, h: r.h * 6 }, bm.width, bm.height);
+        const res2 = await readRowRect(bm, big, { hint, split: true }); if (useful([res2]) > useful([res])) { res = res2; p.autoRects = rs.map((x) => (x === r ? big : x)); }
+      }
+      out.push({ ...res, part: pi, row: ri }); } return out; };
+    let got = await readAll(p.bmp, rects, p.hint);
+    // v0.47.1: boxes drawn round a sideways row read nothing useful: try the photo turned a quarter each way.
     if (p.rects && p.rects.length && useful(got) === 0 && rects.every((r) => r.h > r.w * 0.8)) {
       for (const deg of [90, -90]) {
         const b2 = await turnBitmap(p.bmp, deg); const r2 = rects.map((r) => turnRect(r, deg, p.bmp.width, p.bmp.height)); const g2 = await readAll(b2, r2);
