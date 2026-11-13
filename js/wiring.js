@@ -376,7 +376,7 @@ export const SPUR_LOADS = [
 export const spurNeedsLoad = (device) => device === 'fcu' || device === 'sfcu';
 export function circuitSpurList(c) {
   const raw = c && c.diagram && Array.isArray(c.diagram.spurList) ? c.diagram.spurList : [];
-  return raw.filter((s) => s && s.device).map((s) => ({ id: s.id || '', device: s.device, load: s.load || '', other: s.other || '' }));
+  return raw.filter((s) => s && s.device).map((s) => ({ id: s.id || '', device: s.device, load: s.load || '', other: s.other || '', from: s.from || '' }));
 }
 export function spurListTotal(c) { return circuitSpurList(c).length; }
 export function addSpur(c, { device = 'socket', load = '', other = '' } = {}) {
@@ -399,6 +399,7 @@ export function updateSpur(c, id, patch) {
   const i = list.findIndex((x) => x.id === id); if (i < 0) return;
   const next = { ...list[i], ...patch };
   if (!spurNeedsLoad(next.device)) { delete next.load; delete next.other; }
+  if (!next.from) delete next.from;
   list[i] = next;
 }
 export function spurLabel(s) {
@@ -419,6 +420,21 @@ export function spurLoadKind(s) {
   if (s.load === 'heater' || s.load === 'towel') return 'heater';
   return 'appliance';
 }
+export function spurSocketCount(c) {
+  if (pointKind(c) !== 'socket') return 0;
+  if (socketRoomsOf(c)) return roomSocketTotal(c);
+  const pc = drawnPointCount(c);
+  const sgl = Math.min(socketSingles(c), pc.shown || 0);
+  return Math.max(0, (pc.shown || 0) - sgl);
+}
+export function spurFromOptions(c) {
+  const n = spurSocketCount(c);
+  const opts = [{ value: '', label: n ? 'Next socket' : 'Junction box (default)' }];
+  for (let i = 1; i <= n; i++) opts.push({ value: String(i), label: 'Socket ' + i });
+  if (n) opts.push({ value: 'jb', label: 'Junction box' });
+  return opts;
+}
+
 export function diagramMainPoints(c) {
   if (socketRoomsOf(c)) return roomSocketTotal(c);
   if (roomListOf(c)) return roomLightTotal(c) + roomFanTotal(c);
@@ -660,7 +676,7 @@ export function layout(model, { W = 380, font = 12, screen = false, cableTable =
     if (!circ || circ === '?') { const m = /circuit\s+(\S+)/i.exec(String(from) || ''); if (m) circ = m[1]; }
     const label = 'C' + n + (circ && circ !== '?' ? ' (circuit ' + circ + ')' : '');
     cables.push({ label, from, to, type: type || '' }); if (key) cableOf[key] = cables[cables.length - 1]; return label; }; const cableOf = {};
-  const busX = 14, devX = busX + 14, devW = F * 4.6, gap = 8; let ringLegB = null;
+  const busX = 14, devX = busX + 14, devW = F * 4.6, gap = 8; let ringLegB = null; let sockAnchors = []; let runEnd = null;
   const T = (sh, x, y, txt, o = {}) => sh.push({ t: 'text', x, y, txt, size: o.size || F, bold: !!o.bold, color: o.color || COL.ink, anchor: o.anchor || 'start' });
   const L = (sh, x1, y1, x2, y2, o = {}) => sh.push({ t: 'line', x1, y1, x2, y2, w: o.w || 1.2, color: o.color || COL.line, ...(o.dash ? { dash: o.dash } : {}) });
   const R = (sh, x, y, w, h, o = {}) => sh.push({ t: 'rect', x, y, w, h, lw: o.lw ? (o.lw < 1.4 ? o.lw * 1.3 : o.lw) : 1.5, color: o.color || COL.box, fill: o.fill || null }); // v0.44.2b: outlines a bit darker and thicker
@@ -859,7 +875,7 @@ export function layout(model, { W = 380, font = 12, screen = false, cableTable =
   function tag(b, bd, c) { b.ref = { bi: bd.bi ?? 0, ci: bd.src ? bd.src.indexOf(c) : 0, mw: model.type === 'MW' }; return b; }
 
   function circuitBlock(c, bus, last, outerBus, spd = '', spur = null) {
-    const sh = []; const info = circuitLines(c, spd); const y = 8; ringLegB = null; heatLab = isTowel(c) ? 'Rail' : 'Rad'; /* v0.44.3: rooms too */ let ctlChained = false; let ctlCap = 0;
+    const sh = []; const info = circuitLines(c, spd); const y = 8; ringLegB = null; sockAnchors = []; runEnd = null; heatLab = isTowel(c) ? 'Rail' : 'Rad'; /* v0.44.3: rooms too */ let ctlChained = false; let ctlCap = 0;
     const dx = bus + 12; const tx = dx + devW + gap; const tw = W - tx - 6;
     // text
     let hh = textLines(sh, tx, y - 2, info.title, tw, { bold: true, color: info.spare ? COL.na : COL.ink });
@@ -987,7 +1003,13 @@ export function layout(model, { W = 380, font = 12, screen = false, cableTable =
         if (i === 0) { L(sh, fx, feedTop, fx, cy, g9); L(sh, fx, cy, inX, cy, g9); }
         else if (rowsX[i - 1][1] !== r) { const pcy = cy - rowH; L(sh, prevEnd, pcy, prevEnd + 3, pcy, g9); L(sh, prevEnd + 3, pcy, prevEnd + 3, pcy + rowH / 2 + S * 0.2, g9); L(sh, prevEnd + 3, pcy + rowH / 2 + S * 0.2, fx, pcy + rowH / 2 + S * 0.2, g9); L(sh, fx, pcy + rowH / 2 + S * 0.2, fx, cy, g9); L(sh, fx, cy, inX, cy, g9); }
         else L(sh, prevEnd, cy, inX, cy, g9);
-        lastCy = cy; it[1](xx, cy); prevEnd = it[2] ? xx + it[3] / 2 + loadR(kindAt(li), S) : xx + it[3]; });
+        lastCy = cy; it[1](xx, cy);
+        if (it[2] && li >= 0) {
+          const kd = kindAt(li), cx = xx + it[3] / 2, kr = loadR(kd, S);
+          runEnd = { x: cx, cy, r: kr, k: kd };
+          if (SOCK[kd]) sockAnchors.push({ x: cx, cy, bot: plateBot(kd, S, cy), k: kd });
+        }
+        prevEnd = it[2] ? xx + it[3] / 2 + loadR(kindAt(li), S) : xx + it[3]; });
       ph = 6 + lab0 + rows * rowH - 8; // v0.43.9: the CCU's socket is on its faceplate now
       if (kind === 'socket' && sgl && items.length) { // spur(s): a branch dropping from the last ring socket, below everything else
         used.add('socket1'); const [lx0, lr] = rowsX[items.length - 1]; const bx = lx0 + items[items.length - 1][3] / 2 + loadR(kindAt(ringN - 1), S) + 3; const by = py + lr * rowH + S / 2; // tees off the line just past the last socket
@@ -1106,6 +1128,22 @@ export function layout(model, { W = 380, font = 12, screen = false, cableTable =
   }
 
   function HP(S) { return { upT: S / 2 * 1.32 + 4, dnB: S * 1.15 + 5 }; }
+  function plateBot(k, S, cy) {
+    if (SOCK[k]) { const r = S / 2; return cy + r * 0.35 + r * 1.7; }
+    if (k === 'jb') return cy + S * 0.45;
+    return cy + loadR(k, S);
+  }
+  function markSock(cx, cy, k, S, extra) {
+    if (SOCK[k]) sockAnchors.push({ x: cx, cy, bot: plateBot(k, S, cy), k, ...(extra || {}) });
+    runEnd = { x: cx, cy, r: loadR(k, S), k, ...(extra || {}) };
+  }
+  function drawJB(sh, cx, cy, S) {
+    const w = S * 1.4, h = S * 0.9;
+    R(sh, cx - w / 2, cy - h / 2, w, h, { fill: [255, 255, 255], color: COL.line, lw: 1.1 });
+    T(sh, cx, cy + small * 0.3, 'JB', { anchor: 'middle', bold: true, size: small * 0.85 });
+    used.add('jb');
+    return { x: cx, cy, bot: cy + h / 2, k: 'jb', r: w / 2 };
+  }
   // v0.44.0: outdoor (IP rated) socket: a small white-on-blue IP badge on the plate's bottom right corner
   function ipMark(sh, cx, cy, k, S) { if (!SOCK[k]) return; const r = S / 2, H = r * 1.7, w = SOCK[k][0] ? H * 2.2 : H * 1.15, top = cy + r * 0.35;
     const ts = small * 0.72, pw = textW('IP', ts, true) + 5, bh = ts * 1.3, bx = cx + w / 2 - pw * 0.6, by = top + H - bh * 0.55;
@@ -1170,33 +1208,123 @@ export function layout(model, { W = 380, font = 12, screen = false, cableTable =
   }
   function circuitSpurSection(sh, c, tx, fromY, maxX) {
     const list = circuitSpurList(c); if (!list.length) return 0;
-    const S = F * 1.5, g = { w: 1.1, color: COL.line }, fx = tx - gap / 2, pitch = S * 1.7 + 10;
-    const t0 = fromY + 6;
-    T(sh, tx, t0, list.length === 1 ? 'Spur' : 'Spurs', { size: small, color: COL.grey, bold: true });
-    let rowY = t0 + small + S * 0.7;
-    L(sh, fx, fromY, fx, rowY, g);
+    const S = F * 1.5, g = { w: 1.1, color: COL.line }, fx = tx - gap / 2;
     const savedHeat = heatLab;
     heatLab = ''; // v0.48: row label already names the load; a "Rail"/"Rad" caption above the symbol would sit on the row above
-    list.forEach((s, i) => {
-      if (i) { L(sh, fx, rowY, fx, rowY + pitch, g); rowY += pitch; }
-      const k = spurSymbolOf(s);
-      const sr = loadR(k, S);
-      const cx = fx + 12 + sr;
-      L(sh, fx, rowY, cx - sr, rowY, g);
-      symbol(sh, k, cx, rowY, S); used.add(k);
-      let end = cx + sr;
-      const lk = spurLoadKind(s);
-      if (lk && lk !== k) {
-        const lr = loadR(lk, S * 0.85);
-        L(sh, end, rowY, end + 6, rowY, g);
-        symbol(sh, lk, end + 6 + lr, rowY, S * 0.85); used.add(lk);
-        end = end + 6 + lr * 2;
-      }
-      const lab = spurLabel(s).replace(/^Spur:\s*/, '');
-      T(sh, end + 6, rowY + small * 0.35, lab, { size: small * 0.9, color: COL.grey });
+    // v0.48: a spur is taken from a socket's terminals (or a JB), not from the left feeder
+    const ports = sockAnchors.slice();
+    const wantsJb = list.some((s) => String(s.from || '').toLowerCase() === 'jb');
+    let jbPort = null;
+    if (!ports.length || wantsJb) jbPort = placeSpurJB(sh, S, g, fx, tx, fromY, maxX);
+
+    const nSock = ports.length;
+    const autoOrder = ports.map((_, i) => i).sort((a, b) => {
+      const dy = ports[b].cy - ports[a].cy;
+      if (Math.abs(dy) > 4) return dy;
+      return ports[a].x - ports[b].x;
     });
+    let ai = 0;
+    const assigned = list.map((s) => {
+      const f = String(s.from || '').trim().toLowerCase();
+      if (f === 'jb' && jbPort) return { s, port: jbPort };
+      const m = /^(?:socket\s*)?(\d+)$/.exec(f);
+      if (m && nSock) return { s, port: ports[Math.min(nSock, Math.max(1, parseInt(m[1], 10))) - 1] };
+      if (nSock) { const pi = autoOrder[ai % autoOrder.length]; ai++; return { s, port: ports[pi] }; }
+      return { s, port: jbPort };
+    });
+
+    const groups = [];
+    const byKey = new Map();
+    assigned.forEach((a) => {
+      if (!a.port) return;
+      const key = a.port.k + '@' + a.port.x.toFixed(1) + ',' + (a.port.cy != null ? a.port.cy.toFixed(1) : '0');
+      if (!byKey.has(key)) { const g0 = { port: a.port, items: [] }; byKey.set(key, g0); groups.push(g0); }
+      byKey.get(key).items.push(a.s);
+    });
+    groups.sort((a, b) => a.port.x - b.port.x);
+
+    let row0 = fromY + 8 + S * 0.65;
+    if (jbPort && jbPort.bot + 4 > fromY && (!ports.length || wantsJb && assigned.some((a) => a.port === jbPort))) {
+      row0 = Math.max(row0, jbPort.bot + S * 0.85 + 6);
+    }
+    const usedX = groups.map((g0) => g0.port.x);
+    const labAt = (px) => {
+      const xs = usedX.slice().sort((a, b) => a - b);
+      const i = xs.findIndex((x) => Math.abs(x - px) < 0.6);
+      const left = i > 0 ? (px - xs[i - 1]) / 2 - 3 : px - tx;
+      const right = i >= 0 && i < xs.length - 1 ? (xs[i + 1] - px) / 2 - 3 : maxX - px - 2;
+      const w = Math.min(130, Math.max(34, left + right));
+      let cx = px;
+      if (cx - w / 2 < px - left) cx = px - left + w / 2;
+      if (cx + w / 2 > px + right) cx = px + right - w / 2;
+      return { x: cx, w };
+    };
+
+    let maxBot = row0;
+    groups.forEach((g0) => {
+      const px = g0.port.x;
+      const lab0 = labAt(px);
+      let yC = row0;
+      let prev = g0.port.bot;
+      g0.items.forEach((s) => {
+        const k = spurSymbolOf(s);
+        const sr = loadR(k, S);
+        const lk = spurLoadKind(s);
+        L(sh, px, prev, px, yC, g);
+        symbol(sh, k, px, yC, S); used.add(k);
+        let endY = yC + sr;
+        if (lk && lk !== k) {
+          const lr = loadR(lk, S * 0.85);
+          const ly = yC + sr + 5 + lr;
+          L(sh, px, yC + sr, px, ly - lr, g);
+          symbol(sh, lk, px, ly, S * 0.85); used.add(lk);
+          endY = ly + lr;
+        }
+        const lab = spurLabel(s).replace(/^Spur:\s*/, '');
+        const labTop = endY + 2;
+        const th = textLines(sh, lab0.x, labTop, lab, lab0.w, { size: small * 0.9, color: COL.grey, anchor: 'middle' });
+        const bot = labTop + th;
+        maxBot = Math.max(maxBot, bot);
+        prev = bot;
+        yC = bot + S * 0.55 + 8;
+      });
+    });
+
     heatLab = savedHeat;
-    return rowY + S * 0.95 - fromY + 6;
+    return Math.max(0, maxBot - fromY + 8);
+  }
+  function placeSpurJB(sh, S, g, fx, tx, fromY, maxX) {
+    const w = S * 1.4, h = S * 0.9, half = w / 2;
+    if (runEnd) {
+      const dir = runEnd.dir || 1;
+      if (runEnd.yB != null) {
+        // ring: sit the JB on the closing join, just past the last socket
+        let jx = runEnd.x + dir * (runEnd.r + 12);
+        if (jx + half > maxX || jx - half < fx) jx = Math.max(fx + half + 4, Math.min(jx, maxX - half));
+        return drawJB(sh, jx, runEnd.cy, S);
+      }
+      let jx = runEnd.x + runEnd.r + 8 + half;
+      if (jx + half <= maxX) {
+        L(sh, runEnd.x + runEnd.r, runEnd.cy, jx - half, runEnd.cy, g);
+        return drawJB(sh, jx, runEnd.cy, S);
+      }
+      const teeX = Math.min(Math.max(runEnd.x + runEnd.r + 4, fx + 8), maxX - 4);
+      if (teeX > runEnd.x + runEnd.r + 0.5) L(sh, runEnd.x + runEnd.r, runEnd.cy, teeX, runEnd.cy, g);
+      const jy = fromY + h / 2 + 2;
+      const jx2 = Math.max(tx + F * 2 + half, Math.min(runEnd.x, maxX - Math.max(half + 10, 64)));
+      if (Math.abs(jx2 - teeX) > 1) {
+        L(sh, teeX, runEnd.cy, teeX, jy, g);
+        L(sh, teeX, jy, jx2 + (jx2 < teeX ? half : -half), jy, g);
+      } else {
+        L(sh, teeX, runEnd.cy, teeX, jy - h / 2, g);
+      }
+      return drawJB(sh, jx2, jy, S);
+    }
+    const jy = fromY + h / 2 + 2;
+    const jx = tx + F * 0.6 + half;
+    L(sh, fx, fromY, fx, jy, g);
+    L(sh, fx, jy, jx - half, jy, g);
+    return drawJB(sh, jx, jy, S);
   }
   function ringPlain(sh, c, pc, sgl, tx, top, tw, feedTop) {
     const S = F * 1.5, g = { w: 1.1, color: COL.line }, step = S * 2 + 10, fx = tx - gap / 2; const { upT, dnB } = HP(S);
@@ -1206,6 +1334,10 @@ export function layout(model, { W = 380, font = 12, screen = false, cableTable =
     const xRr = xL + (per - 1) * step; // right-hand turn sits just past the widest row
     const res = hairpin(sh, rows, { S, g, step, xL, xR: xRr, left: true, startT: fx, startB: tx - gap - devW * 0.3, turnL: [tx + 2, tx + 7], turnR: [xRr + rad + 12, xRr + rad + 7] });
     L(sh, fx, feedTop, fx, res[0].yT, g); ringLegB = res[0].yB; // leg B leaves the breaker's foot (drawn with the breaker)
+    rows.forEach((row, k) => {
+      const pos = res[k].pos;
+      row.items.forEach((kd, j) => markSock(pos[j], row.cy, kd, S, { yB: res[k].yB, dir: res[k].dir }));
+    });
     let bottom = res[res.length - 1].yB + 4;
     const lr0 = res[res.length - 1], jx = lr0.pos.length ? lr0.pos[lr0.pos.length - 1] + lr0.dir * (loadR('socket', S) + 12) : 0; const spurLab = sgl === 1 ? 'Spur' : 'Spurs';
     if (sgl && lr0.dir > 0 && jx + 10 + sgl * step + 4 + textW(spurLab, small) < W - 6) { // spur(s) teed off the ring on the same row, after the join
@@ -1245,7 +1377,7 @@ export function layout(model, { W = 380, font = 12, screen = false, cableTable =
         if (k > 0) { L(ln, x, lineY - pitchR, x, lineY, g); } // drop to the next row
         const end = row.length ? (dir > 0 ? Math.max(...pos) + rad + 8 : Math.min(...pos) - rad - 8) : (dir > 0 ? cx0 + 6 : cx0 - 6);
         // the line runs in one side of each socket and out the other
-        let px = x; row.forEach((kd, j) => { const cx = pos[j], kr = loadR(kd, S); L(ln, px, lineY, cx - dir * kr, lineY, g); symbol(rs, kd, cx, cy, S); used.add(kd); if (ip) ipMark(rs, cx, cy, kd, S); px = cx + dir * kr; });
+        let px = x; row.forEach((kd, j) => { const cx = pos[j], kr = loadR(kd, S); L(ln, px, lineY, cx - dir * kr, lineY, g); symbol(rs, kd, cx, cy, S); used.add(kd); if (ip) ipMark(rs, cx, cy, kd, S); markSock(cx, cy, kd, S); px = cx + dir * kr; });
         L(ln, px, lineY, end, lineY, g); x = end;
         if (k < nRows - 1) cy += pitchR; }
       // back to leg 2: straight on if the last row already runs left, else down a little and back
@@ -1291,7 +1423,7 @@ export function layout(model, { W = 380, font = 12, screen = false, cableTable =
         if (!j) L(rs, bx, cy, cx - kr, cy, g);
         else if (j % per === 0) { const wy = last.y + S * 1.15 + 3, wx = ix + 2, ex = last.x + last.r + 3; L(rs, last.x + last.r, last.y, ex, last.y, g); L(rs, ex, last.y, ex, wy, g); L(rs, ex, wy, wx, wy, g); L(rs, wx, wy, wx, cy, g); L(rs, wx, cy, cx - kr, cy, g); }
         else L(rs, last.x + last.r, cy, cx - kr, cy, g);
-        symbol(rs, k, cx, cy, S); used.add(k); ipTag(cx, cy, k); last = { x: cx, y: cy, r: kr }; });
+        symbol(rs, k, cx, cy, S); used.add(k); ipTag(cx, cy, k); markSock(cx, cy, k, S); last = { x: cx, y: cy, r: kr }; });
       if (!last) L(rs, bx, rowY0, r.spurs ? cx0 - S * 0.8 : bx + 10, rowY0, g);
       let bottom = (last ? last.y : rowY0) + S * 1.15;
       if (r.spurs) { const k = r.spurKind === 'fcu' ? 'fcu' : 'socket1'; used.add(k); const sr = loadR(k, S); const sy = bottom + S * 0.5 + 6, dx = cx0 - rad - 6;

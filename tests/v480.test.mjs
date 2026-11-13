@@ -8,7 +8,7 @@ import { cableCheck } from '../js/checks.js';
 import { adiabatic } from '../js/design.js';
 import { isRingCircuit, autoNA, applyNoDevice, blankCircuit, NODEV_KEYS, DEVICE_KEYS, RESULT_KEYS } from '../js/templates.js';
 import { clean, keyOf, nameFor, mergePresets, distinguishName, presetFrom, shown } from '../js/presets.js';
-import { isRingC, noGuessLoad, pointKind, forgiveDesc, namedLoadKind, listedItems, circuitSpurList, addSpur, removeSpur, updateSpur, spurLabel, spurSymbolOf, spurLoadKind, spurListTotal, diagramPointTotal, diagramMainPoints, drawnPointCount, setPointsToDiagramTotal, roomPointsNote, layout, diagramModel, SPUR_DEVICES, SPUR_LOADS } from '../js/wiring.js';
+import { isRingC, noGuessLoad, pointKind, forgiveDesc, namedLoadKind, listedItems, circuitSpurList, addSpur, removeSpur, updateSpur, spurLabel, spurSymbolOf, spurLoadKind, spurListTotal, diagramPointTotal, diagramMainPoints, drawnPointCount, setPointsToDiagramTotal, roomPointsNote, layout, diagramModel, SPUR_DEVICES, SPUR_LOADS, spurFromOptions, spurSocketCount } from '../js/wiring.js';
 
 const src = (f) => readFileSync(new URL('../' + f, import.meta.url), 'utf8');
 
@@ -191,8 +191,22 @@ test('spurs: each is its own item with a chosen device and load; points hint doe
   assert.equal(circuitSpurList(c)[1].device, 'socket');
   removeSpur(c, id);
   assert.equal(circuitSpurList(c).length, 2);
+  const remaining = circuitSpurList(c)[0].id;
+  updateSpur(c, remaining, { from: '2' });
+  assert.equal(circuitSpurList(c)[0].from, '2');
+  updateSpur(c, remaining, { from: 'jb' });
+  assert.equal(circuitSpurList(c)[0].from, 'jb');
+  updateSpur(c, remaining, { from: '' });
+  assert.equal(circuitSpurList(c)[0].from, '');
+  assert.equal('from' in (c.diagram.spurList[0]), false); // empty from is omitted
   // old backups without spurList still load (no field)
   assert.equal(circuitSpurList({ desc: 'Sockets' }).length, 0);
+  const opts = spurFromOptions({ desc: 'Kitchen sockets', points: '4', ring: false });
+  assert.equal(spurSocketCount({ desc: 'Kitchen sockets', points: '4' }), 4);
+  assert.equal(opts[0].value, '');
+  assert.ok(opts.some((o) => o.value === '1' && o.label === 'Socket 1'));
+  assert.ok(opts.some((o) => o.value === 'jb'));
+  assert.equal(spurFromOptions({ desc: 'Boiler FCUs', points: '3' })[0].label, 'Junction box (default)');
 });
 
 test('spur rows: device + load, no stray Rail/Rad caption on the row above', () => {
@@ -210,8 +224,9 @@ test('spur rows: device + load, no stray Rail/Rad caption on the row above', () 
   const circ = lay([kitchen]).blocks.filter((b) => b.kind === 'circuit' || /Kitchen/.test((b.title || '') + (b.ref || '')));
   const texts = (circ.length ? circ : lay([kitchen]).blocks).flatMap((b) => b.shapes).filter((z) => z.t === 'text');
   const labs = texts.map((z) => z.txt);
-  assert.ok(labs.some((s) => /Single socket/.test(s)), labs.join(' | '));
-  assert.ok(labs.some((s) => /Switched FCU/.test(s) && /Towel/.test(s)), labs.join(' | '));
+  const joined = labs.join(' ');
+  assert.ok(/Single\s+socket/.test(joined), joined);
+  assert.ok(/Switched/.test(joined) && /FCU/.test(joined) && /Towel/.test(joined), joined);
   assert.equal(labs.filter((s) => s === 'Rail' || s === 'Rad').length, 0, 'stray Rail/Rad: ' + labs.join(' | '));
   const combos = [];
   for (const [dev] of SPUR_DEVICES) {
@@ -220,18 +235,123 @@ test('spur rows: device + load, no stray Rail/Rad caption on the row above', () 
       combos.push({ device: dev, load: '' });
     } else combos.push({ device: dev, load: '' });
   }
-  const c2 = { num: '3', desc: 'All spur combos', ring: true, rating: '32', live: '2.5', points: '6', diagram: { spurList: [] } };
+  const c2 = { num: '3', desc: 'All spur combos sockets', ring: true, rating: '32', live: '2.5', points: '6', diagram: { spurList: [] } };
   for (const row of combos) addSpur(c2, row);
   const t2 = lay([c2]).blocks.filter((b) => b.kind !== 'legend' && b.kind !== 'flags' && b.kind !== 'key').flatMap((b) => b.shapes).filter((z) => z.t === 'text').map((z) => z.txt);
   assert.equal(t2.filter((s) => s === 'Rail' || s === 'Rad').length, 0, t2.join(' | '));
+  const squash = (s) => String(s).replace(/\s+/g, '');
+  const hasWrapped = (texts, lab) => {
+    const want = squash(lab);
+    if (texts.some((x) => squash(x) === want)) return true;
+    for (let i = 0; i < texts.length; i++) {
+      let acc = '';
+      for (let j = i; j < Math.min(i + 10, texts.length); j++) {
+        acc += squash(texts[j]);
+        if (acc === want) return true;
+        if (acc.length > want.length) break;
+      }
+    }
+    return false;
+  };
   for (const s of circuitSpurList(c2)) {
     const lab = spurLabel(s).replace(/^Spur:\s*/, '');
-    assert.ok(t2.some((x) => x === lab), 'missing label: ' + lab + ' in ' + t2.join(' | '));
+    assert.ok(hasWrapped(t2, lab), 'missing label: ' + lab + ' in ' + t2.join(' | '));
   }
-  const sockLab = texts.find((z) => z.txt === 'Single socket');
+  const sockLab = texts.find((z) => z.txt === 'Single' || z.txt === 'Single socket');
   const towelLab = texts.find((z) => /Towel/.test(z.txt));
-  assert.ok(sockLab && towelLab, 'expected both row labels');
-  assert.ok(towelLab.y - sockLab.y > 10, `row labels too close: socket y=${sockLab.y} towel y=${towelLab.y}`);
+  assert.ok(sockLab && towelLab, 'expected both row labels in ' + joined);
+  // two spurs on a 4-socket radial sit under different sockets (spread), so x differs
+  assert.ok(Math.abs(towelLab.x - sockLab.x) > 20, `expected different sockets: socket x=${sockLab.x} towel x=${towelLab.x}`);
+  assert.match(src('js/schedule.js'), /spurFromOptions/);
+  assert.match(src('js/schedule.js'), /'From'/);
+});
+
+test('spur lines start at a socket (or a JB when there are no sockets)', () => {
+  const lay = (cs, W = 380) => layout(diagramModel({ type: 'EIC', boards: [{ id: 'b', ref: 'DB1', circuits: cs }] }), { W, font: 12, screen: true });
+  const circ = (cs, W) => lay(cs, W).blocks.filter((b) => b.kind === 'circuit').flatMap((b) => b.shapes);
+  const plates = (sh) => sh.filter((z) => z.t === 'rect' && z.fill && z.fill[0] === 255 && z.h > 12 && z.h < 22 && z.w > 14 && z.y > 50);
+  const drops = (sh) => sh.filter((z) => z.t === 'line' && Math.abs(z.x1 - z.x2) < 0.6 && Math.abs(z.y1 - z.y2) > 12);
+  const startsAt = (drop, ports, tol = 3.5) => {
+    const x = drop.x1, top = Math.min(drop.y1, drop.y2);
+    return ports.some((p) => Math.abs(p.x - x) < tol && Math.abs(p.bot - top) < tol);
+  };
+
+  const kitchen = {
+    num: '2', desc: 'Kitchen sockets', ring: false, rating: '32', live: '2.5', cpc: '1.5',
+    points: '4', device: 'mcb', bs: '60898', type: 'B', diagram: { spurList: [] },
+  };
+  addSpur(kitchen, { device: 'socket1' });
+  addSpur(kitchen, { device: 'sfcu', load: 'towel' });
+  const checkFromSockets = (cs, label, W = 380) => {
+    const sh = circ(cs, W);
+    const pl = plates(sh);
+    assert.ok(pl.length >= 2, label + ': expected socket plates, got ' + pl.length);
+    const minY = Math.min(...pl.map((p) => p.y));
+    // main ring/radial plates (not the spur devices below)
+    const main = pl.filter((p) => p.y < minY + 25 || (p.w > 24 && p.y < minY + 80));
+    const ports = main.map((p) => ({ x: p.x + p.w / 2, bot: p.y + p.h, y: p.y }));
+    const ys = ports.map((p) => p.y);
+    const bottomRow = Math.max(...ys);
+    const preferred = ports.filter((p) => p.y > bottomRow - 8);
+    const spurDrops = drops(sh).filter((d) => Math.min(d.y1, d.y2) >= Math.min(...ports.map((p) => p.bot)) - 1);
+    const fromSock = spurDrops.filter((d) => startsAt(d, ports));
+    assert.ok(fromSock.length >= Math.min(circuitSpurList(cs).length, preferred.length || ports.length),
+      label + ': drops should start at a socket plate. drops=' + spurDrops.map((d) => `(${d.x1.toFixed(1)},${Math.min(d.y1, d.y2).toFixed(1)})`).join(' ')
+      + ' ports=' + ports.map((p) => `(${p.x.toFixed(1)},${p.bot.toFixed(1)})`).join(' '));
+    // the left feeder must not be the thing the spur hangs off
+    const feedX = Math.min(...sh.filter((z) => z.t === 'line').map((z) => Math.min(z.x1, z.x2)));
+    const feederToSpur = drops(sh).filter((d) => Math.abs(d.x1 - feedX) < 2 && Math.max(d.y1, d.y2) > Math.max(...ports.map((p) => p.bot)) + 8);
+    assert.equal(feederToSpur.length, 0, label + ': spur must not drop from the left feeder at x=' + feedX);
+    return { sh, ports, fromSock };
+  };
+  checkFromSockets([kitchen], 'kitchen radial 390', 380);
+  checkFromSockets([kitchen], 'kitchen radial 1440', 1440);
+
+  const ring = {
+    num: '4', desc: 'Upstairs sockets', ring: true, rating: '32', live: '4', cpc: '1.5',
+    points: '6', device: 'mcb', bs: '60898', type: 'B', diagram: { spurList: [] },
+  };
+  addSpur(ring, { device: 'fcu', load: 'other', other: 'Boiler' });
+  checkFromSockets([ring], 'upstairs ring 390', 380);
+  checkFromSockets([ring], 'upstairs ring 1440', 1440);
+
+  // more spurs than sockets: extras stack on a socket, still from that plate
+  const hall = {
+    num: '9', desc: 'Hall sockets', ring: false, rating: '32', live: '2.5', points: '2',
+    device: 'mcb', bs: '60898', type: 'B', diagram: { spurList: [] },
+  };
+  addSpur(hall, { device: 'socket1' });
+  addSpur(hall, { device: 'socket' });
+  addSpur(hall, { device: 'sfcu', load: 'towel' });
+  const hallR = checkFromSockets([hall], '2 sockets 3 spurs');
+  // at least one socket has a drop (the stack shares that origin)
+  assert.ok(hallR.fromSock.length >= 2, 'stack still starts at sockets');
+
+  // optional From: socket 3
+  const k2 = { ...kitchen, diagram: { spurList: [] } };
+  addSpur(k2, { device: 'socket1' });
+  const id = addSpur(k2, { device: 'sfcu', load: 'towel' });
+  updateSpur(k2, id, { from: '3' });
+  const sh2 = circ([k2], 380);
+  const pl2 = plates(sh2).sort((a, b) => a.x - b.x || a.y - b.y);
+  const main2 = (() => { const top = Math.min(...pl2.map((p) => p.y)); return pl2.filter((p) => p.y < top + 8); })();
+  assert.ok(main2.length >= 3, 'kitchen has 4 sockets');
+  const sock3 = main2[2];
+  const d3 = drops(sh2).filter((d) => startsAt(d, [{ x: sock3.x + sock3.w / 2, bot: sock3.y + sock3.h }]));
+  assert.ok(d3.length >= 1, 'from=3 should drop from the third socket at x=' + (sock3.x + sock3.w / 2).toFixed(1));
+
+  // no socket items: a radial of FCUs takes the spur from a JB on the cable
+  const fcu = {
+    num: '8', desc: 'Boiler FCUs', ring: false, rating: '16', live: '2.5', points: '3',
+    device: 'mcb', bs: '60898', type: 'B', diagram: { spurList: [] },
+  };
+  addSpur(fcu, { device: 'sfcu', load: 'heater' });
+  const shF = circ([fcu], 380);
+  const jb = shF.filter((z) => z.t === 'text' && z.txt === 'JB');
+  assert.ok(jb.length >= 1, 'expected a JB symbol, texts=' + shF.filter((z) => z.t === 'text').map((z) => z.txt).join(' | '));
+  const jbX = jb[0].x;
+  const fromJb = drops(shF).filter((d) => Math.abs(d.x1 - jbX) < 3 && Math.max(d.y1, d.y2) > jb[0].y + 4);
+  assert.ok(fromJb.length >= 1, 'spur should drop from the JB at x=' + jbX.toFixed(1));
 });
 
 test('Check calculator has full Table 52.2 Ci and Use on a circuit; Size accepts commas via dec', () => {
