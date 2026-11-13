@@ -1,6 +1,6 @@
 # Handoff notes
 
-Status: live is **v0.45.0 beta** (https://mattytattie.github.io/sparky/, main 605886d), PUBLISHED 9 Nov 2026 13:48 GMT (Matthew: "Go live" 13:47). Android: Zs Pro v5 (0.45.0) APK at https://github.com/MattyTattie/sparky/releases/download/app-v5/ZsPro-0.45.0.apk (release app-v5, Latest). The app is called Zs Pro; repo, data keys, cache prefix and Android package still say sparky on purpose (see RENAME.md).
+Status: live is **v0.47.1 beta** (https://mattytattie.github.io/sparky/, main 04d85b9 / commit b93e775 on branch v0.47.1, PUBLISHED 9 Nov 2026 20:39 GMT). **v0.48.0 beta is built locally, not pushed or published** (`sparky-v0.48.0`). Android: last published APK is still Zs Pro v5 (0.45.0) at https://github.com/MattyTattie/sparky/releases/download/app-v5/ZsPro-0.45.0.apk. The app is called Zs Pro; repo, data keys, cache prefix and Android package still say sparky on purpose (see RENAME.md).
 Run the tests with `node --test tests/*.test.mjs tests/*.test.js` (plain `node --test tests/` doesn't work on Node 24). PDF tests find jsPDF's Node build through tests/jspdf-node.cjs; if it's missing it runs tests/setup-jspdf.sh (npm, into tests/.jspdf, git-ignored).
 
 Open points
@@ -519,3 +519,28 @@ Live check 9 Nov ~20:40 GMT: https://mattytattie.github.io/sparky/sw.js serves s
 Headless 390px smoke on live: app opens (0.47.1 beta, cache sparky-v0.47.1), cert opens, PDF builds (7 pages), no page errors.
 Matthew's real DB2 photo scanned on LIVE (fake job, DB2): turned upright; B50 MCB circuit on the board RCD; main switch 100 A
 BS EN 60947-3; RCD BS EN 61008 63 A 300 mA; SPD T2. Web-only: no APK rebuild (ZsPro-0.45.0.apk still current).
+
+## v0.48.0 beta (BUILT LOCALLY 13 Nov 2026, NOT pushed / not published)
+
+Matthew said "go for it" on the open 10 Nov list and the 13 Nov calculator + diagram audit (faults, upgrades, and the two items added at the end). APP_VERSION `0.48.0 beta`, SW cache `sparky-v0.48.0`. Live stays v0.47.1 until he says go live.
+
+What changed (optional fields only; DB name `sparky-certs`, storage keys and backup/sync/export format unchanged; old backups still load):
+
+- **No device fitted / spare:** presets are not highlighted; Type and Rating have an N/A chip (Rating chips still appear when Type is N/A); `applyNoDevice` writes N/A on the whole row (device boxes + test results), still editable by hand; leftover B / 3 A / 500 V on already-ticked old certs (no `noDevAuto`) display as N/A until the next edit. Optional `c.noDevAuto`.
+- **Device presets:** identical-looking B50 chips merge (`clean()` strips leftover RCD from MCBs that have no own RCD); `distinguishName()` labels real differences.
+- **Diagram ring vs radial:** `isRingC` uses the same rule as the schedule tick (`isRingCircuit`). Kitchen sockets, 32 A 2.5 mm², tick OFF, draws as a radial; upstairs 32 A 4 mm², tick ON, no "ring" in the name, draws as a ring.
+- **Schedule cable check:** optional ambient / grouping / Ci on the circuit (`c.ambient`, `c.grouped`, `c.grouping`, `c.ci`) → Iz after factors, same sums as Check. 6 mm² T&E method C at 55 °C: It 47 A, Ca 0.61, Iz 28.67 A, amber vs 32 A. With no factors, the old "before correction factors" In-vs-It wording is unchanged. Folded "Correction factors and maker I²t (optional)" on the circuit page.
+- **Name-based load symbols:** cooker, shower, EV, immersion, heater (and hybrid inverter) are drawn from the description when points are blank, without writing `c.points`. Forgiving: case-insensitive, extra words ignored, typos/abbrevs (`showr`, `elec shower`, `cookr`, `imm`, `EV` / `car charger`). A user item list always wins, even if emptied. Generic "N × points" stays text-only.
+- **Prev / All / Next bar at 390px:** the circuit page is a flex column (`.circuitpage` / `.circuit-scroll` / `body.circedit`); the bar is a real footer, always visible, and does not cover rating chips or RCD fields at 390px or 1440px. `pagein` no longer uses `transform` (that had made `position:fixed` stick to `main` on phones).
+- **Comma decimals:** shared `dec()` in `js/calc.js` (re-exported from `calckit.js`) in every calculator UI and in the core sums (`sizeCable`, `voltDrop`, `designCurrent`, `lengthFromR1R2`, etc.). `9,5` kW and Ze `0,35` work.
+- **Check calculator:** full Table 52.2 Ci picker; **"Use on a circuit"** (cable + device only, never test results — same plan as Size).
+- **Table 4B1:** 90 °C Ca at 25 °C is 1.04 (√((90−25)/(90−30)) = 1.0408), same as the 20 °C column. 70 °C at 25 °C stays 1.03.
+- **`lengthFromR1R2`:** ring-aware (measured R1+R2 on a ring is loop/4, so length = radial × 4) and comma-safe; the circuit page shows the hint on rings too.
+- **"Single-phase 230 V"** at ≤420px stacks as one full-width chip, no orphan "V".
+- **Maker I²t:** optional (`c.i2t`) on Check, Size, and the circuit fold; `adiabatic({ makerI2t })` uses it when given, otherwise the conservative default.
+- **Diagram "Share as PNG"** next to View PDF (`#diagrampngbtn`).
+- **Cable labels:** `C3 (circuit 5)` so drawing-order C-numbers sit next to the circuit number.
+- **Short RCD hints:** EV Type B / 6 mA RDC-DD (Section 722); Type A for sockets (outdoor wording if the description mentions outdoor); S-type if IΔn ≥ 100 or the board is upstream of 30 mA.
+- **Spurs on rings and radials:** each spur is its own item (`c.diagram.spurList`: device + what it feeds — FCU → boiler/extractor/heater/towel rail, single/double socket, cooker hood, light, etc.). The diagram draws each spur off the ring or radial with that device and load, one per row so labels do not collide. Points served is left as Matthew set it, with a hint and an optional "Set points to N".
+
+Tests: `node --test tests/*.test.mjs tests/*.test.js` — 692 pass, including new `tests/v480.test.mjs` (old-backup `parseBackup`/`planRestore`/`normaliseCert`, ring/radial, Iz after factors, forgiving symbols, spurs, applyNoDevice, presets, maker I²t, Ca 1.04, commas). Headless Chromium at 390px and 1440px on a fake 4-DB EIC (no customer data). Diagram and EIC PDFs: 0 overlaps (`tests/pdf_overlap.py`). Source backup before the work: `/workspace/polish-review/zspro-v0480/sparky-app-v0.47.1-HEAD-04d85b9.tar.gz`. Screenshots: `/workspace/polish-review/zspro-v0480/shots/` and `/workspace/polish-review/zspro-v0480/for-matthew/`.

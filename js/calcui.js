@@ -2,20 +2,21 @@
 // the cable; it tells you straight away whether the cable carries the
 // current, the volt drop is OK, and the Zs will be within the limit.
 import { h, fill } from './ui.js';
+import { useOnCircuit } from './usecircuit.js';
 import { route, page } from './app.js';
-import { moreline } from './calckit.js';
+import { moreline, dec } from './calckit.js';
 import { ccc, CALCS, setLastCalc, lastCalc, formKit, icard, more, answerCard, pchip, resline, detailCard, banner } from './calckit.js';
 import { ringCheck } from './checks.js';
 import { icon } from './icons.js';
 import { SYMBOLS } from './symbols.js';
 import { groupSel, groupWords, methodPick, longPick, ciPick, ciWords } from './calckit.js';
-import { CABLES, CABLE_PICKS, AMBIENTS, CA_SOURCE, ARMOUR_MOHM_PER_M, TEMP_MULT, THREE_PHASE_CABLES, UL } from './cables.js';
+import { CABLES, CABLE_PICKS, AMBIENTS, CA_SOURCE, ARMOUR_MOHM_PER_M, TEMP_MULT, THREE_PHASE_CABLES, UL, CI_OPTIONS } from './cables.js';
 import { voltDrop, sizeCable, designZs, r1r2At20, izLine } from './calc.js';
 import { adiabatic, kFor, cpcAreaFor } from './design.js';
 import { CHECK_NOTE, DEVICES, deviceById, ratingsFor, maxZs, maxZsSource, maxZsForTrip, devName } from './limits.js';
 
 const CABLE_ORDER = ['te', 'te3', 'swa', 'swaX', 'swa3', 'swa3X', 'singles', 'tails', 'h07', 'flex', 'tri', 'sycy'];
-const DEFAULTS = { phase: '1', device: 'rcbo', type: 'B', rating: '32', ib: '20', shape: 'radial', length: '25', lighting: false, ze: '0.35', cable: 'te', method: 'C', size: 'auto', cpcMode: 'core', ambient: '30', grouped: '1', grouping: 'bunched', ci: '1', time: 0.4, spread: false, ig: '', tg: '' };
+const DEFAULTS = { phase: '1', device: 'rcbo', type: 'B', rating: '32', ib: '20', shape: 'radial', length: '25', lighting: false, ze: '0.35', cable: 'te', method: 'C', size: 'auto', cpcMode: 'core', ambient: '30', grouped: '1', grouping: 'bunched', ci: '1', time: 0.4, spread: false, ig: '', tg: '', i2t: '' };
 const SHAPES = [['radial', 'Radial'], ['ring-point', 'Ring: load at far point'], ['ring-spread', 'Ring: load spread']];
 
 // CPC for a cable + size (T&E has a smaller CPC; SWA uses a core or the armour).
@@ -62,12 +63,12 @@ route(/^\/calc\/check$/, async () => {
     if (!three && !CABLE_ORDER.includes(v.cable)) { const back = { h073: 'h07', tri3: 'tri', sycy3: 'sycy' }; v.cable = back[v.cable] || 'te'; }
     if (three) v.shape = 'radial';
     const d = deviceById(v.device) || deviceById('rcbo');
-    if (d.adj && !(Number(v.rating) > 0)) v.rating = '20';
+    if (d.adj && !(dec(v.rating) > 0)) v.rating = '20';
     if (!d.types.includes(v.type)) v.type = d.types[0] || '';
     const ratings = ratingsFor(d.id, v.type); if (!d.adj && ratings.length && !ratings.map(String).includes(String(v.rating))) v.rating = String(ratings.find((r) => r >= 20) || ratings[0]);
     const cab = CABLES[v.cable] || CABLES.te; if (!cab.methods[v.method]) v.method = Object.keys(cab.methods)[0];
     if (v.size !== 'auto' && !cab.sizes.map(String).includes(String(v.size))) v.size = 'auto';
-    const amb = AMBIENTS.includes(Number(v.ambient)) ? v.ambient : v.ambient;
+    const amb = AMBIENTS.includes(dec(v.ambient)) ? v.ambient : v.ambient;
     fill(form,
       icard('Supply and load', [
         F.seg('phase', 'Supply', [['1', 'Single-phase 230 V'], ['3', '3-phase 400 V']], three ? 'Balanced 3-phase load. Put in the current in each phase. ⚠ 3-phase cable figures are from memory of Appendix 4: check them.' : '', 'small'),
@@ -90,13 +91,14 @@ route(/^\/calc\/check$/, async () => {
           methodPick(v, set, cab),
           h('div', { class: 'grid2' }, F.sel('ambient', 'Hottest air round it', AMBIENTS.map((t) => [t, t + ' °C'])), F.num('grouped', 'Circuits grouped', { ph: '1', hint: 'Including this one. Blank = 1' })),
           groupSel(F, v, set),
-          ciPick(v, set, [['1', 'None (Ci 1.0)'], ['0.5', 'Totally surrounded for 0.5 m or more (Ci 0.5)']]),
+          ciPick(v, set, CI_OPTIONS),
           cab.note ? h('p', { class: 'note warnnote' }, cab.note) : null],
-          `method ${v.method}, ${amb} °C, ${groupWords(v)}, ${ciWords(v, v.ci === '0.5' ? 'in insulation' : 'no insulation')}`)], { step: 3, gives: 'Iz', key: 'cable' }),
+          `method ${v.method}, ${amb} °C, ${groupWords(v)}, ${ciWords(v, (CI_OPTIONS.find(([k]) => String(k) === String(v.ci)) || [, 'none'])[1])}`)], { step: 3, gives: 'Iz', key: 'cable' }),
       icard('Length and earthing', [
         h('div', { class: 'grid2' }, F.num('length', v.shape === 'radial' ? 'Length' : 'Ring length', { unit: 'm', hint: v.shape === 'radial' ? 'Board to the far end' : 'All the way round' }), F.num('ze', 'Ze at the board', { unit: 'Ω', ph: '0.35', hint: '0.35 Ω PME (TN-C-S), 0.8 Ω TN-S. Measured is best.' })),
         CABLES[v.cable].cores === 3 && !CABLES[v.cable].cpcCore ? F.seg('cpcMode', 'Earth (CPC)', [['core', '3rd core'], ['armour', 'Armour']], '', 'small') : null,
         F.chk('lighting', 'Lighting circuit', 'Ticked = 3% volt drop limit instead of 5%.'),
+        F.num('i2t', 'Maker’s I²t (optional)', { unit: 'A²s', hint: 'Leave blank to use the app’s conservative let-through. If you put the breaker’s I²t in, the adiabatic check uses that.' }),
         v.shape === 'radial' ? F.chk('spread', 'Load spread evenly along the run', 'Like lighting points. Volt drop is worked out at half the length.') : null,
       ], { step: 4, gives: 'VD, Zs, adiabatic', key: 'earth' }));
   };
@@ -104,21 +106,21 @@ route(/^\/calc\/check$/, async () => {
   const draw = () => {
     const d = deviceById(v.device); const ring = v.shape === 'radial' ? false : v.shape.slice(5);
     const three = v.phase === '3' && CABLES[v.cable] && CABLES[v.cable].phase === 3;
-    const s = sizeCable({ cable: v.cable, method: v.method, ib: +v.ib, inA: +v.rating, length: +v.length, ambient: +v.ambient, grouped: +v.grouped, grouping: v.grouping, insulationCi: +v.ci, bs3036: v.device === 'bs3036', lighting: v.lighting, ring, uo: three ? UL : undefined, spread: !ring && !!v.spread });
-    const imag = d && d.adj ? (Number(v.im) > 0 ? Number(v.im) : Number(v.rating) * (d.adj === 'mpcb' ? 13 : 10)) : null;
-    const igA = d && d.adj === 'mccb' && Number(v.ig) > 0 ? Number(v.ig) : null; const tgS = Number(v.tg) > 0 ? Number(v.tg) : null; // v0.25 LSIG
+    const s = sizeCable({ cable: v.cable, method: v.method, ib: dec(v.ib), inA: dec(v.rating), length: dec(v.length), ambient: dec(v.ambient), grouped: dec(v.grouped), grouping: v.grouping, insulationCi: dec(v.ci), bs3036: v.device === 'bs3036', lighting: v.lighting, ring, uo: three ? UL : undefined, spread: !ring && !!v.spread });
+    const imag = d && d.adj ? (dec(v.im) > 0 ? dec(v.im) : dec(v.rating) * (d.adj === 'mpcb' ? 13 : 10)) : null;
+    const igA = d && d.adj === 'mccb' && dec(v.ig) > 0 ? dec(v.ig) : null; const tgS = dec(v.tg) > 0 ? dec(v.tg) : null; // v0.25 LSIG
     const max = igA ? maxZsForTrip(igA) : imag ? maxZsForTrip(imag) : maxZs({ device: v.device, type: v.type, rating: v.rating, time: v.time });
     if (!s.ok) { fill(top, banner(s.error, 'Change the breaker rating or the load so the rating is at least the load.', 'red')); fill(work); return; }
-    const size = v.size === 'auto' ? (s.pick ? s.pick.size : null) : Number(v.size);
+    const size = v.size === 'auto' ? (s.pick ? s.pick.size : null) : dec(v.size);
     const row = s.rows.find((r) => r.size === size);
     const cpc = size != null ? cpcFor(v.cable, size, v.cpcMode) : null;
-    const z = size != null ? designZs({ ze: v.ze, cable: v.cable, live: size, cpc, length: +v.length, ring, device: v.device, type: v.type, rating: v.rating, time: v.time }) : null;
+    const z = size != null ? designZs({ ze: v.ze, cable: v.cable, live: size, cpc, length: dec(v.length), ring, device: v.device, type: v.type, rating: v.rating, time: v.time }) : null;
     if (z && z.ok && imag) { z.max = max; z.pass = z.zs == null ? null : z.zs <= max; }
     const line = resline;
-    const izInfo = (rw) => izLine({ size: rw.size, it: rw.it, iz: rw.iz, needIz: rw.needIz, f: !!ring && rw.needIz === 20 ? { ...s.factors, cf: 1 } : s.factors, ring: !!ring && rw.needIz === 20, inA: +v.rating });
+    const izInfo = (rw) => izLine({ size: rw.size, it: rw.it, iz: rw.iz, needIz: rw.needIz, f: !!ring && rw.needIz === 20 ? { ...s.factors, cf: 1 } : s.factors, ring: !!ring && rw.needIz === 20, inA: dec(v.rating) });
     const allOk = row && row.currentOk && (!row.vd || row.vd.pass) && (!z || z.pass !== false);
     let adi = null, adiCp = null, adiK = null, adiArea = null;
-    if (z && z.ok && z.zs != null) { adiCp = cpcAreaFor(v.cable, size, v.cpcMode); adiArea = adiCp ? (adiCp.cpc === 'armour' ? adiCp.area : adiCp.cpc) : null; adiK = kFor({ cable: v.cable, cpcMode: v.cpcMode }); adi = adiabatic({ zs: z.zs, device: v.device, type: v.type, rating: v.rating, k: adiK.k, cpcCsa: adiArea, rcd: !!(d && d.rcd), time: v.time, imag, ig: igA, tg: tgS }); }
+    if (z && z.ok && z.zs != null) { adiCp = cpcAreaFor(v.cable, size, v.cpcMode); adiArea = adiCp ? (adiCp.cpc === 'armour' ? adiCp.area : adiCp.cpc) : null; adiK = kFor({ cable: v.cable, cpcMode: v.cpcMode }); adi = adiabatic({ zs: z.zs, device: v.device, type: v.type, rating: v.rating, k: adiK.k, cpcCsa: adiArea, rcd: !!(d && d.rcd), time: v.time, imag, ig: igA, tg: tgS, makerI2t: dec(v.i2t) }); }
     const cableName = size == null ? 'No size passes' : `${size} mm²${cpc === 'armour' ? ' + armour CPC' : cpc ? ` / ${cpc} CPC` : ''}`;
     const chips = [
       row ? pchip(row.currentOk, 'Current') : pchip(false, 'Current'),
@@ -128,7 +130,7 @@ route(/^\/calc\/check$/, async () => {
     ];
     fill(top, answerCard({ kicker: allOk ? 'This circuit passes' : 'This circuit needs a look', big: [size == null ? cableName : `${size} mm²${cpc === 'armour' ? ' + armour CPC' : cpc ? ` / ${cpc} mm² CPC` : ''}`, devName(d, v.type, v.rating, three, imag)], good: allOk ? (adi && adi.ok && !adi.pass ? 'warn' : true) : false,
       sub: `${three ? '3-phase 400 V · ' : ''}${CABLES[v.cable].label.split(',')[0]} · ${v.shape === 'radial' ? 'radial' : 'ring'} ${v.length} m · ${v.ib} A ${three ? 'per phase' : 'load'}${v.lighting ? ' · lighting' : ''}${!ring && v.spread ? ' · load spread' : ''}${igA ? ' · Ig ' + igA + ' A' : ''}`, chips,
-      extra: [row ? ccc(izInfo(row), 'Breaker: ' + devName(d, v.type, v.rating, three, imag)) : null, size != null && Number(v.length) ? h('div', { class: 'ans-test' }, icon('clipboard', { size: 16 }), `When you test: expect R1+R2 about ${r1r2At20({ live: size, cpc, length: +v.length, cores: CABLES[v.cable].cores, ring, rTable: CABLES[v.cable].rTable || null })} Ω at 20 °C${ring ? ' (ring, end-to-end ÷ 4)' : ''}.`) : null] }),
+      extra: [row ? ccc(izInfo(row), 'Breaker: ' + devName(d, v.type, v.rating, three, imag)) : null, size != null && dec(v.length) ? h('div', { class: 'ans-test' }, icon('clipboard', { size: 16 }), `When you test: expect R1+R2 about ${r1r2At20({ live: size, cpc, length: dec(v.length), cores: CABLES[v.cable].cores, ring, rTable: CABLES[v.cable].rTable || null })} Ω at 20 °C${ring ? ' (ring, end-to-end ÷ 4)' : ''}.`) : null, size != null ? h('button', { class: 'btn primary', style: 'margin-top:10px;width:100%', 'data-use': '1', type: 'button', onclick: () => useOnCircuit({ cable: v.cable, size, cpc, device: v.device, curve: v.type, rating: v.rating, three, cpcMode: v.cpcMode, im: imag, ig: igA, tg: tgS }) }, 'Use on a circuit') : null] }),
       adi && adi.ok && !adi.pass ? banner(`The earth (CPC) may be too small for the fault: it needs ${adi.smin} mm², it\u2019s ${adiArea} mm².`, 'This assumes the worst-case 0.1 s let-through. Check the breaker maker\u2019s I²t figure, or go up a cable size.') : null);
     fill(work,
       detailCard('chk-how', 'How it worked it out', [

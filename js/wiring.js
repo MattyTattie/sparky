@@ -5,7 +5,7 @@
 // One layout (plain shapes) feeds two renderers: SVG for the screen and
 // jsPDF lines/text for the PDF, so both always match.
 // =====================================================================
-import { isSpareCircuit, circuitFedBySource } from './templates.js';
+import { isSpareCircuit, circuitFedBySource, isRingCircuit } from './templates.js';
 import { showRcdType } from './rcdtype.js';
 import { checkCircuit, boardCtx, boardIsTT } from './checks.js';
 
@@ -75,8 +75,18 @@ export const MAX_SOCKETS = 40;
 // ---------- what kind of point a circuit feeds ----------
 // v0.43.3: electric heaters / radiators / towel rails (drawing only; pointKind is unchanged)
 export const isHeater = (c) => /towel|radiator|\brads?\b|heater|storage heat|panel heat|convector/.test(String((c && c.desc) || '').toLowerCase()) && !/immersion|water/.test(String((c && c.desc) || '').toLowerCase());
+// v0.48: expand common typos and abbrevs; case-insensitive; extra words ignored by the regexes below.
+export function forgiveDesc(d) {
+  let s = String(d || '').toLowerCase();
+  s = s.replace(/\bshowr\b/g, 'shower');
+  s = s.replace(/\bcookr\b/g, 'cooker');
+  s = s.replace(/\belec(?:tric)?\s+show\w*/g, 'shower');
+  s = s.replace(/\bimm(?:ersion)?\b/g, 'immersion');
+  s = s.replace(/\b(evse|car\s*charg\w*|charge\s*points?|ev\s*charg\w*)\b/g, 'ev charger');
+  return s;
+}
 export function pointKind(c) {
-  const d = String((c && c.desc) || '').toLowerCase();
+  const d = forgiveDesc((c && c.desc) || '');
   if (/socket|ring|s\/o|\bsoc|\bs(?:oc|c)?kts?\b|\bsckt/.test(d)) return 'socket';
   if (/light|lamp|ltg|lighting/.test(d)) return 'light';
   if (/cooker|oven|hob|range/.test(d)) return 'cooker';
@@ -95,7 +105,7 @@ export const SOCK = { socket: [true, true], socketu: [true, false], socket1: [fa
 export const KIND_NAME = { heater: 'Heater / radiator', socket: 'Socket', light: 'Light', cooker: 'Cooker', hob: 'Hob', oven: 'Oven', combi: 'Combi oven', hybinv: 'Hybrid inverter', dciso: 'DC rotary isolator', aciso: 'AC rotary isolator', pvarray: 'PV panels (PV array)', battery: 'Battery (home storage)', shower: 'Shower', alarm: 'Smoke / heat alarm', immersion: 'Immersion heater', ev: 'EV charger', fan: 'Fan', fcu: 'Fused spur (FCU)', sfcu: 'Switched fused connection unit (SFCU)', km: 'Contactor coil (KM1, KM2 and on), switched by the controller before it', shelly: 'Shelly smart relay', hive: 'Hive heating controller', relay: 'Other controller (named in the box)', flex: 'Flex outlet (cable outlet plate)', appliance: 'Fixed appliance', point: 'Point' };
 // Plural words for the "Points:" line.
 const KIND_PLURAL = { heater: 'heaters', socket: 'sockets', light: 'lights', cooker: 'cookers', hob: 'hobs', oven: 'ovens', combi: 'combi ovens', hybinv: 'hybrid inverters', dciso: 'DC rotary isolators', aciso: 'AC rotary isolators', pvarray: 'PV arrays', battery: 'batteries', shower: 'showers', alarm: 'alarms', immersion: 'immersions', ev: 'EV chargers', fan: 'fans', fcu: 'FCUs', sfcu: 'SFCUs', km: 'contactors', shelly: 'Shelly relays', flex: 'flex outlets', appliance: 'fixed appliances', point: 'points' };
-const KIND_ONE = { heater: 'heater', socket: 'socket', light: 'light', cooker: 'cooker', hob: 'hob', oven: 'oven', combi: 'combi oven', hybinv: 'hybrid inverter', dciso: 'DC rotary isolator', aciso: 'AC rotary isolator', pvarray: 'PV array', battery: 'battery', shower: 'shower', alarm: 'alarm', immersion: 'immersion', ev: 'EV charger', fan: 'fan', fcu: 'FCU', sfcu: 'SFCU', km: 'contactor', shelly: 'Shelly relay', flex: 'flex outlet', appliance: 'fixed appliance', point: 'point' };
+export const KIND_ONE = { heater: 'heater', socket: 'socket', light: 'light', cooker: 'cooker', hob: 'hob', oven: 'oven', combi: 'combi oven', hybinv: 'hybrid inverter', dciso: 'DC rotary isolator', aciso: 'AC rotary isolator', pvarray: 'PV array', battery: 'battery', shower: 'shower', alarm: 'alarm', immersion: 'immersion', ev: 'EV charger', fan: 'fan', fcu: 'FCU', sfcu: 'SFCU', km: 'contactor', shelly: 'Shelly relay', flex: 'flex outlet', appliance: 'fixed appliance', point: 'point' };
 // Optional per-circuit diagram extras: circuit.diagram = { rooms, sw1, sw2, swi }.
 // Old certs have none; a lighting circuit then gets one 1-way switch.
 const KEY_EXTRA = { ipsock: 'Outdoor socket, weatherproof (IP rated)', fanh: 'Humidistat (%RH) switching a fan', fant: 'Fan timer / overrun (T)', fani: 'Fan isolator', heater: 'Heater / radiator', tailblock: 'Meter tail connector block', swfuse: 'Switch fuse / isolator (supplying a board)', jbsw: 'Switch-fed: JB to switch, looped switch to switch, each to its own lights', socket: 'Twin socket (switched)', socketu: 'Twin socket (unswitched)', socket1: 'Single socket (switched)', socket1u: 'Single socket (unswitched)', rose: 'Ceiling rose (loop-in)', jb: 'Junction box (JB)', strap: '2-way strappers (two wires)', iso: 'Local switch / isolator: DP switch', fcu: 'Unswitched fused connection unit (FCU)', isofcu: 'Unswitched fused connection unit (FCU)', isosfcu: 'Switched fused connection unit (SFCU)', isofcux: 'Unswitched fused connection unit (FCU) with flex outlet', isosfcux: 'Switched fused connection unit (SFCU) with flex outlet', isoccu: 'Cooker control unit (CCU): 45 A DP switch with a 13 A socket', dpu: 'DP switch in the ring, spurring an unswitched single socket (washer, dishwasher etc.)', dps: 'DP switch in the ring, spurring a switched single socket' };
@@ -118,7 +128,20 @@ export const listedItems = (c) => !!(c && c.diagram && c.diagram.items && typeof
 const LOAD_LAB = { immersion: 'Immersion', cooker: 'Cooker', shower: 'Shower', hob: 'Hob', oven: 'Oven', combi: 'Combi', alarm: 'Alarm', heater: 'Rail', hybinv: 'Inverter', dciso: 'DC iso', aciso: 'AC iso', pvarray: 'PV', battery: 'Battery' };
 const SOLO_OK = new Set(['heater', 'immersion', 'cooker', 'hob', 'oven', 'combi', 'hybinv', 'dciso', 'aciso', 'pvarray', 'battery', 'shower', 'ev', 'appliance', 'flex', 'fan', 'light', 'alarm']);
 export function soloItem(c) { if (!noGuessLoad(c)) return null; const its = itemsOf(c.diagram); return its.length === 1 && SOLO_OK.has(its[0][0]) ? [its[0][0], Math.min(10, +its[0][1] || 1)] : null; }
-export const noGuessLoad = (c) => !!c && !roomListOf(c) && switchInfo(c) === null && pointKind(c) !== 'socket';
+// v0.48: only skip a name-based load symbol once the user has their own item list (even emptied).
+export const noGuessLoad = (c) => listedItems(c);
+// Named loads we can draw from the description (1 of) when Points served is blank, without writing points.
+const NAMED_LOADS = new Set(['cooker', 'shower', 'ev', 'immersion', 'hob', 'oven']);
+export function namedLoadKind(c) {
+  if (!c || listedItems(c) || roomListOf(c) || socketRoomsOf(c)) return null;
+  if (isHeater(c)) return 'heater';
+  const k = pointKind(c);
+  if (NAMED_LOADS.has(k)) return k;
+  const d = forgiveDesc(c.desc);
+  if (/inverter|\bpv\b|solar|battery/.test(d) && !/socket|light/.test(d)) return 'hybinv';
+  return null;
+}
+
 export const isoFor = (c) => isolatorOf(c) || impliedFcu(c);
 export function loadKind(c, iso = isoFor(c)) { const k0 = pointKind(c);
   if (isHeater(c) && ['fcu', 'appliance', 'point'].includes(k0)) return 'heater';
@@ -209,7 +232,8 @@ export function socketRoomsOf(c) {
   if (!Array.isArray(l) || !l.length || pointKind(c) !== 'socket') return null;
   return arrangedOrder(c).map((i) => [l[i], i]).filter(([r]) => r).map(([r, i]) => ({ i, name: val(r.name), sockets: cnt(r.sockets), singles: cnt(r.singles, 10), spurs: cnt(r.spurs, 4), spurKind: r.spurKind === 'fcu' ? 'fcu' : 'socket', dpsw: cnt(r.dpsw, 4), dpsws: cnt(r.dpsws, 4), unsw: cnt(r.unsw, 30), items: itemsOf(r) })); // v0.43.8: sockets are switched unless counted in unsw (doubles first, then singles) // v0.43.8: DP switches in the ring, each spurring a single socket: dpsw = unswitched socket, dpsws = switched socket
 }
-export const isRingC = (c) => /\bring\b/i.test(String((c && c.desc) || '')) || (!/radial/i.test(String((c && c.desc) || '')) && String(val(c && c.rating)) === '32' && String(val(c && c.live)) === '2.5');
+// v0.48: same rule as the schedule's Ring final circuit tick (isRingCircuit). Tick OFF is definitive.
+export const isRingC = (c) => isRingCircuit(c);
 export const roomSocketTotal = (c) => (socketRoomsOf(c) || []).reduce((a, r) => a + r.sockets + r.singles + r.spurs + r.dpsw + r.dpsws, 0);
 export const roomLightTotal = (c) => (roomListOf(c) || []).reduce((a, r) => a + r.lights, 0);
 // v0.43.1: optional room fan: room.fans (0-2), room.fanCtl (how it is switched)
@@ -237,13 +261,24 @@ const ptsWord = (t, f) => (f ? `${t} point${t === 1 ? '' : 's'} (${t - f} light$
 // Screen-only note when the rooms' lights don't add up to Points served.
 export const roomPointTotal = (c) => (socketRoomsOf(c) ? roomSocketTotal(c) : roomLightTotal(c) + roomFanTotal(c));
 export function roomPointsNote(c) {
-  if (socketRoomsOf(c)) { const t = roomSocketTotal(c), pc = pointCount(c), w = `${t} socket${t === 1 ? '' : 's'}`;
-    if (!pc.known) return `Rooms add up to ${w}. Points served is not filled in.`;
-    return t === pc.n ? '' : `Rooms add up to ${w}, but Points served says ${pc.n}.`; }
-  const rl = roomListOf(c); if (!rl) return '';
-  const f = roomFanTotal(c); const t = roomLightTotal(c) + f; const pc = pointCount(c);
-  if (!pc.known) return `Rooms add up to ${ptsWord(t, f)}. Points served is not filled in.`;
-  return t === pc.n ? '' : `Rooms add up to ${ptsWord(t, f)}, but Points served says ${pc.n}.`;
+  const extra = spurListTotal(c);
+  const extraW = extra ? ` and ${extra} spur${extra === 1 ? '' : 's'}` : '';
+  if (socketRoomsOf(c)) {
+    const rooms = roomSocketTotal(c), t = rooms + extra, pc = pointCount(c);
+    const who = extra ? 'Rooms and spurs' : 'Rooms';
+    const w = extra ? `${t} point${t === 1 ? '' : 's'} (rooms + spurs)` : `${rooms} socket${rooms === 1 ? '' : 's'}`;
+    if (!pc.known) return `${who} add up to ${w}. Points served is not filled in.`;
+    return t === pc.n ? '' : `${who} add up to ${w}, but Points served says ${pc.n}.`; }
+  const rl = roomListOf(c);
+  if (!rl && extra) {
+    const pc = pointCount(c);
+    if (!pc.known) return `Spurs add up to ${extra}. Put that in Points served if you want.`;
+    return extra === pc.n ? '' : `Spurs add up to ${extra}, but Points served says ${pc.n}.`;
+  }
+  if (!rl) return '';
+  const f = roomFanTotal(c); const t = roomLightTotal(c) + f + extra; const pc = pointCount(c);
+  if (!pc.known) return `Rooms${extraW} add up to ${ptsWord(t, f)}. Points served is not filled in.`;
+  return t === pc.n ? '' : `Rooms${extraW} add up to ${ptsWord(t, f)}, but Points served says ${pc.n}.`;
 }
 // How many symbols to draw: up to MAX_SYMBOLS, then "+ N more".
 export function pointCount(c) {
@@ -305,6 +340,76 @@ export function groupCircuits(circuits, board = null) {
 }
 // Minor works "Spur added": cert.mw.spur = { on, count, feeds: 'socket' | 'fcu' }.
 export const SPUR_FEEDS = { socket: 'Socket', fcu: 'Fused spur (FCU)' };
+// v0.48: each spur is its own item (device + optional load). Optional field diagram.spurList.
+// Old certs keep room.spurs / mw.spur and still draw them.
+export const SPUR_DEVICES = [
+  ['fcu', 'Unswitched FCU'],
+  ['sfcu', 'Switched FCU'],
+  ['socket1', 'Single socket'],
+  ['socket', 'Double socket'],
+  ['hood', 'Cooker hood'],
+  ['light', 'Light'],
+  ['flex', 'Flex outlet'],
+];
+export const SPUR_LOADS = [
+  ['boiler', 'Boiler'],
+  ['extractor', 'Extractor'],
+  ['heater', 'Heater'],
+  ['towel', 'Towel rail'],
+  ['hood', 'Cooker hood'],
+  ['other', 'Other'],
+];
+export const spurNeedsLoad = (device) => device === 'fcu' || device === 'sfcu';
+export function circuitSpurList(c) {
+  const raw = c && c.diagram && Array.isArray(c.diagram.spurList) ? c.diagram.spurList : [];
+  return raw.filter((s) => s && s.device).map((s) => ({ id: s.id || '', device: s.device, load: s.load || '', other: s.other || '' }));
+}
+export function spurListTotal(c) { return circuitSpurList(c).length; }
+export function addSpur(c, { device = 'socket', load = '', other = '' } = {}) {
+  if (!c.diagram) c.diagram = {};
+  if (!Array.isArray(c.diagram.spurList)) c.diagram.spurList = [];
+  const id = 's' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5);
+  const row = { id, device };
+  if (spurNeedsLoad(device) && load) row.load = load;
+  if (load === 'other' && other) row.other = other;
+  c.diagram.spurList.push(row);
+  return id;
+}
+export function removeSpur(c, id) {
+  if (c && c.diagram && Array.isArray(c.diagram.spurList)) c.diagram.spurList = c.diagram.spurList.filter((s) => s.id !== id);
+}
+export function updateSpur(c, id, patch) {
+  const s = circuitSpurList(c).find((x) => x.id === id);
+  if (!s || !c.diagram) return;
+  const list = c.diagram.spurList;
+  const i = list.findIndex((x) => x.id === id); if (i < 0) return;
+  const next = { ...list[i], ...patch };
+  if (!spurNeedsLoad(next.device)) { delete next.load; delete next.other; }
+  list[i] = next;
+}
+export function spurLabel(s) {
+  if (!s || !s.device) return 'Spur';
+  const dev = (SPUR_DEVICES.find(([k]) => k === s.device) || [s.device, s.device])[1];
+  if (!spurNeedsLoad(s.device)) return 'Spur: ' + dev;
+  const load = s.load === 'other' && s.other ? s.other : (SPUR_LOADS.find(([k]) => k === s.load) || [s.load, s.load || 'load'])[1];
+  return 'Spur: ' + dev + (s.load ? ' \u2192 ' + load : '');
+}
+export function spurSymbolOf(s) {
+  if (!s) return 'socket1';
+  if (s.device === 'hood') return 'appliance';
+  if (s.device === 'fcu' || s.device === 'sfcu') {
+    if (s.load === 'extractor') return 'fan';
+    if (s.load === 'heater' || s.load === 'towel') return 'heater';
+    if (s.load === 'hood') return 'appliance';
+    if (s.load === 'boiler') return 'appliance';
+    return s.device;
+  }
+  return SPUR_DEVICES.some(([k]) => k === s.device) ? s.device : 'socket1';
+}
+export function diagramPointTotal(c) {
+  const rooms = socketRoomsOf(c) ? roomSocketTotal(c) : (roomListOf(c) ? roomLightTotal(c) + roomFanTotal(c) : 0);
+  return rooms + spurListTotal(c);
+}
 export function spurInfo(M) {
   const sp = M && M.spur; if (!sp || !sp.on) return null;
   const n = Math.max(1, Math.min(MAX_SYMBOLS, parseInt(String(sp.count ?? '1'), 10) || 1));
@@ -511,7 +616,12 @@ export function layout(model, { W = 380, font = 12, screen = false, cableTable =
   const F = font, small = F * 0.86, lh = (s) => s * 1.3;
   const blocks = []; const cables = []; let ctx = {}; let feeds = {}; let curBoard = '';
   // v0.41: C1, C2… one per cable run, listed in the PDF's cable table
-  const cable = (from, to, type, key) => { const label = 'C' + (cables.length + 1); cables.push({ label, from, to, type: type || '' }); if (key) cableOf[key] = cables[cables.length - 1]; return label; }; const cableOf = {};
+  const cable = (from, to, type, key) => { const n = cables.length + 1;
+    let circ = '';
+    if (key && String(key).includes('|')) circ = String(key).split('|')[1];
+    if (!circ || circ === '?') { const m = /circuit\s+(\S+)/i.exec(String(from) || ''); if (m) circ = m[1]; }
+    const label = 'C' + n + (circ && circ !== '?' ? ' (circuit ' + circ + ')' : '');
+    cables.push({ label, from, to, type: type || '' }); if (key) cableOf[key] = cables[cables.length - 1]; return label; }; const cableOf = {};
   const busX = 14, devX = busX + 14, devW = F * 4.6, gap = 8; let ringLegB = null;
   const T = (sh, x, y, txt, o = {}) => sh.push({ t: 'text', x, y, txt, size: o.size || F, bold: !!o.bold, color: o.color || COL.ink, anchor: o.anchor || 'start' });
   const L = (sh, x1, y1, x2, y2, o = {}) => sh.push({ t: 'line', x1, y1, x2, y2, w: o.w || 1.2, color: o.color || COL.line, ...(o.dash ? { dash: o.dash } : {}) });
@@ -722,7 +832,7 @@ export function layout(model, { W = 380, font = 12, screen = false, cableTable =
     const reds = info.spare ? [] : diagramFlags(c, ctx);
     if (reds.length) hh += textLines(sh, tx, y - 2 + hh, 'Check: ' + reds.join('; '), tw, { size: small, bold: true, color: COL.red });
     const fed = !info.spare && feeds[String(val(c.num)).toLowerCase()];
-    if (!screen && !info.spare && !info.spd && info.noPoints && !info.rooms && !info.sockRooms && !info.itemRooms && !spur && !fed && !(c.diagram && itemsOf(c.diagram).length)) hh += textLines(sh, tx, y - 2 + hh, 'Points served not recorded', tw, { size: small, bold: screen, color: COL.amber });
+    if (!screen && !info.spare && !info.spd && info.noPoints && !info.rooms && !info.sockRooms && !info.itemRooms && !spur && !fed && !(c.diagram && itemsOf(c.diagram).length) && !namedLoadKind(c)) hh += textLines(sh, tx, y - 2 + hh, 'Points served not recorded', tw, { size: small, bold: screen, color: COL.amber });
     if (!info.spare && circuitFedBySource(c)) hh += textLines(sh, tx, y - 2 + hh, 'Source: ' + (model.sources || 'battery / PV / generator') + ' (power can flow both ways)', tw, { size: small, bold: true, color: COL.brand }); // v0.47.0
     if (fed) hh += textLines(sh, tx, y - 2 + hh, 'Feeds ' + fed.join(', ') + ' (see ' + fed.map((x) => x.split(' (')[0]).join(', ') + ')', tw, { size: small, bold: true, color: COL.brand });
     // contactor (or time clock) between the breaker and the load
@@ -806,7 +916,7 @@ export function layout(model, { W = 380, font = 12, screen = false, cableTable =
       hh = res.bottom - y + 6; feedTop = res.lastY; ctlChained = true;
     }
     // points
-    const pc0 = pointCount(c); const solo = !fed && !ctlChained ? soloItem(c) : null; const pc = solo ? { ...pc0, n: solo[1], shown: solo[1], more: 0, known: true } : (fed && !ctl && !iso) || noGuessLoad(c) || (ctlChained && /^(point|appliance)$/.test(pointKind(c))) ? { ...pc0, shown: 0, more: 0 } : pc0; /* v0.44.0: a control circuit's points are its contactor coils, drawn in the chain */ /* v0.43.1: a sub-main draws no load, it feeds the board */ const kind0 = pointKind(c); const kind = solo ? solo[0] : loadKind(c, iso); void kind0; /* v0.43.3: heaters, radiators, towel rails get the heating-element symbol */ // v0.43.1: the FCU isolator IS the spur, the load is the heater itself
+    const pc0 = pointCount(c); const solo = !fed && !ctlChained ? soloItem(c) : null; const named = !fed && !ctlChained ? namedLoadKind(c) : null; const genericPoint = !listedItems(c) && pointKind(c) === 'point' && !named; const pc = solo ? { ...pc0, n: solo[1], shown: solo[1], more: 0, known: true } : (fed && !ctl && !iso) || noGuessLoad(c) || genericPoint || (ctlChained && /^(point|appliance)$/.test(pointKind(c))) ? { ...pc0, shown: 0, more: 0 } : (named && !pc0.known) ? { n: 1, shown: 1, more: 0, known: true, guessed: true } : pc0; /* v0.44.0: a control circuit's points are its contactor coils, drawn in the chain */ /* v0.43.1: a sub-main draws no load, it feeds the board */ /* v0.48: named cooker/shower/EV/immersion drawn from the description when Points served is blank */ const kind0 = pointKind(c); const kind = solo ? solo[0] : (named && !pc0.known ? named : loadKind(c, iso)); void kind0; /* v0.43.3: heaters, radiators, towel rails get the heating-element symbol */ // v0.43.1: the FCU isolator IS the spur, the load is the heater itself
     const sgl = Math.min(socketSingles(c), pc.shown); const kindAt = (i) => (kind === 'socket' && i >= pc.shown - sgl ? 'socket1' : kind);
     let ph = 0;
     if (!info.spare && !info.spd && info.rooms) {
@@ -878,11 +988,15 @@ export function layout(model, { W = 380, font = 12, screen = false, cableTable =
       T(sh, cx + S, t + F * 1.1, info.spd, { bold: true, size: small });
       ph = sh0 + 6;
     }
+    if (!info.spare && !info.spd && circuitSpurList(c).length) {
+      const fromY = y + hh + 6 + ph;
+      ph += circuitSpurSection(sh, c, tx, fromY, W - 6);
+    }
     const cItems = !info.spare && !info.spd && !ctlChained && c.diagram && !solo ? itemList(c.diagram) : [];
     if (cItems.length) { const S = F * 1.5; const top0 = y + hh + 6 + ph + (ph ? 8 : 0); const t0 = textLines(sh, tx, top0, listedItems(c) && !ph ? 'On this circuit' : 'Also on this circuit', tw, { size: small, color: COL.grey });
       const res = chain(sh, cItems.map((k) => ({ k })), { S, inX: tx - gap / 2, fromY: feedTop, x0: tx + F * 0.6, xMax: W - 6, top: top0 + t0 + 2, wrapX: tx + 2 });
       ph = res.bottom - (y + hh + 6) + 4; }
-    if (screen && !info.spare && !info.spd && info.noPoints && !info.rooms && !info.sockRooms && !info.itemRooms && !cItems.length && !fed) ph += textLines(sh, tx, y + hh + (ph ? 6 + ph : 2), 'Add points served to draw sockets/lights', tw, { size: small, color: COL.amber }) + 4;
+    if (screen && !info.spare && !info.spd && info.noPoints && !info.rooms && !info.sockRooms && !info.itemRooms && !cItems.length && !fed && !namedLoadKind(c) && !circuitSpurList(c).length) ph += textLines(sh, tx, y + hh + (ph ? 6 + ph : 2), 'Add points served to draw sockets/lights', tw, { size: small, color: COL.amber }) + 4;
     // minor works: new spur(s) branching off the ring, in bold brand colour
     if (spur && !info.spare && !info.spd) {
       const fx = tx - gap / 2, S = F * 1.5, step = S + 6;
@@ -1015,6 +1129,36 @@ export function layout(model, { W = 380, font = 12, screen = false, cableTable =
     for (let j = 0; j < n; j++) { const cx = dx + d * (6 + sr + j * step); L(sh, px, sy, cx - d * sr, sy, g); symbol(sh, k, cx, sy, S); if (tag) tag(cx, sy, k); px = cx + d * sr; }
     if (d > 0) { const lx = px + (tag ? 12 : 6); if (lx + textW(lab, small) < maxX) T(sh, lx, sy + small * 0.35, lab, { size: small, color: COL.grey }); }
     else { const lx = px - 6 - textW(lab, small); if (lx > minX) T(sh, lx, sy + small * 0.35, lab, { size: small, color: COL.grey }); }
+  }
+  function circuitSpurSection(sh, c, tx, fromY, maxX) {
+    const list = circuitSpurList(c); if (!list.length) return 0;
+    const S = F * 1.5, g = { w: 1.1, color: COL.line }, fx = tx - gap / 2, pitch = S * 1.55 + 8;
+    const t0 = fromY + 6;
+    T(sh, tx, t0, list.length === 1 ? 'Spur' : 'Spurs', { size: small, color: COL.grey, bold: true });
+    let rowY = t0 + small + S * 0.65;
+    L(sh, fx, fromY, fx, rowY, g);
+    list.forEach((s, i) => {
+      if (i) { L(sh, fx, rowY, fx, rowY + pitch, g); rowY += pitch; }
+      const k = spurSymbolOf(s);
+      const sr = loadR(k, S);
+      const cx = fx + 12 + sr;
+      L(sh, fx, rowY, cx - sr, rowY, g);
+      if (s.load === 'towel') heatLab = 'Rail';
+      else if (s.load === 'heater') heatLab = 'Rad';
+      symbol(sh, k, cx, rowY, S); used.add(k);
+      let end = cx + sr;
+      const lk = s.load === 'extractor' ? 'fan' : (s.load === 'heater' || s.load === 'towel') ? 'heater' : s.load ? 'appliance' : '';
+      if (spurNeedsLoad(s.device) && s.load && lk && lk !== k) {
+        const lr = loadR(lk, S * 0.85);
+        L(sh, end, rowY, end + 6, rowY, g);
+        if (s.load === 'towel') heatLab = 'Rail';
+        symbol(sh, lk, end + 6 + lr, rowY, S * 0.85); used.add(lk);
+        end = end + 6 + lr * 2;
+      }
+      const lab = spurLabel(s).replace(/^Spur:\s*/, '');
+      T(sh, end + 6, rowY + small * 0.35, lab, { size: small * 0.9, color: COL.grey });
+    });
+    return rowY + S * 0.9 - fromY + 6;
   }
   function ringPlain(sh, c, pc, sgl, tx, top, tw, feedTop) {
     const S = F * 1.5, g = { w: 1.1, color: COL.line }, step = S * 2 + 10, fx = tx - gap / 2; const { upT, dnB } = HP(S);

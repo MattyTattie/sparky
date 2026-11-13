@@ -21,12 +21,12 @@ import * as W from '../js/wiring.js';
 const mk = (num, desc, extra = {}) => ({ num, desc, device: 'mcb', type: 'B', rating: '20', live: '2.5', cpc: '1.5', points: '1', ...extra });
 const lay = (cs) => W.layout(W.diagramModel({ type: 'EIC', boards: [{ id: 'b', ref: 'DB1', circuits: cs }] }), { W: 380, font: 12, screen: true });
 const txt = (c) => lay([c]).blocks.filter((b) => b.kind === 'circuit').flatMap((b) => b.shapes.filter((z) => z.t === 'text').map((z) => z.txt));
-test('no load is guessed from the name or points', () => {
+test('named radiator, cooker, shower, EV are drawn from the name (v0.48)', () => {
   const t = txt(mk('22', 'Living Room Radiator'));
-  assert.ok(!t.includes('Rad') && !t.some((x) => /FCU|heater/.test(x)), t.join(' / '));
+  assert.ok(t.includes('Rad') || t.some((x) => /heater|Rail/.test(x)), t.join(' / '));
   assert.ok(t.some((x) => /22 Living Room Radiator/.test(x)));
   for (const d of ['Cooker', 'Towel rail', 'Shower', 'Immersion', 'EV charger', 'Fused spur']) assert.doesNotThrow(() => lay([mk('9', d)]));
-  assert.equal(W.impliedFcu(mk('22', 'Towel rail')), null);
+  assert.ok(W.impliedFcu(mk('22', 'Towel rail')));
 });
 test('items he picks are drawn', () => { assert.ok(txt(mk('22', 'Living Room Radiator', { diagram: { items: { heater: 1 } } })).includes('Rad')); });
 test('editor does not seed items', () => { assert.doesNotMatch(src, /guessedItems/); });

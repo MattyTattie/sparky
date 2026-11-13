@@ -178,6 +178,43 @@ async function makeDiagramPdf(cert, btn) {
   } catch (e) { console.error(e); toast('Couldn\u2019t make the PDF: ' + ((e && e.message) || 'unknown error')); }
   btn.disabled = false; btn.textContent = label;
 }
+export async function diagramPngBlob(cert, { scale = 2 } = {}) {
+  const { diagramSvg, diagramModel, layout } = await import('./wiring.js');
+  const L = layout(diagramModel(cert), {});
+  const hgt = Math.ceil((L.height || L.blocks.reduce((a, b) => a + b.h, 0)) + 6);
+  const svg = diagramSvg(cert).replace('width="100%"', `width="${L.W}" height="${hgt}"`);
+  const blob = new Blob([svg], { type: 'image/svg+xml;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  try {
+    const img = await new Promise((resolve, reject) => {
+      const i = new Image();
+      i.onload = () => resolve(i);
+      i.onerror = () => reject(new Error('Could not render the diagram as an image'));
+      i.src = url;
+    });
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.max(1, Math.round(L.W * scale));
+    canvas.height = Math.max(1, Math.round(hgt * scale));
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+    const png = await new Promise((resolve) => canvas.toBlob((b) => resolve(b), 'image/png'));
+    if (!png) throw new Error('Could not make a PNG');
+    return png;
+  } finally { URL.revokeObjectURL(url); }
+}
+async function makeDiagramPng(cert, btn) {
+  await flush(); const label = btn.textContent; btn.disabled = true; btn.textContent = 'Making PNG\u2026';
+  try {
+    const { pdfName } = await import('./pdf.js');
+    const blob = await diagramPngBlob(cert, { scale: 2 });
+    const name = pdfName(cert, '-diagram').replace(/\.pdf$/i, '') + '.png';
+    const r = await shareOrDownload(blob, name, `Wiring diagram ${cert.number}`);
+    if (r === 'downloaded') toast('Saved the diagram as a PNG');
+  } catch (e) { console.error(e); toast('Couldn\u2019t make the PNG: ' + ((e && e.message) || 'unknown error')); }
+  btn.disabled = false; btn.textContent = label;
+}
 async function makeChart(cert, btn) {
   await flush(); btn.disabled = true;
   try {
@@ -268,7 +305,7 @@ route(/^\/cert\/([^/]+)\/diagram$/, async (id) => {
     diagramHasCircuits(cert) ? (extrasEl = extrasCard(cert, () => { draw(); drawIssues(); })) : null,
     diagramHasCircuits(cert) && !(cert.boards || []).some((b) => (b.circuits || []).some((c) => isControlCircuit(c, b.circuits))) ? controlCard(cert, () => { draw(); drawIssues(); }) : null, // v0.44.2: control lives in the circuit's list
     h('div', { class: 'card' }, h('div', { class: 'switchrow', style: 'border-top:0;margin-top:0' }, h('span', {}, 'Include in the PDF (after the schedules)'), sw)),
-    diagramHasCircuits(cert) ? h('div', { class: 'btns', style: 'margin:4px 4px 14px' }, h('button', { class: 'btn primary', type: 'button', id: 'diagrampdfbtn', style: 'width:100%;min-height:48px', onclick: (e) => makeDiagramPdf(cert, e.currentTarget) }, 'View PDF')) : null, // v0.44.6: just the diagram
+    diagramHasCircuits(cert) ? h('div', { class: 'btns', style: 'margin:4px 4px 14px' }, h('button', { class: 'btn primary', type: 'button', id: 'diagrampdfbtn', style: 'width:100%;min-height:48px', onclick: (e) => makeDiagramPdf(cert, e.currentTarget) }, 'View PDF'), h('button', { class: 'btn', type: 'button', id: 'diagrampngbtn', style: 'width:100%;min-height:48px', onclick: (e) => makeDiagramPng(cert, e.currentTarget) }, 'Share as PNG')) : null, // v0.44.6: just the diagram; v0.48 PNG
   ], { back: '#/cert/' + id, sub: cert.number });
 });
 

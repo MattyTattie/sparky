@@ -17,7 +17,7 @@ test('Shelly and Hive each get their own branch with their own contactor', () =>
   const all = T.map((z) => z.txt).join(' '); assert.match(all, /Switches/); assert.match(all, /Hot water/); assert.ok(!all.includes('\u2026'));
   assert.equal(crossings(L), 0);
   const boxes = blk.shapes.filter((z) => z.t === 'rect' && z.h > 10 && z.w < 40); assert.equal(new Set(boxes.map((b) => Math.round(b.h / 4))).size, 1, 'same size');
-  const r3 = L.blocks.find((b) => b.num === '3').shapes.filter((z) => z.t === 'text').map((z) => z.txt).join(' '); assert.match(r3, /KM1 via contactor Coil switched by circuit 6 \(see circuit 6\)/);
+  const r3 = L.blocks.find((b) => b.num === '3').shapes.filter((z) => z.t === 'text').map((z) => z.txt).join(' '); assert.match(r3, /KM1(?: Immersion)? via contactor Coil switched by circuit 6 \(see circuit 6\)/);
 });
 test('key has Hive and contactor; several contactors per controller', () => {
   const cs = house(); cs[2].diagram.controllers[1].contactors.push({ circuits: [], label: 'Towel rails' });

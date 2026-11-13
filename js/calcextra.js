@@ -5,6 +5,7 @@
 // app with "typical, check your books / the maker".
 // =====================================================================
 import { UO, CMIN } from './limits.js';
+import { dec } from './calc.js';
 import { UL, CU_MOHM_PER_M, CU5_MOHM_PER_M, ARMOUR_MOHM_PER_M, CABLES } from './cables.js';
 const r2 = (n) => Math.round(n * 100) / 100;
 const r3 = (n) => Math.round(n * 1000) / 1000;
@@ -20,7 +21,7 @@ const r3 = (n) => Math.round(n * 1000) / 1000;
 export const FUSE_SIZES = [0.5, 1, 1.6, 2, 2.5, 3.15, 4, 5, 6.3, 8, 10, 12, 16, 20, 25, 32, 40, 50, 63];
 export const nextFuse = (a) => FUSE_SIZES.find((f) => f >= a - 1e-9) || null;
 export function transformer({ va, vp = 400, vs = 230, primaryMult = 2 }) {
-  const S = Number(va), P = Number(vp), Sv = Number(vs);
+  const S = dec(va), P = dec(vp), Sv = dec(vs);
   if (!(S > 0)) return { ok: false, error: 'Enter the transformer VA.' };
   if (!(P > 0) || !(Sv > 0)) return { ok: false, error: 'Enter the primary and secondary voltage.' };
   const ip = S / P, is = S / Sv;
@@ -53,8 +54,8 @@ export const CATS = [
 export const catFor = (k) => CATS.find((c) => c.k === k) || CATS[0];
 export function contactor({ cat = 'AC-1', load, unit = 'kW', phase = 3, pf = 1, eff = 1, uo = UO, ul = UL }) {
   const c = catFor(cat); const v = Number(load); if (!(v > 0)) return { ok: false, error: 'Enter the load (kW or amps).' };
-  const three = Number(phase) === 3; const e = c.k.startsWith('AC-3') || c.k === 'AC-4' ? (Number(eff) || 1) : 1;
-  const amps = unit === 'A' ? v : (v * 1000) / ((three ? Math.sqrt(3) * ul : uo) * (Number(pf) || 1) * e);
+  const three = dec(phase) === 3; const e = c.k.startsWith('AC-3') || c.k === 'AC-4' ? (dec(eff) || 1) : 1;
+  const amps = unit === 'A' ? v : (v * 1000) / ((three ? Math.sqrt(3) * ul : uo) * (dec(pf) || 1) * e);
   const need = amps * c.mult; const list = AC_STD[c.list];
   const size = list.find((x) => x >= need - 1e-9) || null; const next = size ? list[list.indexOf(size) + 1] || null : null;
   return { ok: true, cat: c, amps: r2(amps), need: r2(need), size, next, line: c.list === 'ac1' ? 'AC-1' : 'AC-3',
@@ -71,27 +72,27 @@ export function contactor({ cat = 'AC-1', load, unit = 'kW', phase = 3, pf = 1, 
 // for small cables; above about 35 mm² reactance matters, so it's flagged).
 export const KA_RATINGS = [3, 4.5, 6, 10, 15, 16, 25, 36, 50];
 export function faultLevel({ pfc, ze = null, pefc = null, phase = 1, cable = 'swa', size, length, cpc = null, armour = false, deviceKa = 6, uo = UO }) {
-  const P = Number(pfc) * 1000; const L = Number(length); const S = Number(size);
+  const P = dec(pfc) * 1000; const L = dec(length); const S = dec(size);
   if (!(P > 0)) return { ok: false, error: 'Enter the PFC at the origin (kA).' };
   if (!(L >= 0) || !(S > 0)) return { ok: false, error: 'Enter the cable size and length.' };
   const cab = CABLES[cable] || {}; const R = cab.rTable === 'cu5' ? CU5_MOHM_PER_M : CU_MOHM_PER_M;
   const rL = R[S]; if (rL == null) return { ok: false, error: 'No resistance figure for that size.' };
-  const three = Number(phase) === 3;
+  const three = dec(phase) === 3;
   const zsrc = uo / P;
-  const zE = Number(ze) > 0 ? Number(ze) : Number(pefc) > 0 ? uo / (Number(pefc) * 1000) : null;
-  const rC = armour ? (ARMOUR_MOHM_PER_M[cab.cores || 3] || ARMOUR_MOHM_PER_M[3])[S] : R[Number(cpc) || S];
+  const zE = dec(ze) > 0 ? dec(ze) : dec(pefc) > 0 ? uo / (dec(pefc) * 1000) : null;
+  const rC = armour ? (ARMOUR_MOHM_PER_M[cab.cores || 3] || ARMOUR_MOHM_PER_M[3])[S] : R[dec(cpc) || S];
   const pscc1 = uo / (zsrc + (2 * rL * L) / 1000);
   const ik3o = three ? 2 * P : null; const pscc3 = three ? uo / (uo / ik3o + (rL * L) / 1000) : null;
   const pefc2 = zE != null && rC != null ? uo / (zE + ((rL + rC) * L) / 1000) : null;
   const worst = Math.max(three ? pscc3 : pscc1, pefc2 || 0);
-  const ka = Number(deviceKa) || 6;
+  const ka = dec(deviceKa) || 6;
   return { ok: true, pscc: r2((three ? pscc3 : pscc1) / 1000), pscc1: r2(pscc1 / 1000), pefc: pefc2 == null ? null : r2(pefc2 / 1000), worst: r2(worst / 1000), ka, pass: worst / 1000 <= ka + 1e-9,
     origin3: ik3o ? r2(ik3o / 1000) : null, big: S > 35,
     // v0.29: the working in Ω, the way it's done on site.
     zsrc: r3(zsrc), r1rn: r3((2 * rL * L) / 1000), r1r2: rC != null ? r3(((rL + rC) * L) / 1000) : null, ze: zE != null ? r3(zE) : null,
     zeSub: zE != null && rC != null ? r3(zE + ((rL + rC) * L) / 1000) : null, which: pefc2 != null && pefc2 > (three ? pscc3 : pscc1) ? 'PEFC' : 'PSCC',
-    steps: [`Source impedance (L–N) = ${uo} V ÷ ${Number(pfc)} kA = ${r3(zsrc)} Ω.`,
-      three ? `Three-phase fault at the origin ≈ 2 × ${Number(pfc)} kA = ${r2(ik3o / 1000)} kA (rule of thumb). At the far end: ${uo} V ÷ (${r3(uo / ik3o)} Ω + ${rL} mΩ/m × ${L} m) = ${r2(pscc3 / 1000)} kA.`
+    steps: [`Source impedance (L–N) = ${uo} V ÷ ${dec(pfc)} kA = ${r3(zsrc)} Ω.`,
+      three ? `Three-phase fault at the origin ≈ 2 × ${dec(pfc)} kA = ${r2(ik3o / 1000)} kA (rule of thumb). At the far end: ${uo} V ÷ (${r3(uo / ik3o)} Ω + ${rL} mΩ/m × ${L} m) = ${r2(pscc3 / 1000)} kA.`
         : `At the far end (L–N): ${uo} V ÷ (${r3(zsrc)} Ω + 2 × ${rL} mΩ/m × ${L} m) = ${r2(pscc1 / 1000)} kA.`,
       pefc2 != null ? `Earth fault: ${uo} V ÷ (Ze ${r3(zE)} Ω + (${rL} + ${rC}) mΩ/m × ${L} m) = ${r2(pefc2 / 1000)} kA.` : 'Put in Ze (or the PEFC) to get the earth fault current too.',
       'Cable resistance at 20 °C (cold, so the highest fault current), reactance ignored.'] };

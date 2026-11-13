@@ -225,3 +225,59 @@
 - v0.47.1 (PUBLISHED 9 Nov 20:39 GMT): board scan reads sideways photos (turns them upright), and has a Turn button.
 - v0.47.1 (PUBLISHED 9 Nov 20:39 GMT): board scan knows an RCCB (Garo DCCB, 61008) from the main switch: fills the board's RCD (BS, A, mA) and its MCBs pick it up; SPD Type 2 and main switch BS 60947-3 filled if blank.
 - v0.47.1 (PUBLISHED 9 Nov 20:39 GMT): checked on Matthew's real Garo DB2 photo (sideways): B50 circuit, 100 A main switch 60947-3, RCCB 61008 63 A 300 mA, SPD T2.
+
+## [DONE v0.48.0, 13 Nov 2026, LOCAL — not published] New list (10 Nov 2026)
+- [x] Circuit with "No device fitted" ticked (Spare) still highlights a device preset chip (B50 MCB 6 kA). Should clear/unhighlight presets when no device.
+- [x] Device presets list shows duplicate-looking chips (B50 MCB 6 kA x3, B50 MCB, B50 MCB 300 mA Type A-S S). Investigate what differs; dedupe identical ones and label differences so chips are distinguishable.
+- [x] Spare way / No device fitted: Type (col 9) and Rating (col 10) still default to B / 3 A and print on the schedule (seen on DB2). Should print N/A; add N/A chip to Type and Rating rows and auto-select it when No device fitted is ticked.
+  - Matthew confirmed (10 Nov): No device fitted => whole row N/A: all device boxes (BS, type, rating, kA, max Zs, RCD fields) AND all test results (R1+R2, IR, Zs, RCD times). Still editable by hand.
+
+## [DONE v0.48.0, 13 Nov 2026, LOCAL — not published] Calculator + diagram audit (13 Nov 2026)
+Built locally as v0.48.0 beta (`sparky-v0.48.0`); not pushed or published. Live is still v0.47.1. Workings, PDFs and screenshots: `/workspace/polish-review/zspro-v0480/`.
+
+Audit only of v0.47.1 (local serve of the live build) at 390px and 1440px, with a fake 4-DB EIC. No app code changed. Screenshots and workings are in `/workspace/polish-review/zspro-calc-diagram-audit/`. Maths checked against BS 7671:2018+A2/A3 tables as used in the app (A4:2026; Uo=230, Cmin=0.95, Uo×Cmin=218.5 V). Max Zs (Tables 41.2–41.5), 80% rule, R1+R2 (OSG I1), volt drop (Table 4D5), Ca (Table 4B1), Cg (Table 4C1), shower/cable sizing, max demand (OSG Appendix A) and fault-level sums all matched the book figures where tested. Findings below are faults first (by severity), then upgrades. Separate from the 10 Nov list above.
+
+### Faults
+- [x] **Medium — Diagram draws ring vs radial from a name/size guess, not the "Ring final circuit" tick.** `isRingC()` in `js/wiring.js` is: "ring" in the description, or 32 A and 2.5 mm² unless the description has "radial". It never looks at `c.ring`. The rest of the app (`isRingCircuit()` / the tick) does. Confirmed on a fake job in v0.47.1: (1) Kitchen sockets, 32 A 2.5 mm², tick OFF, no "radial" in the name → `isRingC` true, drawn as a closed ring loop (screen at 390px and the diagram PDF); the schedule correctly treats it as a radial and ambers "32 A on 2.5 mm²… a 2.5 mm² radial can't be on 32 A" (Table 4D5 method C, It 27 A). (2) Upstairs sockets, 32 A 4 mm², tick ON, no "ring" in the name → `isRingC` false, drawn as a radial (single leg plus a hanging socket). See `390/32-diagram-kitchen-radial-as-ring.png`.
+- [x] **Medium — Schedule cable check ignores Ca, Cg and Ci.** `cableCheck()` uses tabulated It only and says "before correction factors". A 32 A device on 6 mm² T&E method C (It 47 A, Table 4D5) is not flagged. At 55 °C, Table 4B1 Ca for 70 °C PVC is 0.61, so Iz = 47 × 0.61 = 28.67 A, which is below 32 A. The Check calculator applies the factors and correctly fails: "CCC after factors: 28.67 A, too small" (`crops/390-08-check-6mm-55C.png`). The Size calculator at the same conditions correctly steps up to 10 mm² (Iz 39.04 A). The circuit page has no ambient/grouping/Ci boxes.
+- [x] **Medium — Cooker, shower and other named loads are drawn as "1 × point" with no symbol.** `noGuessLoad()` is true for every non-socket circuit that has no rooms and no switches, so the diagram suppresses guessed load names and symbols (v0.44.4 comment said this should only apply once the user has their own item list). Confirmed: "5 Cooker" and "6 Shower 9.5 kW" both show "Points: 1 × point" and no cooker/shower symbol, on screen and on the diagram PDF. Sockets and lights are drawn. EV charger and the hybrid inverter show amber "Add points served to draw sockets/lights" instead of an EV/inverter symbol.
+- [x] **Medium — On a 390px phone, the sticky Previous / All circuits / Next bar overlaps the circuit form.** It sits on top of the 80 / 100 / 125 A rating chips and the OCPD BS (EN) / breaking-capacity (kA) boxes, so those fields are hard to read or tap. Confirmed on Circuit 2 and Circuit 11 (`crops/390-40-circuit-kitchen-radial.png`, `crops/390-42-circuit-utility-6mm.png`). At 1440px the bar does not cover the fields.
+- [x] **Low — Check and Size calculators reject comma decimals; the Ring final check accepts them.** Size: load `9,5` kW shows "Enter the load (kW or amps)" and no answer (`crops/390-05-size-comma-9comma5.png`). Check: Ze `0,35` leaves the Zs chip grey (not calculated). Ring final check with r1/rn/r2 `0,32` / `0,32` / `0,53` reports "Ring looks sound" (it uses `checks.num`, which allows commas). `Number()` / unary `+` in the other calculators do not.
+- [x] **Low — Check calculator's thermal-insulation picker is only Ci 1.0 and 0.5.** Size uses the full Table 52.2 set in `CI_OPTIONS` (0.88 / 0.78 / 0.63 / 0.51 for 50–400 mm through insulation, plus 0.5). An electrician checking a cable through 100 mm of insulation can only pick none or "totally surrounded". Code: `js/calcui.js` vs `js/calcsize.js`.
+- [x] **Low — 90 °C Ca at 25 °C is 1.02 in `js/cables.js`; the usual Table 4B1 figure is 1.04** (√((90−25)/(90−30)) = 1.0408). Conservative, so it may oversize slightly. (20 °C using the 25 °C column is already disclosed in HANDOFF.)
+- [x] **Low — `lengthFromR1R2()` has no ring argument.** A measured 0.195 Ω on 2.5/1.5 mm² is reported as 10 m (radial) not 40 m of ring (÷4). The circuit page only shows this hint when `!isRingLike(c)`, so a correctly ticked ring is safe. It would mislead if a ring was not recognised as one.
+- [x] **Low — Size calculator at 390px: "Single-phase 230 V" wraps with "V" on its own line** inside the selected chip (`crops/390-04-size-55C-32A.png`). Cosmetic; fine at 1440px.
+
+### Upgrades
+- [x] **"Use on a circuit" from the Check calculator** (Size already has this button). Push the cable, breaker, and expected R1+R2 / Zs onto a chosen circuit on the schedule, so a "check" you just ran does not have to be typed in again.
+- [x] **Ambient, grouping and Ci on the circuit (optional), and an Iz-after-factors check on the schedule.** Closes the Medium cable-check gap. The Check calculator already has the sums; the schedule should not silently ignore a hot loft or a bunch of circuits.
+- [x] **Draw cooker, shower, EV and immersion symbols from the circuit name** unless the user has set their own item list. Don't show "Add points served to draw sockets/lights" on sub-mains, inverters or EV chargers; offer a one-tap "draw 1 × EV charger" (or cooker/shower) instead.
+- [x] **Make `isRingC()` use the same rule as the "Ring final circuit" tick** (`isRingCircuit()` / `c.ring`). That is the fix for the first Medium fault.
+- [x] **Adiabatic: optional maker I²t (let-through) figure**, instead of only the conservative default, so a 1.5 mm² CPC on a B20 is not failed (or only ambered) when the maker's energy-let-through would pass 543.1.3.
+- [x] **Share or export the wiring diagram as a PNG (or a share sheet)** as well as "View PDF". The PDF path already works (4-page diagram, 0 overlaps on the fake 4-DB job).
+- [x] **Cable numbers C1, C2… follow drawing order (RCD groups), not circuit numbers**, so circuit 5 becomes C3. Show the circuit number as well ("C3, circuit 5"), or number cables to match the circuit, so the "Feeds DB2 by cable C8" line is easier to follow on the schedule.
+- [x] **Give the Check calculator the same Ci options as Size** (full Table 52.2).
+- [x] **Accept comma decimals in every calculator**, the same way `checks.num` and the Ring final check already do.
+- [x] **RCD selection hints on the circuit** (Type A for sockets that may supply outdoor equipment, Type B / 6 mA RDC-DD for EV, S-type upstream of a 30 mA device). Some EV prompt chips already exist; a short hint next to the RCD type would help on a split-load or TT board.
+- [x] (13 Nov, Matthew OK) Name-based load symbols must be forgiving: case-insensitive, ignore extra words (e.g. "En-suite shower 9.5kW"), catch common typos/abbrevs (showr, elec shower, cookr, imm/immersion, EV/car charger). Never override user-set points/items.
+- [x] (13 Nov) Spurs on rings AND radials: each spur is its own item where Matthew picks individually what it feeds (e.g. FCU -> boiler / extractor / heater / towel rail; single socket; double socket; cooker hood; light etc.) instead of fixed combos like "spur feeding a single socket". Diagram draws each spur off the ring/radial with the chosen device + its load; schedule point count follows.
+
+
+### v0.48.0 how they were done
+- No device fitted: presets not highlighted; Type and Rating have an N/A chip (Rating chips still show when Type is N/A); `applyNoDevice` writes N/A on the whole row (device boxes + test results), still editable; leftover B/3/500 on old certs without `noDevAuto` display as N/A until the next edit. Optional field `c.noDevAuto`.
+- Identical-looking B50 presets merge (`clean()` strips leftover RCD on MCBs); `distinguishName()` labels real differences (e.g. 300 mA Type A-S).
+- Diagram `isRingC` is the same rule as the schedule tick (`isRingCircuit`). Kitchen 32 A 2.5 mm² with the tick off draws as a radial; upstairs 32 A 4 mm² with the tick on draws as a ring.
+- Schedule `cableCheck` applies optional Ca/Cg/Ci (`c.ambient`, `c.grouped`, `c.grouping`, `c.ci`); 6 mm² T&E method C at 55 °C, It 47, Ca 0.61, Iz 28.67 A, amber vs 32 A. No-factor path keeps the old It wording. Folded “Correction factors and maker I²t” on the circuit.
+- Name-based cooker/shower/EV/immersion/heater symbols: forgiving (`showr`, `elec shower`, `cookr`, `imm`, `EV`/`car charger`, extra words, case-insensitive). User item lists always win; points are never auto-written.
+- Circuit Prev/All/Next is a real footer on a scrolling form (`body.circedit` + `.circuitpage`); it stays visible and does not cover rating chips at 390px or 1440px. (`pagein` no longer uses `transform`, which had made `position:fixed` stick to `main` on phones.)
+- Shared `dec()` accepts comma decimals in every calculator and in the core sums.
+- Check calculator has full Table 52.2 Ci and a “Use on a circuit” button (cable + device only, never test results).
+- Table 4B1: 90 °C Ca at 25 °C is 1.04 (same as 20 °C).
+- `lengthFromR1R2` is ring-aware (measured R1+R2 is loop/4; length = radial × 4) and comma-safe; the circuit page shows the hint on rings too.
+- “Single-phase 230 V” stacks as one chip at ≤420px, no orphan “V”.
+- Optional maker I²t (`c.i2t`) on Check, Size, and the circuit fold; otherwise the conservative default.
+- Diagram “Share as PNG” next to View PDF.
+- Cable labels: `C3 (circuit 5)`.
+- Short RCD hints (EV Type B / 6 mA RDC-DD; Type A for sockets, outdoor wording if relevant; S-type if IΔn ≥ 100 or board upstream of 30 mA).
+- Spurs on rings and radials: each is its own item (`c.diagram.spurList`); pick the device and what it feeds. Drawn off the ring or radial with that device + load. Points served is left as you set it, with a hint and an optional “Set points to N” — never auto-written.
+- DB name, storage keys and backup format unchanged (optional fields only). Old backups still load. 692 tests pass. PDF overlaps: 0 after spur labels were stacked one per row.

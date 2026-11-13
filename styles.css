@@ -85,6 +85,20 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--navy); outl
 .limit { font-size: 13px; background: #e8eef8; border-radius: 8px; padding: 8px 10px; margin-bottom: 10px; color: var(--navy); }
 .stick { position: sticky; bottom: 0; background: var(--bg); padding: 8px 0; display: flex; gap: 8px; }
 .stick .btn { flex: 1; }
+/* v0.48: circuit page is a flex column; form scrolls, Prev/All/Next is a real footer and never covers fields. */
+body.circedit { overflow: hidden; height: 100dvh; }
+body.circedit #app { display: flex; flex-direction: column; height: 100dvh; overflow: hidden; }
+body.circedit header.top { flex-shrink: 0; }
+body.circedit main { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; overflow: hidden; padding-bottom: 12px; }
+.circuitpage { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
+.circuit-scroll { flex: 1 1 auto; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; overscroll-behavior: contain; padding-bottom: 8px; }
+.circuitnav, .stick.circuitnav { position: relative; left: auto; right: auto; bottom: auto; z-index: 5; flex: 0 0 auto; width: 100%; max-width: none; margin: 0; padding: 10px 0 calc(10px + env(safe-area-inset-bottom, 0px)); background: var(--bg); border-top: 1px solid var(--line); display: flex; gap: 8px; box-sizing: border-box; }
+.circuitnav .btn { flex: 1; }
+.circuitnav-pad { display: none; height: 0; }
+html { scroll-padding-bottom: 96px; }
+.spurlist { margin-top: 14px; }
+.spurrow { display: grid; gap: 8px; padding: 10px 0; border-bottom: 1px solid var(--line); }
+.rcdhint { margin: 4px 0 8px; }
 /* Landscape table */
 .tablewrap { overflow: auto; max-height: calc(100vh - 120px); border: 1px solid var(--line); background: #fff; border-radius: 8px; }
 table.sched { border-collapse: separate; border-spacing: 0; font-size: 13px; }
@@ -357,8 +371,11 @@ h2.sec { margin: var(--s4) 0 var(--s2); }
 .withunit { position: relative; display: block; }
 .withunit input { padding-right: 46px; }
 .withunit .unit { position: absolute; right: 12px; top: 50%; transform: translateY(-50%); font-size: 13px; font-weight: 700; color: var(--muted); pointer-events: none; }
-.chips.seg2 { background: #eceffa; border-radius: 999px; padding: 4px; gap: 4px; flex-wrap: nowrap; }
-.chips.seg2 .chip { flex: 1; border: 0; background: transparent; box-shadow: none; color: var(--sub); min-height: 38px; padding: 6px 10px; }
+.chips.seg2 { background: #eceffa; border-radius: 999px; padding: 4px; gap: 4px; flex-wrap: wrap; }
+.chips.seg2 .chip { flex: 1; border: 0; background: transparent; box-shadow: none; color: var(--sub); min-height: 38px; padding: 6px 10px; white-space: nowrap; }
+@media (max-width: 420px) {
+  .chips.seg2 .chip { flex: 1 1 100%; }
+}
 .chips.seg2 .chip.on { background: #fff; color: var(--brand); box-shadow: 0 2px 8px rgba(16,24,40,.12); }
 .seg { margin-bottom: var(--s3); }
 
@@ -486,7 +503,7 @@ header.top h1 { font-size: 19px; font-weight: 780; letter-spacing: -0.015em; }
 header.top .brandmark { background: linear-gradient(160deg, #fff, #e9ecff); color: var(--hdr2); border-radius: 13px; }
 .beta { color: var(--hdr2); box-shadow: 0 1px 3px rgba(0,0,0,.12); }
 main { animation: pagein .22s var(--ease) both; }
-@keyframes pagein { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+@keyframes pagein { from { opacity: 0; } to { opacity: 1; } } /* v0.48: no transform — it made position:fixed children stick to main */
 .card, .list, .calcpick { border: 1px solid rgba(225,230,242,.9); box-shadow: var(--shadow); }
 .card { border-radius: var(--r); }
 .list { border-radius: var(--r); }

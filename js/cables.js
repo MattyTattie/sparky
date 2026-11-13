@@ -69,11 +69,11 @@ export const CABLES = {
 
 // Ambient temperature factor Ca (Table 4B1), for 70 °C and 90 °C cables.
 // ⚠ Table 4B1 starts at 25 °C. For 20 °C the app uses the 25 °C factor
-// (1.03 / 1.02), which errs on the safe side. (IEC 60364-5-52 Table B.52.14
+// (1.03 / 1.04), which errs on the safe side. (IEC 60364-5-52 Table B.52.14
 // gives 1.12 / 1.08 at 20 °C if you can justify it; BS 7671 doesn't.)
 export const CA = {
   70: { 20: 1.03, 25: 1.03, 30: 1.0, 35: 0.94, 40: 0.87, 45: 0.79, 50: 0.71, 55: 0.61, 60: 0.5 },
-  90: { 20: 1.02, 25: 1.02, 30: 1.0, 35: 0.96, 40: 0.91, 45: 0.87, 50: 0.82, 55: 0.76, 60: 0.71 },
+  90: { 20: 1.04, 25: 1.04, 30: 1.0, 35: 0.96, 40: 0.91, 45: 0.87, 50: 0.82, 55: 0.76, 60: 0.71 },
 };
 export const CA_SOURCE = 'BS 7671 Table 4B1 (cables in air, reference 30 °C)';
 export const CA_NOTES = { 20: 'Table 4B1 stops at 25 °C, so 20 °C uses the 25 °C factor (on the safe side).' };

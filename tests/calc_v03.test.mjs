@@ -6,8 +6,8 @@ import { voltDrop, sizeCable, designZs, r1r2At20, lengthFromR1R2, ambientFactor 
 import { cableCheck, applyCable, checkCircuit } from '../js/checks.js';
 
 test('ambient factors: Table 4B1 values, 20 °C uses the 25 °C factor (safe side)', () => {
-  assert.equal(CA[70][25], 1.03); assert.equal(CA[90][25], 1.02); assert.equal(CA[70][40], 0.87); assert.equal(CA[90][50], 0.82);
-  assert.equal(CA[70][20], 1.03); assert.equal(CA[90][20], 1.02);
+  assert.equal(CA[70][25], 1.03); assert.equal(CA[90][25], 1.04); assert.equal(CA[70][40], 0.87); assert.equal(CA[90][50], 0.82);
+  assert.equal(CA[70][20], 1.03); assert.equal(CA[90][20], 1.04);
   assert.match(ambientFactor('te', 20).note, /25 °C/);
 });
 test('T&E 6242Y live/CPC pairs', () => {

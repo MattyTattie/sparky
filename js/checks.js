@@ -3,7 +3,7 @@
 // =====================================================================
 // Plain JS (no browser needed), tested by tests/checks.test.mjs.
 // Every limit comes from limits.js.
-import { CABLES, CABLE_PICKS, CU_MOHM_PER_M, ARMOUR_CSA } from './cables.js';
+import { CABLES, CABLE_PICKS, CU_MOHM_PER_M, ARMOUR_CSA, CA, CABLE_TEMP, cgFor, effectiveCi } from './cables.js';
 import { maxZsForTrip } from './limits.js';
 import { adiabatic, kFor } from './design.js';
 import { maxZs, coldLimit, irMinFor, IR_TABLE, rcdTimeLimit, RING, RCD_ZS, deviceById, isLegacyTable, RULE_OF_THUMB } from './limits.js';
@@ -75,12 +75,39 @@ export function cableCheck(c) {
   if (!m) return ref ? { level: null, msg: `No current rating in the app for ${tbl ? tbl.label.split(',')[0] : 'this cable'} with reference method ${c.ref}. Check Appendix 4.` } : null;
   const it = m.amps[live]; if (it == null) return null;
   const src = `${tbl.source.split(' (')[0].split(' and')[0]}, method ${c.ref}`;
-  const base = `Cable rating ${it} A (${src}), before correction factors.`;
-  if (In == null) return { level: null, msg: base, it };
-  if (In <= it) return { level: null, msg: base, it };
-  const ringOk = live >= 2.5 && (isRingLike(c) || (c.ring !== false && live === 2.5 && [30, 32].includes(In) && SOCKETY.test(c.desc || ''))) && [30, 32].includes(In) && it >= 20;
-  if (ringOk) return { level: null, msg: `${base} ${In} A on ${live} mm² is OK as a ring final (Regulation 433.1.204, Iz ≥ 20 A); a ${live} mm² radial can\u2019t be on ${In} A.`, it };
-  return { level: 'amber', msg: `The device (${In} A) is bigger than the cable\u2019s rating (${it} A, ${src}, before correction factors). Check the cable size or the device.`, it };
+  // v0.48: optional ambient / grouping / Ci on the circuit → Iz after factors (same sums as the Check calculator).
+  // With no factors entered, keep the old "before correction factors" wording and compare In to It.
+  const temp = CABLE_TEMP[t] || 70;
+  const amb = num(c.ambient);
+  const methodD = /^D/.test(ref);
+  let ca = 1;
+  if (!methodD && amb != null && CA[temp] && CA[temp][amb] != null) ca = CA[temp][amb];
+  const grouped = num(c.grouped);
+  const grouping = c.grouping || 'bunched';
+  const cg = (grouped != null && grouped > 1) ? cgFor(grouping, grouped) : 1;
+  const ciRaw = (c.ci == null || String(c.ci).trim() === '') ? null : num(c.ci);
+  const ci = effectiveCi(ref, ciRaw == null ? 1 : ciRaw);
+  const factor = ca * cg * ci;
+  const used = Math.abs(factor - 1) > 1e-12;
+  const iz = Math.round(it * factor * 100) / 100;
+  const bits = [];
+  if (ca !== 1) bits.push('Ca ' + ca + ' at ' + amb + ' °C');
+  else if (methodD && amb != null && amb !== 30) bits.push('buried method D: air-temperature factor is not used');
+  if (cg !== 1) bits.push('Cg ' + cg + ' for ' + grouped + ' cables');
+  if (ci !== 1) bits.push('Ci ' + ci);
+  const base = used
+    ? `Cable tabulated rating It ${it} A (${src}). Iz ${iz} A after ${bits.join(' × ')}.`
+    : `Cable rating ${it} A (${src}), before correction factors.`;
+  const cmp = used ? iz : it;
+  const ringNeed = used ? 20 : 20; // 433.1.204: Iz ≥ 20 A
+  if (In == null) return { level: null, msg: base, it, iz: used ? iz : it, ca, cg, ci, factor };
+  if (In <= cmp + 1e-9) return { level: null, msg: base, it, iz: used ? iz : it, ca, cg, ci, factor };
+  const ringOk = live >= 2.5 && (isRingLike(c) || (c.ring !== false && live === 2.5 && [30, 32].includes(In) && SOCKETY.test(c.desc || ''))) && [30, 32].includes(In) && cmp >= ringNeed - 1e-9;
+  if (ringOk) return { level: null, msg: `${base} ${In} A on ${live} mm² is OK as a ring final (Regulation 433.1.204, Iz ≥ 20 A); a ${live} mm² radial can\u2019t be on ${In} A.`, it, iz: used ? iz : it, ca, cg, ci, factor };
+  const why = used
+    ? `The device (${In} A) is bigger than the cable\u2019s Iz (${iz} A after ${bits.join(' × ')}). Check the cable size, the device, or the correction factors.`
+    : `The device (${In} A) is bigger than the cable\u2019s rating (${it} A, ${src}, before correction factors). Check the cable size or the device.`;
+  return { level: 'amber', msg: why, it, iz: used ? iz : it, ca, cg, ci, factor };
 }
 // Cable picker on the circuit page → live and CPC columns.
 export function applyCable(c) {
@@ -185,7 +212,7 @@ export function circuitAdiabatic(c, ctx = {}) {
   if (area == null) return null;
   const k = kFor({ cable: pick ? c.cable : t, cpcMode: isArmour ? 'armour' : 'core' });
   const rcd = !!(c.rcdIdn && num(c.rcdIdn)) || !!(deviceById(c.device) || {}).rcd;
-  const r = adiabatic({ zs, device: c.device, type: c.type, rating: In, k: k.k, cpcCsa: area, rcd, rcdS: !!c.rcdS, bka: num(c.bka) || 6, time: c.time || 0.4, imag: (deviceById(c.device) || {}).adj && num(c.im) > 0 ? num(c.im) : null, ig: (deviceById(c.device) || {}).adj === 'mccb' && num(c.ig) > 0 ? num(c.ig) : null, tg: num(c.tg) });
+  const r = adiabatic({ zs, device: c.device, type: c.type, rating: In, k: k.k, cpcCsa: area, rcd, rcdS: !!c.rcdS, bka: num(c.bka) || 6, time: c.time || 0.4, imag: (deviceById(c.device) || {}).adj && num(c.im) > 0 ? num(c.im) : null, ig: (deviceById(c.device) || {}).adj === 'mccb' && num(c.ig) > 0 ? num(c.ig) : null, tg: num(c.tg), makerI2t: num(c.i2t) });
   return { ...r, cpc: area, kLabel: k.label, armourNote };
 }
 

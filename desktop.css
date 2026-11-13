@@ -187,3 +187,16 @@
   body { background: #fff !important; }
   .card { break-inside: avoid; box-shadow: none !important; }
 }
+
+
+/* v0.48: circuit footer sits in the column, not over the form */
+@media (min-width: 900px) {
+  body.circedit main, body.circedit main.withlist, body.circedit main.hasnav {
+    padding-bottom: 16px;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+  }
+  body.circedit .circuitnav { max-width: var(--col, 940px); }
+}

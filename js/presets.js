@@ -24,11 +24,15 @@ export const RCD_KEYS = ['rcdBs', 'rcdType', 'rcdIdn', 'rcdRating', 'rcdS'];
 // v0.25: MCCBs/MPCBs have no RCD of their own: their presets never keep RCD boxes
 // (before v0.25 a board's RCD details could leak into an MCCB preset).
 const isAdj = (f) => !!(deviceById(f && f.device) || {}).adj;
+const hasOwnRcd = (f = {}) => { const d = deviceById(f.device) || deviceFromBs(f.bs); return !!(d && d.rcd); };
 export function clean(f = {}) {
   const out = { ...f };
-  if (isAdj(out)) { for (const k of RCD_KEYS) if (k in out) out[k] = k === 'rcdS' ? false : ''; }
-  else for (const k of EXTRA_KEYS) if (k in out) out[k] = '';
+  // v0.48: MCB / fuse presets strip leftover upstream RCD so identical-looking B50 chips merge.
+  if (isAdj(out) || !hasOwnRcd(out)) { for (const k of RCD_KEYS) if (k in out) out[k] = k === 'rcdS' ? false : ''; }
+  if (!isAdj(out)) for (const k of EXTRA_KEYS) if (k in out) out[k] = '';
   if ((deviceById(out.device) || {}).adj !== 'mccb') { if ('ig' in out) out.ig = ''; if ('tg' in out) out.tg = ''; }
+  // Normalise Type A-S vs A S so they don't split the same chip.
+  if (out.rcdType) out.rcdType = showRcdType(out.rcdType);
   return out;
 }
 const val = (v) => (v == null ? '' : typeof v === 'boolean' ? v : String(v).trim());
@@ -84,7 +88,30 @@ export function wouldOverwrite(c, fields) {
   return Object.keys(fields).filter((k) => { const cur = c[k]; const nv = fields[k]; const has = typeof cur === 'boolean' ? cur : String(cur ?? '').trim() !== ''; return has && String(cur) !== String(nv); });
 }
 // v0.25: most recently used first, then by name (the "used N×" count isn't shown any more).
-export const shown = (list) => (list || []).filter((p) => !p.deleted).sort((a, b) => String(b.usedAt || '').localeCompare(String(a.usedAt || '')) || String(a.name || '').localeCompare(String(b.name || '')));
+// v0.48: if two surviving presets still share a display name, append the fields that differ.
+export function distinguishName(list = []) {
+  const groups = new Map();
+  for (const p of list) {
+    const n = p.name || nameFor(p.fields || {});
+    if (!groups.has(n)) groups.set(n, []);
+    groups.get(n).push(p);
+  }
+  const LAB = { bka: 'kA', afddBs: 'AFDD BS', afddType: 'AFDD type', afddRating: 'AFDD A', im: 'Im', ig: 'Ig', tg: 'tg', rcdIdn: 'mA', rcdType: 'RCD type', rcdBs: 'RCD BS', rcdRating: 'RCD A', device: 'device', bs: 'BS', type: 'type', rating: 'A' };
+  for (const [n, ps] of groups) {
+    if (ps.length < 2) continue;
+    const keys = PRESET_KEYS.filter((k) => new Set(ps.map((p) => String((p.fields || {})[k] ?? ''))).size > 1);
+    for (const p of ps) {
+      const bits = keys.map((k) => {
+        const v = (p.fields || {})[k];
+        if (v == null || v === '' || v === false) return (LAB[k] || k) + ' —';
+        return (LAB[k] || k) + ' ' + v;
+      }).filter(Boolean);
+      if (bits.length) p.name = n + ' (' + bits.join(', ') + ')';
+    }
+  }
+  return list;
+}
+export const shown = (list) => distinguishName((list || []).filter((p) => !p.deleted).sort((a, b) => String(b.usedAt || '').localeCompare(String(a.usedAt || '')) || String(a.name || '').localeCompare(String(b.name || ''))));
 // Two lists → one: same combination = one preset; newest edit wins (name, deleted), uses = the higher.
 export function mergePresets(a = [], b = []) {
   const m = new Map();

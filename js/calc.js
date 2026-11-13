@@ -6,6 +6,14 @@ import { UO, VOLT_DROP, maxZs } from './limits.js';
 
 const r2 = (n) => Math.round(n * 100) / 100;
 const r3 = (n) => Math.round(n * 1000) / 1000;
+// v0.48: commas as decimals (0,35 → 0.35), same as checks.num / the Ring final check.
+export function dec(v) {
+  if (v == null || v === '') return NaN;
+  if (typeof v === 'number') return v;
+  const s = String(v).trim().replace(/\s/g, '').replace(',', '.');
+  return Number(s);
+}
+
 
 // Ring final circuits: the two legs share the current.
 //  'point'  = whole load at the far point of the ring: ¼ of the drop of a radial the length of the ring.
@@ -20,7 +28,7 @@ export function voltDrop({ cable = 'te', size, ib, length, lighting = false, uo 
   const c = CABLES[cable]; if (!c) throw new Error('Unknown cable');
   const mv = c.mvam[size]; if (mv == null) return { ok: false, error: 'No volt drop figure for that size' };
   const div = ring ? RING_DIVISOR[ring] || 4 : spread ? SPREAD_DIVISOR : 1;
-  const v = (mv * Number(ib) * Number(length)) / 1000 / div;
+  const v = (mv * dec(ib) * dec(length)) / 1000 / div;
   const pct = (v / uo) * 100;
   const limitPct = lighting ? VOLT_DROP.lightingPct : VOLT_DROP.otherPct;
   return { ok: true, mvam: mv, divisor: div, spread: !ring && !!spread, volts: r2(v), pct: r2(pct), limitPct, limitV: r2((uo * limitPct) / 100), pass: pct <= limitPct };
@@ -38,16 +46,16 @@ export function ambientFactor(cable, ambient) {
 export function sizeCable({ cable = 'te', method = 'C', ib, inA, length, ambient = 30, grouped = 1, grouping = 'bunched', insulationCi = 1, bs3036 = false, lighting = false, ring = false, uo = UO, spread = false }) {
   const c = CABLES[cable]; const m = c && c.methods[method];
   if (!m) return { ok: false, error: 'Pick a cable and installation method' };
-  if (!(Number(inA) >= Number(ib))) return { ok: false, error: 'The device rating (In) must be at least the design current (Ib).' };
+  if (!(dec(inA) >= dec(ib))) return { ok: false, error: 'The device rating (In) must be at least the design current (Ib).' };
   let { ca, note: caNote } = ambientFactor(cable, ambient);
   if (/^D/.test(method)) { ca = 1; caNote = 'Buried (method D): the tables assume 20 °C ground; the air-temperature factor isn\u2019t used. Check ground temperature and soil (Tables 4B2, 4B3).'; }
-  const cg = (Number(grouped) || 1) > 1 ? cgFor(grouping, grouped) : 1; // v0.22: blank / 1 = not grouped
+  const cg = (dec(grouped) || 1) > 1 ? cgFor(grouping, grouped) : 1; // v0.22: blank / 1 = not grouped
   const ci = effectiveCi(method, insulationCi); // v0.34: A / 100–103 already allow for insulation
   const cf = bs3036 ? CF_BS3036 : 1;
   const factor = ca * cg * ci * cf;
   // 433.1.204 is written for 2.5 mm² copper rings on 30/32 A; anything else needs Iz ≥ In like a radial.
-  const ringRule = (s) => ring && [30, 32].includes(Number(inA)) && s >= 2.5;
-  const needFor = (s) => (ringRule(s) ? 20 : Number(inA));
+  const ringRule = (s) => ring && [30, 32].includes(dec(inA)) && s >= 2.5;
+  const needFor = (s) => (ringRule(s) ? 20 : dec(inA));
   // v0.34: where 433.1.204 applies (Iz ≥ 20 A ring), the 0.725 BS 3036 factor isn't added on top.
   const factorFor = (s) => (ringRule(s) && cf !== 1 ? ca * cg * ci : factor);
   const rows = c.sizes.map((s) => {
@@ -56,7 +64,7 @@ export function sizeCable({ cable = 'te', method = 'C', ib, inA, length, ambient
     const fs = factorFor(s);
     return { size: s, it, iz: it == null ? null : r2(it * fs), factor: r2(fs), needIz: needFor(s), needIt: r2(needFor(s) / fs), currentOk: it != null && it >= needFor(s) / fs - 1e-9, vd };
   });
-  const needIz = ring && [30, 32].includes(Number(inA)) ? 20 : Number(inA);
+  const needIz = ring && [30, 32].includes(dec(inA)) ? 20 : dec(inA);
   const needIt = needIz / factor;
   const pick = rows.find((r) => r.currentOk && (!r.vd || r.vd.pass)) || null;
   return { ok: true, factors: { ca, cg, ci, cf, total: r2(factor) }, needIz: r2(needIz), needIt: r2(needIt), rows, pick, caNote,
@@ -76,8 +84,8 @@ export function r1r2At20({ live, cpc, length, cores = 2, ring = false, rTable = 
   const R = rTable === 'cu5' ? CU5_MOHM_PER_M : CU_MOHM_PER_M; // v0.19: fine-stranded flexes (class 5)
   const a = R[live];
   const b = cpc === 'armour' ? (ARMOUR_MOHM_PER_M[cores] || ARMOUR_MOHM_PER_M[3])[live] : R[cpc];
-  if (a == null || b == null || !Number(length)) return null;
-  const r = ((a + b) * Number(length)) / 1000;
+  if (a == null || b == null || !dec(length)) return null;
+  const r = ((a + b) * dec(length)) / 1000;
   return r3(ring ? r / 4 : r);
 }
 export function expectedR1R2(live, cpc, length) { const v = r1r2At20({ live, cpc, length }); return v == null ? null : r2(v); }
@@ -90,14 +98,17 @@ export function designZs({ ze, cable = 'te', live, cpc, length, ring = false, de
   if (r20 == null) return { ok: false, max, error: 'Need cable sizes and a length' };
   const mult = TEMP_MULT[temp] || 1.2;
   const rHot = r3(r20 * mult);
-  const zs = ze === '' || ze == null || isNaN(Number(ze)) ? null : r2(Number(ze) + rHot);
+  const zs = ze === '' || ze == null || isNaN(dec(ze)) ? null : r2(dec(ze) + rHot);
   return { ok: true, r20, mult, rHot, zs, max, pass: zs == null || max == null ? null : zs <= max,
     armour: cpc === 'armour', note: cpc === 'armour' ? 'Armour resistance from maker\u2019s data (check your cable); the armour must also pass the adiabatic check (543.1.3).' : '' };
 }
 // Length of cable a measured R1+R2 corresponds to (a sanity check on the circuit page).
-export function lengthFromR1R2({ r1r2, live, cpc, cores = 2, rTable = null }) {
-  const per = r1r2At20({ live, cpc, length: 1000, cores, rTable }); const v = Number(String(r1r2).replace(/^[<>]/, ''));
-  if (per == null || !v) return null; return Math.round((v / per) * 1000);
+export function lengthFromR1R2({ r1r2, live, cpc, cores = 2, rTable = null, ring = false }) {
+  const per = r1r2At20({ live, cpc, length: 1000, cores, rTable, ring: false });
+  const v = Number(String(r1r2).trim().replace(',', '.').replace(/^[<>]/, ''));
+  if (per == null || !v) return null;
+  const m = (v / per) * 1000;
+  return Math.round(ring ? m * 4 : m);
 }
 
 // v0.23b: the chosen cable's current-carrying capacity (CCC = Iz) after factors.

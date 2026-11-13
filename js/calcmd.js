@@ -5,7 +5,7 @@ import { h, fill, toast } from './ui.js';
 import { route, page, go } from './app.js';
 import * as db from './db.js';
 import { flush } from './state.js';
-import { setLastCalc, icard, answerCard, pchip, resline, detailCard, banner } from './calckit.js';
+import {  setLastCalc, icard, answerCard, pchip, resline, detailCard, banner , dec } from './calckit.js';
 import { KINDS, kind, maxDemand, maxDemandLines, kindBoxes, EXAMPLE, setCcuSocket, migrateCcu } from './maxdemand.js';
 import { icon } from './icons.js';
 
@@ -58,7 +58,7 @@ route(/^\/calc\/md(?:\/([^/]+))?$/, async (certId) => {
     if (before != null) { const diff = anchor.getBoundingClientRect().top - before; if (Math.abs(diff) > 0.5) scrollBy(0, diff); }
   };
   const drawTop = () => {
-    const r = maxDemand(v.loads); const fuse = Number(v.fuse) || 0;
+    const r = maxDemand(v.loads); const fuse = dec(v.fuse) || 0;
     fill(top, v.loads.length ? answerCard({ kicker: 'Maximum demand (by the book)', big: `${Math.round(r.total)} A`, sub: `${r.totalKVA} kVA at 230 V · ${r.connected} A connected before diversity`,
       good: fuse && r.total > fuse ? 'warn' : true,
       chips: [fuse ? pchip(r.total <= fuse, `Supply fuse ${fuse} A`) : null].filter(Boolean),

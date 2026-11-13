@@ -180,5 +180,5 @@ test('old v0.46.0 jobs: no new fields needed, nothing renamed', () => {
   const c = normaliseCert(JSON.parse(JSON.stringify({ ...newCert('EIC', {}), boards: [{ ref: 'DB1', rcdIdn: '30', circuits: [mcb(1, { rcdIdn: '30' })] }] })));
   assert.equal(boardCtx(c, c.boards[0]).earthing, 'TN-C-S (PME)');
   assert.equal(diagramModel(c).boards.length, 1);
-  assert.match(src('js/config.js'), /APP_VERSION = '0\.47\.\d+ beta'/); assert.match(src('sw.js'), /const CACHE = 'sparky-v0\.47\.\d+'/); // v0.47.x
+  assert.match(src('js/config.js'), /APP_VERSION = '0\.4[78]\.\d+ beta'/); assert.match(src('sw.js'), /const CACHE = 'sparky-v0\.4[78]\.\d+'/); // v0.47+ (v0.48 continues)
 });

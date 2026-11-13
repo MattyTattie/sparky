@@ -1,4 +1,5 @@
 // =====================================================================
+import { dec } from './calc.js';
 // maxdemand.js — v0.9: maximum demand with diversity, the way the IET
 // On-Site Guide does it for a house (Appendix A, Table A2, from memory:
 // ⚠ check against your copy). Plain JS, tested with Node.
@@ -24,7 +25,7 @@ export const KINDS = [
 ];
 export const kind = (k) => KINDS.find((x) => x.k === k);
 // One load: { k, qty, value } → amps each.
-export const ampsEach = (l, u = U) => { const d = kind(l.k); const v = Number(l.value) || 0; return !d ? 0 : d.unit === 'kW' ? (v * 1000) / u : d.unit === 'W' ? v / u : d.unit === 'A' ? v : 0; };
+export const ampsEach = (l, u = U) => { const d = kind(l.k); const v = dec(l.value) || 0; return !d ? 0 : d.unit === 'kW' ? (v * 1000) / u : d.unit === 'W' ? v / u : d.unit === 'A' ? v : 0; };
 
 export const RULES = {
   cooking: '10 A + 30% of the rest',
@@ -46,7 +47,7 @@ export function maxDemand(loads, { u = U } = {}) {
   const each = {}; // group → [amps of each single item]
   for (const l of loads || []) {
     const d = kind(l.k); if (!d) continue;
-    const n = Math.max(0, Math.round(Number(l.qty) || 0)); const a = ampsEach(l, u);
+    const n = Math.max(0, Math.round(dec(l.qty) || 0)); const a = ampsEach(l, u);
     if (d.unit === 'each') { (each.cookerSocket ||= []).push(...Array(n).fill(5)); continue; }
     for (let i = 0; i < n; i++) (each[d.group] ||= []).push(a);
   }
@@ -111,7 +112,7 @@ export function maxDemandLines(loads, { u = U } = {}) {
   const items = {}; // group → [{ line, a }]
   (loads || []).forEach((l, li) => {
     const g = groupOf(l); if (!g) return;
-    const n = Math.max(0, Math.round(Number(l.qty) || 0)); const a = g === 'cookerSocket' ? 5 : ampsEach(l, u);
+    const n = Math.max(0, Math.round(dec(l.qty) || 0)); const a = g === 'cookerSocket' ? 5 : ampsEach(l, u);
     for (let i = 0; i < n; i++) (items[g] ||= []).push({ line: li, a });
   });
   const shares = (loads || []).map(() => 0); const conn = (loads || []).map(() => 0);
@@ -126,8 +127,8 @@ export function maxDemandLines(loads, { u = U } = {}) {
   const lines = (loads || []).map((l, li) => {
     const d = kind(l.k); const g = groupOf(l); if (!d) return null;
     const grp = groups.find((x) => x.g === g); const combined = Boolean(grp && grp.lines > 1);
-    const qty = Math.max(0, Math.round(Number(l.qty) || 0));
-    const text = d.unit === 'each' ? `${qty} × 5 A = ${fmt(conn[li])} A` : `${qty} × ${Number(l.value) || 0} ${d.unit} = ${fmt(conn[li])} A`;
+    const qty = Math.max(0, Math.round(dec(l.qty) || 0));
+    const text = d.unit === 'each' ? `${qty} × 5 A = ${fmt(conn[li])} A` : `${qty} × ${dec(l.value) || 0} ${d.unit} = ${fmt(conn[li])} A`;
     const work = !qty ? '' : combined ? `share of ${grp.label.toLowerCase()}, ${grp.lines} lines combined` : grp ? grp.work : '';
     return { group: g, combined, connected: r1(conn[li]), share: r1(shares[li]), text, work, full: qty ? `${text} · after diversity ${fmt(shares[li])} A` + (work ? ` (${work})` : '') : `${text} · nothing counted` };
   });
@@ -166,7 +167,7 @@ export function kindBoxes(loads, opts) {
 }
 
 // v0.28.1: how many cooker-unit sockets are counted (+5 A each), and the tick box toggle.
-export const ccuSockets = (loads) => (loads || []).filter((l) => l && l.k === 'cookerSocket').reduce((s, l) => s + Math.max(0, Math.round(Number(l.qty) || 0)), 0);
+export const ccuSockets = (loads) => (loads || []).filter((l) => l && l.k === 'cookerSocket').reduce((s, l) => s + Math.max(0, Math.round(dec(l.qty) || 0)), 0);
 export function setCcuSocket(loads, on) {
   const rest = (loads || []).filter((l) => !(l && l.k === 'cookerSocket'));
   return on ? [...rest, { k: 'cookerSocket', qty: 1 }] : rest;

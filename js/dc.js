@@ -1,4 +1,5 @@
 // =====================================================================
+import { dec } from './calc.js';
 // dc.js — DC sums for solar PV strings and battery leads. Plain JS,
 // tested by tests/dc.test.mjs.
 // =====================================================================
@@ -27,10 +28,10 @@ export const rhoAt = (tC) => RHO20 * (1 + ALPHA * (Number(tC) - 20));
 
 // Two-way (out and back) volt drop for a run of `length` m one way.
 export function dcVoltDrop({ current, length, csa, temp = 70, volts }) {
-  const I = Number(current), L = Number(length), A = Number(csa);
+  const I = dec(current), L = dec(length), A = dec(csa);
   if (!(I > 0 && L > 0 && A > 0)) return null;
   const r = (2 * L * rhoAt(temp)) / A; const v = I * r;
-  return { mohm: r2(r * 1000), volts: r2(v), pct: volts ? r2((v / Number(volts)) * 100) : null, watts: r2(I * I * r) };
+  return { mohm: r2(r * 1000), volts: r2(v), pct: volts ? r2((v / dec(volts)) * 100) : null, watts: r2(I * I * r) };
 }
 // Smallest standard size passing volt drop (and the cable current rating, if a rating table is given).
 export function dcCableSize({ current, length, volts, targetPct = 1, temp = 70, needAmps = 0, cable = 'xlpe90', minSize = 0 }) {
@@ -39,7 +40,7 @@ export function dcCableSize({ current, length, volts, targetPct = 1, temp = 70, 
     const vd = dcVoltDrop({ current, length, csa: s, temp, volts });
     const amps = tbl.amps[s] ?? null;
     const curOk = !needAmps || (amps != null && amps >= needAmps - 1e-9);
-    return { size: s, vd, amps, curOk, vdOk: vd && vd.pct != null ? vd.pct <= Number(targetPct) + 1e-9 : false };
+    return { size: s, vd, amps, curOk, vdOk: vd && vd.pct != null ? vd.pct <= dec(targetPct) + 1e-9 : false };
   });
   const pick = rows.find((r) => r.curOk && r.vdOk) || null;
   const why = [];
@@ -49,7 +50,7 @@ export function dcCableSize({ current, length, volts, targetPct = 1, temp = 70, 
 
 // Cold-morning string voltage: n × Voc × (1 + coef% × (Tmin − 25)).
 export function coldVoc({ n, voc, coefPct = -0.27, tmin = -10 }) {
-  const N = Number(n), V = Number(voc), c = Number(coefPct) / 100;
+  const N = Number(n), V = dec(voc), c = Number(coefPct) / 100;
   if (!(N > 0 && V > 0)) return null;
   return r2(N * V * (1 + c * (Number(tmin) - 25)));
 }
@@ -62,7 +63,7 @@ export function hotVmp({ n, vmp, coefPct = -0.35, tcell = 70 }) {
 // PV string fuse: needed when 3 or more strings are in parallel (or 2+ where the panels'
 // reverse current rating would be exceeded). Rating 1.5–2.4 × Isc and ≤ the panel's max series fuse.
 export function pvStringFuse({ isc, strings = 1, maxSeriesFuse = null }) {
-  const I = Number(isc), S = Number(strings) || 1; const mx = Number(maxSeriesFuse) || null;
+  const I = dec(isc), S = Number(strings) || 1; const mx = Number(maxSeriesFuse) || null;
   if (!(I > 0)) return null;
   const lo = 1.5 * I, hi = 2.4 * I;
   const reverse = (S - 1) * I;
@@ -73,7 +74,7 @@ export function pvStringFuse({ isc, strings = 1, maxSeriesFuse = null }) {
 }
 // Battery fuse: above the max continuous current (× 1.25 margin), and the cable must carry the fuse rating.
 export function batteryFuse({ current, margin = 1.25 }) {
-  const I = Number(current); if (!(I > 0)) return null;
+  const I = dec(current); if (!(I > 0)) return null;
   const need = I * Number(margin || 1.25);
   return { need: r2(need), fuse: BATT_FUSES.find((f) => f >= need - 1e-9) || null };
 }
@@ -82,22 +83,22 @@ export function batteryFuse({ current, margin = 1.25 }) {
 export function pvString(o) {
   const { n, voc, vmp, isc, imp, coefPct = -0.27, tmin = -10, invMax, mpptMax, length, targetPct = 1, temp = 70, strings = 1, maxSeriesFuse, cable = 'xlpe90' } = o;
   const cold = coldVoc({ n, voc, coefPct, tmin });
-  const stc = n && voc ? r2(Number(n) * Number(voc)) : null;
+  const stc = n && voc ? r2(Number(n) * dec(voc)) : null;
   const vstring = n && vmp ? r2(Number(n) * Number(vmp)) : null;
-  const vocOk = cold != null && invMax ? cold <= Number(invMax) : null;
-  const near = cold != null && invMax ? cold > 0.95 * Number(invMax) && cold <= Number(invMax) : false;
-  const cableAmps = isc ? r2(1.25 * Number(isc)) : 0; // 712.433.101 style: Iz ≥ 1.25 × Isc STC (no string fuse)
+  const vocOk = cold != null && invMax ? cold <= dec(invMax) : null;
+  const near = cold != null && invMax ? cold > 0.95 * dec(invMax) && cold <= dec(invMax) : false;
+  const cableAmps = isc ? r2(1.25 * dec(isc)) : 0; // 712.433.101 style: Iz ≥ 1.25 × Isc STC (no string fuse)
   const fuse = pvStringFuse({ isc, strings, maxSeriesFuse });
   const needAmps = fuse && fuse.needed && fuse.fuse ? Math.max(cableAmps, fuse.fuse) : cableAmps;
   const size = vstring && (imp || isc) && length ? dcCableSize({ current: imp || isc, length, volts: vstring, targetPct, temp, needAmps, cable, minSize: 4 }) : null;
-  return { cold, stc, vstring, vocOk, near, invMax: Number(invMax) || null, mpptMax: Number(mpptMax) || null, mpptOk: cold != null && mpptMax ? cold <= Number(mpptMax) : null, cableAmps, needAmps, fuse, size };
+  return { cold, stc, vstring, vocOk, near, invMax: dec(invMax) || null, mpptMax: dec(mpptMax) || null, mpptOk: cold != null && mpptMax ? cold <= dec(mpptMax) : null, cableAmps, needAmps, fuse, size };
 }
 // Battery ↔ inverter leads.
 export function batteryLeads(o) {
   const { volts = 51.2, current, kw, eff = 0.95, length, targetPct = 1, temp = 70, cable = 'xlpe90' } = o;
-  const I = Number(current) > 0 ? Number(current) : Number(kw) > 0 ? (Number(kw) * 1000) / (Number(volts) * (Number(eff) || 1)) : null;
+  const I = dec(current) > 0 ? dec(current) : dec(kw) > 0 ? (dec(kw) * 1000) / (dec(volts) * (dec(eff) || 1)) : null;
   if (!I) return { ok: false, error: 'Enter the max continuous current, or the inverter power in kW.' };
   const fuse = batteryFuse({ current: I });
   const size = length ? dcCableSize({ current: I, length, volts, targetPct, temp, needAmps: fuse && fuse.fuse ? fuse.fuse : I * 1.25, cable }) : null;
-  return { ok: true, current: r2(I), fuse, size, fromKw: !(Number(current) > 0) };
+  return { ok: true, current: r2(I), fuse, size, fromKw: !(dec(current) > 0) };
 }

@@ -2,7 +2,7 @@
 // string fuses) and battery ↔ inverter leads (volt drop, cable, fuse).
 import { h, fill } from './ui.js';
 import { route, page, render } from './app.js';
-import { setLastCalc, formKit, icard, more, answerCard, pchip, resline, detailCard, banner } from './calckit.js';
+import {  setLastCalc, formKit, icard, more, answerCard, pchip, resline, detailCard, banner , dec } from './calckit.js';
 import { pvString, batteryLeads, DC_AMPS, RHO20, ALPHA, rhoAt } from './dc.js';
 
 const DEFAULTS = { mode: 'pv', n: '10', voc: '49.5', vmp: '41.6', isc: '13.9', imp: '13.2', coef: '-0.27', tmin: '-10', invMax: '600', mpptMax: '', pvLen: '25', strings: '1', maxFuse: '25', pvPct: '1',

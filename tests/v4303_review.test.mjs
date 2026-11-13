@@ -56,10 +56,12 @@ import { impliedFcu, loadKind } from '../js/wiring.js';
 test('towel rail recorded as FCU points: FCU drawn in line as the isolator, then the rail', () => {
   const c = diagramEICRooms(); c.boards[0].circuits.push({ num: '19', desc: 'Towel rail', points: '1' });
   const tr = c.boards[0].circuits.at(-1);
-  assert.equal(impliedFcu(tr), null); // v0.44.4: nothing guessed from the name
-  assert.equal(impliedFcu({ desc: 'FCU spur', points: '1' }), null);
+  // v0.48: towel rail / FCU is drawn from the name unless the user has their own item list.
+  assert.ok(impliedFcu(tr));
   const L = layout(diagramModel(c), { W: 380, font: 12 }); const t = L.blocks.flatMap((b) => b.shapes.filter((z) => z.t === 'text').map((z) => z.txt));
-  assert.ok(!t.includes('13A FCU')); assert.ok(!t.includes('Rail')); assert.ok(t.some((x) => /1 × point$/.test(x)));
+  assert.ok(t.includes('Rail') || t.includes('Rad') || t.some((x) => /towel rail|heater/i.test(x)), t.join(' | '));
+  // emptied item list still wins
+  assert.equal(impliedFcu({ desc: 'Towel rail', points: '1', diagram: { items: {} } }), null);
 });
 test('no cable tags (C4, C5...) on the room cables; they stay in the cable list', () => {
   const c = diagramEICRooms(); const l = c.boards[0].circuits.find((x) => String(x.num) === '2'); l.diagram.roomList.forEach((r, i) => { r.wiring = i % 2 ? 'jb-switch' : 'loop-in'; });

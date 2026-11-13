@@ -6,6 +6,8 @@
 // =====================================================================
 import { h, icon } from './ui.js';
 import { GROUPINGS, GROUP_INFO, METHOD_INFO, JOIST_HINT, cgFor, methodHasInsulation, INSULATED_METHOD_NOTE } from './cables.js';
+import { dec } from './calc.js';
+export { dec };
 
 // The calculator picker (Calculators home). key = what's remembered as "last used".
 export const CALCS = [
@@ -100,7 +102,7 @@ export const methodPick = (v, set, cab) => pickField({ label: 'How it\u2019s ins
 export const longPick = (v, set, k, label, options, hint = '') => pickField({ label, value: v[k], options, onPick: (x) => set(k, x), hint });
 
 // v0.22: 'Grouped how' (BS 7671 Table 4C1 rows). Shows N/A, greyed, until 2 or more circuits are grouped.
-export const isGrouped = (v) => Math.floor(Number(v.grouped) || 1) > 1;
+export const isGrouped = (v) => Math.floor(dec(v.grouped) || 1) > 1;
 export function groupSel(F, v, set) {
   const on = isGrouped(v);
   return pickField({ label: 'Grouped how', value: v.grouping, options: GROUPINGS, onPick: (k) => set('grouping', k), info: groupInfo, disabled: !on, naText: 'N/A (not grouped)', hint: on ? `Cg ${cgFor(v.grouping, v.grouped)} (Table 4C1)` : '' });

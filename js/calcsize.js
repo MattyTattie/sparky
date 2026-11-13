@@ -3,7 +3,7 @@
 // saying in plain words why it went up a size.
 import { h, fill } from './ui.js';
 import { route, page } from './app.js';
-import { groupSel, groupWords, methodPick, longPick, ciPick, ciWords } from './calckit.js';
+import { groupSel, groupWords, methodPick, longPick, ciPick, ciWords, dec } from './calckit.js';
 import { CABLES, CABLE_PICKS, AMBIENTS, CI_OPTIONS, SINGLES_CPC, THREE_PHASE_CABLES, UL, CUTOUT_FUSES, TYPICAL_NOTE } from './cables.js';
 import { sizeCircuit, LOAD_TYPES, START_METHODS, convertLine } from './design.js';
 import { useOnCircuit } from './usecircuit.js';
@@ -71,6 +71,7 @@ route(/^\/calc\/size$/, async () => {
           `method ${v.method}, ${v.ambient} °C, ${groupWords(v)}, ${ciWords(v, String(ciLabel).split(' (')[0].toLowerCase())}`)], { step: 3, gives: 'Iz', key: 'cable' }),
       icard('Length and earthing', [
         h('div', { class: 'grid2' }, F.num('length', ring ? 'Ring length' : 'Length of run', { unit: 'm', hint: ring ? 'All the way round' : 'Board to the far end' }), F.num('ze', 'Ze at the board', { unit: 'Ω', ph: '0.35', hint: '0.35 PME, 0.8 TN-S' })),
+        F.num('i2t', 'Maker’s I²t (optional)', { unit: 'A²s', hint: 'Leave blank to use the app’s conservative let-through.' }),
         ring ? null : F.chk('spread', 'Load spread evenly along the run', 'Like lighting points. Volt drop is worked out at half the length.'),
         !three && CABLES[v.cable].cores === 3 && !CABLES[v.cable].cpcCore ? F.seg('cpcMode', 'Earth (CPC)', [['core', '3rd core'], ['armour', 'Armour']], '', 'small') : null,
         v.cable === 'singles' ? F.chk('separateCpc', 'CPC run separately, not bunched with the circuit', 'k 143 instead of 115 for the adiabatic check.') : null,
@@ -78,7 +79,7 @@ route(/^\/calc\/size$/, async () => {
   };
 
   const draw = () => {
-    const r = sizeCircuit({ eff: v.eff, cutout: v.cutout, mpcbSet: v.mpcbSet, mpcbMax: v.mpcbMax, magMult: v.magMult, ir: v.ir, im: v.im, ig: v.ig, tg: v.tg, spread: !!v.spread && v.loadType !== 'ring', load: v.load, unit: v.unit, pf: v.pf, loadType: v.loadType, length: v.length, cable: v.cable, cpcMode: v.cpcMode, method: v.method, ambient: +v.ambient, grouped: +v.grouped, grouping: v.grouping, ci: +v.ci, ze: Number(v.ze) || 0, device: v.device, type: v.type, time: Number(v.time), vdPct: v.vd === 'auto' ? null : v.vd, ringLoad: v.ringLoad, start: v.start, separateCpc: v.separateCpc, phase: Number(v.phase) || 1 });
+    const r = sizeCircuit({ eff: v.eff, cutout: v.cutout, mpcbSet: v.mpcbSet, mpcbMax: v.mpcbMax, magMult: v.magMult, ir: v.ir, im: v.im, ig: v.ig, tg: v.tg, spread: !!v.spread && v.loadType !== 'ring', load: v.load, unit: v.unit, pf: v.pf, loadType: v.loadType, length: v.length, cable: v.cable, cpcMode: v.cpcMode, method: v.method, ambient: dec(v.ambient), grouped: dec(v.grouped), grouping: v.grouping, ci: dec(v.ci), ze: dec(v.ze) || 0, device: v.device, type: v.type, time: dec(v.time), vdPct: v.vd === 'auto' ? null : v.vd, ringLoad: v.ringLoad, start: v.start, separateCpc: v.separateCpc, phase: dec(v.phase) || 1, i2t: v.i2t });
     if (!r.ok) { fill(top, banner(r.error, 'Check the load and length above.', 'red')); fill(work); return; }
     const d = deviceById(r.device); const p = r.pick;
     const cpcText = (row) => row.cpc === 'armour' ? ' + armour as CPC' : row.cpc != null ? ` / ${row.cpc} mm² CPC` : '';

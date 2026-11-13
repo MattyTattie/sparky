@@ -13,11 +13,11 @@ import { sectionsFor, get, set, mainSwitchFields } from './certmodel.js';
 import { mainFromScan, mainSummary, mirrorMainRcd, liftBoardRcdToMain, mainAt, scanBoardExtras } from './boardmain.js';
 import { msIsRcdAt } from './certmodel.js';
 import { QUICK, planQuick, applyQuick, undoQuick } from './quickfill.js';
-import { supplyKindOf, feedInfo } from './wiring.js';
+import { supplyKindOf, feedInfo, circuitSpurList, addSpur, removeSpur, updateSpur, spurLabel, SPUR_DEVICES, SPUR_LOADS, spurNeedsLoad, namedLoadKind, pointKind, roomPointsNote, diagramPointTotal, pointCount, KIND_ONE } from './wiring.js';
 const boardsLine = (cert) => { const sec = sectionsFor(cert.type).find((x) => x.special === 'boards'); if (!sec) return null; const [c, t] = stateLine(cert, sec); return h('div', { class: 'notice ' + c + ' secstate' }, t); };
 import { blankBoard } from './certmodel.js';
 import * as presets from './presets.js';
-import { FIELDS, FIELD, TEMPLATES, blankCircuit, applyTemplate, copyCircuit, copyBoard, copyBoardToCert, makeSpare, autoNA, descChanged, rcdGroupChanged, spdGroupChanged, SPD_HIDE, spdHidden, spdObservation, circuitFedBySource, boardFedBySource, bidiTarget, hasBidiNote, addBidiNote, bidiCircuits, addBidiRemark, bidiRemarksDone, GEN_NOTES, EV_NOTES, addNote, noteDone, isEvCircuit, evMissing, isBatteryCircuit, spareLine, copyToNextWay, laterSequential, deleteCircuitAt } from './templates.js';
+import { FIELDS, FIELD, TEMPLATES, blankCircuit, applyTemplate, copyCircuit, copyBoard, copyBoardToCert, makeSpare, autoNA, applyNoDevice, descChanged, rcdGroupChanged, spdGroupChanged, SPD_HIDE, spdHidden, spdObservation, circuitFedBySource, boardFedBySource, bidiTarget, hasBidiNote, addBidiNote, bidiCircuits, addBidiRemark, bidiRemarksDone, GEN_NOTES, EV_NOTES, addNote, noteDone, isEvCircuit, evMissing, isBatteryCircuit, spareLine, copyToNextWay, laterSequential, deleteCircuitAt } from './templates.js';
 import { checkCircuit, limitZs, isSpare, boardCtx, boardIsTT, fmtZs } from './checks.js';
 import { WAVES, parseRcdType, formatRcdType, isSType } from './rcdtype.js';
 import { autoFillOcpd as autoFill0, typed, fillBoardRcd, releaseRcboRcd, boardHasRcd, syncBoardS } from './ocpdfill.js';
@@ -25,7 +25,7 @@ import { autoFillOcpd as autoFill0, typed, fillBoardRcd, releaseRcboRcd, boardHa
 const boardOf = (cert, c) => ((cert && cert.boards) || []).find((x) => (x.circuits || []).includes(c)) || null;
 import { DEVICES, deviceById, deviceFromBs, ratingsFor, CHECK_NOTE } from './limits.js';
 import { voiceSupported, listen } from './voice.js';
-import { CABLES, CABLE_PICKS, WIRING_TYPES, REF_METHODS, METHODS_FOR_PICK } from './cables.js';
+import { CABLES, CABLE_PICKS, WIRING_TYPES, REF_METHODS, METHODS_FOR_PICK, AMBIENTS, GROUPINGS, CI_OPTIONS } from './cables.js';
 // v0.29: only the reference methods that suit the picked cable (full list if none picked).
 // A value already on the cert always stays in the list, so old certs keep theirs.
 export function refMethodsFor(c) {
@@ -433,7 +433,7 @@ function presetPicker(c, after, cert) {
   const autoFillOcpd = (x) => autoFill0(x, { board: boardOf(cert, x) });
   const box = h('div', { class: 'presetbox' });
   const draw = async () => {
-    const list = presets.shown(await presets.load()); const cur = presets.presetFrom(c); const k = cur && presets.keyOf(cur);
+    const list = presets.shown(await presets.load()); const cur = c.noDevice ? null : presets.presetFrom(c); const k = cur && presets.keyOf(cur);
     const match = k && list.find((p) => presets.keyOf(p.fields) === k);
     box.style.display = list.length || cur ? '' : 'none';
     fill(box, h('div', { class: 'phd' }, h('span', {}, 'Device presets'), list.length ? h('a', { href: '#/settings/presets', class: 'note' }, 'Manage') : null),
@@ -476,6 +476,52 @@ function notePrompts(cert, c, after) {
   draw(); box.redraw = draw; return box;
 }
 const isAutoBs = (c) => !String(c.bs || '').trim() || !!(c.autoF && c.autoF.bs === c.bs) || !!deviceFromBs(c.bs); // a standard number is replaced by the new device's
+function rcdHint(c, cert) {
+  const parts = [];
+  if (isEvCircuit(c)) parts.push('EV charger: Type B RCBO, or Type A with a 6 mA RDC-DD (Section 722).');
+  const d = String((c && c.desc) || '').toLowerCase();
+  if (pointKind(c) === 'socket') {
+    parts.push(/outdoor|garden|outside|garage|external|patio|caravan/.test(d)
+      ? 'Outdoor-capable sockets: Type A (or F / B), not Type AC.'
+      : 'Type A is the usual pick for socket circuits that may supply outdoor equipment.');
+  }
+  const idn = Number(String((c && c.rcdIdn) || '').replace(',', '.'));
+  if (idn >= 100) parts.push('S-type (time-delayed) if this RCD is upstream of a 30 mA device.');
+  else if (idn === 30 || String((c && c.rcdIdn) || '') === '30') {
+    const b = (cert && cert.boards || []).find((x) => (x.circuits || []).includes(c));
+    if (b && String(b.rcdIdn || '') && Number(b.rcdIdn) > 30) parts.push('The board’s upstream RCD should be S-type (time-delayed) ahead of this 30 mA device.');
+  }
+  return parts;
+}
+function spurEditor(c, after) {
+  const box = h('div', { class: 'spurlist', 'data-spurs': '1' });
+  const draw = () => {
+    const list = circuitSpurList(c);
+    const tot = diagramPointTotal(c);
+    const pc = pointCount(c);
+    const named = namedLoadKind(c);
+    const note = roomPointsNote(c);
+    const rows = list.map((s) => h('div', { class: 'spurrow', 'data-sid': s.id },
+      h('label', { class: 'f' }, h('span', {}, 'Device'), h('select', { onchange: (e) => { updateSpur(c, s.id, { device: e.target.value }); if (!spurNeedsLoad(e.target.value)) updateSpur(c, s.id, { load: '' }); changed(); draw(); after(); } },
+        SPUR_DEVICES.map(([k, lab]) => h('option', { value: k, selected: s.device === k ? true : null }, lab)))),
+      spurNeedsLoad(s.device) ? h('label', { class: 'f' }, h('span', {}, 'It feeds'), h('select', { onchange: (e) => { updateSpur(c, s.id, { load: e.target.value }); changed(); draw(); after(); } },
+        h('option', { value: '' }, '— pick —'), SPUR_LOADS.map(([k, lab]) => h('option', { value: k, selected: s.load === k ? true : null }, lab)))) : null,
+      spurNeedsLoad(s.device) && s.load === 'other' ? h('label', { class: 'f' }, h('span', {}, 'Named'), h('input', { value: s.other || '', placeholder: 'e.g. gate motor', onchange: (e) => { updateSpur(c, s.id, { other: e.target.value }); changed(); after(); } })) : null,
+      h('button', { class: 'btn tiny', type: 'button', 'aria-label': 'Remove this spur', onclick: () => { removeSpur(c, s.id); changed(); draw(); after(); } }, 'Remove'),
+      h('p', { class: 'note' }, spurLabel(s))));
+    const hints = [];
+    if (note) hints.push(h('p', { class: 'note' }, note));
+    if (tot > 0 && !pc.known) hints.push(h('div', { class: 'btns' }, h('button', { class: 'btn small', type: 'button', onclick: () => { c.points = String(tot); changed(); draw(); after(); } }, 'Set points served to ' + tot)));
+    if (named && !pc.known) hints.push(h('div', { class: 'btns' }, h('button', { class: 'btn small', type: 'button', 'data-drawnamed': '1', onclick: () => { c.points = '1'; changed(); draw(); after(); } }, 'Draw 1 × ' + (KIND_ONE[named] || named))));
+    fill(box,
+      h('div', { class: 'phd' }, h('span', {}, 'Spurs on this circuit')),
+      h('p', { class: 'note' }, 'Each spur is its own item: pick the device, then what it feeds. Drawn off the ring or the radial. Points served is left as you set it — use the button if you want the count to follow.'),
+      rows,
+      h('button', { class: 'btn small', type: 'button', 'data-addspur': '1', onclick: () => { addSpur(c, { device: 'socket' }); changed(); draw(); after(); } }, '+ Add a spur'),
+      hints);
+  };
+  draw(); box.redraw = draw; return box;
+}
 function circuitEditor({ cert, c, ctx, back, title, prev, next, extra = [], more = [], mw = false }) {
   const autoFillOcpd = (x) => autoFill0(x, { board: boardOf(cert, x) });
   leaveCircuit(location.hash); leaving = { c, hash: location.hash };
@@ -499,7 +545,7 @@ function circuitEditor({ cert, c, ctx, back, title, prev, next, extra = [], more
     document.querySelectorAll('select[data-k]').forEach((sel) => { const o = sel.querySelector('.pick0'); if (o) o.textContent = autoNA(c, sel.dataset.k) ? 'N/A' : '— pick —'; sel.classList.toggle('autona', autoNA(c, sel.dataset.k)); });
     for (const [k, el] of Object.entries(inputs)) if (document.activeElement !== el && String(el.value) !== String(c[k] ?? '')) el.value = c[k] ?? ''; // v0.33.1: show values filled by the device picker
     for (const [k, el] of Object.entries(inputs)) { const na = autoNA(c, k); el.placeholder = na ? 'N/A' : ''; el.classList.toggle('autona', na); }
-    fill(noDevBox, isSpare(c) ? h('label', { class: 'check nodev' }, h('input', { type: 'checkbox', checked: !!c.noDevice, onchange: (e) => { c.noDevice = e.target.checked; changed(); refresh(); } }), 'No device fitted (device boxes show N/A too)') : null);
+    fill(noDevBox, isSpare(c) ? h('label', { class: 'check nodev' }, h('input', { type: 'checkbox', checked: !!c.noDevice, onchange: (e) => { applyNoDevice(c, e.target.checked); changed(); drawDev(); refresh(); } }), 'No device fitted (the whole row shows N/A, still editable by hand)') : null);
     if (pBox.redraw) pBox.redraw(); if (wrBox && wrBox.redraw) wrBox.redraw(); if (npBox && npBox.redraw) npBox.redraw();
     fill(limBox, isSpare(c) ? 'Spare way: no limits apply.' : lim.value != null ? h('span', {}, 'Max Zs ', h('b', {}, fmtZs(lim.value) + ' Ω'), res.cold != null ? ` · 80% (cold reading) ${res.cold.toFixed(2)} Ω` : '', h('br'), h('span', { class: 'note' }, lim.source)) : 'Pick the device and rating to see the maximum Zs.');
   };
@@ -521,12 +567,12 @@ function circuitEditor({ cert, c, ctx, back, title, prev, next, extra = [], more
   const drawDev = () => {
     const d = deviceById(c.device) || deviceFromBs(c.bs);
     if (d && c.device !== d.id) c.device = d.id;
-    const ratings = d ? ratingsFor(d.id, c.type) : [];
+    const ratings = d ? (ratingsFor(d.id, c.type).length ? ratingsFor(d.id, c.type) : ratingsFor(d.id)) : [];
     fill(devBox, 
       h('label', { class: 'f' }, h('span', {}, 'Protective device'), h('select', { onchange: (e) => { const nd = deviceById(e.target.value); if (!nd) return; const od = deviceById(c.device) || deviceFromBs(c.bs); releaseRcboRcd(c, od, nd); c.device = nd.id; askRcd = !!(od && od.rcd && !nd.rcd) && !boardHasRcd(boardOf(cert, c)); if (isAutoBs(c)) c.bs = nd.bs; if (nd.types.length && !nd.types.includes(c.type)) c.type = nd.types.length === 1 ? nd.types[0] : nd.types[0]; autoFillOcpd(c); changed(); drawDev(); refresh(); } },
         h('option', { value: '' }, '— pick —'), DEVICES.map((x) => h('option', { value: x.id, selected: d && d.id === x.id ? true : null }, x.label)))),
-      d && d.types.length > 1 ? h('div', { class: 'f', style: 'margin-bottom:10px' }, h('span', { class: 'note' }, 'Type (col 9)'), h('div', { class: 'chips' }, d.types.map((t) => h('button', { class: 'chip' + (c.type === t ? ' on' : ''), onclick: () => { c.type = t; typed(c, 'type'); autoFillOcpd(c); changed(); drawDev(); refresh(); } }, t)))) : null,
-      ratings.length ? h('div', { class: 'f', style: 'margin-bottom:10px' }, h('span', { class: 'note' }, 'Rating, A (col 10)'), h('div', { class: 'chips' }, ratings.map((r) => h('button', { class: 'chip' + (String(c.rating) === String(r) ? ' on' : ''), onclick: () => { c.rating = String(r); autoFillOcpd(c); changed(); drawDev(); refresh(); } }, r)))) : inp('rating'),
+      d && d.types.length > 1 ? h('div', { class: 'f', style: 'margin-bottom:10px' }, h('span', { class: 'note' }, 'Type (col 9)'), h('div', { class: 'chips' }, [['N/A', 'N/A'], ...d.types.map((t) => [t, t])].map(([v, lab]) => h('button', { class: 'chip' + ((v === 'N/A' ? autoNA(c, 'type') || /^n\/?a$/i.test(String(c.type || '')) : !autoNA(c, 'type') && c.type === v) ? ' on' : ''), type: 'button', onclick: () => { c.type = v; typed(c, 'type'); if (c.noDevice) c.noDevAuto = { ...(c.noDevAuto || {}) }; autoFillOcpd(c); changed(); drawDev(); refresh(); } }, lab)))) : null,
+      ratings.length ? h('div', { class: 'f', style: 'margin-bottom:10px' }, h('span', { class: 'note' }, 'Rating, A (col 10)'), h('div', { class: 'chips' }, [['N/A', 'N/A'], ...ratings.map((r) => [String(r), String(r)])].map(([v, lab]) => h('button', { class: 'chip' + ((v === 'N/A' ? autoNA(c, 'rating') || /^n\/?a$/i.test(String(c.rating || '')) : !autoNA(c, 'rating') && String(c.rating) === v) ? ' on' : ''), type: 'button', onclick: () => { c.rating = v; typed(c, 'rating'); if (c.noDevice) c.noDevAuto = { ...(c.noDevAuto || {}) }; autoFillOcpd(c); changed(); drawDev(); refresh(); } }, lab)))) : inp('rating'),
       d && d.adj ? h('label', { class: 'f' }, h('span', {}, d.adj === 'mpcb' ? 'Magnetic trip, A (MPCB: about 13 × the top of the dial)' : 'Magnetic setting Im / Ii, A (MCCB: e.g. 10 × Ir)'), h('input', { inputmode: 'decimal', 'aria-label': 'Magnetic trip setting', value: c.im || '', oninput: (e) => { c.im = e.target.value.trim(); changed(); refresh(); } }), h('div', { class: 'note imnote' }, c.im ? `Max Zs = 230 × 0.95 ÷ ${c.im} A. Check the maker\u2019s setting.` : 'Gives the max Zs and the adiabatic check. Leave blank to type your own max Zs below.')) : null,
       // v0.25: optional MCCB earth fault settings (LSIG). When Ig is in, max Zs uses Ig.
       d && d.adj === 'mccb' ? [h('div', { class: 'grid2' },
@@ -564,8 +610,8 @@ function circuitEditor({ cert, c, ctx, back, title, prev, next, extra = [], more
     if (pick && pick.cpc === 'armour') hint.push(h('p', { class: 'note' }, '⚠ CPC is the steel armour: R1+R2 uses maker’s armour resistance (check your cable’s data sheet), and the armour must pass the adiabatic check (543.1.3).'));
     const cab = cableCheck(c);
     if (cab && cab.msg && !cab.level) hint.push(h('p', { class: 'note' }, cab.msg));
-    const pc = pick && CABLES[pick.calc]; const len = lengthFromR1R2({ r1r2: c.r1r2, live: Number(c.live), cpc: pick && pick.cpc === 'armour' ? 'armour' : Number(c.cpc), cores: (pick && pick.cores) || (pc && pc.cores) || 2, rTable: pc && pc.rTable });
-    if (len && !isRingLike(c)) hint.push(h('p', { class: 'note' }, `Your R1+R2 of ${c.r1r2} Ω is about ${len} m of this cable (at 20 °C).`));
+    const pc = pick && CABLES[pick.calc]; const len = lengthFromR1R2({ r1r2: c.r1r2, live: Number(c.live), cpc: pick && pick.cpc === 'armour' ? 'armour' : Number(c.cpc), cores: (pick && pick.cores) || (pc && pc.cores) || 2, rTable: pc && pc.rTable, ring: isRingLike(c) });
+    if (len) hint.push(h('p', { class: 'note' }, `Your R1+R2 of ${c.r1r2} Ω is about ${len} m of this cable (at 20 °C)${isRingLike(c) ? ', as a ring (measured R1+R2 is a quarter of the loop)' : ''}.`));
     const ad = circuitAdiabatic(c, ctx());
     if (ad && ad.ok) hint.push(h('div', { class: 'resline ' + (ad.pass ? 'ok' : ad.pass === false ? 'bad' : 'na') }, h('b', {}, ad.pass ? '✓' : ad.pass === false ? '!' : '–'),
       h('div', {}, h('div', {}, `Adiabatic (543.1.3): CPC needs ${ad.smin} mm², it\u2019s ${ad.cpc} mm²`), h('div', { class: 'note' }, `Fault ${Math.round(ad.ifault)} A at Zs ${c.zs} Ω. ${ad.how} k ${ad.k} (${ad.kLabel}). S = √(${ad.i2t} A²s) ÷ ${ad.k}.${ad.armourNote || ''}`))));
@@ -583,6 +629,19 @@ function circuitEditor({ cert, c, ctx, back, title, prev, next, extra = [], more
       h('div', { class: 'grid2' }, inp('live'), inp('cpc')),
       h('label', { class: 'check' }, h('input', { type: 'checkbox', checked: isRingLike(c), onchange: (e) => { c.ring = e.target.checked; changed(); drawCable(); refresh(); } }), 'Ring final circuit', h('span', { class: 'note' }, ' (shows the ring tests)')),
       codeSel('wiring', WIRING_TYPES, 'Type of wiring', 3), codeSel('ref', refMethodsFor(c), 'Reference method', 4),
+      h('details', { class: 'fold more', 'data-factors': '1', open: [c.ambient, c.grouped, c.ci, c.i2t].some((x) => x != null && String(x).trim() !== '') ? true : null },
+        h('summary', {}, 'Correction factors and maker I²t (optional)'),
+        h('div', { class: 'foldin' },
+          h('p', { class: 'note' }, 'Leave these blank and the schedule compares In to the tabulated It. Put a temperature, grouping or Ci in and it checks Iz after factors, the same way as the Check calculator.'),
+          h('div', { class: 'grid2' },
+            h('label', { class: 'f' }, h('span', {}, 'Hottest air around it'), h('select', { 'aria-label': 'Ambient temperature', onchange: (e) => { c.ambient = e.target.value; changed(); drawCable(); refresh(); } },
+              h('option', { value: '' }, '— 30 °C (no factor) —'), AMBIENTS.map((n) => h('option', { value: String(n), selected: String(c.ambient || '') === String(n) ? true : null }, n + ' °C')))),
+            h('label', { class: 'f' }, h('span', {}, 'Circuits grouped (including this one)'), h('input', { inputmode: 'decimal', value: c.grouped ?? '', placeholder: '1', onchange: (e) => { c.grouped = e.target.value.trim(); changed(); drawCable(); refresh(); } }))),
+          h('label', { class: 'f' }, h('span', {}, 'Grouped how'), h('select', { disabled: !(Number(String(c.grouped || '').replace(',', '.')) > 1) || null, onchange: (e) => { c.grouping = e.target.value; changed(); drawCable(); refresh(); } },
+            GROUPINGS.map(([k, lab]) => h('option', { value: k, selected: (c.grouping || 'bunched') === k ? true : null }, lab)))),
+          h('label', { class: 'f' }, h('span', {}, 'Thermal insulation (Ci)'), h('select', { onchange: (e) => { c.ci = e.target.value; changed(); drawCable(); refresh(); } },
+            h('option', { value: '' }, '— none (Ci 1.0) —'), CI_OPTIONS.map(([k, lab]) => h('option', { value: k, selected: String(c.ci || '') === String(k) ? true : null }, lab)))),
+          h('label', { class: 'f' }, h('span', {}, 'Maker’s I²t (optional)'), h('input', { inputmode: 'decimal', value: c.i2t ?? '', placeholder: 'A²s', onchange: (e) => { c.i2t = e.target.value.trim(); changed(); drawCable(); refresh(); } }), h('span', { class: 'help' }, 'Leave blank for the app’s conservative let-through. If you put the breaker’s I²t in, the adiabatic check uses that.')))),
       hintBox);
   };
   // Ring final: r1 / rn / r2 boxes and the end-to-end check, only when ticked.
@@ -616,7 +675,8 @@ function circuitEditor({ cert, c, ctx, back, title, prev, next, extra = [], more
   } }, 'Say readings') : null;
   const sect = (t, ...kids) => h('div', { class: 'card' }, h('h2', {}, t), kids);
   const hasAfdd = ['afddBs', 'afddType', 'afddRating'].some((k) => String(c[k] || '').trim());
-  page(title, [
+  page(title, h('div', { class: 'circuitpage' },
+    h('div', { class: 'circuit-scroll' },
     // v0.45: the two most used buttons, the rest under "More"
     h('div', { class: 'btns circtools' }, extra,
       (more.length || mic) ? h('details', { class: 'more circmore' }, h('summary', {}, 'More'),
@@ -625,7 +685,7 @@ function circuitEditor({ cert, c, ctx, back, title, prev, next, extra = [], more
     // v0.14: the RCD boxes (cols 13-16) sit with the protective device, before the cable.
     sect('Circuit details', h('div', { class: 'grid2' }, inp('num'), inp('points')), inp('desc'), noDevBox, pBox, devBox,
       h('div', { class: 'rcdgrp' }, h('div', { class: 'phd' }, h('span', {}, 'RCD (if any)')),
-        h('div', { class: 'grid2' }, inp('rcdBs'), inp('rcdType'), inp('rcdIdn'), inp('rcdRating')), cTypeChips, mw ? null : (wrBox = whichRcd(cert, c))),
+        h('div', { class: 'grid2' }, inp('rcdBs'), inp('rcdType'), inp('rcdIdn'), inp('rcdRating')), cTypeChips, rcdHint(c, cert).map((tx) => h('p', { class: 'note rcdhint' }, tx)), mw ? null : (wrBox = whichRcd(cert, c))),
       // v0.32: optional AFDD details (printed on the Minor Works form, which has the boxes). v0.45: folded.
       h('details', { class: 'rcdgrp more afddmore', open: hasAfdd ? true : null }, h('summary', { class: 'phd' }, h('span', {}, 'AFDD (if any)')),
         h('div', { class: 'grid3' }, inp('afddBs', { label: 'AFDD BS (EN)' }), inp('afddType', { label: 'AFDD type' }), inp('afddRating', { label: 'AFDD rating (A)' }))),
@@ -634,12 +694,14 @@ function circuitEditor({ cert, c, ctx, back, title, prev, next, extra = [], more
       bidiBox(cert, () => circuitFedBySource(c), () => [c]),
       mw ? null : npBox = notePrompts(cert, c, () => { if (inputs.remarks) inputs.remarks.value = c.remarks || ''; changed(); refresh(); }),
       h('div', { class: 'phd cablehd' }, h('span', {}, 'Cable and wiring')),
-      cableBox),
+      cableBox,
+      mw ? null : spurEditor(c, () => { changed(); refresh(); })),
     sect('Test results', quickFillRow(c),
       ringInputs, h('div', { class: 'grid2' }, inp('r1r2'), inp('R2')), ringBox,
       inp('irV'), inp('irLL'), inp('irLE'), inp('pol'), inp('zs'), inp('rcdMs'), inp('rcdBtn'), inp('afddBtn'), inp('remarks')),
-    h('div', { class: 'stick' }, prev ? h('a', { class: 'btn', href: prev }, '← Previous') : null, h('a', { class: 'btn', href: back }, 'All circuits'), next ? h('a', { class: 'btn primary', href: next }, 'Next →') : null),
-  ], { back, sub: c.desc || '' });
+    ),
+    h('div', { class: 'circuitnav', role: 'navigation', 'aria-label': 'Circuits' }, prev ? h('a', { class: 'btn', href: prev }, '← Previous') : null, h('a', { class: 'btn', href: back }, 'All circuits'), next ? h('a', { class: 'btn primary', href: next }, 'Next →') : null)
+  ), { back, sub: c.desc || '' });
   refresh();
 }
 

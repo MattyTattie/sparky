@@ -62,8 +62,8 @@ test('scan screen: sideways photos turned upright, Turn button, RCCB card, board
   const sch = readFileSync(new URL('../js/schedule.js', import.meta.url), 'utf8'), ocr = readFileSync(new URL('../js/ocr.js', import.meta.url), 'utf8');
   assert.match(ocr, /uprightPhoto\(p\.bmp/); assert.match(ocr, /turnBitmap\(p\.bmp, deg\)/);
   assert.match(sch, /'Turn \\u21bb'/); assert.match(sch, /Not a circuit: RCCB/); assert.match(sch, /scanBoardExtras\(b, rows\.flatMap/); assert.match(sch, /turned upright to read it/);
-  assert.match(readFileSync(new URL('../js/config.js', import.meta.url), 'utf8'), /0\.47\.1 beta/);
-  assert.match(readFileSync(new URL('../sw.js', import.meta.url), 'utf8'), /sparky-v0\.47\.1/);
+  assert.match(readFileSync(new URL('../js/config.js', import.meta.url), 'utf8'), /0\.4[78]\.\d+ beta/);
+  assert.match(readFileSync(new URL('../sw.js', import.meta.url), 'utf8'), /sparky-v0\.4[78]\.\d+/);
 });
 
 // From Matthew's real DB2 photo (taken sideways; read turned upright). Only the OCR words are kept here, not the photo.

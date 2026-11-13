@@ -8,6 +8,7 @@
 // share, fuse and part size ranges) are typical makers' / trade practice,
 // written in from memory. They're a guide: the maker's instructions win.
 import { DC_AMPS, dcCableSize, pvString, coldVoc, dcVoltDrop } from './dc.js';
+import { dec } from './calc.js';
 
 const r1 = (n) => Math.round(n * 10) / 10;
 const r2 = (n) => Math.round(n * 100) / 100;
@@ -49,8 +50,8 @@ export const PV_LAYOUTS = [['auto', 'Pick for me'], ['series', 'All in series'],
 export const INV_EFF = 0.9;
 // v0.35: battery energy. kWh = Ah × nominal V ÷ 1000; nominal 12.8 V per 12 V for LiFePO4 (4 cells × 3.2 V), 12 V for lead / AGM.
 export const nominalV = (chem, V) => r2(((CHEMS[chem] || CHEMS.lifepo4).nom * (Number(V) || 12)) / 12);
-export const kwhOf = (ah, chem, V) => (Number(ah) === 0 ? 0 : Number(ah) > 0 ? r2((Number(ah) * nominalV(chem, V)) / 1000) : null);
-export const ahOfKwh = (kwh, chem, V) => (Number(kwh) > 0 ? Math.round((Number(kwh) * 1000) / nominalV(chem, V)) : null);
+export const kwhOf = (ah, chem, V) => (dec(ah) === 0 ? 0 : dec(ah) > 0 ? r2((dec(ah) * nominalV(chem, V)) / 1000) : null);
+export const ahOfKwh = (kwh, chem, V) => (dec(kwh) > 0 ? Math.round((dec(kwh) * 1000) / nominalV(chem, V)) : null);
 // Fuse / breaker families and the ratings makers usually sell (A).
 // v0.36.2: dcV = typical DC voltage rating, ka = typical DC breaking (interrupting) capacity.
 // ⚠ Typical figures: the part's own data sheet wins (some MIDI / MEGA / ANL come in higher-voltage versions).
@@ -69,7 +70,7 @@ export const ISO_DCV = 48;
 export const maxChargeV = (chem, V) => r2(((CHEMS[chem] || CHEMS.lifepo4).vmax * (Number(V) || 12)) / 12);
 // Prospective short-circuit current, kA (⚠ rough: about 20 × Ah for LiFePO4, 10 × Ah for lead/AGM).
 // The battery maker's figure wins: type it in (battIscKA) if you have it.
-export const faultKA = (chem, ah, typed) => (Number(typed) > 0 ? Number(typed) : Number(ah) > 0 ? r1(((CHEMS[chem] || CHEMS.lifepo4).iscPerAh * Number(ah)) / 1000) : null);
+export const faultKA = (chem, ah, typed) => (Number(typed) > 0 ? Number(typed) : dec(ah) > 0 ? r1(((CHEMS[chem] || CHEMS.lifepo4).iscPerAh * dec(ah)) / 1000) : null);
 // Parallel conductors touching (BS 7671 Table 4C1): 2 or 3 per pole, side by side.
 export const PAR_CG = { 1: 1, 2: 0.85, 3: 0.79 };
 export const INVERTER_SIZES = [150, 300, 500, 600, 800, 1000, 1200, 1500, 2000, 2500, 3000, 3500, 4000, 5000, 6000, 8000, 10000, 12000, 15000];
@@ -170,10 +171,10 @@ export function sizeRun({ id, name, intro = null, current, peak, length, volts, 
   let par2 = null;
   if (pick && pick.size >= 70 && f) {
     const amps = DC_AMPS[tbl.amps] ? DC_AMPS[tbl.amps].amps : DC_AMPS.xlpe90.amps;
-    for (const s2 of [16, 25, 35, 50, 70]) { const rate = 2 * amps[s2] * PAR_CG[2] * (derate || 1); const vd2 = dcVoltDrop({ current: I, length: L, csa: 2 * s2, temp: 70, volts: baseVolts || volts }); if (rate >= f.A - 1e-9 && vd2 && vd2.pct <= Number(pct) + 1e-9) { par2 = { size: s2, amps: r1(rate), vd: vd2 }; break; } }
+    for (const s2 of [16, 25, 35, 50, 70]) { const rate = 2 * amps[s2] * PAR_CG[2] * (derate || 1); const vd2 = dcVoltDrop({ current: I, length: L, csa: 2 * s2, temp: 70, volts: baseVolts || volts }); if (rate >= f.A - 1e-9 && vd2 && vd2.pct <= dec(pct) + 1e-9) { par2 = { size: s2, amps: r1(rate), vd: vd2 }; break; } }
     if (par2) why.push(`Or 2 × ${par2.size} mm² per pole: rated ${par2.amps} A together (× ${PAR_CG[2]} for touching, Table 4C1), drop ${par2.vd.pct}%.`);
   }
-  return { id, name, kind, current: r2(I), peak: r2(Ipk), length: L, pct: Number(pct), need, fuse: f, tableNeed, size: pick ? pick.size : null, vd: pick ? pick.vd : null, par2, ok: !!(pick && f), why: why.join(' '), rows: sz ? sz.rows : [] };
+  return { id, name, kind, current: r2(I), peak: r2(Ipk), length: L, pct: dec(pct), need, fuse: f, tableNeed, size: pick ? pick.size : null, vd: pick ? pick.vd : null, par2, ok: !!(pick && f), why: why.join(' '), rows: sz ? sz.rows : [] };
 }
 
 export function planDC(o0 = {}) {

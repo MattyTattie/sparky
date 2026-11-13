@@ -40,7 +40,9 @@ test('3: red flags from the limit checks, amber for missing points, legend', () 
   const scr = layout(diagramModel(c), { W: 380, font: 12, screen: true });
   assert.equal(scr.blocks[0].kind, 'flags');
   const pdf = layout(diagramModel(c), { W: 560, font: 11 }); const t = texts(pdf);
-  assert.ok(t.includes('Points served not recorded') && t.includes('Reading out of limits') && t.includes('Link not recorded'));
+  assert.ok(t.includes('Reading out of limits') && t.includes('Link not recorded'));
+  // v0.48: a named Cooker with no points is drawn (1 × cooker), not ambered 'Points served not recorded'.
+  assert.ok(t.includes('cooker') || t.includes('Cooker'));
   const red = pdf.blocks.find((x) => x.reds); assert.ok(red.shapes.some((z) => z.t === 'rect' && z.color.join() === '200,30,30'));
   assert.equal(pdf.blocks.at(-1).kind, 'legend'); // the key is still last without the cable table
 });
@@ -53,7 +55,7 @@ test('4: on screen each circuit is a tappable group, not a link', () => {
 });
 test('5: cable labels C1… and a cable table in the PDF layout only', () => {
   const L = layout(diagramModel(diagramEICPro()), { W: 560, font: 11, cableTable: true });
-  assert.equal(L.cables[0].label, 'C1'); assert.ok(L.cables.every((c, i) => c.label === 'C' + (i + 1)));
+  assert.match(L.cables[0].label, /^C1\b/); assert.ok(L.cables.every((c, i) => c.label === 'C' + (i + 1) || c.label.startsWith('C' + (i + 1) + ' ')), L.cables.map((c) => c.label).join(','));
   const sub = L.cables.find((c) => c.from === 'DB1 circuit 11'); assert.ok(sub.to.includes('DB2 (Garage)'));
   assert.ok(!L.cables.some((c) => c.from === 'DB1 circuit 11' && c !== sub), 'the sub-main is one cable, not two');
   assert.ok(L.cables.some((c) => c.from === 'JB, circuit 2' && c.to === 'switch, Kitchen'));

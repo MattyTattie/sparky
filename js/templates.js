@@ -115,7 +115,38 @@ const blankV = (v) => v == null || String(v).trim() === '';
 export const RING_KEYS = ['r1', 'rn', 'r2'];
 const realV = (v) => v != null && String(v).trim() !== '' && !/^n\/?a$/i.test(String(v).trim());
 export const isRingCircuit = (c) => !!c && (c.ring === true || (c.ring !== false && (RING_KEYS.some((k) => realV(c[k])) || /\bring\b/i.test(c.desc || ''))));
+// v0.48: boxes N/A'd when "No device fitted" is ticked (device + test results + IR voltage).
+export const NODEV_KEYS = [...DEVICE_KEYS, ...RESULT_KEYS, 'irV'];
+const isNAish = (v) => blankV(v) || /^n\/?a$/i.test(String(v ?? '').trim());
+// Leftover defaults on old certs already ticked "No device fitted" (no noDevAuto yet): B / 3 A / 500 V.
+const NODEV_LEFTOVER = { type: ['B'], rating: ['3'], irV: ['500'] };
+export function applyNoDevice(c, on) {
+  if (!c) return;
+  if (on) {
+    const prev = { ...(c.noDevAuto || {}) };
+    for (const k of NODEV_KEYS) {
+      if (!(k in prev)) prev[k] = c[k];
+      c[k] = 'N/A';
+    }
+    c.noDevAuto = prev;
+    c.noDevice = true;
+  } else {
+    const prev = c.noDevAuto || {};
+    for (const k of NODEV_KEYS) {
+      if (isNAish(c[k]) && k in prev) c[k] = prev[k];
+    }
+    delete c.noDevAuto;
+    c.noDevice = false;
+  }
+}
 export function autoNA(c, k) {
+  if (c && c.noDevice && NODEV_KEYS.includes(k)) {
+    const v = String(c[k] ?? '').trim();
+    if (isNAish(c[k])) return true;
+    // Old certs (no noDevAuto): leftover B / 3 A / 500 V look like N/A until the next edit.
+    if (!c.noDevAuto && NODEV_LEFTOVER[k] && NODEV_LEFTOVER[k].includes(v)) return true;
+    return false;
+  }
   if (RING_KEYS.includes(k) && !isSpareCircuit(c) && !isRingCircuit(c)) return blankV(c[k]);
   if (!isSpareCircuit(c) || k === 'num' || k === 'desc') return false;
   if (DEVICE_KEYS.includes(k) && !c.noDevice) return false;

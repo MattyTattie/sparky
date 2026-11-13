@@ -6,7 +6,7 @@
 // =====================================================================
 import { CABLES, CABLE_PICKS, CABLE_TEMP, CG, cgFor, CF_BS3036, SINGLES_CPC, ARMOUR_CSA, K_VALUES, UL, TAILS_CPC, TYPICAL_NOTE, effectiveCi } from './cables.js';
 import { UO, CMIN, MAX_ZS, deviceById, ratingsFor, maxZs, INSTANT_MULT, MCB_INSTANT_T, MCB_CLASS3_I2T, RCD_TIMES, MPCB_MAG_MULT, mpcbRange, MCCB_FRAMES, maxZsForTrip } from './limits.js';
-import { ambientFactor, r1r2At20, RING_DIVISOR, izLine } from './calc.js';
+import { ambientFactor, r1r2At20, RING_DIVISOR, izLine, dec } from './calc.js';
 import { TEMP_MULT } from './cables.js';
 
 const r2 = (n) => Math.round(n * 100) / 100;
@@ -87,12 +87,15 @@ export function clearance({ device, type, rating, zs, uo = UO, rcd = false, rcdS
 }
 
 // S = √(I²t) / k  (543.1.3)
-export function adiabatic({ zs, device, type, rating, k = 115, cpcCsa, rcd = false, rcdS = false, bka = 6, time = 0.4, uo = UO, imag = null, ig = null, tg = null }) {
+export function adiabatic({ zs, device, type, rating, k = 115, cpcCsa, rcd = false, rcdS = false, bka = 6, time = 0.4, uo = UO, imag = null, ig = null, tg = null, makerI2t = null }) {
   const cl = clearance({ device, type, rating, zs, uo, rcd, rcdS, bka, time, imag, ig, tg });
   if (!cl.ok) return { ok: false, ...cl };
-  const smin = Math.sqrt(cl.i2t) / Number(k);
+  const mine = dec(makerI2t);
+  const i2t = mine > 0 ? mine : cl.i2t;
+  const how = mine > 0 ? `Using the maker’s I²t of ${mine} A²s (in place of the app’s conservative ${Math.round(cl.i2t)} A²s).` : cl.how;
+  const smin = Math.sqrt(i2t) / Number(k);
   const have = Number(cpcCsa);
-  return { ok: true, ...cl, k: Number(k), smin: r2(smin), cpc: have || null, pass: have ? have >= smin - 1e-9 : null, i2t: Math.round(cl.i2t) };
+  return { ok: true, ...cl, how, maker: mine > 0, k: Number(k), smin: r2(smin), cpc: have || null, pass: have ? have >= smin - 1e-9 : null, i2t: Math.round(i2t) };
 }
 
 // ---------- Cable & breaker sizer ----------
@@ -107,23 +110,23 @@ export const LOAD_TYPES = [
 // v0.5: phase 3 → balanced three-phase load, Ib = P ÷ (√3 × UL × pf) per line.
 // v0.19: eff = motor efficiency (motors are rated on shaft output, so input power = kW ÷ efficiency).
 export function designCurrent({ load, unit = 'A', pf = 1, uo = UO, phase = 1, ul = UL, eff = 1 }) {
-  const v = Number(load); if (!(v > 0)) return null;
+  const v = dec(load); if (!(v > 0)) return null;
   if (unit !== 'kW') return r2(v);
-  const e = Number(eff) > 0 && Number(eff) <= 1 ? Number(eff) : 1;
-  return Number(phase) === 3 ? r2((v * 1000) / (Math.sqrt(3) * ul * (Number(pf) || 1) * e)) : r2((v * 1000) / (uo * (Number(pf) || 1) * e));
+  const e = dec(eff) > 0 && dec(eff) <= 1 ? dec(eff) : 1;
+  return dec(phase) === 3 ? r2((v * 1000) / (Math.sqrt(3) * ul * (dec(pf) || 1) * e)) : r2((v * 1000) / (uo * (dec(pf) || 1) * e));
 }
 // v0.19: the other way round, amps → kW (output kW for a motor, allowing for efficiency).
 export function kwFromAmps({ amps, pf = 1, uo = UO, phase = 1, ul = UL, eff = 1 }) {
-  const a = Number(amps); if (!(a > 0)) return null;
-  const e = Number(eff) > 0 && Number(eff) <= 1 ? Number(eff) : 1;
-  const w = Number(phase) === 3 ? Math.sqrt(3) * ul * a * (Number(pf) || 1) * e : uo * a * (Number(pf) || 1) * e;
+  const a = dec(amps); if (!(a > 0)) return null;
+  const e = dec(eff) > 0 && dec(eff) <= 1 ? dec(eff) : 1;
+  const w = dec(phase) === 3 ? Math.sqrt(3) * ul * a * (dec(pf) || 1) * e : uo * a * (dec(pf) || 1) * e;
   return r2(w / 1000);
 }
 // Line under the load box: "≈ 37.4 A per phase" or "≈ 22 kW". Motors: efficiency and nameplate hint.
 export function convertLine({ load, unit, pf = 1, phase = 1, eff = 1, motor = false }) {
-  const three = Number(phase) === 3; const e = motor ? eff : 1;
-  if (!(Number(load) > 0)) return '';
-  const how = `${three ? '3-phase √3 × 400 V' : 'single-phase 230 V'}, pf ${Number(pf) || 1}${motor ? `, efficiency ${e}` : ''}`;
+  const three = dec(phase) === 3; const e = motor ? eff : 1;
+  if (!(dec(load) > 0)) return '';
+  const how = `${three ? '3-phase √3 × 400 V' : 'single-phase 230 V'}, pf ${dec(pf) || 1}${motor ? `, efficiency ${e}` : ''}`;
   const tail = motor ? ' Motors: use the nameplate full-load current (FLC) if you have it.' : '';
   if (unit === 'kW') return `≈ ${designCurrent({ load, unit: 'kW', pf, phase, eff: e })} A${three ? ' per phase' : ''} (${how}).${tail}`;
   return `≈ ${kwFromAmps({ amps: load, pf, phase, eff: e })} kW${motor ? ' output' : ''} (${how}).${tail}`;
@@ -187,14 +190,14 @@ export function sizeCircuit(o) {
     ambient = 30, grouped = 1, grouping = 'bunched', ci = 1, ze = 0.35, device = 'rcbo', type = 'auto', time = 0.4,
     vdPct = null, ringLoad = 'spread', bka = 6, separateCpc = false, uo = UO, phase = 1, ul = UL, minIn = 0, start = 'dol', eff = 1, cutout = 100, adj = null, spread = false,
   } = o;
-  const three = Number(phase) === 3;
+  const three = dec(phase) === 3;
   if (three && !(CABLES[cable] && CABLES[cable].phase === 3)) return { ok: false, error: 'Pick a three-phase cable (4-core SWA or singles).' };
   if (!three && CABLES[cable] && CABLES[cable].phase === 3) return { ok: false, error: 'That cable is for three-phase. Pick a single-phase cable or switch to 3-phase.' };
   if (three && loadType === 'ring') return { ok: false, error: 'Ring finals are single-phase. Pick another load type for 3-phase.' };
   const ib = designCurrent({ load, unit, pf, uo, phase, ul, eff: loadType === 'motor' ? eff : 1 });
   const vref = three ? ul : uo; // volt drop % is of 400 V line voltage on 3-phase
   if (ib == null) return { ok: false, error: 'Enter the load (kW or amps).' };
-  const L = Number(length);
+  const L = dec(length);
   if (!(L > 0)) return { ok: false, error: 'Enter the length of the cable run.' };
   const cab = CABLES[cable]; const m = cab && cab.methods[method];
   if (!m) return { ok: false, error: 'Pick a cable and how it\u2019s installed.' };
@@ -223,7 +226,7 @@ export function sizeCircuit(o) {
   // correction factors
   let { ca, note: caNote } = ambientFactor(cable, ambient);
   if (/^D/.test(method)) { ca = 1; caNote = 'Buried: air-temperature factor not used.'; }
-  const cg = (Number(grouped) || 1) > 1 ? cgFor(m.bunched ? 'bunched' : grouping, grouped) : 1; // v0.22: blank / 1 = not grouped
+  const cg = (dec(grouped) || 1) > 1 ? cgFor(m.bunched ? 'bunched' : grouping, grouped) : 1; // v0.22: blank / 1 = not grouped
   const cf = device === 'bs3036' ? CF_BS3036 : 1;
   const ciEff = effectiveCi(method, ci); // v0.34: A / 100–103 already allow for insulation
   const factor = ca * cg * ciEff * cf;
@@ -243,10 +246,10 @@ export function sizeCircuit(o) {
     const vd = { pass: pct <= limit + 1e-9, volts: r2(v), pct: r2(pct), limit, mvam: mv, div };
     const cp = cpcAreaFor(cable, s, cpcMode);
     const r20 = cp && cp.cpc != null ? r1r2At20({ live: s, cpc: cp.cpc, length: L, cores: cab.cores || 2, ring: !!ring, rTable: cab.rTable || null }) : null;
-    const zs = r20 == null ? null : r2(Number(ze) + r20 * mult);
+    const zs = r20 == null ? null : r2(dec(ze) + r20 * mult);
     const z = { pass: zs != null && max != null ? zs <= max + 1e-9 : null, zs, max, r20, rHot: r20 == null ? null : r3(r20 * mult) };
     const area = cp ? (cp.cpc === 'armour' ? cp.area : cp.cpc) : null;
-    const ad = zs ? adiabatic({ zs, device: d.id, type: curve, rating: inA, k: k.k, cpcCsa: area, rcd: !!d.rcd, bka, time, imag: adj ? adj.imag : null, ig: adj ? adj.ig : null, tg: adj ? adj.tg : null }) : { ok: false };
+    const ad = zs ? adiabatic({ zs, device: d.id, type: curve, rating: inA, k: k.k, cpcCsa: area, rcd: !!d.rcd, bka, time, imag: adj ? adj.imag : null, ig: adj ? adj.ig : null, tg: adj ? adj.tg : null, makerI2t: o.makerI2t || o.i2t }) : { ok: false };
     const adi = { pass: ad.ok ? ad.pass : null, ...ad, area, armour: cp && cp.cpc === 'armour' };
     const ok = cur.pass && vd.pass && z.pass !== false && adi.pass !== false;
     return { size: s, cpc: cp ? cp.cpc : null, cur, vd, z, adi, ok };

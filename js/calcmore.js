@@ -4,7 +4,7 @@ import { h, fill, toast } from './ui.js';
 import { route, page, go } from './app.js';
 import * as db from './db.js';
 import { flush } from './state.js';
-import { setLastCalc, formKit, icard, more, answerCard, pchip, detailCard, banner } from './calckit.js';
+import {  setLastCalc, formKit, icard, more, answerCard, pchip, detailCard, banner , dec } from './calckit.js';
 import { transformer, contactor, CATS, catFor, faultLevel, KA_RATINGS } from './calcextra.js';
 import { CABLES } from './cables.js';
 
@@ -97,7 +97,7 @@ route(/^\/calc\/fault(?:\/([^/]+)\/(\d+))?$/, async (certId, bi) => {
         h('div', { class: 'grid2' }, F.sel('size', 'Size (mm²)', cab.sizes.map((s) => [String(s), s + ' mm²'])), F.num('length', 'Length one way', { unit: 'm' }))], { step: 2, gives: 'R1+Rn and R1+R2', key: 'run' }),
       icard('Breakers at the sub-board', [F.seg('ka', 'Breaking capacity (kA)', KA_RATINGS.map((k) => [String(k), k + ' kA']), 'On the breakers, the number in a box (e.g. 6000 = 6 kA).', 'small')], { step: 3, gives: 'breaking capacity check', key: 'device' }));
     fill(work, r.ok ? [detailCard('fl-how', 'How it worked it out', h('ol', { class: 'steps' },
-        h('li', {}, `Source impedance at the origin = 230 V ÷ ${Number(v.pfc)} kA = ${r.zsrc} Ω.`),
+        h('li', {}, `Source impedance at the origin = 230 V ÷ ${dec(v.pfc)} kA = ${r.zsrc} Ω.`),
         h('li', {}, `Sub-main R1+Rn = ${r.r1rn} Ω${r.r1r2 != null ? `, R1+R2 = ${r.r1r2} Ω` : ''} (${v.length || 0} m of ${v.size} mm², cold).`),
         r.steps.slice(1).map((t) => h('li', {}, t)))),
       detailCard('fl-more', 'More info', [h('p', { class: 'note' }, 'PSCC is the current if line and neutral (or two lines) touch; PEFC is the current if line touches earth. The fault level is the larger of the two, and every device at the sub-board must be able to break it (its kA rating). Write it as Ipf for that board on the schedule of test results. The cable is taken cold (20 °C) because that gives the highest current; reactance is ignored, which is fine up to about 35 mm².'),

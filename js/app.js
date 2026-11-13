@@ -69,7 +69,7 @@ export function page(title, content, { back = null, sub = '', actions = [], wide
   const listPane = listSpot && paneOpen(); // v0.31: Hide / Show jobs, remembered on this computer
   const calcPage = /^#\/calc\/./.test(location.hash);
   const main = h('main', { class: (wide ? 'wide ' : '') + (tab ? 'hasnav' : '') + (desk && calcPage ? ' calcpage' : '') + (listPane ? ' withlist' : '') }, content);
-  document.body.classList.toggle('desk', desk); document.body.classList.toggle('withlist', listPane);
+  document.body.classList.toggle('desk', desk); document.body.classList.toggle('withlist', listPane); document.body.classList.toggle('circedit', /\/b\/\d+\/c\/\d+/.test(location.hash));
   fill(app, 
     h('header', { class: 'top' },
       back ? h('button', { class: 'iconbtn', 'aria-label': 'Back', onclick: () => go(back) }, icon('arrowLeft', { size: 22 })) : h('span', { class: 'brandmark', 'aria-hidden': 'true' }, h('img', { src: 'icons/icon.svg', alt: '', width: 36, height: 36 })),
