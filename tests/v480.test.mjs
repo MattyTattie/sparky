@@ -9,6 +9,7 @@ import { adiabatic } from '../js/design.js';
 import { isRingCircuit, autoNA, applyNoDevice, blankCircuit, NODEV_KEYS, DEVICE_KEYS, RESULT_KEYS } from '../js/templates.js';
 import { clean, keyOf, nameFor, mergePresets, distinguishName, presetFrom, shown } from '../js/presets.js';
 import { isRingC, noGuessLoad, pointKind, forgiveDesc, namedLoadKind, listedItems, circuitSpurList, addSpur, removeSpur, updateSpur, spurLabel, spurSymbolOf, spurLoadKind, spurListTotal, diagramPointTotal, diagramMainPoints, drawnPointCount, setPointsToDiagramTotal, roomPointsNote, layout, diagramModel, SPUR_DEVICES, SPUR_LOADS, spurFromOptions, spurSocketCount } from '../js/wiring.js';
+import { textSymbolOverlaps, hangingSocketTicks, textBBox } from './shape_overlap.mjs';
 
 const src = (f) => readFileSync(new URL('../' + f, import.meta.url), 'utf8');
 
@@ -352,6 +353,89 @@ test('spur lines start at a socket (or a JB when there are no sockets)', () => {
   const jbX = jb[0].x;
   const fromJb = drops(shF).filter((d) => Math.abs(d.x1 - jbX) < 3 && Math.max(d.y1, d.y2) > jb[0].y + 4);
   assert.ok(fromJb.length >= 1, 'spur should drop from the JB at x=' + jbX.toFixed(1));
+});
+
+test('spur labels sit clear of symbols and hanging sockets have no through-cable tick', () => {
+  const lay = (cs, W = 380) => layout(diagramModel({ type: 'EIC', boards: [{ id: 'b', ref: 'DB1', circuits: cs }] }), { W, font: 12, screen: true });
+  const allShapes = (cs, W) => lay(cs, W).blocks.filter((b) => b.kind === 'circuit').flatMap((b) => b.shapes || []);
+  // block shapes use block-local y, so check one circuit block at a time
+  const clean = (cs, label, W = 380) => {
+    for (const b of lay(cs, W).blocks.filter((x) => x.kind === 'circuit')) {
+      const sh = b.shapes || [];
+      const hits = textSymbolOverlaps(sh);
+      assert.equal(hits.length, 0, label + ' W=' + W + ' circuit ' + b.num + ' text on symbol: ' + hits.map((h) => '"' + h.txt + '" area=' + h.area.toFixed(1)).join('; '));
+      const ticks = hangingSocketTicks(sh);
+      assert.equal(ticks.length, 0, label + ' W=' + W + ' circuit ' + b.num + ' hanging through-cable tick at cy=' + ticks.map((t) => t.cy.toFixed(1)).join(','));
+    }
+  };
+
+  const kitchen = {
+    num: '2', desc: 'Kitchen sockets', ring: false, rating: '32', live: '2.5', cpc: '1.5',
+    points: '4', device: 'mcb', bs: '60898', type: 'B', diagram: { spurList: [] },
+  };
+  addSpur(kitchen, { device: 'socket1' });
+  addSpur(kitchen, { device: 'sfcu', load: 'towel' });
+  for (const W of [380, 1100, 1440]) clean([kitchen], 'kitchen', W);
+  // "Single" sits below the hanging single-socket plate, not through it
+  const shK = allShapes([kitchen], 380);
+  const spurPlate = shK.filter((z) => z.t === 'rect' && z.fill && z.fill[0] === 255 && z.w > 16 && z.w < 25 && z.h > 12 && z.h < 22 && z.y > 100)[0]; // single-socket plate (FCU plates are narrower)
+  assert.ok(spurPlate, 'expected a hanging single-socket plate');
+  const single = shK.filter((z) => z.t === 'text' && (z.txt === 'Single' || z.txt === 'Single socket')).map(textBBox);
+  assert.ok(single.length, 'expected a Single socket label');
+  for (const b of single) {
+    // to the right of the faceplate, level with it (not drawn through it)
+    assert.ok(b.x >= spurPlate.x + spurPlate.w + 3, '"Single" starts at x=' + b.x.toFixed(1) + ' but plate right edge is ' + (spurPlate.x + spurPlate.w).toFixed(1));
+    const mid = b.y + b.h / 2;
+    assert.ok(mid > spurPlate.y - 2 && mid < spurPlate.y + spurPlate.h + 2, 'label should sit level with its faceplate');
+  }
+  // the checker itself catches a label drawn through a faceplate (the bug Matthew saw)
+  const bad = [...shK, { t: 'text', x: spurPlate.x + spurPlate.w / 2, y: spurPlate.y + spurPlate.h * 0.8, txt: 'Single', size: 9.3, anchor: 'middle' }];
+  assert.ok(textSymbolOverlaps(bad).some((h) => h.txt === 'Single'), 'checker must flag text over a symbol');
+  // an upper-row ring socket picked by hand routes down the channel between columns, clear of the lower sockets
+  const r2 = { num: '1', desc: 'Downstairs sockets', ring: true, rating: '32', live: '2.5', points: '8', device: 'mcb', type: 'B', diagram: { spurList: [] } };
+  const sid = addSpur(r2, { device: 'fcu', load: 'boiler' }); updateSpur(r2, sid, { from: '2' });
+  clean([r2], 'ring from upper-row socket 2', 380);
+
+  const ring = {
+    num: '4', desc: 'Upstairs sockets', ring: true, rating: '32', live: '4', cpc: '1.5',
+    points: '6', device: 'mcb', bs: '60898', type: 'B', diagram: { spurList: [] },
+  };
+  addSpur(ring, { device: 'fcu', load: 'other', other: 'Boiler' });
+  for (const W of [380, 1440]) clean([ring], 'ring', W);
+
+  const hall = {
+    num: '9', desc: 'Hall sockets', ring: false, rating: '32', live: '2.5', points: '2',
+    device: 'mcb', bs: '60898', type: 'B', diagram: { spurList: [] },
+  };
+  addSpur(hall, { device: 'socket1' });
+  addSpur(hall, { device: 'socket' });
+  addSpur(hall, { device: 'sfcu', load: 'towel' });
+  for (const W of [380, 1440]) clean([hall], 'stack', W);
+
+  const fcu = {
+    num: '8', desc: 'Boiler FCUs', ring: false, rating: '16', live: '2.5', points: '3',
+    device: 'mcb', bs: '60898', type: 'B', diagram: { spurList: [] },
+  };
+  addSpur(fcu, { device: 'sfcu', load: 'heater' });
+  for (const W of [380, 1440]) clean([fcu], 'JB fallback', W);
+
+  // every device × load combo, including stacked on a 6-socket ring
+  const combos = { num: '3', desc: 'All spur combos sockets', ring: true, rating: '32', live: '2.5', points: '6', diagram: { spurList: [] } };
+  for (const [dev] of SPUR_DEVICES) {
+    if (dev === 'fcu' || dev === 'sfcu') {
+      for (const [load] of SPUR_LOADS) addSpur(combos, { device: dev, load });
+      addSpur(combos, { device: dev, load: '' });
+    } else addSpur(combos, { device: dev, load: '' });
+  }
+  for (const W of [380, 1440]) clean([combos], 'all combos', W);
+
+  // the four-DB sample that we screenshot: downstairs ring + kitchen two spurs
+  const down = {
+    num: '1', desc: 'Ring final: downstairs sockets', ring: true, rating: '32', live: '2.5', cpc: '1.5',
+    points: '8', device: 'mcb', bs: '60898', type: 'B', diagram: { spurList: [] },
+  };
+  addSpur(down, { device: 'fcu', load: 'boiler' });
+  for (const W of [380, 1100, 1440]) clean([down, kitchen], 'screenshot sample', W);
 });
 
 test('Check calculator has full Table 52.2 Ci and Use on a circuit; Size accepts commas via dec', () => {

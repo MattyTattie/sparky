@@ -1206,90 +1206,110 @@ export function layout(model, { W = 380, font = 12, screen = false, cableTable =
     if (d > 0) { const lx = px + (tag ? 12 : 6); if (lx + textW(lab, small) < maxX) T(sh, lx, sy + small * 0.35, lab, { size: small, color: COL.grey }); }
     else { const lx = px - 6 - textW(lab, small); if (lx > minX) T(sh, lx, sy + small * 0.35, lab, { size: small, color: COL.grey }); }
   }
+  function spurHalfW(k, S) {
+    const r = S / 2;
+    if (SOCK[k]) return SOCK[k][0] ? r * 1.7 * 1.1 : r * 1.7 * 0.575;
+    if (k === 'fcu' || k === 'sfcu' || k === 'flex') return faceW(k, r) / 2;
+    return loadR(k, S);
+  }
   function circuitSpurSection(sh, c, tx, fromY, maxX) {
     const list = circuitSpurList(c); if (!list.length) return 0;
     const S = F * 1.5, g = { w: 1.1, color: COL.line }, fx = tx - gap / 2;
     const savedHeat = heatLab;
     heatLab = ''; // v0.48: row label already names the load; a "Rail"/"Rad" caption above the symbol would sit on the row above
     // v0.48: a spur is taken from a socket's terminals (or a JB), not from the left feeder
-    const ports = sockAnchors.slice();
+    const all = sockAnchors.slice();
+    const botCy = all.length ? Math.max(...all.map((p) => p.cy)) : 0;
+    const bottomRow = all.filter((p) => p.cy > botCy - 4).sort((a, b) => a.x - b.x); // drops from here never cross another socket
     const wantsJb = list.some((s) => String(s.from || '').toLowerCase() === 'jb');
     let jbPort = null;
-    if (!ports.length || wantsJb) jbPort = placeSpurJB(sh, S, g, fx, tx, fromY, maxX);
-
-    const nSock = ports.length;
-    const autoOrder = ports.map((_, i) => i).sort((a, b) => {
-      const dy = ports[b].cy - ports[a].cy;
-      if (Math.abs(dy) > 4) return dy;
-      return ports[a].x - ports[b].x;
-    });
+    if (!all.length || wantsJb) jbPort = placeSpurJB(sh, S, g, fx, tx, fromY, maxX);
+    // an upper-row ring socket picked by hand: drop into the channel between columns, then down past the lower rows
+    const viaChannel = (p) => {
+      if (p.cy > botCy - 4 || p.yB == null || !p.step) return null;
+      const cx = p.col ? p.x - p.step / 2 : p.x + p.step / 2;
+      return { ...p, x: cx, from: p, bot: p.yB + 5 };
+    };
     let ai = 0;
     const assigned = list.map((s) => {
       const f = String(s.from || '').trim().toLowerCase();
       if (f === 'jb' && jbPort) return { s, port: jbPort };
       const m = /^(?:socket\s*)?(\d+)$/.exec(f);
-      if (m && nSock) return { s, port: ports[Math.min(nSock, Math.max(1, parseInt(m[1], 10))) - 1] };
-      if (nSock) { const pi = autoOrder[ai % autoOrder.length]; ai++; return { s, port: ports[pi] }; }
+      if (m && all.length) {
+        const want = all[Math.min(all.length, Math.max(1, parseInt(m[1], 10))) - 1];
+        if (bottomRow.includes(want)) return { s, port: want };
+        const ch = viaChannel(want);
+        if (ch) return { s, port: ch };
+      }
+      if (bottomRow.length) return { s, port: bottomRow[ai++ % bottomRow.length] };
       return { s, port: jbPort };
     });
-
     const groups = [];
     const byKey = new Map();
     assigned.forEach((a) => {
       if (!a.port) return;
-      const key = a.port.k + '@' + a.port.x.toFixed(1) + ',' + (a.port.cy != null ? a.port.cy.toFixed(1) : '0');
+      const key = a.port.x.toFixed(1) + ',' + (a.port.bot || 0).toFixed(1);
       if (!byKey.has(key)) { const g0 = { port: a.port, items: [] }; byKey.set(key, g0); groups.push(g0); }
       byKey.get(key).items.push(a.s);
     });
-    groups.sort((a, b) => a.port.x - b.port.x);
-
     let row0 = fromY + 8 + S * 0.65;
-    if (jbPort && jbPort.bot + 4 > fromY && (!ports.length || wantsJb && assigned.some((a) => a.port === jbPort))) {
-      row0 = Math.max(row0, jbPort.bot + S * 0.85 + 6);
-    }
-    const usedX = groups.map((g0) => g0.port.x);
-    const labAt = (px) => {
-      const xs = usedX.slice().sort((a, b) => a - b);
-      const i = xs.findIndex((x) => Math.abs(x - px) < 0.6);
-      const left = i > 0 ? (px - xs[i - 1]) / 2 - 3 : px - tx;
-      const right = i >= 0 && i < xs.length - 1 ? (xs[i + 1] - px) / 2 - 3 : maxX - px - 2;
-      const w = Math.min(130, Math.max(34, left + right));
-      let cx = px;
-      if (cx - w / 2 < px - left) cx = px - left + w / 2;
-      if (cx + w / 2 > px + right) cx = px + right - w / 2;
-      return { x: cx, w };
-    };
-
-    let maxBot = row0;
-    groups.forEach((g0) => {
+    if (jbPort && assigned.some((a) => a.port === jbPort)) row0 = Math.max(row0, jbPort.bot + S * 0.85 + 6);
+    const sz = small * 0.9;
+    // Plan each group: device (and load) on the drop, the label to the right of the widest symbol.
+    const plan = groups.map((g0) => {
       const px = g0.port.x;
-      const lab0 = labAt(px);
-      let yC = row0;
-      let prev = g0.port.bot;
-      g0.items.forEach((s) => {
-        const k = spurSymbolOf(s);
-        const sr = loadR(k, S);
-        const lk = spurLoadKind(s);
-        L(sh, px, prev, px, yC, g);
-        symbol(sh, k, px, yC, S); used.add(k);
-        let endY = yC + sr;
-        if (lk && lk !== k) {
-          const lr = loadR(lk, S * 0.85);
-          const ly = yC + sr + 5 + lr;
-          L(sh, px, yC + sr, px, ly - lr, g);
-          symbol(sh, lk, px, ly, S * 0.85); used.add(lk);
+      const items = g0.items.map((s) => {
+        const k = spurSymbolOf(s), lk = spurLoadKind(s);
+        const hw = Math.max(spurHalfW(k, S), lk && lk !== k ? spurHalfW(lk, S * 0.85) : 0);
+        return { s, k, lk: lk && lk !== k ? lk : '', hw, lab: spurLabel(s).replace(/^Spur:\s*/, '') };
+      });
+      const hw = Math.max(...items.map((it) => it.hw));
+      const labX = px + hw + 6;
+      const labW = Math.max(56, maxX - labX - 2);
+      const right = Math.max(...items.map((it) => labX + Math.max(...wrapText(it.lab, labW, sz).map((l) => textW(l, sz)))));
+      return { g0, px, items, hw, labX, labW, left: px - hw - 4, right: right + 4 };
+    });
+    // Right-most first. A group whose symbols or labels would reach a group to its right starts below it,
+    // so its drop passes to the left of everything already drawn and its labels cross nothing.
+    plan.sort((a, b) => b.px - a.px);
+    const placed = [];
+    let maxBot = row0;
+    for (const P of plan) {
+      let top = row0;
+      for (const Q of placed) if (P.right > Q.left && P.left < Q.right) top = Math.max(top, Q.bottom + 10);
+      const port = P.g0.port;
+      if (port.from) { // channel route from an upper-row socket
+        L(sh, port.from.x, port.from.bot, port.from.x, port.bot, g);
+        L(sh, port.from.x, port.bot, P.px, port.bot, g);
+      }
+      let prev = port.bot;
+      let yC = top + S * 0.5;
+      let bottom = top;
+      P.items.forEach((it) => {
+        const sr = loadR(it.k, S);
+        const hang = !!SOCK[it.k];
+        L(sh, P.px, prev, P.px, yC, g);
+        symbol(sh, it.k, P.px, yC, S, null, hang ? { hang: true } : {}); used.add(it.k);
+        let endY = hang ? plateBot(it.k, S, yC) : yC + sr;
+        if (it.lk) {
+          const lr = loadR(it.lk, S * 0.85);
+          const ly = endY + 5 + lr;
+          L(sh, P.px, endY, P.px, ly - lr, g);
+          symbol(sh, it.lk, P.px, ly, S * 0.85); used.add(it.lk);
           endY = ly + lr;
         }
-        const lab = spurLabel(s).replace(/^Spur:\s*/, '');
-        const labTop = endY + 2;
-        const th = textLines(sh, lab0.x, labTop, lab, lab0.w, { size: small * 0.9, color: COL.grey, anchor: 'middle' });
-        const bot = labTop + th;
-        maxBot = Math.max(maxBot, bot);
-        prev = bot;
-        yC = bot + S * 0.55 + 8;
+        const midY = hang ? (yC + plateBot(it.k, S, yC)) / 2 + 1 : yC;
+        const labTop = midY - sz * 0.75; // first line centred on the device (a hanging socket: on its faceplate)
+        const th = textLines(sh, P.labX, labTop, it.lab, P.labW, { size: sz, color: COL.grey });
+        const b = Math.max(endY, labTop + th);
+        bottom = Math.max(bottom, b);
+        prev = endY;
+        yC = b + 10 + S * 0.5;
       });
-    });
-
+      P.bottom = bottom;
+      placed.push(P);
+      maxBot = Math.max(maxBot, bottom);
+    }
     heatLab = savedHeat;
     return Math.max(0, maxBot - fromY + 8);
   }
@@ -1336,7 +1356,7 @@ export function layout(model, { W = 380, font = 12, screen = false, cableTable =
     L(sh, fx, feedTop, fx, res[0].yT, g); ringLegB = res[0].yB; // leg B leaves the breaker's foot (drawn with the breaker)
     rows.forEach((row, k) => {
       const pos = res[k].pos;
-      row.items.forEach((kd, j) => markSock(pos[j], row.cy, kd, S, { yB: res[k].yB, dir: res[k].dir }));
+      row.items.forEach((kd, j) => markSock(pos[j], row.cy, kd, S, { yB: res[k].yB, dir: res[k].dir, step, col: j }));
     });
     let bottom = res[res.length - 1].yB + 4;
     const lr0 = res[res.length - 1], jx = lr0.pos.length ? lr0.pos[lr0.pos.length - 1] + lr0.dir * (loadR('socket', S) + 12) : 0; const spurLab = sgl === 1 ? 'Spur' : 'Spurs';
@@ -1664,13 +1684,15 @@ export function layout(model, { W = 380, font = 12, screen = false, cableTable =
   function nocH(o, x, cy, w) { const g = { w: 1.2, color: COL.line }; const a = x + w * 0.3, b = x + w * 0.7, rr = w * 0.07;
     L(o, x, cy, a, cy, g); L(o, b, cy, x + w, cy, g); L(o, a, cy, b + w * 0.02, cy - w * 0.26, g);
     for (let i = 0; i < 6; i++) { const a1 = Math.PI * i / 6, a2 = Math.PI * (i + 1) / 6; L(o, b + rr - rr * Math.cos(a1), cy - rr * Math.sin(a1), b + rr - rr * Math.cos(a2), cy - rr * Math.sin(a2), g); } }
-  function symbol(sh, kind, cx, cy, S, tag) {
+  function symbol(sh, kind, cx, cy, S, tag, o = {}) {
     const r = S / 2; const W0 = [255, 255, 255];
     if (kind === 'light') { // outlet for lighting: circle with a cross
       C(sh, cx, cy, r * 0.8, { fill: W0 }); const d = r * 0.8 * 0.707; L(sh, cx - d, cy - d, cx + d, cy + d, { w: 1 }); L(sh, cx - d, cy + d, cx + d, cy - d, { w: 1 }); }
     else if (SOCK[kind]) { // v0.43.9: pictorial UK 13 A faceplate under the cable; the cable dips into its top centre
       const [twin, sw] = SOCK[kind], d = r * 0.35, a = loadR(kind, S);
-      L(sh, cx - a, cy, cx + a, cy, { w: 1.1 }); L(sh, cx, cy, cx, cy + d, { w: 1.1 }); /* v0.44.3: cable straight over the plate, one tidy drop */ plate(sh, cx, cy + d, r, twin, sw); }
+      // v0.48: a hanging spur socket sits on a vertical drop — do not draw the through-cable (a leftover T/JB stub)
+      if (!o.hang) L(sh, cx - a, cy, cx + a, cy, { w: 1.1 });
+      L(sh, cx, cy, cx, cy + d, { w: 1.1 }); /* v0.44.3: cable straight over the plate, one tidy drop */ plate(sh, cx, cy + d, r, twin, sw); }
     else if (kind === 'dpu' || kind === 'dps') { // DP switch faceplate in the ring; long spur up and over to its socket faceplate
       const H = r * 1.7, y0 = cy - H / 2; facePlate(sh, cx, cy, 'dp', r);
       const Y = y0 - r * 2.5, sx = cx + r * 2.4; L(sh, cx, y0, cx, Y, { w: 1.1 }); L(sh, cx, Y, sx, Y, { w: 1.1 }); L(sh, sx, Y, sx, Y + r * 0.35, { w: 1.1 });
