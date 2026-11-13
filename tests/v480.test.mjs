@@ -8,7 +8,7 @@ import { cableCheck } from '../js/checks.js';
 import { adiabatic } from '../js/design.js';
 import { isRingCircuit, autoNA, applyNoDevice, blankCircuit, NODEV_KEYS, DEVICE_KEYS, RESULT_KEYS } from '../js/templates.js';
 import { clean, keyOf, nameFor, mergePresets, distinguishName, presetFrom, shown } from '../js/presets.js';
-import { isRingC, noGuessLoad, pointKind, forgiveDesc, namedLoadKind, listedItems, circuitSpurList, addSpur, removeSpur, updateSpur, spurLabel, spurSymbolOf, spurListTotal, diagramPointTotal, roomPointsNote } from '../js/wiring.js';
+import { isRingC, noGuessLoad, pointKind, forgiveDesc, namedLoadKind, listedItems, circuitSpurList, addSpur, removeSpur, updateSpur, spurLabel, spurSymbolOf, spurLoadKind, spurListTotal, diagramPointTotal, diagramMainPoints, drawnPointCount, setPointsToDiagramTotal, roomPointsNote, layout, diagramModel, SPUR_DEVICES, SPUR_LOADS } from '../js/wiring.js';
 
 const src = (f) => readFileSync(new URL('../' + f, import.meta.url), 'utf8');
 
@@ -170,7 +170,22 @@ test('spurs: each is its own item with a chosen device and load; points hint doe
   assert.equal(spurSymbolOf(circuitSpurList(c)[1]), 'socket1');
   assert.equal(c.points, ''); // never auto-written
   const note = roomPointsNote(c);
-  assert.match(note, /Spurs add up to 3/);
+  assert.match(note, /3 spurs/i);
+  assert.match(note, /empty/i);
+  assert.equal(c.points, ''); // never auto-written
+  c.points = '4';
+  const note2 = roomPointsNote(c);
+  assert.match(note2, /4 \+ 3 spurs = 7/);
+  assert.equal(diagramPointTotal(c), 7);
+  assert.equal(diagramMainPoints(c), 4);
+  assert.equal(c.diagram.pointsIncludeSpurs, undefined);
+  setPointsToDiagramTotal(c);
+  assert.equal(c.points, '7');
+  assert.equal(c.diagram.pointsIncludeSpurs, true);
+  assert.equal(roomPointsNote(c), ''); // consistent: 4 main + 3 spurs = 7
+  assert.equal(drawnPointCount(c).n, 4); // ring still draws the original 4, not 7
+  assert.equal(diagramMainPoints(c), 4);
+  assert.equal(diagramPointTotal(c), 7);
   const id = circuitSpurList(c)[1].id;
   updateSpur(c, id, { device: 'socket' });
   assert.equal(circuitSpurList(c)[1].device, 'socket');
@@ -178,6 +193,45 @@ test('spurs: each is its own item with a chosen device and load; points hint doe
   assert.equal(circuitSpurList(c).length, 2);
   // old backups without spurList still load (no field)
   assert.equal(circuitSpurList({ desc: 'Sockets' }).length, 0);
+});
+
+test('spur rows: device + load, no stray Rail/Rad caption on the row above', () => {
+  const lay = (cs) => layout(diagramModel({ type: 'EIC', boards: [{ id: 'b', ref: 'DB1', circuits: cs }] }), { W: 380, font: 12, screen: true });
+  const shapesOf = (cs) => lay(cs).blocks.flatMap((b) => b.shapes);
+  const kitchen = {
+    num: '2', desc: 'Kitchen sockets', ring: false, rating: '32', live: '2.5', cpc: '1.5',
+    cable: 'te', cableSize: '2.5', points: '4', device: 'mcb', bs: '60898', type: 'B', wiring: 'C',
+    diagram: { spurList: [] },
+  };
+  addSpur(kitchen, { device: 'socket1' });
+  addSpur(kitchen, { device: 'sfcu', load: 'towel' });
+  assert.equal(spurSymbolOf(circuitSpurList(kitchen)[1]), 'sfcu');
+  assert.equal(spurLoadKind(circuitSpurList(kitchen)[1]), 'heater');
+  const circ = lay([kitchen]).blocks.filter((b) => b.kind === 'circuit' || /Kitchen/.test((b.title || '') + (b.ref || '')));
+  const texts = (circ.length ? circ : lay([kitchen]).blocks).flatMap((b) => b.shapes).filter((z) => z.t === 'text');
+  const labs = texts.map((z) => z.txt);
+  assert.ok(labs.some((s) => /Single socket/.test(s)), labs.join(' | '));
+  assert.ok(labs.some((s) => /Switched FCU/.test(s) && /Towel/.test(s)), labs.join(' | '));
+  assert.equal(labs.filter((s) => s === 'Rail' || s === 'Rad').length, 0, 'stray Rail/Rad: ' + labs.join(' | '));
+  const combos = [];
+  for (const [dev] of SPUR_DEVICES) {
+    if (dev === 'fcu' || dev === 'sfcu') {
+      for (const [load] of SPUR_LOADS) combos.push({ device: dev, load });
+      combos.push({ device: dev, load: '' });
+    } else combos.push({ device: dev, load: '' });
+  }
+  const c2 = { num: '3', desc: 'All spur combos', ring: true, rating: '32', live: '2.5', points: '6', diagram: { spurList: [] } };
+  for (const row of combos) addSpur(c2, row);
+  const t2 = lay([c2]).blocks.filter((b) => b.kind !== 'legend' && b.kind !== 'flags' && b.kind !== 'key').flatMap((b) => b.shapes).filter((z) => z.t === 'text').map((z) => z.txt);
+  assert.equal(t2.filter((s) => s === 'Rail' || s === 'Rad').length, 0, t2.join(' | '));
+  for (const s of circuitSpurList(c2)) {
+    const lab = spurLabel(s).replace(/^Spur:\s*/, '');
+    assert.ok(t2.some((x) => x === lab), 'missing label: ' + lab + ' in ' + t2.join(' | '));
+  }
+  const sockLab = texts.find((z) => z.txt === 'Single socket');
+  const towelLab = texts.find((z) => /Towel/.test(z.txt));
+  assert.ok(sockLab && towelLab, 'expected both row labels');
+  assert.ok(towelLab.y - sockLab.y > 10, `row labels too close: socket y=${sockLab.y} towel y=${towelLab.y}`);
 });
 
 test('Check calculator has full Table 52.2 Ci and Use on a circuit; Size accepts commas via dec', () => {

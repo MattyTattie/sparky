@@ -13,7 +13,7 @@ import { sectionsFor, get, set, mainSwitchFields } from './certmodel.js';
 import { mainFromScan, mainSummary, mirrorMainRcd, liftBoardRcdToMain, mainAt, scanBoardExtras } from './boardmain.js';
 import { msIsRcdAt } from './certmodel.js';
 import { QUICK, planQuick, applyQuick, undoQuick } from './quickfill.js';
-import { supplyKindOf, feedInfo, circuitSpurList, addSpur, removeSpur, updateSpur, spurLabel, SPUR_DEVICES, SPUR_LOADS, spurNeedsLoad, namedLoadKind, pointKind, roomPointsNote, diagramPointTotal, pointCount, KIND_ONE } from './wiring.js';
+import { supplyKindOf, feedInfo, circuitSpurList, addSpur, removeSpur, updateSpur, spurLabel, SPUR_DEVICES, SPUR_LOADS, spurNeedsLoad, namedLoadKind, pointKind, roomPointsNote, diagramPointTotal, setPointsToDiagramTotal, pointCount, KIND_ONE } from './wiring.js';
 const boardsLine = (cert) => { const sec = sectionsFor(cert.type).find((x) => x.special === 'boards'); if (!sec) return null; const [c, t] = stateLine(cert, sec); return h('div', { class: 'notice ' + c + ' secstate' }, t); };
 import { blankBoard } from './certmodel.js';
 import * as presets from './presets.js';
@@ -511,7 +511,7 @@ function spurEditor(c, after) {
       h('p', { class: 'note' }, spurLabel(s))));
     const hints = [];
     if (note) hints.push(h('p', { class: 'note' }, note));
-    if (tot > 0 && !pc.known) hints.push(h('div', { class: 'btns' }, h('button', { class: 'btn small', type: 'button', onclick: () => { c.points = String(tot); changed(); draw(); after(); } }, 'Set points served to ' + tot)));
+    if (tot > 0 && (!pc.known || pc.n !== tot)) hints.push(h('div', { class: 'btns' }, h('button', { class: 'btn small', type: 'button', onclick: () => { setPointsToDiagramTotal(c); changed(); draw(); after(); } }, 'Set points to ' + tot)));
     if (named && !pc.known) hints.push(h('div', { class: 'btns' }, h('button', { class: 'btn small', type: 'button', 'data-drawnamed': '1', onclick: () => { c.points = '1'; changed(); draw(); after(); } }, 'Draw 1 × ' + (KIND_ONE[named] || named))));
     fill(box,
       h('div', { class: 'phd' }, h('span', {}, 'Spurs on this circuit')),

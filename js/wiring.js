@@ -263,22 +263,36 @@ export const roomPointTotal = (c) => (socketRoomsOf(c) ? roomSocketTotal(c) : ro
 export function roomPointsNote(c) {
   const extra = spurListTotal(c);
   const extraW = extra ? ` and ${extra} spur${extra === 1 ? '' : 's'}` : '';
+  const spurWord = extra === 1 ? '1 spur' : extra + ' spurs';
   if (socketRoomsOf(c)) {
     const rooms = roomSocketTotal(c), t = rooms + extra, pc = pointCount(c);
-    const who = extra ? 'Rooms and spurs' : 'Rooms';
-    const w = extra ? `${t} point${t === 1 ? '' : 's'} (rooms + spurs)` : `${rooms} socket${rooms === 1 ? '' : 's'}`;
-    if (!pc.known) return `${who} add up to ${w}. Points served is not filled in.`;
-    return t === pc.n ? '' : `${who} add up to ${w}, but Points served says ${pc.n}.`; }
+    if (pc.known && t === pc.n) return '';
+    if (!extra) {
+      const w = `${rooms} socket${rooms === 1 ? '' : 's'}`;
+      if (!pc.known) return `Rooms add up to ${w}. Points served is not filled in.`;
+      return `Rooms add up to ${w}, but Points served says ${pc.n}.`;
+    }
+    const body = `Points served: ${rooms} (rooms) + ${spurWord} = ${t}?`;
+    return pc.known ? (pc.n === t ? '' : body) : body + ' Points served is empty.';
+  }
   const rl = roomListOf(c);
   if (!rl && extra) {
     const pc = pointCount(c);
-    if (!pc.known) return `Spurs add up to ${extra}. Put that in Points served if you want.`;
-    return extra === pc.n ? '' : `Spurs add up to ${extra}, but Points served says ${pc.n}.`;
+    const main = diagramMainPoints(c);
+    const t = main + extra;
+    if (pc.known && pc.n === t) return '';
+    if (main) return `Points served: ${main} + ${spurWord} = ${t}?`;
+    return pc.known ? `${spurWord[0].toUpperCase() + spurWord.slice(1)}. Points served says ${pc.n}.` : `${spurWord[0].toUpperCase() + spurWord.slice(1)}. Points served is empty.`;
   }
   if (!rl) return '';
-  const f = roomFanTotal(c); const t = roomLightTotal(c) + f + extra; const pc = pointCount(c);
-  if (!pc.known) return `Rooms${extraW} add up to ${ptsWord(t, f)}. Points served is not filled in.`;
-  return t === pc.n ? '' : `Rooms${extraW} add up to ${ptsWord(t, f)}, but Points served says ${pc.n}.`;
+  const f = roomFanTotal(c); const rooms = roomLightTotal(c) + f; const t = rooms + extra; const pc = pointCount(c);
+  if (pc.known && t === pc.n) return '';
+  if (!extra) {
+    if (!pc.known) return `Rooms add up to ${ptsWord(t, f)}. Points served is not filled in.`;
+    return `Rooms add up to ${ptsWord(t, f)}, but Points served says ${pc.n}.`;
+  }
+  const body = `Points served: ${ptsWord(rooms, f)} + ${spurWord} = ${t}?`;
+  return pc.known ? body : body + ' Points served is empty.';
 }
 // How many symbols to draw: up to MAX_SYMBOLS, then "+ N more".
 export function pointCount(c) {
@@ -397,18 +411,42 @@ export function spurLabel(s) {
 export function spurSymbolOf(s) {
   if (!s) return 'socket1';
   if (s.device === 'hood') return 'appliance';
-  if (s.device === 'fcu' || s.device === 'sfcu') {
-    if (s.load === 'extractor') return 'fan';
-    if (s.load === 'heater' || s.load === 'towel') return 'heater';
-    if (s.load === 'hood') return 'appliance';
-    if (s.load === 'boiler') return 'appliance';
-    return s.device;
-  }
   return SPUR_DEVICES.some(([k]) => k === s.device) ? s.device : 'socket1';
 }
+export function spurLoadKind(s) {
+  if (!s || !spurNeedsLoad(s.device) || !s.load) return '';
+  if (s.load === 'extractor') return 'fan';
+  if (s.load === 'heater' || s.load === 'towel') return 'heater';
+  return 'appliance';
+}
+export function diagramMainPoints(c) {
+  if (socketRoomsOf(c)) return roomSocketTotal(c);
+  if (roomListOf(c)) return roomLightTotal(c) + roomFanTotal(c);
+  const pc = pointCount(c), sp = spurListTotal(c);
+  if (!pc.known) return 0;
+  if (sp && c.diagram && c.diagram.pointsIncludeSpurs && pc.n >= sp) return pc.n - sp;
+  return pc.n;
+}
 export function diagramPointTotal(c) {
-  const rooms = socketRoomsOf(c) ? roomSocketTotal(c) : (roomListOf(c) ? roomLightTotal(c) + roomFanTotal(c) : 0);
-  return rooms + spurListTotal(c);
+  return diagramMainPoints(c) + spurListTotal(c);
+}
+export function drawnPointCount(c) {
+  const pc = pointCount(c), sp = spurListTotal(c);
+  if (!pc.known || !sp || !c.diagram || !c.diagram.pointsIncludeSpurs) return pc;
+  if (socketRoomsOf(c) || roomListOf(c)) return pc;
+  const n = Math.max(0, pc.n - sp);
+  const cap = pointKind(c) === 'socket' ? MAX_SOCKETS : MAX_SYMBOLS;
+  const shown = Math.min(n, cap);
+  return { ...pc, n, shown, more: Math.max(0, n - shown) };
+}
+export function setPointsToDiagramTotal(c) {
+  const t = diagramPointTotal(c);
+  if (t > 0) {
+    c.points = String(t);
+    if (!c.diagram) c.diagram = {};
+    c.diagram.pointsIncludeSpurs = true;
+  }
+  return t;
 }
 export function spurInfo(M) {
   const sp = M && M.spur; if (!sp || !sp.on) return null;
@@ -916,7 +954,7 @@ export function layout(model, { W = 380, font = 12, screen = false, cableTable =
       hh = res.bottom - y + 6; feedTop = res.lastY; ctlChained = true;
     }
     // points
-    const pc0 = pointCount(c); const solo = !fed && !ctlChained ? soloItem(c) : null; const named = !fed && !ctlChained ? namedLoadKind(c) : null; const genericPoint = !listedItems(c) && pointKind(c) === 'point' && !named; const pc = solo ? { ...pc0, n: solo[1], shown: solo[1], more: 0, known: true } : (fed && !ctl && !iso) || noGuessLoad(c) || genericPoint || (ctlChained && /^(point|appliance)$/.test(pointKind(c))) ? { ...pc0, shown: 0, more: 0 } : (named && !pc0.known) ? { n: 1, shown: 1, more: 0, known: true, guessed: true } : pc0; /* v0.44.0: a control circuit's points are its contactor coils, drawn in the chain */ /* v0.43.1: a sub-main draws no load, it feeds the board */ /* v0.48: named cooker/shower/EV/immersion drawn from the description when Points served is blank */ const kind0 = pointKind(c); const kind = solo ? solo[0] : (named && !pc0.known ? named : loadKind(c, iso)); void kind0; /* v0.43.3: heaters, radiators, towel rails get the heating-element symbol */ // v0.43.1: the FCU isolator IS the spur, the load is the heater itself
+    const pc0 = drawnPointCount(c); const solo = !fed && !ctlChained ? soloItem(c) : null; const named = !fed && !ctlChained ? namedLoadKind(c) : null; const genericPoint = !listedItems(c) && pointKind(c) === 'point' && !named; const pc = solo ? { ...pc0, n: solo[1], shown: solo[1], more: 0, known: true } : (fed && !ctl && !iso) || noGuessLoad(c) || genericPoint || (ctlChained && /^(point|appliance)$/.test(pointKind(c))) ? { ...pc0, shown: 0, more: 0 } : (named && !pc0.known) ? { n: 1, shown: 1, more: 0, known: true, guessed: true } : pc0; /* v0.44.0: a control circuit's points are its contactor coils, drawn in the chain */ /* v0.43.1: a sub-main draws no load, it feeds the board */ /* v0.48: named cooker/shower/EV/immersion drawn from the description when Points served is blank */ const kind0 = pointKind(c); const kind = solo ? solo[0] : (named && !pc0.known ? named : loadKind(c, iso)); void kind0; /* v0.43.3: heaters, radiators, towel rails get the heating-element symbol */ // v0.43.1: the FCU isolator IS the spur, the load is the heater itself
     const sgl = Math.min(socketSingles(c), pc.shown); const kindAt = (i) => (kind === 'socket' && i >= pc.shown - sgl ? 'socket1' : kind);
     let ph = 0;
     if (!info.spare && !info.spd && info.rooms) {
@@ -1132,33 +1170,33 @@ export function layout(model, { W = 380, font = 12, screen = false, cableTable =
   }
   function circuitSpurSection(sh, c, tx, fromY, maxX) {
     const list = circuitSpurList(c); if (!list.length) return 0;
-    const S = F * 1.5, g = { w: 1.1, color: COL.line }, fx = tx - gap / 2, pitch = S * 1.55 + 8;
+    const S = F * 1.5, g = { w: 1.1, color: COL.line }, fx = tx - gap / 2, pitch = S * 1.7 + 10;
     const t0 = fromY + 6;
     T(sh, tx, t0, list.length === 1 ? 'Spur' : 'Spurs', { size: small, color: COL.grey, bold: true });
-    let rowY = t0 + small + S * 0.65;
+    let rowY = t0 + small + S * 0.7;
     L(sh, fx, fromY, fx, rowY, g);
+    const savedHeat = heatLab;
+    heatLab = ''; // v0.48: row label already names the load; a "Rail"/"Rad" caption above the symbol would sit on the row above
     list.forEach((s, i) => {
       if (i) { L(sh, fx, rowY, fx, rowY + pitch, g); rowY += pitch; }
       const k = spurSymbolOf(s);
       const sr = loadR(k, S);
       const cx = fx + 12 + sr;
       L(sh, fx, rowY, cx - sr, rowY, g);
-      if (s.load === 'towel') heatLab = 'Rail';
-      else if (s.load === 'heater') heatLab = 'Rad';
       symbol(sh, k, cx, rowY, S); used.add(k);
       let end = cx + sr;
-      const lk = s.load === 'extractor' ? 'fan' : (s.load === 'heater' || s.load === 'towel') ? 'heater' : s.load ? 'appliance' : '';
-      if (spurNeedsLoad(s.device) && s.load && lk && lk !== k) {
+      const lk = spurLoadKind(s);
+      if (lk && lk !== k) {
         const lr = loadR(lk, S * 0.85);
         L(sh, end, rowY, end + 6, rowY, g);
-        if (s.load === 'towel') heatLab = 'Rail';
         symbol(sh, lk, end + 6 + lr, rowY, S * 0.85); used.add(lk);
         end = end + 6 + lr * 2;
       }
       const lab = spurLabel(s).replace(/^Spur:\s*/, '');
       T(sh, end + 6, rowY + small * 0.35, lab, { size: small * 0.9, color: COL.grey });
     });
-    return rowY + S * 0.9 - fromY + 6;
+    heatLab = savedHeat;
+    return rowY + S * 0.95 - fromY + 6;
   }
   function ringPlain(sh, c, pc, sgl, tx, top, tw, feedTop) {
     const S = F * 1.5, g = { w: 1.1, color: COL.line }, step = S * 2 + 10, fx = tx - gap / 2; const { upT, dnB } = HP(S);
@@ -1524,7 +1562,7 @@ export function layout(model, { W = 380, font = 12, screen = false, cableTable =
       box(sh, cx, cy, r); for (const a of [-0.5, 0, 0.5]) L(sh, cx + (a - 0.3) * r, cy + r * 0.6, cx + (a + 0.3) * r, cy - r * 0.6, { w: 1 }); if (heatLab) T(sh, cx, cy - r - 3, 'Immersion', { anchor: 'middle', bold: true, size: Math.max(r * 0.8, small * 0.85), color: COL.grey }); /* v0.44.6: labelled, like Rad */ }
     else if (kind === 'heater') { // v0.43.3: heating element (as immersion) with a small 'Rad' label above
       box(sh, cx, cy, r); for (const a of [-0.5, 0, 0.5]) L(sh, cx + (a - 0.3) * r, cy + r * 0.6, cx + (a + 0.3) * r, cy - r * 0.6, { w: 1 });
-      T(sh, cx, cy - r - 3, heatLab, { anchor: 'middle', bold: true, size: Math.max(r * 0.8, small * 0.85), color: COL.grey }); }
+      if (heatLab) T(sh, cx, cy - r - 3, heatLab, { anchor: 'middle', bold: true, size: Math.max(r * 0.8, small * 0.85), color: COL.grey }); }
     else if (kind === 'ev') { box(sh, cx, cy, r); T(sh, cx, cy + r * 0.32, 'EV', { anchor: 'middle', bold: true, size: r * 0.9 }); }
     else if (kind === 'fan') { C(sh, cx, cy, r * 0.85, { fill: W0 }); for (const a of [0, 2.094, 4.189]) L(sh, cx, cy, cx + Math.cos(a) * r * 0.65, cy + Math.sin(a) * r * 0.65, { w: 1.4 }); C(sh, cx, cy, r * 0.15, { fill: COL.line }); }
     else if (kind === 'fcu') facePlate(sh, cx, cy, 'fcu', r); // v0.43.9: fused connection unit faceplate (fuse carrier, flex outlet)

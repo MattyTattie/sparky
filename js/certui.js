@@ -15,7 +15,7 @@ import { INTAKE_NOTE_10, INTAKE_NOTES, INTAKE_NOTIFIED, migrateIntake, EIC_ITEMS
 import { checkCircuit, isSpare, boardCtx } from './checks.js';
 import { CHECK_NOTE } from './limits.js';
 import { ITEM_KINDS, itemRoomsOf, isControlCircuit, chainOf, migrateChain, kmNumbers, CHAIN_KINDS, CHAIN_SUPPLY, iconSvg, itemsOf, insertKind } from './wiring.js';
-import { diagramSvg, diagramInPdf, diagramHasCircuits, SPUR_FEEDS, CONTROL_VIA, switchInfo, roomListOf, roomPointsNote, socketRoomsOf, roomPointTotal, pointKind, socketSingles, arrangedOrder, feedInfo, ISOLATORS } from './wiring.js';
+import { diagramSvg, diagramInPdf, diagramHasCircuits, SPUR_FEEDS, CONTROL_VIA, switchInfo, roomListOf, roomPointsNote, socketRoomsOf, roomPointTotal, diagramPointTotal, pointKind, socketSingles, arrangedOrder, feedInfo, ISOLATORS } from './wiring.js';
 import { limitOn, limitBar } from './limitbar.js';
 import { checkCert } from './certcheck.js';
 import { WAVES, parseRcdType, formatRcdType } from './rcdtype.js';
@@ -316,8 +316,8 @@ export function diagramIssues(cert) {
   for (const c of all) { if (!c || isSpareC(c)) continue;
     const k = c.control; if (k && k.via && k.via !== 'none' && !String(k.controlCircuit || '').trim()) out.push({ c, kind: 'coil', text: 'choose which circuit feeds the contactor coil', fixes: [] });
     const note = roomPointsNote(c); if (!note) continue;
-    const sock = !!socketRoomsOf(c); const t = roomPointTotal(c); const n = parseInt(String(c.points ?? ''), 10);
-    const fixes = [{ label: `Set points to ${t}`, apply: () => { c.points = String(t); } }];
+    const sock = !!socketRoomsOf(c); const t = diagramPointTotal(c); const n = parseInt(String(c.points ?? ''), 10);
+    const fixes = t > 0 ? [{ label: `Set points to ${t}`, apply: () => { c.points = String(t); if (!c.diagram) c.diagram = {}; if (t >= (c.diagram.spurList || []).length) c.diagram.pointsIncludeSpurs = true; } }] : [];
     const raw = c.diagram && Array.isArray(c.diagram.roomList) ? c.diagram.roomList : []; const last = raw[raw.length - 1];
     if (Number.isFinite(n) && n > t && last) { const d = n - t; const f = sock ? 'sockets' : 'lights', w = sock ? 'socket' : 'light'; fixes.push({ label: `Add ${d} ${w}${d === 1 ? '' : 's'} to ${last.name || 'the last room'}`, apply: () => { last[f] = Math.min(sock ? 20 : 10, (+last[f] || 0) + d); } }); }
     out.push({ c, kind: 'points', text: note, fixes });
