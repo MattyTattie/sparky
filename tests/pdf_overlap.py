@@ -40,10 +40,23 @@ def symbol_rects_from_drawings(drawings, max_w=48, max_h=36, min_w=6, min_h=6):
             out.append((r.x0, r.y0, r.x1, r.y1))
     return out
 
-def text_symbol_hits(words, rects):
+def badge_rects_from_drawings(drawings):
+    """Small coloured badges (the IP mark on an outdoor socket's corner)."""
+    out = []
+    for d in drawings:
+        r = d.get('rect'); fill = d.get('fill')
+        if r is not None and fill and fill[0] < 0.6 and r.width < 30 and r.height < 16:
+            out.append((r.x0, r.y0, r.x1, r.y1))
+    return out
+
+def text_symbol_hits(words, rects, badges=()):
     hits = []
     for w in words:
         txt = w[4]
+        cx, cy = (w[0] + w[2]) / 2, (w[1] + w[3]) / 2
+        # v0.48.1: a caption sat in its own badge overlaps the plate by design
+        if CAPTION.match(txt) and any(b[0] < cx < b[2] and b[1] - 1 < cy < b[3] + 1 for b in badges):
+            continue
         for r in rects:
             ix = min(w[2], r[2]) - max(w[0], r[0])
             iy = min(w[3], r[3]) - max(w[1], r[1])
@@ -74,8 +87,9 @@ def check_pdf_symbols(pdf):
         head = ' '.join(w[4] for w in words[:6])
         if 'WIRING DIAGRAM' not in head:  # the certificate's single-line diagram sheet (DC plan pills hold text on purpose)
             continue
-        rects = symbol_rects_from_drawings(page.get_drawings())
-        for txt, r, area in text_symbol_hits(words, rects):
+        dr = page.get_drawings()
+        rects = symbol_rects_from_drawings(dr)
+        for txt, r, area in text_symbol_hits(words, rects, badge_rects_from_drawings(dr)):
             hits.append((pi, txt, r, area))
     return hits
 
@@ -170,8 +184,15 @@ for f in args:
                 bad += 1
                 print(f'{name}: "{txt}" overlaps a symbol at ({r[0]:.1f},{r[1]:.1f},{r[2]-r[0]:.1f}x{r[3]-r[1]:.1f})')
     elif suf == '.svg':
+        raw = Path(f).read_text(); badges = []
+        for m in re.finditer(r'<rect\b([^>]*)/?>', raw, re.I):  # v0.48.1: coloured badges (IP mark)
+            at = m.group(1); g = lambda n: float((re.search(rf'\b{n}="([\d.]+)"', at) or [0, 0])[1])
+            fl = re.search(r'\bfill="([^"]+)"', at)
+            if fl and fl.group(1).lower() not in ('none', 'transparent', '#fff', '#ffffff', 'white') and not fl.group(1).lower().startswith('rgb(255') and g('width') < 30 and g('height') < 16:
+                badges.append((g('x'), g('y'), g('x') + g('width'), g('y') + g('height')))
         for words, rects, name in load_svg_shapes(f):
-            for txt, r, area in text_symbol_hits(words, rects):
+            rects = [r for r in rects if r not in badges]
+            for txt, r, area in text_symbol_hits(words, rects, badges):
                 bad += 1
                 print(f'{name}: "{txt}" overlaps a symbol at ({r[0]:.1f},{r[1]:.1f},{r[2]-r[0]:.1f}x{r[3]-r[1]:.1f})')
     else:

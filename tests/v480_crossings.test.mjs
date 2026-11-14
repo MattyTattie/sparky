@@ -65,8 +65,13 @@ test('ring diagram: spur drops hop the ring return; no dot where they cross; key
   for (const o of opts) {
     const L = lay({ type: 'EIC', boards: [{ id: 'b', ref: 'DB1', circuits: [ring] }] }, o);
     const b = L.blocks.find((x) => x.kind === 'circuit');
+    // v0.48.1: the last row's sockets sit on the lower leg, so a spur off a bottom-row socket crosses nothing;
+    // only the in-ring FCU on an upper row has to hop the rows below it on its way down
     const hops = hopSegs(b.shapes).length / 8;
-    assert.ok(hops >= 2, 'W=' + o.W + ' hops: ' + hops);
+    assert.ok(hops <= 3, 'W=' + o.W + ' hops: ' + hops);
+    const singles = b.shapes.filter((z) => z.t === 'rect' && z.fill && z.fill[0] === 255 && z.w < 28 && z.w > z.h + 1 && z.h > 12);
+    const spurPlate = singles.sort((a, c) => c.y - a.y)[0]; const sx = spurPlate.x + spurPlate.w / 2;
+    assert.ok(!hopSegs(b.shapes).some((z) => Math.abs(z.x1 - sx) < 1), 'W=' + o.W + ': the single-socket spur drops off a bottom-row socket and crosses nothing');
     // every hop sits on a crossing: there is an unbroken horizontal through its middle
     for (let i = 0; i < b.shapes.length; i++) { const z = b.shapes[i]; if (!z.hop || b.shapes[i - 1].hop) continue;
       const seg = b.shapes.slice(i, i + 8); const x = seg[0].x1; const ym = (seg[0].y1 + seg[7].y2) / 2;
@@ -77,8 +82,9 @@ test('ring diagram: spur drops hop the ring return; no dot where they cross; key
     assert.ok(dots(b.shapes).every((d) => d.cx < 45), 'no dots on the ring itself: ' + dots(b.shapes).map((d) => d.cx.toFixed(0)).join(','));
     const key = L.blocks.find((x) => x.kind === 'legend');
     const kt = key.shapes.filter((z) => z.t === 'text').map((z) => z.txt).join(' ');
-    assert.match(kt, /Lines crossing, not/); assert.match(kt, /Connected/);
-    assert.ok(hopSegs(key.shapes).length === 8 && dots(key.shapes).length === 1, 'key samples drawn with the same hop and dot');
+    if (hops) { assert.match(kt, /Lines crossing, not/); assert.match(kt, /Connected/);
+      assert.ok(hopSegs(key.shapes).length === 8 && dots(key.shapes).length === 1, 'key samples drawn with the same hop and dot'); }
+    else assert.doesNotMatch(kt, /Lines crossing, not/, 'no hop in the key when nothing crosses');
     for (const blk of L.blocks.filter((x) => x.kind === 'circuit')) assert.equal(textSymbolOverlaps(blk.shapes).length, 0);
   }
 });

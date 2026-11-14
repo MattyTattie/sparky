@@ -13,10 +13,7 @@ import { textSymbolOverlaps, hangingSocketTicks, textBBox } from './shape_overla
 
 const src = (f) => readFileSync(new URL('../' + f, import.meta.url), 'utf8');
 
-test('v0.48.0 version and SW cache', () => {
-  assert.match(src('js/config.js'), /APP_VERSION = '0\.48\.0 beta'/);
-  assert.match(src('sw.js'), /const CACHE = 'sparky-v0\.48\.0'/);
-});
+// (version/SW cache check moved to tests/v481.test.mjs)
 
 test('Table 4B1: 90 °C Ca at 25 °C is 1.04 (20 °C uses the same column)', () => {
   assert.equal(CA[90][25], 1.04);

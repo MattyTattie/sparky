@@ -108,7 +108,7 @@ const KIND_PLURAL = { heater: 'heaters', socket: 'sockets', light: 'lights', coo
 export const KIND_ONE = { heater: 'heater', socket: 'socket', light: 'light', cooker: 'cooker', hob: 'hob', oven: 'oven', combi: 'combi oven', hybinv: 'hybrid inverter', dciso: 'DC rotary isolator', aciso: 'AC rotary isolator', pvarray: 'PV array', battery: 'battery', shower: 'shower', alarm: 'alarm', immersion: 'immersion', ev: 'EV charger', fan: 'fan', fcu: 'FCU', sfcu: 'SFCU', km: 'contactor', shelly: 'Shelly relay', flex: 'flex outlet', appliance: 'fixed appliance', point: 'point' };
 // Optional per-circuit diagram extras: circuit.diagram = { rooms, sw1, sw2, swi }.
 // Old certs have none; a lighting circuit then gets one 1-way switch.
-const KEY_EXTRA = { xhop: 'Lines crossing, not connected', xdot: 'Connected', ipsock: 'Outdoor socket, weatherproof (IP rated)', fanh: 'Humidistat (%RH) switching a fan', fant: 'Fan timer / overrun (T)', fani: 'Fan isolator', heater: 'Heater / radiator', tailblock: 'Meter tail connector block', swfuse: 'Switch fuse / isolator (supplying a board)', jbsw: 'Switch-fed: JB to switch, looped switch to switch, each to its own lights', socket: 'Twin socket (switched)', socketu: 'Twin socket (unswitched)', socket1: 'Single socket (switched)', socket1u: 'Single socket (unswitched)', rose: 'Ceiling rose (loop-in)', jb: 'Junction box (JB)', strap: '2-way strappers (two wires)', iso: 'Local switch / isolator: DP switch', fcu: 'Unswitched fused connection unit (FCU)', isofcu: 'Unswitched fused connection unit (FCU)', isosfcu: 'Switched fused connection unit (SFCU)', isofcux: 'Unswitched fused connection unit (FCU) with flex outlet', isosfcux: 'Switched fused connection unit (SFCU) with flex outlet', isoccu: 'Cooker control unit (CCU): 45 A DP switch with a 13 A socket', dpu: 'DP switch in the ring, spurring an unswitched single socket (washer, dishwasher etc.)', dps: 'DP switch in the ring, spurring a switched single socket' };
+const KEY_EXTRA = { dpsw: 'DP switch (20 A / 45 A)', xhop: 'Lines crossing, not connected', xdot: 'Connected', ipsock: 'Outdoor socket, weatherproof (IP rated)', fanh: 'Humidistat (%RH) switching a fan', fant: 'Fan timer / overrun (T)', fani: 'Fan isolator', heater: 'Heater / radiator', tailblock: 'Meter tail connector block', swfuse: 'Switch fuse / isolator (supplying a board)', jbsw: 'Switch-fed: JB to switch, looped switch to switch, each to its own lights', socket: 'Twin socket (switched)', socketu: 'Twin socket (unswitched)', socket1: 'Single socket (switched)', socket1u: 'Single socket (unswitched)', rose: 'Ceiling rose (loop-in)', jb: 'Junction box (JB)', strap: '2-way strappers (two wires)', iso: 'Local switch / isolator: DP switch', fcu: 'Unswitched fused connection unit (FCU)', isofcu: 'Unswitched fused connection unit (FCU)', isosfcu: 'Switched fused connection unit (SFCU)', isofcux: 'Unswitched fused connection unit (FCU) with flex outlet', isosfcux: 'Switched fused connection unit (SFCU) with flex outlet', isoccu: 'Cooker control unit (CCU): 45 A DP switch with a 13 A socket', dpu: 'DP switch in the ring, spurring an unswitched single socket (washer, dishwasher etc.)', dps: 'DP switch in the ring, spurring a switched single socket' };
 // v0.43 (test): optional local isolator next to the load: circuit.diagram.isolator = { type, rating }.
 export const ISOLATORS = { dp20: '20 A DP switch', dp45: '45 A DP switch (cooker / shower)', sfcu: 'Switched FCU', ufcu: 'Unswitched FCU', rotary: 'Rotary isolator', ccu: 'Cooker control unit (CCU)' };
 const ISO_SHORT = { dp20: '20A DP', dp45: '45A DP', sfcu: 'SFCU', ufcu: 'FCU', rotary: 'Rotary isolator', ccu: '45A CCU' };
@@ -264,7 +264,8 @@ export function roomPointsNote(c) {
   const extra = spurListTotal(c);
   const extraW = extra ? ` and ${extra} spur${extra === 1 ? '' : 's'}` : '';
   const nIn = inRingSpurs(c).length, nOff = extra - nIn; // v0.48: FCUs in the ring/radial count as points on it (not twice)
-  const inWord = nIn ? `${nIn} FCU${nIn === 1 ? '' : 's'} in the ${isRingC(c) ? 'ring' : 'radial'}` : '';
+  const inL = inRingSpurs(c), nDp = inL.filter((s) => isDpDevice(s.device)).length, nF = nIn - nDp; // v0.48.1: DP switches too
+  const inWord = nIn ? [nF ? `${nF} FCU${nF === 1 ? '' : 's'}` : '', nDp ? `${nDp} DP switch${nDp === 1 ? '' : 'es'}` : ''].filter(Boolean).join(' + ') + ` in the ${isRingC(c) ? 'ring' : 'radial'}` : '';
   const offWord = nOff ? (nOff === 1 ? '1 spur' : nOff + ' spurs') : '';
   const spurWord = [offWord, inWord].filter(Boolean).join(' + ') || '0 spurs';
   if (socketRoomsOf(c)) {
@@ -367,7 +368,39 @@ export const SPUR_DEVICES = [
   ['hood', 'Cooker hood'],
   ['light', 'Light'],
   ['flex', 'Flex outlet'],
+  ['dp20', '20 A DP switch'],
+  ['dp45', '45 A DP switch'],
 ];
+// v0.48.1: a DP switch on the spur list works like an FCU (in the ring/radial or spurred off a socket/JB), and feeds
+// any socket type or a fixed appliance. Optional fields only; old room counts dpsw/dpsws still draw as before.
+export const DP_DEVICES = { dp20: '20 A DP switch', dp45: '45 A DP switch' };
+export const DP_LOADS = [
+  ['socket1', 'Single socket (switched)'],
+  ['socket1u', 'Single socket (unswitched)'],
+  ['socket', 'Double socket (switched)'],
+  ['socketu', 'Double socket (unswitched)'],
+  ['ipsock1', 'Outdoor single socket (IP)'],
+  ['ipsock', 'Outdoor double socket (IP)'],
+  ['washer', 'Washing machine'],
+  ['dishwasher', 'Dishwasher'],
+  ['dryer', 'Tumble dryer'],
+  ['fridge', 'Fridge / freezer'],
+  ['boiler', 'Boiler'],
+  ['cooker', 'Cooker'],
+  ['oven', 'Oven'],
+  ['hob', 'Hob'],
+  ['immersion', 'Immersion heater'],
+  ['heater', 'Heater'],
+  ['towel', 'Towel rail'],
+  ['extractor', 'Extractor'],
+  ['other', 'Other'],
+];
+const DP_SOCK_LOAD = { socket1: 'socket1', socket1u: 'socket1u', socket: 'socket', socketu: 'socketu', ipsock1: 'socket1', ipsock: 'socket' };
+export const isDpDevice = (device) => !!DP_DEVICES[device];
+export const spurLoadsFor = (device) => (isDpDevice(device) ? DP_LOADS : SPUR_LOADS);
+export const canSitInRing = (device) => device === 'fcu' || device === 'sfcu' || isDpDevice(device);
+// in-ring pseudo-kinds -> the faceplate drawn in line
+const IN_KINDS = { fcuin: 'fcu', sfcuin: 'sfcu', dpin: 'dp' };
 export const SPUR_LOADS = [
   ['boiler', 'Boiler'],
   ['extractor', 'Extractor'],
@@ -376,10 +409,10 @@ export const SPUR_LOADS = [
   ['hood', 'Cooker hood'],
   ['other', 'Other'],
 ];
-export const spurNeedsLoad = (device) => device === 'fcu' || device === 'sfcu';
+export const spurNeedsLoad = (device) => device === 'fcu' || device === 'sfcu' || isDpDevice(device);
 export function circuitSpurList(c) {
   const raw = c && c.diagram && Array.isArray(c.diagram.spurList) ? c.diagram.spurList : [];
-  return raw.filter((s) => s && s.device).map((s) => ({ id: s.id || '', device: s.device, load: s.load || '', other: s.other || '', from: s.from || '', place: s.place === 'in' && (s.device === 'fcu' || s.device === 'sfcu') ? 'in' : '', after: s.after || '' }));
+  return raw.filter((s) => s && s.device).map((s) => ({ id: s.id || '', device: s.device, load: s.load || '', other: s.other || '', from: s.from || '', place: s.place === 'in' && canSitInRing(s.device) ? 'in' : '', after: s.after || '' }));
 }
 export function spurListTotal(c) { return circuitSpurList(c).length; }
 export function addSpur(c, { device = 'socket', load = '', other = '', place = '', after = '' } = {}) {
@@ -389,7 +422,7 @@ export function addSpur(c, { device = 'socket', load = '', other = '', place = '
   const row = { id, device };
   if (spurNeedsLoad(device) && load) row.load = load;
   if (load === 'other' && other) row.other = other;
-  if (place === 'in' && (device === 'fcu' || device === 'sfcu')) { row.place = 'in'; if (after !== '' && after != null) row.after = String(after); } // v0.48: FCU in the ring/radial
+  if (place === 'in' && canSitInRing(device)) { row.place = 'in'; if (after !== '' && after != null) row.after = String(after); } // v0.48: FCU in the ring/radial
   c.diagram.spurList.push(row);
   return id;
 }
@@ -403,8 +436,11 @@ export function updateSpur(c, id, patch) {
   const i = list.findIndex((x) => x.id === id); if (i < 0) return;
   const next = { ...list[i], ...patch };
   if (!spurNeedsLoad(next.device)) { delete next.load; delete next.other; }
+  else if (next.load && !spurLoadsFor(next.device).some(([k]) => k === next.load)) { delete next.load; delete next.other; } // v0.48.1: e.g. FCU -> DP: a load the new device can't feed
+  if (!next.load) delete next.load;
+  if (next.load !== 'other') delete next.other;
   if (!next.from) delete next.from;
-  if (next.place !== 'in' || (next.device !== 'fcu' && next.device !== 'sfcu')) { delete next.place; delete next.after; }
+  if (next.place !== 'in' || !canSitInRing(next.device)) { delete next.place; delete next.after; }
   if (!next.after) delete next.after;
   list[i] = next;
 }
@@ -413,23 +449,28 @@ export function spurLabel(s, c) {
   const dev = (SPUR_DEVICES.find(([k]) => k === s.device) || [s.device, s.device])[1];
   if (spurInRing(s)) { // v0.48: an FCU sitting in the ring/radial, feeding its load
     const where = ' in the ' + (c && !isRingC(c) ? 'radial' : 'ring');
-    const ld = s.load === 'other' && s.other ? s.other : s.load ? (SPUR_LOADS.find(([k]) => k === s.load) || [s.load, s.load])[1] : '';
+    const ld = s.load === 'other' && s.other ? s.other : s.load ? (spurLoadsFor(s.device).find(([k]) => k === s.load) || [s.load, s.load])[1] : '';
     return dev + where + (ld ? ' \u2192 ' + ld : ''); }
   if (!spurNeedsLoad(s.device)) return 'Spur: ' + dev;
-  const load = s.load === 'other' && s.other ? s.other : (SPUR_LOADS.find(([k]) => k === s.load) || [s.load, s.load || 'load'])[1];
+  const load = s.load === 'other' && s.other ? s.other : (spurLoadsFor(s.device).find(([k]) => k === s.load) || [s.load, s.load || 'load'])[1];
   return 'Spur: ' + dev + (s.load ? ' \u2192 ' + load : '');
 }
 export function spurSymbolOf(s) {
   if (!s) return 'socket1';
   if (s.device === 'hood') return 'appliance';
+  if (isDpDevice(s.device)) return 'dpsw';
   return SPUR_DEVICES.some(([k]) => k === s.device) ? s.device : 'socket1';
 }
 export function spurLoadKind(s) {
   if (!s || !spurNeedsLoad(s.device) || !s.load) return '';
+  if (isDpDevice(s.device)) { // v0.48.1: what a DP switch feeds
+    if (DP_SOCK_LOAD[s.load]) return DP_SOCK_LOAD[s.load];
+    if (['cooker', 'oven', 'hob', 'immersion'].includes(s.load)) return s.load; }
   if (s.load === 'extractor') return 'fan';
   if (s.load === 'heater' || s.load === 'towel') return 'heater';
   return 'appliance';
 }
+export const spurLoadIp = (s) => !!s && isDpDevice(s.device) && /^ipsock/.test(s.load || '');
 export function spurSocketCount(c) {
   if (pointKind(c) !== 'socket') return 0;
   if (socketRoomsOf(c)) return roomSocketTotal(c);
@@ -445,7 +486,7 @@ export function spurFromOptions(c) {
   return opts;
 }
 // v0.48: an FCU / SFCU can sit IN the ring or radial (the cable passes through it like a socket), not spurred off it.
-export function spurInRing(s) { return !!s && s.place === 'in' && (s.device === 'fcu' || s.device === 'sfcu'); }
+export function spurInRing(s) { return !!s && s.place === 'in' && canSitInRing(s.device); }
 export function inRingSpurs(c) { return circuitSpurList(c).filter(spurInRing); }
 // Insert in-ring FCUs into the drawn run of points. `after` is "after point N" of the run (default: the end).
 export function inRingSeq(c, base) {
@@ -458,7 +499,7 @@ export function inRingSeq(c, base) {
     let seen = 0, at = kinds.length;
     if (nth === 0) at = 0;
     else for (let i = 0; i < kinds.length; i++) { if (!ids[i]) seen++; if (seen === nth) { at = i + 1; while (at < kinds.length && ids[at]) at++; break; } }
-    kinds.splice(at, 0, s.device + 'in'); ids.splice(at, 0, s.id);
+    kinds.splice(at, 0, DP_DEVICES[s.device] ? 'dpin' : s.device + 'in'); ids.splice(at, 0, s.id);
   });
   return { kinds, ids };
 }
@@ -843,7 +884,7 @@ export function layout(model, { W = 380, font = 12, screen = false, cableTable =
   // key: only the symbols this diagram uses
   heatLab = 'Rad';
   if (used.size) {
-    const sh = []; const y = 10; const order = ['socket', 'socketu', 'socket1', 'socket1u', 'ipsock', 'light', 'rose', 'jb', 'jbsw', 'sw1', 'sw2', 'swi', 'strap', 'cooker', 'hob', 'oven', 'combi', 'hybinv', 'dciso', 'aciso', 'pvarray', 'battery', 'shower', 'alarm', 'immersion', 'heater', 'ev', 'fan', 'fcu', 'sfcu', 'flex', 'appliance', 'point', 'contactor', 'coil', 'km', 'shelly', 'hive', 'relay', 'timeclock', 'iso', 'isofcu', 'isofcux', 'isosfcu', 'isosfcux', 'isoccu', 'dpu', 'dps', 'tailblock', 'swfuse', 'fanh', 'fant', 'fani', 'spd', 'xhop', 'xdot'];
+    const sh = []; const y = 10; const order = ['socket', 'socketu', 'socket1', 'socket1u', 'ipsock', 'light', 'rose', 'jb', 'jbsw', 'sw1', 'sw2', 'swi', 'strap', 'cooker', 'hob', 'oven', 'combi', 'hybinv', 'dciso', 'aciso', 'pvarray', 'battery', 'shower', 'alarm', 'immersion', 'heater', 'ev', 'fan', 'fcu', 'sfcu', 'flex', 'appliance', 'point', 'contactor', 'coil', 'km', 'shelly', 'hive', 'relay', 'timeclock', 'iso', 'isofcu', 'isofcux', 'isosfcu', 'isosfcux', 'isoccu', 'dpu', 'dps', 'dpsw', 'tailblock', 'swfuse', 'fanh', 'fant', 'fani', 'spd', 'xhop', 'xdot'];
     let hh = textLines(sh, 8, y, 'Key', W - 16, { bold: true });
     const S = F * 1.5; const colW = (W - 16) / 2; let col = 0, rowY = y + hh + 4, rowH = 0; const KW = 2 * loadR('socket', S); // v0.43.9: icon column fits the widest (twin) outlet
     const CW = S * 1.7, CH = S * 1.4; void KW; // v0.44.3: every key symbol gets the same cell; labels line up
@@ -856,6 +897,7 @@ export function layout(model, { W = 380, font = 12, screen = false, cableTable =
       else if (k === 'iso') isoPlateH(sym, x - S * 0.1, rowY + S / 2, S * 1.2, false, true, false);
       else if (k === 'isoccu') isoPlateH(sym, x - S * 0.1, rowY + S / 2, S * 2.0, false, true, true);
       else if (k === 'dpu' || k === 'dps') { const ky = rowY + S * 1.75; L(sym, x, ky, x + S * 0.17, ky, { w: 1.1 }); L(sym, x + S * 1.03, ky, x + S * 1.2, ky, { w: 1.1 }); /* cable meets the plate's sides, not through it */ symbol(sym, k, x + S * 0.6, rowY + S * 1.75, S); }
+      else if (k === 'dpsw') facePlate(sym, x + S * 0.6, rowY + S / 2, 'dp', S / 2);
       else if (SOCK[k]) symbol(sym, k, x + KW / 2, rowY + S * 0.1, S);
       else if (k === 'ipsock') { symbol(sym, 'socket', x + KW / 2, rowY + S * 0.1, S); ipMark(sym, x + KW / 2, rowY + S * 0.1, 'socket', S); }
       else if (k === 'km') kmCoil(sym, x + S * 0.5, rowY + S * 0.6, S / 2, null);
@@ -1057,8 +1099,10 @@ export function layout(model, { W = 380, font = 12, screen = false, cableTable =
         used.add('socket1'); const [lx0, lr] = rowsX[items.length - 1]; const bx = lx0 + items[items.length - 1][3] / 2 + loadR(kAt(ringN - 1), S) + 3; const by = py + lr * rowH + S / 2; // tees off the line just past the last socket
         const sy = py + rows * rowH + 4 + S / 2; const sper = Math.max(1, Math.floor((maxX - tx - F * 0.6) / lstep)); let px = null;
         for (let j = 0; j < sgl; j++) { const rr = Math.floor(j / sper), xx = tx + F * 0.6 + (j % sper) * lstep, cy = sy + rr * rowH, cx = xx + S / 2, rad = loadR('socket1', S);
-          if (j === 0) { L(sh, bx, by, bx, cy - rowH / 2 + 2, g9); L(sh, bx, cy - rowH / 2 + 2, cx, cy - rowH / 2 + 2, g9); L(sh, cx, cy - rowH / 2 + 2, cx, cy - S * 0.45, g9); }
-          else if (j % sper === 0) { L(sh, px.x, px.y + S * 0.45, px.x, cy - rowH / 2 + 2, g9); L(sh, px.x, cy - rowH / 2 + 2, cx, cy - rowH / 2 + 2, g9); L(sh, cx, cy - rowH / 2 + 2, cx, cy - S * 0.45, g9); }
+          // v0.48.1: the branch comes round and runs into the first single's side, in line like the rest
+          const my = cy - rowH / 2 + 2, xl = cx - rad - 5;
+          if (j === 0) { L(sh, bx - 3, by, bx, by, g9); L(sh, bx, by, bx, my, g9); L(sh, bx, my, xl, my, g9); L(sh, xl, my, xl, cy, g9); L(sh, xl, cy, cx - rad, cy, g9); }
+          else if (j % sper === 0) { L(sh, px.x, px.y + S * 0.425, px.x, my, g9); L(sh, px.x, my, xl, my, g9); L(sh, xl, my, xl, cy, g9); L(sh, xl, cy, cx - rad, cy, g9); }
           else L(sh, px.x + rad, cy, cx - rad, cy, g9);
           symbol(sh, 'socket1', cx, cy, S); px = { x: cx, y: cy }; }
         const srows = Math.ceil(sgl / sper); ph += srows * rowH + 4;
@@ -1101,16 +1145,15 @@ export function layout(model, { W = 380, font = 12, screen = false, cableTable =
     if (screen && !info.spare && !info.spd && info.noPoints && !info.rooms && !info.sockRooms && !info.itemRooms && !cItems.length && !fed && !namedLoadKind(c) && !circuitSpurList(c).length) ph += textLines(sh, tx, y + hh + (ph ? 6 + ph : 2), 'Add points served to draw sockets/lights', tw, { size: small, color: COL.amber }) + 4;
     // minor works: new spur(s) branching off the ring, in bold brand colour
     if (spur && !info.spare && !info.spd) {
-      const fx = tx - gap / 2, S = F * 1.5, step = S + 6;
+      const fx = tx - gap / 2, S = F * 1.5, sk = spur.kind === 'appliance' ? 'fcu' : spur.kind, kr = loadR(sk, S), step = Math.max(S + 6, 2 * kr + 8), x0 = Math.max(tx + S / 2, fx + kr + 8); // v0.48.1: in line, plates clear of the feed
       const top = y + hh + ph + 8;
       const lab = textLines(sh, tx, top, spur.label, tw, { bold: true, color: COL.brand });
-      const per = Math.max(1, Math.floor((tw - 4) / step)); const rows = Math.ceil(spur.n / per);
+      const per = Math.max(1, Math.floor((tx + tw - x0 - kr - 2) / step) + 1); const rows = Math.ceil(spur.n / per);
       const sy = top + lab + 4; let lastCy = 0;
       for (let r = 0; r < rows; r++) {
         const n = Math.min(per, spur.n - r * per); const cy = sy + r * (S + 10) + S / 2; lastCy = cy;
-        L(sh, fx, cy, tx + (n - 1) * step + S / 2, cy, { w: 2.2, color: COL.brand });
-        used.add(spur.kind === 'appliance' ? 'fcu' : spur.kind);
-        for (let i = 0; i < n; i++) { const k0 = sh.length; symbol(sh, spur.kind === 'appliance' ? 'fcu' : spur.kind, tx + i * step + S / 2, cy, S); for (let j = k0; j < sh.length; j++) { sh[j].color = COL.brand; if (sh[j].t === 'line') sh[j].w = 1.6; else sh[j].lw = 1.6; } }
+        used.add(sk);
+        for (let i = 0; i < n; i++) { const cx = x0 + i * step; L(sh, i ? cx - step + kr : fx, cy, cx - kr, cy, { w: 2.2, color: COL.brand }); const k0 = sh.length; symbol(sh, sk, cx, cy, S); for (let j = k0; j < sh.length; j++) { sh[j].color = COL.brand; if (sh[j].t === 'line') sh[j].w = 1.6; else sh[j].lw = 1.6; } }
       }
       L(sh, fx, pc.shown ? y + hh + 6 + S / 2 : feedTop, fx, lastCy, { w: 2.2, color: COL.brand });
       ph += 8 + lab + 4 + rows * (S + 10) - 10;
@@ -1150,7 +1193,7 @@ export function layout(model, { W = 380, font = 12, screen = false, cableTable =
   // legs join. Rows that run out of width snake back (alternate direction) with
   // nested U-turns, so no line ever crosses another.
   function hairpin(sh, rows, o) {
-    const { S, g, step } = o; const r = S / 2, upT = 0, dnB = S * 1.15 + 5; const out = []; // v0.43.9: sockets hang below the cable, leg B clears them void r; // sockets sit ON the top leg
+    const { S, g, step } = o; const r = S / 2, upT = 0, dnB = r * 0.85 + 9; const out = []; // v0.43.9: sockets hang below the cable, leg B clears them void r; // sockets sit ON the top leg
     const N = rows.length;
     rows.forEach((row, k) => {
       const dir = k % 2 ? -1 : 1, cy = row.cy, yT = cy - upT, yB = cy + dnB;
@@ -1161,19 +1204,23 @@ export function layout(model, { W = 380, font = 12, screen = false, cableTable =
       if (k === N - 1) { const lastX = pos.length ? pos[pos.length - 1] + dir * (loadR(row.items[pos.length - 1], S) + 12) : (dir > 0 ? Math.max(tIn, bIn) : Math.min(tIn, bIn)) + dir * 14; tOut = bOut = lastX; L(sh, lastX, yT, lastX, yB, g); }
       else { const s1 = side(dir); tOut = s1[0]; bOut = s1[1]; const nx = rows[k + 1]; const nyT = nx.cy - upT, nyB = nx.cy + dnB;
         L(sh, s1[0], yT, s1[0], nyB, g); L(sh, s1[1], yB, s1[1], nyT, g); }
-      L(sh, bIn, yB, bOut, yB, g); let px = tIn;
-      row.items.forEach((kd, j) => { const cx = pos[j], kr = loadR(kd, S); L(sh, px, yT, cx - dir * kr, yT, g); symbol(sh, kd, cx, cy, S); px = cx + dir * kr; used.add(kd); if (row.tag) row.tag(cx, cy, kd); });
-      L(sh, px, yT, tOut, yT, g);
-      out.push({ pos, yT, yB, dir });
+      // v0.48.1: sockets sit IN the cable (it runs into and out of each faceplate). On the last row they go on the
+      // lower leg, so a spur dropped off the bottom of a socket crosses nothing.
+      const onB = k === N - 1 && o.lastOnB !== false; const sy = onB ? yB : yT;
+      if (onB) L(sh, tIn, yT, tOut, yT, g); else L(sh, bIn, yB, bOut, yB, g);
+      let px = onB ? bIn : tIn;
+      row.items.forEach((kd, j) => { const cx = pos[j], kr = loadR(kd, S); L(sh, px, sy, cx - dir * kr, sy, g); symbol(sh, kd, cx, sy, S); px = cx + dir * kr; used.add(kd); if (row.tag) row.tag(cx, sy, kd); });
+      L(sh, px, sy, onB ? bOut : tOut, sy, g);
+      out.push({ pos, yT, yB, dir, sy });
     });
     return out;
   }
 
-  function HP(S) { return { upT: S / 2 * 1.32 + 4, dnB: S * 1.15 + 5 }; }
-  function plateBot(k, S, cy) {
-    if (SOCK[k]) { const r = S / 2; return cy + r * 0.35 + r * 1.7; }
+  function HP(S) { return { upT: S / 2 * 1.32 + 4, dnB: S / 2 * 0.85 + 9 }; }
+  function plateBot(k, S, cy, hang = false) {
+    if (SOCK[k]) { const r = S / 2; return hang ? cy + r * 0.35 + r * 1.7 : cy + r * 0.85; } // v0.48.1: in line, the plate is centred on the cable
     if (k === 'jb') return cy + S * 0.45;
-    if (k === 'fcuin' || k === 'sfcuin') { const r = S / 2; return cy + r * 0.35 + r * 1.7; }
+    if (IN_KINDS[k]) return cy + S / 2 * 0.85;
     return cy + loadR(k, S);
   }
   function markSock(cx, cy, k, S, extra) {
@@ -1188,7 +1235,7 @@ export function layout(model, { W = 380, font = 12, screen = false, cableTable =
     return { x: cx, cy, bot: cy + h / 2, k: 'jb', r: w / 2 };
   }
   // v0.44.0: outdoor (IP rated) socket: a small white-on-blue IP badge on the plate's bottom right corner
-  function ipMark(sh, cx, cy, k, S) { if (!SOCK[k]) return; const r = S / 2, H = r * 1.7, w = SOCK[k][0] ? H * 2.2 : H * 1.15, top = cy + r * 0.35;
+  function ipMark(sh, cx, cy, k, S, hang = false) { if (!SOCK[k]) return; const r = S / 2, H = r * 1.7, w = SOCK[k][0] ? H * 2.2 : H * 1.15, top = hang ? cy + r * 0.35 : cy - H / 2; // v0.48.1: in-line plate
     const ts = small * 0.72, pw = textW('IP', ts, true) + 5, bh = ts * 1.3, bx = cx + w / 2 - pw * 0.6, by = top + H - bh * 0.55;
     sh.push({ t: 'rect', x: bx, y: by, w: pw, h: bh, lw: 0.6, color: COL.brand, fill: COL.brand }); T(sh, bx + pw / 2, by + bh * 0.78, 'IP', { anchor: 'middle', bold: true, size: ts, color: [255, 255, 255] }); }
   // v0.44.0: a simple daisy chain: one cable down from (inX, fromY), into each item and on to the next; wraps under itself
@@ -1203,7 +1250,7 @@ export function layout(model, { W = 380, font = 12, screen = false, cableTable =
       list = list.filter((it) => !['dciso', 'pvarray', 'battery'].includes(it.k)); }
     const nBat = branches.length; const invI = nBat ? list.findIndex((it) => it.k === 'hybinv') : -1; const brH = r * 2 + small * 1.3 + 8; const batH = nBat ? nBat * brH + 4 : 0; const dp = (k) => k === 'dpu' || k === 'dps';
     const wOf = (k) => (dp(k) ? r * 4.4 : Math.max(2 * loadR(k, S), labW(k, S)));
-    const up = list.some((it) => dp(it.k)) ? r * 3.5 : list.some((it) => ['heater', 'hob', 'oven', 'combi', 'immersion', 'cooker', 'shower', 'hybinv', 'dciso', 'aciso', 'pvarray', 'battery'].includes(it.k)) ? r + small * 1.2 + 2 : r + 2; /* heater: room for its Rad label */ const down = list.some((it) => SOCK[it.k]) ? r * 2.3 + 4 : r + 2; const rowH = up + down + 10;
+    const up = list.some((it) => dp(it.k)) ? r * 3.5 : list.some((it) => ['heater', 'hob', 'oven', 'combi', 'immersion', 'cooker', 'shower', 'hybinv', 'dciso', 'aciso', 'pvarray', 'battery'].includes(it.k)) ? r + small * 1.2 + 2 : r + 2; /* heater: room for its Rad label */ const down = list.some((it) => SOCK[it.k]) ? r * 0.85 + (o.ip ? 7 : 4) : r + 2; /* v0.48.1: sockets in line */ const rowH = up + down + 10;
     let x = o.x0; let row = 0; const pos = [];
     for (const it of list) { const w = wOf(it.k); if (x + w > o.xMax && x > o.x0) { row++; x = o.x0; } pos.push({ x: x + (dp(it.k) ? loadR(it.k, S) : w / 2), row }); x += w + 14; }
     let prev = null; const invRow = invI >= 0 ? pos[invI].row : -1; const rowY = (rw) => o.top + up + rw * rowH + (invRow >= 0 && rw > invRow ? batH : 0);
@@ -1253,6 +1300,7 @@ export function layout(model, { W = 380, font = 12, screen = false, cableTable =
     const r = S / 2;
     if (SOCK[k]) return SOCK[k][0] ? r * 1.7 * 1.1 : r * 1.7 * 0.575;
     if (k === 'fcu' || k === 'sfcu' || k === 'flex') return faceW(k, r) / 2;
+    if (k === 'dpsw') return faceW('dp', r) / 2;
     return loadR(k, S);
   }
   function circuitSpurSection(sh, c, tx, fromY, maxX) {
@@ -1303,6 +1351,13 @@ export function layout(model, { W = 380, font = 12, screen = false, cableTable =
     let row0 = fromY + 8 + S * 0.65;
     if (jbPort && assigned.some((a) => a.port === jbPort)) row0 = Math.max(row0, jbPort.bot + S * 0.85 + 6);
     const sz = small * 0.9;
+    // v0.48.1: the load under an FCU / DP switch. A socket hangs on the drop (fed into its top); an outdoor one gets its IP badge.
+    const S2 = S * 0.85;
+    const drawLoad = (s, lk, px, fromY, minTop) => {
+      if (SOCK[lk]) { const cyL = Math.max(fromY + 3, minTop); L(sh, px, fromY, px, cyL, g); symbol(sh, lk, px, cyL, S2, null, { hang: true }); used.add(lk);
+        const endY = plateBot(lk, S2, cyL, true); if (spurLoadIp(s)) { ipMark(sh, px, cyL, lk, S2, true); used.add('ipsock'); } return { endY, midY: (cyL + endY) / 2 + 1 }; }
+      const lr = loadR(lk, S2); const ly = Math.max(minTop + lr, fromY + 5 + lr);
+      L(sh, px, fromY, px, ly - lr, g); symbol(sh, lk, px, ly, S2); used.add(lk); return { endY: ly + lr, midY: ly }; };
     // Plan each group: device (and load) on the drop, the label to the right of the widest symbol.
     const plan = groups.map((g0) => {
       const px = g0.port.x;
@@ -1338,24 +1393,17 @@ export function layout(model, { W = 380, font = 12, screen = false, cableTable =
       P.items.forEach((it) => {
         if (!it.k) { // v0.48: FCU in the ring: its load comes straight off the FCU's faceplate
           let endY = prev, midY = top + sz * 0.75;
-          if (it.lk) { const lr = loadR(it.lk, S * 0.85); const ly = Math.max(top + lr, prev + 5 + lr);
-            L(sh, P.px, prev, P.px, ly - lr, g); symbol(sh, it.lk, P.px, ly, S * 0.85); used.add(it.lk); endY = ly + lr; midY = ly; }
+          if (it.lk) { const d = drawLoad(it.s, it.lk, P.px, prev, top); endY = d.endY; midY = d.midY; }
           const labTop = midY - sz * 0.75;
           const th = textLines(sh, P.labX, labTop, it.lab, P.labW, { size: sz, color: COL.grey });
           const b = Math.max(endY, labTop + th); bottom = Math.max(bottom, b); prev = endY; yC = b + 10 + S * 0.5; return; }
         const sr = loadR(it.k, S);
         const hang = !!SOCK[it.k];
-        L(sh, P.px, prev, P.px, yC, g);
+        L(sh, P.px, prev, P.px, hang ? yC : yC - sr, g); // v0.48.1: into the plate's top edge, not across its face
         symbol(sh, it.k, P.px, yC, S, null, hang ? { hang: true } : {}); used.add(it.k);
-        let endY = hang ? plateBot(it.k, S, yC) : yC + sr;
-        if (it.lk) {
-          const lr = loadR(it.lk, S * 0.85);
-          const ly = endY + 5 + lr;
-          L(sh, P.px, endY, P.px, ly - lr, g);
-          symbol(sh, it.lk, P.px, ly, S * 0.85); used.add(it.lk);
-          endY = ly + lr;
-        }
-        const midY = hang ? (yC + plateBot(it.k, S, yC)) / 2 + 1 : yC;
+        let endY = hang ? plateBot(it.k, S, yC, true) : yC + sr;
+        if (it.lk) endY = drawLoad(it.s, it.lk, P.px, endY, endY).endY;
+        const midY = hang ? (yC + plateBot(it.k, S, yC, true)) / 2 + 1 : yC;
         const labTop = midY - sz * 0.75; // first line centred on the device (a hanging socket: on its faceplate)
         const th = textLines(sh, P.labX, labTop, it.lab, P.labW, { size: sz, color: COL.grey });
         const b = Math.max(endY, labTop + th);
@@ -1414,17 +1462,18 @@ export function layout(model, { W = 380, font = 12, screen = false, cableTable =
     rows.forEach((row, k) => {
       const pos = res[k].pos;
       row.items.forEach((kd, j) => { const sid = seq.ids[k * per + j];
-        if (sid) { inAnchors.push({ x: pos[j], cy: row.cy, bot: plateBot(kd, S, row.cy), k: kd, sid, yB: res[k].yB, dir: res[k].dir, step, col: j }); runEnd = { x: pos[j], cy: row.cy, r: loadR(kd, S), k: kd, yB: res[k].yB, dir: res[k].dir }; }
-        else markSock(pos[j], row.cy, kd, S, { yB: res[k].yB, dir: res[k].dir, step, col: j }); });
+        const sy = res[k].sy; // v0.48.1: the line the plates sit on (the lower leg on the last row)
+        if (sid) { inAnchors.push({ x: pos[j], cy: sy, bot: plateBot(kd, S, sy), k: kd, sid, yB: res[k].yB, dir: res[k].dir, step, col: j }); runEnd = { x: pos[j], cy: sy, r: loadR(kd, S), k: kd, yB: res[k].yB, dir: res[k].dir }; }
+        else markSock(pos[j], sy, kd, S, { yB: res[k].yB, dir: res[k].dir, step, col: j }); });
     });
-    let bottom = res[res.length - 1].yB + 4;
+    let bottom = res[res.length - 1].yB + S / 2 * 0.85 + 4; // v0.48.1: the last row's plates sit on the lower leg
     const lr0 = res[res.length - 1], jx = lr0.pos.length ? lr0.pos[lr0.pos.length - 1] + lr0.dir * (loadR('socket', S) + 12) : 0; const spurLab = sgl === 1 ? 'Spur' : 'Spurs';
     if (sgl && lr0.dir > 0 && jx + 10 + sgl * step + 4 + textW(spurLab, small) < W - 6) { // spur(s) teed off the ring on the same row, after the join
-      used.add('socket1'); const sr = loadR('socket1', S); let px = jx; C(sh, jx, lr0.yT, 1.6, { fill: COL.line, lw: 0.6 });
-      for (let j = 0; j < sgl; j++) { const cx = jx + 10 + sr + j * step; L(sh, px, lr0.yT, cx - sr, lr0.yT, g); symbol(sh, 'socket1', cx, lr0.yT, S); px = cx + sr; }
-      T(sh, px + 4, lr0.yT - S * 0.15, spurLab, { size: small, color: COL.grey }); }
-    else if (sgl) { const last = res[res.length - 1]; const dx = Math.min(...(last.pos.length ? last.pos : [xL])) - S * 0.2; const sy = last.yB + S * 0.5 + 8; used.add('socket1');
-      spurRow(sh, 'socket1', dx, last.yB, sy, step, S, g, sgl, sgl === 1 ? 'Spur' : 'Spurs', W - 6); bottom = sy + S * 0.6; }
+      used.add('socket1'); const sr = loadR('socket1', S); let px = jx; const sy = lr0.sy; C(sh, jx, sy, 1.6, { fill: COL.line, lw: 0.6 });
+      for (let j = 0; j < sgl; j++) { const cx = jx + 10 + sr + j * step; L(sh, px, sy, cx - sr, sy, g); symbol(sh, 'socket1', cx, sy, S); px = cx + sr; }
+      T(sh, px + 6, sy + small * 0.35, spurLab, { size: small, color: COL.grey }); }
+    else if (sgl) { const last = res[res.length - 1]; const dx = Math.min(...(last.pos.length ? last.pos : [xL])) - rad - 4; const sy = last.sy + S / 2 * 0.85 + S * 0.5 + 8; used.add('socket1'); // v0.48.1: tee off the line clear of the first plate
+      spurRow(sh, 'socket1', dx, last.sy, sy, step, S, g, sgl, sgl === 1 ? 'Spur' : 'Spurs', W - 6); bottom = sy + S * 0.6; }
     let ph = bottom - top + 2;
     if (pc.more) ph += textLines(sh, tx, top + ph, `+ ${pc.more} more (${pc.n} in total)`, tw, { size: small, color: COL.grey }) + 2;
     return ph;
@@ -1437,10 +1486,10 @@ export function layout(model, { W = 380, font = 12, screen = false, cableTable =
   function ringRooms(sh, info, tx, top, tw, feedTop, c) {
     const S = F * 1.5, r0 = S / 2, g = { w: 1.1, color: COL.line }, step = S * 2 + 10, fx = tx - gap / 2;
     const bx = tx + 8, bw = tx + tw - bx, ix = bx + 8, iw = bw - 16; const rad = loadR('socket', S); const cx0 = ix + rad + 8;
-    const per = Math.max(1, Math.floor((bx + bw - 12 - rad - cx0) / step) + 1); const lead = r0 * 0.95, pitch = S * 1.5 + 14;
+    const per = Math.max(1, Math.floor((bx + bw - 12 - rad - cx0) / step) + 1); const lead = r0 * 0.95, pitch = S * 0.85 + 16; const ph = r0 * 0.85; /* v0.48.1: plates sit in line, centred on the cable */ const hasList = circuitSpurList(c).length > 0;
     let y0 = top; if (screen && info.roomNote) y0 += textLines(sh, tx, y0 - 4, info.roomNote, tw, { size: small, color: COL.na }) + 4;
     let legY = feedTop; // where leg 2 picks up again
-    info.sockRooms.forEach((r) => {
+    info.sockRooms.forEach((r, ri) => {
       const rs = [], ln = []; let ry = y0 + 4;
       ry += textLines(rs, ix, ry, r.name || 'Room ' + (r.i + 1), iw, { bold: true, size: small });
       const ip = /outside|outdoor|garden|exterior|external|patio/i.test(r.name); if (ip) used.add('ipsock');
@@ -1450,8 +1499,18 @@ export function layout(model, { W = 380, font = 12, screen = false, cableTable =
       // spurs ride on the same row, teed off after the last ring socket, when they fit
       const spurK = r.spurKind === 'fcu' ? 'fcu' : 'socket1'; const spurLab = r.spurs === 1 ? 'Spur' : 'Spurs'; // the symbol says socket or FCU; the room summary says which
       const spurW = r.spurs ? 10 + (r.spurs - 1) * step + 2 * loadR(spurK, S) + (ip && spurK === 'socket1' ? 12 : 4) + textW(spurLab, small) : 0;
-      const nRows = Math.max(1, Math.ceil(items.length / per)); let cy = ry + 6 + r0 * 1.45 + (items.slice(0, per).some((k) => k === 'dpu' || k === 'dps') ? dpH : 0); let x = fx; const pitchR = pitch + dpH; let lineY = cy; const yIn = lineY;
+      const nRows = Math.max(1, Math.ceil(items.length / per)); let cy = ry + 6 + (items.slice(0, per).some((k) => k === 'dpu' || k === 'dps') ? r0 * 3.45 : ph); let x = fx; const pitchR = pitch + dpH; let lineY = cy; const yIn = lineY;
+      // v0.48.1: on the last room, when spurs are taken off its sockets, the last row's sockets go on the way back
+      // (like the hairpin's lower leg) so each spur drops straight off the bottom of its socket and crosses nothing.
+      const lastRow = items.slice((nRows - 1) * per); const onRet = hasList && ri === info.sockRooms.length - 1 && (nRows - 1) % 2 === 0 && lastRow.length && !lastRow.some((k) => k === 'dpu' || k === 'dps');
+      let retDone = false;
       for (let k = 0; k < nRows; k++) { const row = items.slice(k * per, (k + 1) * per); const dir = k % 2 ? -1 : 1; lineY = cy;
+        if (onRet && k === nRows - 1) {
+          const pos = row.map((_, j) => cx0 + j * step); const end = Math.max(...pos) + rad + 8; const yR = lineY + ph * 2 + 8;
+          L(ln, x, lineY, end, lineY, g); L(ln, end, lineY, end, yR, g); let px = end;
+          for (let j = row.length - 1; j >= 0; j--) { const kd = row[j], cx = pos[j], kr = loadR(kd, S); L(ln, px, yR, cx + kr, yR, g); symbol(rs, kd, cx, yR, S); used.add(kd); if (ip) ipMark(rs, cx, yR, kd, S); px = cx - kr; }
+          row.forEach((kd, j) => markSock(pos[j], yR, kd, S));
+          L(ln, px, yR, fx, yR, g); x = fx; lineY = cy = yR; retDone = true; break; }
         const pos = row.map((_, j) => (dir > 0 ? cx0 + j * step : cx0 + (row.length - 1 - j) * step));
         if (k > 0) { L(ln, x, lineY - pitchR, x, lineY, g); } // drop to the next row
         const end = row.length ? (dir > 0 ? Math.max(...pos) + rad + 8 : Math.min(...pos) - rad - 8) : (dir > 0 ? cx0 + 6 : cx0 - 6);
@@ -1460,15 +1519,15 @@ export function layout(model, { W = 380, font = 12, screen = false, cableTable =
         L(ln, px, lineY, end, lineY, g); x = end;
         if (k < nRows - 1) cy += pitchR; }
       // back to leg 2: straight on if the last row already runs left, else down a little and back
-      let yOut = lineY; const lastDir = (nRows - 1) % 2 ? -1 : 1;
+      let yOut = lineY; const lastDir = retDone ? -1 : (nRows - 1) % 2 ? -1 : 1;
       const spurInline = r.spurs && lastDir > 0 && x + spurW < bx + bw - 6;
       if (spurInline) { // a tee off the ring after its last socket: the branch carries on along the row
         used.add(spurK); const sr = loadR(spurK, S); let px = x; C(ln, x, lineY, 1.6, { fill: COL.line, lw: 0.6 });
         for (let j = 0; j < r.spurs; j++) { const cx = x + 10 + sr + j * step; L(ln, px, lineY, cx - sr, lineY, g); symbol(rs, spurK, cx, cy, S); if (ip && spurK === 'socket1') ipMark(rs, cx, cy, spurK, S); px = cx + sr; }
-        T(rs, px + 4, cy - S * 0.15, spurLab, { size: small, color: COL.grey }); }
-      if (lastDir > 0) { yOut = lineY + S * 1.15 + 4; L(ln, x, lineY, x, yOut, g); }
-      L(ln, x, yOut, fx, yOut, g);
-      let bottom = Math.max(yOut, cy + S * 1.15 + (dpH ? 0 : 0)) + 6; // v0.44.3: the box grows to hold every socket row
+        T(rs, px + (ip && spurK === 'socket1' ? 12 : 6), cy + small * 0.35, spurLab, { size: small, color: COL.grey }); } // v0.48.1: beside the in-line plate
+      if (lastDir > 0) { yOut = lineY + ph + (ip ? 10 : 7); L(ln, x, lineY, x, yOut, g); }
+      if (!retDone) L(ln, x, yOut, fx, yOut, g);
+      let bottom = Math.max(yOut, cy + ph + 4) + 6; // v0.44.3: the box grows to hold every socket row
       let dpFrom = yOut;
       if (r.spurs && !spurInline) { const k = r.spurKind === 'fcu' ? 'fcu' : 'socket1'; const sy = yOut + S * 0.5 + 8;
         spurRow(ln, k, cx0 - rad - 4, yOut, sy, step, S, g, r.spurs, (r.spurKind === 'fcu' ? 'FCU spur' : 'Spur') + (r.spurs === 1 ? '' : 's'), bx + bw - 6, ip && k === 'socket1' ? (xx, yy, kk) => ipMark(ln, xx, yy, kk, S) : null, bx + 6);
@@ -1483,7 +1542,7 @@ export function layout(model, { W = 380, font = 12, screen = false, cableTable =
   }
   function sockRoomsSection(sh, info, tx, top, tw, feedTop, c) {
     if (isRingC(c)) return ringRooms(sh, info, tx, top, tw, feedTop, c);
-    const S = F * 1.5, rad = loadR('socket', S), step = S * 2 + 10, rowH = S * 1.5 + 14, fx = tx - gap / 2; const g = { w: 1.1, color: COL.line };
+    const S = F * 1.5, rad = loadR('socket', S), step = S * 2 + 10, rowH = S * 0.85 + 16, ph = S / 2 * 0.85, fx = tx - gap / 2; /* v0.48.1: plates in line */ const g = { w: 1.1, color: COL.line };
     const ring = isRingC(c); const xi = ring ? fx : tx + 4, bx = tx + 8, bw = tx + tw - bx - (ring ? 18 : 0), xr = bx + bw + 10; /* v0.43.5: a ring is drawn as a closed loop */
     let y0 = top; if (screen && info.roomNote) y0 += textLines(sh, tx, y0 - 4, info.roomNote, tw, { size: small, color: COL.na }) + 4;
     const topY = y0 + 2; y0 += 8; let teeY = topY, lastBottom = y0;
@@ -1496,19 +1555,19 @@ export function layout(model, { W = 380, font = 12, screen = false, cableTable =
       ry += textLines(rs, ix, ry, parts.join(' \u00b7 '), iw, { size: small * 0.92, color: COL.grey });
       const uD = Math.min(r.unsw, r.sockets), uS = Math.min(r.unsw - uD, r.singles); const items = [...Array(r.sockets - uD).fill('socket'), ...Array(uD).fill('socketu'), ...Array(r.singles - uS).fill('socket1'), ...Array(uS).fill('socket1u'), ...Array(r.dpsw).fill('dpu'), ...Array(r.dpsws).fill('dps'), ...r.items.flatMap(([k, n]) => Array(n).fill(k))]; const dpH = items.some((k) => k === 'dpu' || k === 'dps') ? S * 1.75 : 0; /* v0.44.0: any extra items join the room's run */ // v0.43.8: DP stacks stand taller
       const cx0 = ix + S * 0.9 + rad; const per = Math.max(1, Math.floor((bx + bw - 10 - rad - cx0) / step) + 1);
-      const rowY0 = ry + S * 0.5 + 4 + dpH; let last = null; const rowHr = rowH + dpH;
+      const rowY0 = ry + 6 + (items.slice(0, per).some((k) => k === 'dpu' || k === 'dps') ? S / 2 * 3.45 : ph); let last = null; const rowHr = rowH + dpH;
       const ipTag = (x, y, k) => { if (ip) ipMark(rs, x, y, k, S); };
       items.forEach((k, j) => { const cx = cx0 + (j % per) * step, cy = rowY0 + Math.floor(j / per) * rowHr; const kr = loadR(k, S);
         if (!j) L(rs, bx, cy, cx - kr, cy, g);
-        else if (j % per === 0) { const wy = last.y + S * 1.15 + 3, wx = ix + 2, ex = last.x + last.r + 3; L(rs, last.x + last.r, last.y, ex, last.y, g); L(rs, ex, last.y, ex, wy, g); L(rs, ex, wy, wx, wy, g); L(rs, wx, wy, wx, cy, g); L(rs, wx, cy, cx - kr, cy, g); }
+        else if (j % per === 0) { const wy = last.y + ph + (ip ? 9 : 6), wx = ix + 2, ex = last.x + last.r + 3; L(rs, last.x + last.r, last.y, ex, last.y, g); L(rs, ex, last.y, ex, wy, g); L(rs, ex, wy, wx, wy, g); L(rs, wx, wy, wx, cy, g); L(rs, wx, cy, cx - kr, cy, g); }
         else L(rs, last.x + last.r, cy, cx - kr, cy, g);
         symbol(rs, k, cx, cy, S); used.add(k); ipTag(cx, cy, k); markSock(cx, cy, k, S); last = { x: cx, y: cy, r: kr }; });
       if (!last) L(rs, bx, rowY0, r.spurs ? cx0 - S * 0.8 : bx + 10, rowY0, g);
-      let bottom = (last ? last.y : rowY0) + S * 1.15;
+      let bottom = (last ? last.y : rowY0) + ph + (ip ? 6 : 3);
       if (r.spurs) { const k = r.spurKind === 'fcu' ? 'fcu' : 'socket1'; used.add(k); const sr = loadR(k, S); const sy = bottom + S * 0.5 + 6, dx = cx0 - rad - 6;
         L(rs, dx, last ? last.y : rowY0, dx, sy, g); let px = dx;
         for (let j = 0; j < r.spurs; j++) { const cx = cx0 + j * step; L(rs, px, sy, cx - sr, sy, g); symbol(rs, k, cx, sy, S); if (k === 'socket1') ipTag(cx, sy, k); px = cx + sr; }
-        const lab = (r.spurKind === 'fcu' ? 'FCU spur' : 'Spur') + (r.spurs === 1 ? '' : 's'); const lx = px + 6; if (lx + textW(lab, small) < bx + bw - 6) T(rs, lx, sy + small * 0.35, lab, { size: small, color: COL.grey });
+        const lab = (r.spurKind === 'fcu' ? 'FCU spur' : 'Spur') + (r.spurs === 1 ? '' : 's'); const lx = px + (ip && k === 'socket1' ? 12 : 6); if (lx + textW(lab, small) < bx + bw - 6) T(rs, lx, sy + small * 0.35, lab, { size: small, color: COL.grey });
         bottom = sy + S * 0.6; }
       const bh = bottom - y0 + 6; R(sh, bx, y0, bw, bh, { fill: COL.fill, color: COL.room, lw: 1.6 }); sh.push(...rs);
       L(sh, xi, rowY0, bx, rowY0, g); teeY = rowY0; lastBottom = y0 + bh; // the tee
@@ -1672,7 +1731,7 @@ export function layout(model, { W = 380, font = 12, screen = false, cableTable =
   // v0.43: where a conductor meets a load symbol on its row (half-width from centre)
   // v0.44.6: width the grey label above a load needs, so neighbours never collide
   function labW(k, S) { const t = LOAD_LAB[k]; return t ? textW(t, Math.max(S / 2 * 0.8, small * 0.85), true) + 4 : 0; }
-  function loadR(k, S) { const r = S / 2; if (k === 'fcuin' || k === 'sfcuin') k = k.slice(0, -2); return k === 'km' ? r * 0.75 : k === 'shelly' || k === 'hive' || k === 'relay' ? r * 1.5 : k === 'sfcu' ? r * 0.85 : k === 'timeclock' ? r * 0.9 : k === 'light' ? r * 0.8 : k === 'fan' ? r * 0.85 : SOCK[k] ? (SOCK[k][0] ? r * 2.0 : r * 1.1) : (k === 'dpu' || k === 'dps') ? r * 0.85 : k === 'fcu' || k === 'flex' ? r * 0.85 : k === 'point' ? r * 0.7 : r; }
+  function loadR(k, S) { const r = S / 2; if (IN_KINDS[k]) k = IN_KINDS[k] === 'dp' ? 'dpsw' : IN_KINDS[k]; return k === 'km' ? r * 0.75 : k === 'shelly' || k === 'hive' || k === 'relay' ? r * 1.5 : k === 'sfcu' ? r * 0.85 : k === 'timeclock' ? r * 0.9 : k === 'light' ? r * 0.8 : k === 'fan' ? r * 0.85 : SOCK[k] ? (SOCK[k][0] ? r * 1.87 : r * 0.9775) : /* v0.48.1: exactly the plate's half-width, so an in-line cable meets its sides */ (k === 'dpu' || k === 'dps' || k === 'dpsw') ? r * 0.85 : k === 'fcu' || k === 'flex' ? r * 0.85 : k === 'point' ? r * 0.7 : r; }
   function rotH(o, x0, y0, fn) { const tmp = []; fn(tmp); const P = (x, y) => [x0 + (y - y0), y0 - (x - x0)];
     for (const z of tmp) { if (z.t === 'line') { const [a, b] = P(z.x1, z.y1), [c2, d] = P(z.x2, z.y2); o.push({ ...z, x1: a, y1: b, x2: c2, y2: d }); }
       else if (z.t === 'rect') { const [a, b] = P(z.x + z.w, z.y); o.push({ ...z, x: a, y: b, w: z.h, h: z.w }); }
@@ -1747,18 +1806,21 @@ export function layout(model, { W = 380, font = 12, screen = false, cableTable =
     const r = S / 2; const W0 = [255, 255, 255];
     if (kind === 'light') { // outlet for lighting: circle with a cross
       C(sh, cx, cy, r * 0.8, { fill: W0 }); const d = r * 0.8 * 0.707; L(sh, cx - d, cy - d, cx + d, cy + d, { w: 1 }); L(sh, cx - d, cy + d, cx + d, cy - d, { w: 1 }); }
-    else if (kind === 'fcuin' || kind === 'sfcuin') { // v0.48: FCU in the ring/radial: the cable runs over it and drops into its top, like a socket
-      const base = kind.slice(0, -2), d = r * 0.35, a = loadR(base, S), H = r * 1.7;
-      L(sh, cx - a, cy, cx + a, cy, { w: 1.1 }); L(sh, cx, cy, cx, cy + d, { w: 1.1 }); facePlate(sh, cx, cy + d + H / 2, base, r); used.add(base); }
-    else if (SOCK[kind]) { // v0.43.9: pictorial UK 13 A faceplate under the cable; the cable dips into its top centre
-      const [twin, sw] = SOCK[kind], d = r * 0.35, a = loadR(kind, S);
-      // v0.48: a hanging spur socket sits on a vertical drop — do not draw the through-cable (a leftover T/JB stub)
-      if (!o.hang) L(sh, cx - a, cy, cx + a, cy, { w: 1.1 });
-      L(sh, cx, cy, cx, cy + d, { w: 1.1 }); /* v0.44.3: cable straight over the plate, one tidy drop */ plate(sh, cx, cy + d, r, twin, sw); }
-    else if (kind === 'dpu' || kind === 'dps') { // DP switch faceplate in the ring; long spur up and over to its socket faceplate
+    else if (IN_KINDS[kind]) { // v0.48.1: FCU / DP switch in the ring/radial: in line, the cable runs into and out of its faceplate
+      const base = IN_KINDS[kind], a = loadR(kind, S), w2 = faceW(base, r) / 2;
+      if (a > w2 + 0.3) { L(sh, cx - a, cy, cx - w2, cy, { w: 1.1 }); L(sh, cx + w2, cy, cx + a, cy, { w: 1.1 }); }
+      facePlate(sh, cx, cy, base, r); used.add(base === 'dp' ? 'dpsw' : base); }
+    else if (kind === 'dpsw') facePlate(sh, cx, cy, 'dp', r); // v0.48.1: DP switch (20 A / 45 A) on a spur
+    else if (SOCK[kind]) { // v0.43.9: pictorial UK 13 A faceplate
+      const [twin, sw] = SOCK[kind], H = r * 1.7, a = loadR(kind, S), w2 = (twin ? H * 2.2 : H * 1.15) / 2;
+      if (o.hang) { L(sh, cx, cy, cx, cy + r * 0.35, { w: 1.1 }); plate(sh, cx, cy + r * 0.35, r, twin, sw); } // v0.48: a spur socket hangs on its drop, fed into its top
+      else { // v0.48.1: in line, like the DP switch: the cable runs into one side of the faceplate and out of the other
+        if (a > w2 + 0.3) { L(sh, cx - a, cy, cx - w2, cy, { w: 1.1 }); L(sh, cx + w2, cy, cx + a, cy, { w: 1.1 }); }
+        plate(sh, cx, cy - H / 2, r, twin, sw); } }
+    else if (kind === 'dpu' || kind === 'dps') { // DP switch faceplate in the ring; a spur up and over into its socket (in line at the end of the spur)
       const H = r * 1.7, y0 = cy - H / 2; facePlate(sh, cx, cy, 'dp', r);
-      const Y = y0 - r * 2.5, sx = cx + r * 2.4; L(sh, cx, y0, cx, Y, { w: 1.1 }); L(sh, cx, Y, sx, Y, { w: 1.1 }); L(sh, sx, Y, sx, Y + r * 0.35, { w: 1.1 });
-      plate(sh, sx, Y + r * 0.35, r, false, kind === 'dps'); }
+      const Y = y0 - r * 1.75, sx = cx + r * 2.4, w2 = H * 1.15 / 2; L(sh, cx, y0, cx, Y, { w: 1.1 }); L(sh, cx, Y, sx - w2, Y, { w: 1.1 });
+      plate(sh, sx, Y - H / 2, r, false, kind === 'dps'); }
     else if (kind === 'cooker') { // cooker: box with four hob rings
       box(sh, cx, cy, r); for (const [a, b] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) C(sh, cx + a * r * 0.45, cy + b * r * 0.45, r * 0.25, { lw: 0.8 }); if (heatLab) T(sh, cx, cy - r - 3, 'Cooker', { anchor: 'middle', bold: true, size: Math.max(r * 0.8, small * 0.85), color: COL.grey }); /* v0.44.6: labelled, like Rad */ }
     // v0.44.5: hob (two rings across, top view), oven (door with window and handle), combi oven (oven window with a fan/microwave mark); labelled like Rad

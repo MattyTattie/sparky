@@ -16,7 +16,7 @@ export function symbolRects(shapes, { maxW = 50, maxH = 40, minW = 6, minH = 6 }
     .map((z) => ({ x: z.x, y: z.y, w: z.w, h: z.h }));
 }
 
-const CAPTION = /^(JB|EV|IP|N|\+|MCB|RCBO|Spare|Rail|Rad|Cooker|Hob|PV|Shower|Alarm|Immersion|T2|DB\d*|C?\d+|B\d+|A\d+|RCD|SPD|KM\d*|Ctrl|EE|A|DP|13A|ISO)$/i;
+const CAPTION = /^(JB|EV|IP|AC|DC|N|\+|MCB|RCBO|Spare|Rail|Rad|Cooker|Hob|PV|Shower|Alarm|Immersion|T2|DB\d*|C?\d+|B\d+|A\d+|RCD|SPD|KM\d*|Ctrl|EE|A|DP|13A|ISO)$/i;
 
 export function textSymbolOverlaps(shapes, { minArea = 2, minFrac = 0.12 } = {}) {
   const hits = [];
@@ -25,6 +25,8 @@ export function textSymbolOverlaps(shapes, { minArea = 2, minFrac = 0.12 } = {})
   for (const t of texts) {
     const b = textBBox(t);
     const ta = b.w * b.h;
+    // v0.48.1: a caption sat inside its own badge (the IP mark on an outdoor socket's corner) overlaps the plate by design
+    if (CAPTION.test(String(t.txt).trim()) && shapes.some((s) => s.t === 'rect' && s.w < 30 && s.h < 16 && b.x + b.w / 2 > s.x && b.x + b.w / 2 < s.x + s.w && b.y + b.h / 2 > s.y - 1 && b.y + b.h / 2 < s.y + s.h + 1)) continue;
     for (const s of syms) {
       const ix = Math.min(b.x + b.w, s.x + s.w) - Math.max(b.x, s.x);
       const iy = Math.min(b.y + b.h, s.y + s.h) - Math.max(b.y, s.y);
@@ -57,6 +59,26 @@ export function hangingSocketTicks(shapes) {
     if (hit.length) ticks.push({ plate: p, cy, lines: hit });
   }
   return ticks;
+}
+
+// v0.48.1: a cable must run INTO a faceplate's side (or drop into its top/bottom), never across its face.
+// Flags any straight line that starts outside a white plate and runs more than `depth` into it.
+export function linesThroughPlates(shapes, { depth = 1.6 } = {}) {
+  const plates = shapes.filter((z) => z.t === 'rect' && z.fill && z.fill[0] >= 250 && z.fill[1] >= 250 && z.w >= 8 && z.h >= 8 && z.w <= 60 && z.h <= 40);
+  const lines = shapes.filter((z) => z.t === 'line' && !z.hop && !z.dash && (Math.abs(z.y1 - z.y2) < 0.45 || Math.abs(z.x1 - z.x2) < 0.45));
+  const hits = [];
+  for (const p of plates) {
+    const inside = (x, y, m) => x > p.x + m && x < p.x + p.w - m && y > p.y + m && y < p.y + p.h - m;
+    for (const l of lines) {
+      if (inside(l.x1, l.y1, -0.5) && inside(l.x2, l.y2, -0.5)) continue; // a glyph drawn on the plate
+      const hz = Math.abs(l.y1 - l.y2) < 0.45;
+      if (hz) { const y = l.y1; if (!(y > p.y + depth && y < p.y + p.h - depth)) continue;
+        const a = Math.min(l.x1, l.x2), b = Math.max(l.x1, l.x2); if (Math.min(b, p.x + p.w) - Math.max(a, p.x) > depth) hits.push({ plate: p, line: l }); }
+      else { const x = l.x1; if (!(x > p.x + depth && x < p.x + p.w - depth)) continue;
+        const a = Math.min(l.y1, l.y2), b = Math.max(l.y1, l.y2); if (Math.min(b, p.y + p.h) - Math.max(a, p.y) > depth) hits.push({ plate: p, line: l }); }
+    }
+  }
+  return hits;
 }
 
 export function shapesToJson(blocks, name) {

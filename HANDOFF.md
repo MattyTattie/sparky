@@ -1,6 +1,6 @@
 # Handoff notes
 
-Status: live is **v0.47.1 beta** (https://mattytattie.github.io/sparky/, main 04d85b9 / commit b93e775 on branch v0.47.1, PUBLISHED 9 Nov 2026 20:39 GMT). **v0.48.0 beta is built locally, not pushed or published** (`sparky-v0.48.0`). Android: last published APK is still Zs Pro v5 (0.45.0) at https://github.com/MattyTattie/sparky/releases/download/app-v5/ZsPro-0.45.0.apk. The app is called Zs Pro; repo, data keys, cache prefix and Android package still say sparky on purpose (see RENAME.md).
+Status: live is **v0.48.0 beta** (https://mattytattie.github.io/sparky/, main e10d4ea, PUBLISHED 14 Nov 2026 ~08:15 GMT). **v0.48.1 beta is built locally, not pushed or published** (`sparky-v0.48.1`; see the v0.48.1 section at the end). Android: last published APK is still Zs Pro v5 (0.45.0) at https://github.com/MattyTattie/sparky/releases/download/app-v5/ZsPro-0.45.0.apk. The app is called Zs Pro; repo, data keys, cache prefix and Android package still say sparky on purpose (see RENAME.md).
 Run the tests with `node --test tests/*.test.mjs tests/*.test.js` (plain `node --test tests/` doesn't work on Node 24). PDF tests find jsPDF's Node build through tests/jspdf-node.cjs; if it's missing it runs tests/setup-jspdf.sh (npm, into tests/.jspdf, git-ignored).
 
 Open points
@@ -577,3 +577,53 @@ Follow-up 4 (14 Nov, Matthew: "Can we do something so we know that where the lin
 - **PDF:** the certificate (16 pp) and diagram-only PDFs are made by the live code. `tests/pdf_overlap.py` finds 0 overlaps on both PDFs and both screen SVGs. View PDF opens the viewer.
 - **Cosmetic, not a regression:** at 390 the PDF viewer header wraps a long file name over several lines. v0.47.1 did the same.
 
+## v0.48.1 beta (built locally 14 Nov 2026, NOT pushed / not published; Matthew approved building it, go-live still to come)
+APP_VERSION `0.48.1 beta`, SW cache `sparky-v0.48.1`. Two items from NIGGLES "After v0.48.0". No change to the DB name, storage keys, section ids or backup/sync/export format. Only new optional values on `c.diagram.spurList` items.
+
+1. **Sockets in line** (js/wiring.js). Every socket faceplate (double/single, switched/unswitched, outdoor IP) is now centred on its cable, with the cable running into one side and out of the other, like the DP switch. This applies on every layout: hairpin rings (`ringPlain`/`hairpin`), the horizontal radial, rooms rings (`ringRooms`), rooms radials (`sockRoomsSection`), item rooms (`chain`), room spur rows, the ring/radial "singles" spur rows, and the Minor Works new-spur row.
+   - `loadR` for sockets is now exactly the plate's half-width, so cables meet the plate edges.
+   - `symbol(..., { hang: true })` keeps the old "fed into the top" drawing for sockets at the end of a spur drop.
+   - `plateBot(k, S, cy, hang)` and `ipMark(..., hang)` know both positions.
+   - In-ring FCU/SFCU (`fcuin`/`sfcuin`) and the new `dpin` are drawn the same way, in line (`IN_KINDS`).
+   - The old room DP counts (`dpu`/`dps`): the DP is in line and its socket now sits in line at the end of the up-and-over spur.
+   - **Hairpin:** the LAST row's sockets (and in-ring FCU/DP) sit on the lower leg (`hairpin` returns `sy`), so a spur dropped off the bottom of a socket crosses nothing.
+   - **Rooms ring:** when the circuit has spur-list items, the last room's last row sits on the way back (`onRet`) for the same reason.
+   - Room boxes and row pitches have been tightened for the centred plates.
+   - The spur drop into a spur device (FCU/DP) now stops at the plate's top edge instead of running under its face.
+2. **DP switches on the spur list** (js/wiring.js, js/schedule.js).
+   - New devices: `dp20` "20 A DP switch" and `dp45` "45 A DP switch" (`DP_DEVICES`, `isDpDevice`).
+   - They work like the FCU: Where (spur off a socket/JB, or in the ring/radial via `canSitInRing`) and Position/From.
+   - It feeds (`DP_LOADS` via `spurLoadsFor(device)`): single/double, switched/unswitched, outdoor single/double (IP), washing machine, dishwasher, tumble dryer, fridge/freezer, boiler, cooker, oven, hob, immersion, heater, towel rail, extractor, other.
+   - `updateSpur` drops a load the new device can't feed (e.g. DP → FCU with a socket load).
+   - Drawing:
+     - a DP faceplate (`dpsw`) on the drop, or `dpin` in line in the run
+     - a socket load hangs off the DP's bottom, fed into its top (IP badge for outdoor)
+     - cooker/oven/hob/immersion use their symbols; the other appliances use the fixed-appliance box
+   - Label, e.g. "20 A DP switch in the ring → Single socket (switched)".
+   - Key entry "DP switch (20 A / 45 A)".
+   - Points: one point per item, as before. `roomPointsNote` says e.g. "Points served: 6 + 1 spur + 1 FCU + 1 DP switch in the ring = 9?".
+   - Old room counts `dpsw`/`dpsws` are unchanged (still "DP + socket" in the room editor and drawn as above).
+
+Checkers:
+- New `linesThroughPlates()` in tests/shape_overlap.mjs: no cable may run across a faceplate.
+- The IP badge caption is allowed on its own plate in shape_overlap.mjs and in tests/pdf_overlap.py (PDF and SVG). AC/DC have been added to the caption list.
+
+Tests:
+- 719 pass.
+- New file: tests/v481.test.mjs.
+- Updated for the new geometry: v480_fcu_ring (FCU in line), v480_crossings (bottom-row spur drop has no hop) and the editor regex.
+- The version check has moved from v480 to v481.
+
+Overlap checks:
+- Diagram + EIC PDFs: 0 overlaps.
+- 390 SVG: 1 false positive, from the SVG checker's rough text-width guess on the key label "Single socket (unswitched)". The real render is clear.
+- All sample fixtures at 360/390/1100/1440/560: 0 text/plate/tick issues.
+
+Fake data only. Artefacts:
+- Screenshots: `/workspace/polish-review/zspro-v0481/for-matthew/` (1 rooms ring, 2 hairpin ring with FCU + DP in the ring, 3 DP "It feeds" editor, 4 PDF page 1).
+- PDF seed: `/workspace/polish-review/zspro-v0481/make-pdf.mjs`.
+- Screenshot script: `/tmp/shot481app.py` (copy in the polish-review folder).
+
+Not done:
+- An in-ring FCU/DP on an upper hairpin row still hops the rows below on its way down.
+- Rooms layouts still draw an in-ring FCU/DP as a spur off the socket it sits after.

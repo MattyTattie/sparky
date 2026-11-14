@@ -61,7 +61,7 @@ test('FCU in the ring: position in the run (after socket N, default the end)', (
   assert.deepEqual(opts, ['At the end', 'Before socket 1', 'After socket 1', 'After socket 2', 'After socket 3', 'After socket 4']);
 });
 
-test('FCU in the ring is drawn ON the cable (passes through it) with its load hanging off it', () => {
+test('FCU in the ring is drawn IN the cable (v0.48.1: in line, through its sides) with its load hanging off it', () => {
   for (const [mk, word, after] of [[ring, 'ring', ''], [ring, 'ring', '7'], [radial, 'radial', '2']]) { // a radial ends at its last point, so test one mid-run
     for (const W of [380, 1100, 1440]) {
       const c = mk(); addSpur(c, { device: 'fcu', load: 'boiler', place: 'in', after });
@@ -70,14 +70,11 @@ test('FCU in the ring is drawn ON the cable (passes through it) with its load ha
       assert.equal(plates.length, 1, word + ' W=' + W + ': one FCU plate, got ' + plates.length);
       const p = plates[0], cx = p.x + p.w / 2;
       const lines = sh.filter((z) => z.t === 'line');
-      // the run's cable passes over the plate, and drops into its top centre like a socket
-      const over = lines.filter((z) => near(z.y1, z.y2) && z.y1 < p.y && p.y - z.y1 < 6 && Math.min(z.x1, z.x2) < cx - 3 && Math.max(z.x1, z.x2) > cx + 3);
-      assert.ok(over.length, word + ' W=' + W + ': cable over the FCU');
-      const cableY = over[0].y1;
-      // cable continues on both sides (it is in the run, not at a spur's end)
-      assert.ok(lines.some((z) => near(z.y1, cableY) && near(z.y2, cableY) && Math.max(z.x1, z.x2) <= cx - 3 && Math.max(z.x1, z.x2) > cx - 14), word + ': cable into the FCU from the left');
-      assert.ok(lines.some((z) => near(z.y1, cableY) && near(z.y2, cableY) && Math.min(z.x1, z.x2) >= cx + 3 && Math.min(z.x1, z.x2) < cx + 14), word + ': cable out of the FCU to the right');
-      assert.ok(lines.some((z) => near(z.x1, cx) && near(z.x2, cx) && near(Math.min(z.y1, z.y2), cableY) && near(Math.max(z.y1, z.y2), p.y)), word + ': drop into the plate top');
+      // v0.48.1: in line, like a DP switch: the run's cable runs into the plate's left side and out of its right, at mid-height
+      const cableY = p.y + p.h / 2;
+      assert.ok(lines.some((z) => near(z.y1, cableY) && near(z.y2, cableY) && near(Math.max(z.x1, z.x2), p.x) && Math.min(z.x1, z.x2) < p.x - 3), word + ' W=' + W + ': cable into the FCU from the left');
+      assert.ok(lines.some((z) => near(z.y1, cableY) && near(z.y2, cableY) && near(Math.min(z.x1, z.x2), p.x + p.w) && Math.max(z.x1, z.x2) > p.x + p.w + 3), word + ' W=' + W + ': cable out of the FCU to the right');
+      assert.ok(!lines.some((z) => near(z.y1, z.y2) && z.y1 > p.y + 1 && z.y1 < p.y + p.h - 1 && Math.min(z.x1, z.x2) < p.x - 1 && Math.max(z.x1, z.x2) > p.x + 2), word + ': no cable across its face');
       // the load's line leaves the bottom of the FCU plate
       const drop = lines.find((z) => near(z.x1, cx) && near(z.x2, cx) && near(Math.min(z.y1, z.y2), p.y + p.h, 1));
       assert.ok(drop, word + ' W=' + W + ': load line from the FCU plate bottom');
@@ -136,10 +133,10 @@ test('FCU in the ring on a layout without a drawn run falls back to a spur off i
   }
 });
 
-test('spur editor offers Where / Position for an FCU only', () => {
+test('spur editor offers Where / Position for an FCU (v0.48.1: or a DP switch) only', () => {
   const s = readFileSync(new URL('../js/schedule.js', import.meta.url), 'utf8');
   assert.match(s, /'Spur off a socket\/JB'/);
   assert.match(s, /isRingC\(c\) \? 'In the ring' : 'In the radial'/);
-  assert.match(s, /s\.device === 'fcu' \|\| s\.device === 'sfcu' \? h\('label'[^\n]*'Where'/);
+  assert.match(s, /canSitInRing\(s\.device\) \? h\('label'[^\n]*'Where'/);
   assert.match(s, /spurInRing\(s\) \? h\('label'[^\n]*'Position'/);
 });
