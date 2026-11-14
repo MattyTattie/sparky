@@ -520,9 +520,9 @@ Headless 390px smoke on live: app opens (0.47.1 beta, cache sparky-v0.47.1), cer
 Matthew's real DB2 photo scanned on LIVE (fake job, DB2): turned upright; B50 MCB circuit on the board RCD; main switch 100 A
 BS EN 60947-3; RCD BS EN 61008 63 A 300 mA; SPD T2. Web-only: no APK rebuild (ZsPro-0.45.0.apk still current).
 
-## v0.48.0 beta (BUILT LOCALLY 13 Nov 2026, NOT pushed / not published)
+## v0.48.0 beta (PUBLISHED 14 Nov 2026, main e10d4ea, live ~08:15 GMT (sw.js serves sparky-v0.48.0); Matthew: "go live"; built 13–14 Nov)
 
-Matthew said "go for it" on the open 10 Nov list and the 13 Nov calculator + diagram audit (faults, upgrades, and the two items added at the end). APP_VERSION `0.48.0 beta`, SW cache `sparky-v0.48.0`. Live stays v0.47.1 until he says go live.
+Matthew said "go for it" on the open 10 Nov list and the 13 Nov calculator + diagram audit (faults, upgrades, and the two items added at the end). APP_VERSION `0.48.0 beta`, SW cache `sparky-v0.48.0`. Live stays v0.47.1 until he says go live. **Update 14 Nov: now live (see the live smoke at the end of this section).**
 
 What changed (optional fields only; DB name `sparky-certs`, storage keys and backup/sync/export format unchanged; old backups still load):
 
@@ -565,4 +565,15 @@ Follow-up 4 (14 Nov, Matthew: "Can we do something so we know that where the lin
 - **Caveat:** only horizontal/vertical lines are considered (diagonals are symbol details). In the PDF fixture the key grows by one row, so the cable list now ends on page 5.
 - **Tests:** 709 pass (new `tests/v480_crossings.test.mjs`). `tests/v431_ccu.test.mjs` now looks only at the circuit block and ignores `dot` circles (the key has line samples now). `pdf_overlap.py` (0 on diagram + EIC PDFs and the 390/1440 SVGs) checks text vs text/rects, so arcs and dots don't trip it.
 - **Screenshots:** `/workspace/polish-review/zspro-v0480/for-matthew/10-crossings-390.png` (same ring/FCU zoom as shot 9), `10b-crossings-1440.png`, `10c-crossings-pdf-page1.png`, `10d-crossings-pdf-zoom.png`, `10e-crossings-key-390.png`. Version stays 0.48.0 / sparky-v0.48.0.
+
+**LIVE 14 Nov 2026 ~08:15 GMT, main e10d4ea** (Matthew: "go live"). Live smoke ran 14 Nov ~08:17–08:19 GMT against https://mattytattie.github.io/sparky/ in headless Chromium at 390 and 1440, using fake seed data only (no Drive). Script and captures: `/workspace/polish-review/v0480-live/` (`smoke.py`, `smoke.json`, screenshots, PDFs). All PASS at both widths:
+- **New service worker:** controller is `/sparky/sw.js`. Caches are only `sparky-v0.48.0`.
+- **Version:** `0.48.0 beta` (module, Settings and sidebar).
+- **Console:** 0 page errors, 0 console errors.
+- **Old backup:** a v0.18-shaped backup (no new fields) restores through `importAll` (3 records). The cert opens, and its old FCU spur draws as an ordinary spur.
+- **Diagram:** spurs (Single socket, SFCU → Towel rail), FCU in the ring (downstairs, after socket 6) and SFCU in the ring (upstairs). Key has "Lines crossing, not connected" and "Connected". 3 hops and 11 junction dots.
+- **Spare way:** the schedule row is N/A all the way across, and the circuit page has its N/A chips. The certificate PDF's spare row is N/A too.
+- **Calculators:** Check, Size, Ring, MD, Fault, DC/PV and Symbols all render with no errors. Comma decimals work (ring length from 0,195 = 40 m; dec('9,5') = 9.5).
+- **PDF:** the certificate (16 pp) and diagram-only PDFs are made by the live code. `tests/pdf_overlap.py` finds 0 overlaps on both PDFs and both screen SVGs. View PDF opens the viewer.
+- **Cosmetic, not a regression:** at 390 the PDF viewer header wraps a long file name over several lines. v0.47.1 did the same.
 

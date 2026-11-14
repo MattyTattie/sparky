@@ -226,14 +226,14 @@
 - v0.47.1 (PUBLISHED 9 Nov 20:39 GMT): board scan knows an RCCB (Garo DCCB, 61008) from the main switch: fills the board's RCD (BS, A, mA) and its MCBs pick it up; SPD Type 2 and main switch BS 60947-3 filled if blank.
 - v0.47.1 (PUBLISHED 9 Nov 20:39 GMT): checked on Matthew's real Garo DB2 photo (sideways): B50 circuit, 100 A main switch 60947-3, RCCB 61008 63 A 300 mA, SPD T2.
 
-## [DONE v0.48.0, 13 Nov 2026, LOCAL — not published] New list (10 Nov 2026)
+## [DONE v0.48.0, LIVE 14 Nov 2026 ~08:15 GMT, main e10d4ea] New list (10 Nov 2026)
 - [x] Circuit with "No device fitted" ticked (Spare) still highlights a device preset chip (B50 MCB 6 kA). Should clear/unhighlight presets when no device.
 - [x] Device presets list shows duplicate-looking chips (B50 MCB 6 kA x3, B50 MCB, B50 MCB 300 mA Type A-S S). Investigate what differs; dedupe identical ones and label differences so chips are distinguishable.
 - [x] Spare way / No device fitted: Type (col 9) and Rating (col 10) still default to B / 3 A and print on the schedule (seen on DB2). Should print N/A; add N/A chip to Type and Rating rows and auto-select it when No device fitted is ticked.
   - Matthew confirmed (10 Nov): No device fitted => whole row N/A: all device boxes (BS, type, rating, kA, max Zs, RCD fields) AND all test results (R1+R2, IR, Zs, RCD times). Still editable by hand.
 
-## [DONE v0.48.0, 13 Nov 2026, LOCAL — not published] Calculator + diagram audit (13 Nov 2026)
-Built locally as v0.48.0 beta (`sparky-v0.48.0`); not pushed or published. Live is still v0.47.1. Workings, PDFs and screenshots: `/workspace/polish-review/zspro-v0480/`.
+## [DONE v0.48.0, LIVE 14 Nov 2026 ~08:15 GMT, main e10d4ea] Calculator + diagram audit (13 Nov 2026)
+Built as v0.48.0 beta (`sparky-v0.48.0`). **Live since 14 Nov 2026 ~08:15 GMT (main e10d4ea); the live smoke passed at 390/1440.** Workings, PDFs and screenshots: `/workspace/polish-review/zspro-v0480/`.
 
 Audit only of v0.47.1 (local serve of the live build) at 390px and 1440px, with a fake 4-DB EIC. No app code changed. Screenshots and workings are in `/workspace/polish-review/zspro-calc-diagram-audit/`. Maths checked against BS 7671:2018+A2/A3 tables as used in the app (A4:2026; Uo=230, Cmin=0.95, Uo×Cmin=218.5 V). Max Zs (Tables 41.2–41.5), 80% rule, R1+R2 (OSG I1), volt drop (Table 4D5), Ca (Table 4B1), Cg (Table 4C1), shower/cable sizing, max demand (OSG Appendix A) and fault-level sums all matched the book figures where tested. Findings below are faults first (by severity), then upgrades. Separate from the 10 Nov list above.
 
@@ -261,8 +261,8 @@ Audit only of v0.47.1 (local serve of the live build) at 390px and 1440px, with 
 - [x] **RCD selection hints on the circuit** (Type A for sockets that may supply outdoor equipment, Type B / 6 mA RDC-DD for EV, S-type upstream of a 30 mA device). Some EV prompt chips already exist; a short hint next to the RCD type would help on a split-load or TT board.
 - [x] (13 Nov, Matthew OK) Name-based load symbols must be forgiving: case-insensitive, ignore extra words (e.g. "En-suite shower 9.5kW"), catch common typos/abbrevs (showr, elec shower, cookr, imm/immersion, EV/car charger). Never override user-set points/items.
 - [x] (13 Nov) Spurs on rings AND radials: each spur is its own item where Matthew picks individually what it feeds (e.g. FCU -> boiler / extractor / heater / towel rail; single socket; double socket; cooker hood; light etc.) instead of fixed combos like "spur feeding a single socket". Diagram draws each spur off the ring/radial with the chosen device + its load; schedule point count follows.
-- [x] (14 Nov, Matthew OK) FCU / SFCU **in the ring** (or radial), not only spurred off it: done in local v0.48.0 (not published).
-- [x] (14 Nov, Matthew: "Can we do something so we know that where the lines cross that they aren't actually connected") Hop-overs where cables cross without connecting, and junction dots where they really join; both in the key. Done in local v0.48.0 (not published).
+- [x] (14 Nov, Matthew OK) FCU / SFCU **in the ring** (or radial), not only spurred off it: done in v0.48.0, live 14 Nov 2026 ~08:15 GMT.
+- [x] (14 Nov, Matthew: "Can we do something so we know that where the lines cross that they aren't actually connected") Hop-overs where cables cross without connecting, and junction dots where they really join; both in the key. Done in v0.48.0, live 14 Nov 2026 ~08:15 GMT.
 
 
 ### v0.48.0 how they were done
