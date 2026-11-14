@@ -13,7 +13,7 @@ import { sectionsFor, get, set, mainSwitchFields } from './certmodel.js';
 import { mainFromScan, mainSummary, mirrorMainRcd, liftBoardRcdToMain, mainAt, scanBoardExtras } from './boardmain.js';
 import { msIsRcdAt } from './certmodel.js';
 import { QUICK, planQuick, applyQuick, undoQuick } from './quickfill.js';
-import { supplyKindOf, feedInfo, circuitSpurList, addSpur, removeSpur, updateSpur, spurLabel, SPUR_DEVICES, SPUR_LOADS, spurNeedsLoad, namedLoadKind, pointKind, roomPointsNote, diagramPointTotal, setPointsToDiagramTotal, pointCount, KIND_ONE, spurFromOptions } from './wiring.js';
+import { supplyKindOf, feedInfo, circuitSpurList, addSpur, removeSpur, updateSpur, spurLabel, SPUR_DEVICES, SPUR_LOADS, spurNeedsLoad, namedLoadKind, pointKind, roomPointsNote, diagramPointTotal, setPointsToDiagramTotal, pointCount, KIND_ONE, spurFromOptions, spurAfterOptions, spurInRing, isRingC } from './wiring.js';
 const boardsLine = (cert) => { const sec = sectionsFor(cert.type).find((x) => x.special === 'boards'); if (!sec) return null; const [c, t] = stateLine(cert, sec); return h('div', { class: 'notice ' + c + ' secstate' }, t); };
 import { blankBoard } from './certmodel.js';
 import * as presets from './presets.js';
@@ -507,17 +507,23 @@ function spurEditor(c, after) {
       spurNeedsLoad(s.device) ? h('label', { class: 'f' }, h('span', {}, 'It feeds'), h('select', { onchange: (e) => { updateSpur(c, s.id, { load: e.target.value }); changed(); draw(); after(); } },
         h('option', { value: '' }, '— pick —'), SPUR_LOADS.map(([k, lab]) => h('option', { value: k, selected: s.load === k ? true : null }, lab)))) : null,
       spurNeedsLoad(s.device) && s.load === 'other' ? h('label', { class: 'f' }, h('span', {}, 'Named'), h('input', { value: s.other || '', placeholder: 'e.g. gate motor', onchange: (e) => { updateSpur(c, s.id, { other: e.target.value }); changed(); after(); } })) : null,
-      h('label', { class: 'f' }, h('span', {}, 'From'), h('select', { onchange: (e) => { updateSpur(c, s.id, { from: e.target.value }); changed(); draw(); after(); } },
+      // v0.48: an FCU/SFCU can sit in the ring/radial itself (cable through it), not only on a spur
+      s.device === 'fcu' || s.device === 'sfcu' ? h('label', { class: 'f' }, h('span', {}, 'Where'), h('select', { 'data-spurplace': '1', onchange: (e) => { updateSpur(c, s.id, { place: e.target.value }); changed(); draw(); after(); } },
+        h('option', { value: '', selected: !spurInRing(s) ? true : null }, 'Spur off a socket/JB'),
+        h('option', { value: 'in', selected: spurInRing(s) ? true : null }, isRingC(c) ? 'In the ring' : 'In the radial'))) : null,
+      spurInRing(s) ? h('label', { class: 'f' }, h('span', {}, 'Position'), h('select', { 'data-spurafter': '1', onchange: (e) => { updateSpur(c, s.id, { after: e.target.value }); changed(); draw(); after(); } },
+        spurAfterOptions(c).map((o) => h('option', { value: o.value, selected: (s.after || '') === o.value ? true : null }, o.label))))
+        : h('label', { class: 'f' }, h('span', {}, 'From'), h('select', { onchange: (e) => { updateSpur(c, s.id, { from: e.target.value }); changed(); draw(); after(); } },
         spurFromOptions(c).map((o) => h('option', { value: o.value, selected: (s.from || '') === o.value ? true : null }, o.label)))),
       h('button', { class: 'btn tiny', type: 'button', 'aria-label': 'Remove this spur', onclick: () => { removeSpur(c, s.id); changed(); draw(); after(); } }, 'Remove'),
-      h('p', { class: 'note' }, spurLabel(s))));
+      h('p', { class: 'note' }, spurLabel(s, c))));
     const hints = [];
     if (note) hints.push(h('p', { class: 'note' }, note));
     if (tot > 0 && (!pc.known || pc.n !== tot)) hints.push(h('div', { class: 'btns' }, h('button', { class: 'btn small', type: 'button', onclick: () => { setPointsToDiagramTotal(c); changed(); draw(); after(); } }, 'Set points to ' + tot)));
     if (named && !pc.known) hints.push(h('div', { class: 'btns' }, h('button', { class: 'btn small', type: 'button', 'data-drawnamed': '1', onclick: () => { c.points = '1'; changed(); draw(); after(); } }, 'Draw 1 × ' + (KIND_ONE[named] || named))));
     fill(box,
       h('div', { class: 'phd' }, h('span', {}, 'Spurs on this circuit')),
-      h('p', { class: 'note' }, 'Each spur is its own item: pick the device, then what it feeds. The spur is taken from a socket on the ring or radial (or a junction box). Points served is left as you set it — use the button if you want the count to follow.'),
+      h('p', { class: 'note' }, 'Each spur is its own item: pick the device, then what it feeds. The spur is taken from a socket on the ring or radial (or a junction box). An FCU can instead sit in the ring or radial itself. Points served is left as you set it — use the button if you want the count to follow.'),
       rows,
       h('button', { class: 'btn small', type: 'button', 'data-addspur': '1', onclick: () => { addSpur(c, { device: 'socket' }); changed(); draw(); after(); } }, '+ Add a spur'),
       hints);

@@ -45,7 +45,7 @@ export function hangingSocketTicks(shapes) {
     && z.h > 12 && z.h < 22 && z.w > 14 && z.w < 40);
   if (!plates.length) return [];
   const minY = Math.min(...plates.map((p) => p.y));
-  const spurPlates = plates.filter((p) => p.y > minY + 20 && p.w < 28); // hanging singles, not the ring twins
+  const spurPlates = plates.filter((p) => p.y > minY + 20 && p.w < 28 && p.w > p.h + 1); // hanging singles, not the ring twins (nor a square FCU plate sat in the ring, whose cable runs over it by design)
   const lines = shapes.filter((z) => z.t === 'line' && Math.abs(z.y1 - z.y2) < 0.45);
   const ticks = [];
   for (const p of spurPlates) {

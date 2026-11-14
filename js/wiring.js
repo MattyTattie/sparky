@@ -263,7 +263,10 @@ export const roomPointTotal = (c) => (socketRoomsOf(c) ? roomSocketTotal(c) : ro
 export function roomPointsNote(c) {
   const extra = spurListTotal(c);
   const extraW = extra ? ` and ${extra} spur${extra === 1 ? '' : 's'}` : '';
-  const spurWord = extra === 1 ? '1 spur' : extra + ' spurs';
+  const nIn = inRingSpurs(c).length, nOff = extra - nIn; // v0.48: FCUs in the ring/radial count as points on it (not twice)
+  const inWord = nIn ? `${nIn} FCU${nIn === 1 ? '' : 's'} in the ${isRingC(c) ? 'ring' : 'radial'}` : '';
+  const offWord = nOff ? (nOff === 1 ? '1 spur' : nOff + ' spurs') : '';
+  const spurWord = [offWord, inWord].filter(Boolean).join(' + ') || '0 spurs';
   if (socketRoomsOf(c)) {
     const rooms = roomSocketTotal(c), t = rooms + extra, pc = pointCount(c);
     if (pc.known && t === pc.n) return '';
@@ -376,16 +379,17 @@ export const SPUR_LOADS = [
 export const spurNeedsLoad = (device) => device === 'fcu' || device === 'sfcu';
 export function circuitSpurList(c) {
   const raw = c && c.diagram && Array.isArray(c.diagram.spurList) ? c.diagram.spurList : [];
-  return raw.filter((s) => s && s.device).map((s) => ({ id: s.id || '', device: s.device, load: s.load || '', other: s.other || '', from: s.from || '' }));
+  return raw.filter((s) => s && s.device).map((s) => ({ id: s.id || '', device: s.device, load: s.load || '', other: s.other || '', from: s.from || '', place: s.place === 'in' && (s.device === 'fcu' || s.device === 'sfcu') ? 'in' : '', after: s.after || '' }));
 }
 export function spurListTotal(c) { return circuitSpurList(c).length; }
-export function addSpur(c, { device = 'socket', load = '', other = '' } = {}) {
+export function addSpur(c, { device = 'socket', load = '', other = '', place = '', after = '' } = {}) {
   if (!c.diagram) c.diagram = {};
   if (!Array.isArray(c.diagram.spurList)) c.diagram.spurList = [];
   const id = 's' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5);
   const row = { id, device };
   if (spurNeedsLoad(device) && load) row.load = load;
   if (load === 'other' && other) row.other = other;
+  if (place === 'in' && (device === 'fcu' || device === 'sfcu')) { row.place = 'in'; if (after !== '' && after != null) row.after = String(after); } // v0.48: FCU in the ring/radial
   c.diagram.spurList.push(row);
   return id;
 }
@@ -400,11 +404,17 @@ export function updateSpur(c, id, patch) {
   const next = { ...list[i], ...patch };
   if (!spurNeedsLoad(next.device)) { delete next.load; delete next.other; }
   if (!next.from) delete next.from;
+  if (next.place !== 'in' || (next.device !== 'fcu' && next.device !== 'sfcu')) { delete next.place; delete next.after; }
+  if (!next.after) delete next.after;
   list[i] = next;
 }
-export function spurLabel(s) {
+export function spurLabel(s, c) {
   if (!s || !s.device) return 'Spur';
   const dev = (SPUR_DEVICES.find(([k]) => k === s.device) || [s.device, s.device])[1];
+  if (spurInRing(s)) { // v0.48: an FCU sitting in the ring/radial, feeding its load
+    const where = ' in the ' + (c && !isRingC(c) ? 'radial' : 'ring');
+    const ld = s.load === 'other' && s.other ? s.other : s.load ? (SPUR_LOADS.find(([k]) => k === s.load) || [s.load, s.load])[1] : '';
+    return dev + where + (ld ? ' \u2192 ' + ld : ''); }
   if (!spurNeedsLoad(s.device)) return 'Spur: ' + dev;
   const load = s.load === 'other' && s.other ? s.other : (SPUR_LOADS.find(([k]) => k === s.load) || [s.load, s.load || 'load'])[1];
   return 'Spur: ' + dev + (s.load ? ' \u2192 ' + load : '');
@@ -432,6 +442,32 @@ export function spurFromOptions(c) {
   const opts = [{ value: '', label: n ? 'Next socket' : 'Junction box (default)' }];
   for (let i = 1; i <= n; i++) opts.push({ value: String(i), label: 'Socket ' + i });
   if (n) opts.push({ value: 'jb', label: 'Junction box' });
+  return opts;
+}
+// v0.48: an FCU / SFCU can sit IN the ring or radial (the cable passes through it like a socket), not spurred off it.
+export function spurInRing(s) { return !!s && s.place === 'in' && (s.device === 'fcu' || s.device === 'sfcu'); }
+export function inRingSpurs(c) { return circuitSpurList(c).filter(spurInRing); }
+// Insert in-ring FCUs into the drawn run of points. `after` is "after point N" of the run (default: the end).
+export function inRingSeq(c, base) {
+  const kinds = base.slice(), ids = base.map(() => '');
+  const n0 = base.length;
+  inRingSpurs(c).forEach((s) => {
+    const a = parseInt(s.after, 10);
+    const nth = Number.isFinite(a) && a >= 0 ? Math.min(a, n0) : n0;
+    // position just after the nth original point (earlier inserts do not count)
+    let seen = 0, at = kinds.length;
+    if (nth === 0) at = 0;
+    else for (let i = 0; i < kinds.length; i++) { if (!ids[i]) seen++; if (seen === nth) { at = i + 1; while (at < kinds.length && ids[at]) at++; break; } }
+    kinds.splice(at, 0, s.device + 'in'); ids.splice(at, 0, s.id);
+  });
+  return { kinds, ids };
+}
+export function spurAfterOptions(c) {
+  const n = spurSocketCount(c) || (pointCount(c).known ? drawnPointCount(c).shown : 0);
+  const w = pointKind(c) === 'socket' ? 'socket' : 'point';
+  const opts = [{ value: '', label: 'At the end' }];
+  if (n) opts.push({ value: '0', label: 'Before ' + w + ' 1' });
+  for (let i = 1; i <= n; i++) opts.push({ value: String(i), label: 'After ' + w + ' ' + i });
   return opts;
 }
 
@@ -676,7 +712,7 @@ export function layout(model, { W = 380, font = 12, screen = false, cableTable =
     if (!circ || circ === '?') { const m = /circuit\s+(\S+)/i.exec(String(from) || ''); if (m) circ = m[1]; }
     const label = 'C' + n + (circ && circ !== '?' ? ' (circuit ' + circ + ')' : '');
     cables.push({ label, from, to, type: type || '' }); if (key) cableOf[key] = cables[cables.length - 1]; return label; }; const cableOf = {};
-  const busX = 14, devX = busX + 14, devW = F * 4.6, gap = 8; let ringLegB = null; let sockAnchors = []; let runEnd = null;
+  const busX = 14, devX = busX + 14, devW = F * 4.6, gap = 8; let ringLegB = null; let sockAnchors = []; let inAnchors = []; let runEnd = null;
   const T = (sh, x, y, txt, o = {}) => sh.push({ t: 'text', x, y, txt, size: o.size || F, bold: !!o.bold, color: o.color || COL.ink, anchor: o.anchor || 'start' });
   const L = (sh, x1, y1, x2, y2, o = {}) => sh.push({ t: 'line', x1, y1, x2, y2, w: o.w || 1.2, color: o.color || COL.line, ...(o.dash ? { dash: o.dash } : {}) });
   const R = (sh, x, y, w, h, o = {}) => sh.push({ t: 'rect', x, y, w, h, lw: o.lw ? (o.lw < 1.4 ? o.lw * 1.3 : o.lw) : 1.5, color: o.color || COL.box, fill: o.fill || null }); // v0.44.2b: outlines a bit darker and thicker
@@ -875,7 +911,7 @@ export function layout(model, { W = 380, font = 12, screen = false, cableTable =
   function tag(b, bd, c) { b.ref = { bi: bd.bi ?? 0, ci: bd.src ? bd.src.indexOf(c) : 0, mw: model.type === 'MW' }; return b; }
 
   function circuitBlock(c, bus, last, outerBus, spd = '', spur = null) {
-    const sh = []; const info = circuitLines(c, spd); const y = 8; ringLegB = null; sockAnchors = []; runEnd = null; heatLab = isTowel(c) ? 'Rail' : 'Rad'; /* v0.44.3: rooms too */ let ctlChained = false; let ctlCap = 0;
+    const sh = []; const info = circuitLines(c, spd); const y = 8; ringLegB = null; sockAnchors = []; inAnchors = []; runEnd = null; heatLab = isTowel(c) ? 'Rail' : 'Rad'; /* v0.44.3: rooms too */ let ctlChained = false; let ctlCap = 0;
     const dx = bus + 12; const tx = dx + devW + gap; const tw = W - tx - 6;
     // text
     let hh = textLines(sh, tx, y - 2, info.title, tw, { bold: true, color: info.spare ? COL.na : COL.ink });
@@ -993,26 +1029,28 @@ export function layout(model, { W = 380, font = 12, screen = false, cableTable =
       const si0 = switchInfo(c); const swIn = si0 && si0.list.length && pc.shown && kind === 'light' ? si0.list : [];
       for (const k0 of swIn) items.push([lstep, (x, cy) => { const r = S / 2, ax = x + S / 2 - r * 0.1; /* pivot on the line, lever lifted: an open switch in series */
         symbol(sh, k0, x + S / 2, cy - r * 0.25, S); used.add(k0); L(sh, x, cy, ax - r * 0.2, cy, g9); L(sh, ax + r * 0.62, cy, x + S, cy, g9); }, false, S]);
-      const nSw = swIn.length; const ringN = kind === 'socket' ? pc.shown - sgl : pc.shown; // v0.43.4: single sockets hang off the ring as spurs
-      for (let i = 0; i < ringN; i++) { const k1 = kindAt(i), w1 = Math.max(lstep, 2 * loadR(k1, S) + 10, labW(k1, S) + 2); items.push([w1, (x, cy) => { heatLab = isTowel(c) ? 'Rail' : 'Rad'; symbol(sh, k1, x + w1 / 2, cy, S); used.add(k1); }, true, w1]); } // v0.43.9: slot fits the symbol (UK chart outlets are wide)
+      const nSw = swIn.length; const ringN0 = kind === 'socket' ? pc.shown - sgl : pc.shown; // v0.43.4: single sockets hang off the ring as spurs
+      const seq = inRingSeq(c, Array.from({ length: ringN0 }, (_, i) => kindAt(i))); const ringN = seq.kinds.length; const kAt = (i) => seq.kinds[i]; // v0.48: FCUs in the radial
+      for (let i = 0; i < ringN; i++) { const k1 = kAt(i), w1 = Math.max(lstep, 2 * loadR(k1, S) + 10, labW(k1, S) + 2); items.push([w1, (x, cy) => { heatLab = isTowel(c) ? 'Rail' : 'Rad'; symbol(sh, k1, x + w1 / 2, cy, S); used.add(k1); }, true, w1]); } // v0.43.9: slot fits the symbol (UK chart outlets are wide)
       const rowsX = []; let x = tx + F * 0.6, row = 0; const maxX = W - 6;
       for (const it of items) { if (x + it[0] > maxX + 6 && x > tx + F * 0.6) { row++; x = tx + F * 0.6; } rowsX.push([x, row]); x += it[0]; }
       const rows = row + 1; const rowH = S * (kind === 'socket' ? 1.6 : 1) + lab0 + 8; let prevEnd = null;
       items.forEach((it, i) => { const [xx, r] = rowsX[i]; const cy = py + r * rowH + S / 2;
-        const li = i - (items.length - ringN); const inX = it[2] ? xx + it[3] / 2 - loadR(kindAt(li), S) : xx;
+        const li = i - (items.length - ringN); const inX = it[2] ? xx + it[3] / 2 - loadR(kAt(li), S) : xx;
         if (i === 0) { L(sh, fx, feedTop, fx, cy, g9); L(sh, fx, cy, inX, cy, g9); }
         else if (rowsX[i - 1][1] !== r) { const pcy = cy - rowH; L(sh, prevEnd, pcy, prevEnd + 3, pcy, g9); L(sh, prevEnd + 3, pcy, prevEnd + 3, pcy + rowH / 2 + S * 0.2, g9); L(sh, prevEnd + 3, pcy + rowH / 2 + S * 0.2, fx, pcy + rowH / 2 + S * 0.2, g9); L(sh, fx, pcy + rowH / 2 + S * 0.2, fx, cy, g9); L(sh, fx, cy, inX, cy, g9); }
         else L(sh, prevEnd, cy, inX, cy, g9);
         lastCy = cy; it[1](xx, cy);
         if (it[2] && li >= 0) {
-          const kd = kindAt(li), cx = xx + it[3] / 2, kr = loadR(kd, S);
+          const kd = kAt(li), cx = xx + it[3] / 2, kr = loadR(kd, S);
+          if (seq.ids[li]) inAnchors.push({ x: cx, cy, bot: plateBot(kd, S, cy), k: kd, sid: seq.ids[li] });
           runEnd = { x: cx, cy, r: kr, k: kd };
           if (SOCK[kd]) sockAnchors.push({ x: cx, cy, bot: plateBot(kd, S, cy), k: kd });
         }
-        prevEnd = it[2] ? xx + it[3] / 2 + loadR(kindAt(li), S) : xx + it[3]; });
+        prevEnd = it[2] ? xx + it[3] / 2 + loadR(kAt(li), S) : xx + it[3]; });
       ph = 6 + lab0 + rows * rowH - 8; // v0.43.9: the CCU's socket is on its faceplate now
       if (kind === 'socket' && sgl && items.length) { // spur(s): a branch dropping from the last ring socket, below everything else
-        used.add('socket1'); const [lx0, lr] = rowsX[items.length - 1]; const bx = lx0 + items[items.length - 1][3] / 2 + loadR(kindAt(ringN - 1), S) + 3; const by = py + lr * rowH + S / 2; // tees off the line just past the last socket
+        used.add('socket1'); const [lx0, lr] = rowsX[items.length - 1]; const bx = lx0 + items[items.length - 1][3] / 2 + loadR(kAt(ringN - 1), S) + 3; const by = py + lr * rowH + S / 2; // tees off the line just past the last socket
         const sy = py + rows * rowH + 4 + S / 2; const sper = Math.max(1, Math.floor((maxX - tx - F * 0.6) / lstep)); let px = null;
         for (let j = 0; j < sgl; j++) { const rr = Math.floor(j / sper), xx = tx + F * 0.6 + (j % sper) * lstep, cy = sy + rr * rowH, cx = xx + S / 2, rad = loadR('socket1', S);
           if (j === 0) { L(sh, bx, by, bx, cy - rowH / 2 + 2, g9); L(sh, bx, cy - rowH / 2 + 2, cx, cy - rowH / 2 + 2, g9); L(sh, cx, cy - rowH / 2 + 2, cx, cy - S * 0.45, g9); }
@@ -1131,6 +1169,7 @@ export function layout(model, { W = 380, font = 12, screen = false, cableTable =
   function plateBot(k, S, cy) {
     if (SOCK[k]) { const r = S / 2; return cy + r * 0.35 + r * 1.7; }
     if (k === 'jb') return cy + S * 0.45;
+    if (k === 'fcuin' || k === 'sfcuin') { const r = S / 2; return cy + r * 0.35 + r * 1.7; }
     return cy + loadR(k, S);
   }
   function markSock(cx, cy, k, S, extra) {
@@ -1219,11 +1258,14 @@ export function layout(model, { W = 380, font = 12, screen = false, cableTable =
     heatLab = ''; // v0.48: row label already names the load; a "Rail"/"Rad" caption above the symbol would sit on the row above
     // v0.48: a spur is taken from a socket's terminals (or a JB), not from the left feeder
     const all = sockAnchors.slice();
-    const botCy = all.length ? Math.max(...all.map((p) => p.cy)) : 0;
+    const inAt = new Map(inAnchors.map((p) => [p.sid, p])); // v0.48: FCUs drawn in the ring/radial
+    const isIn = (s) => spurInRing(s) && inAt.has(s.id);
+    const botCy = all.length || inAnchors.length ? Math.max(...all.concat(inAnchors).map((p) => p.cy)) : 0;
     const bottomRow = all.filter((p) => p.cy > botCy - 4).sort((a, b) => a.x - b.x); // drops from here never cross another socket
-    const wantsJb = list.some((s) => String(s.from || '').toLowerCase() === 'jb');
+    const offList = list.filter((s) => !isIn(s));
+    const wantsJb = offList.some((s) => String(s.from || '').toLowerCase() === 'jb');
     let jbPort = null;
-    if (!all.length || wantsJb) jbPort = placeSpurJB(sh, S, g, fx, tx, fromY, maxX);
+    if (offList.length && (!all.length || wantsJb)) jbPort = placeSpurJB(sh, S, g, fx, tx, fromY, maxX);
     // an upper-row ring socket picked by hand: drop into the channel between columns, then down past the lower rows
     const viaChannel = (p) => {
       if (p.cy > botCy - 4 || p.yB == null || !p.step) return null;
@@ -1232,7 +1274,9 @@ export function layout(model, { W = 380, font = 12, screen = false, cableTable =
     };
     let ai = 0;
     const assigned = list.map((s) => {
-      const f = String(s.from || '').trim().toLowerCase();
+      if (isIn(s)) { const p = inAt.get(s.id); return { s, port: p.cy > botCy - 4 ? p : (viaChannel(p) || p), inRing: true }; }
+      // an in-ring FCU this layout can't put on the run (e.g. a rooms layout): drawn off the socket it sits after
+      const f = String(spurInRing(s) ? (s.after && s.after !== '0' ? s.after : '') : (s.from || '')).trim().toLowerCase();
       if (f === 'jb' && jbPort) return { s, port: jbPort };
       const m = /^(?:socket\s*)?(\d+)$/.exec(f);
       if (m && all.length) {
@@ -1259,9 +1303,11 @@ export function layout(model, { W = 380, font = 12, screen = false, cableTable =
     const plan = groups.map((g0) => {
       const px = g0.port.x;
       const items = g0.items.map((s) => {
+        if (isIn(s)) { const lk = spurLoadKind(s); const k0 = spurSymbolOf(s); const lk2 = lk && lk !== k0 ? lk : '';
+          return { s, k: '', lk: lk2, hw: lk2 ? spurHalfW(lk2, S * 0.85) : 0, lab: spurLabel(s, c).replace(/^Spur:\s*/, '') }; }
         const k = spurSymbolOf(s), lk = spurLoadKind(s);
         const hw = Math.max(spurHalfW(k, S), lk && lk !== k ? spurHalfW(lk, S * 0.85) : 0);
-        return { s, k, lk: lk && lk !== k ? lk : '', hw, lab: spurLabel(s).replace(/^Spur:\s*/, '') };
+        return { s, k, lk: lk && lk !== k ? lk : '', hw, lab: spurLabel(s, c).replace(/^Spur:\s*/, '') };
       });
       const hw = Math.max(...items.map((it) => it.hw));
       const labX = px + hw + 6;
@@ -1286,6 +1332,13 @@ export function layout(model, { W = 380, font = 12, screen = false, cableTable =
       let yC = top + S * 0.5;
       let bottom = top;
       P.items.forEach((it) => {
+        if (!it.k) { // v0.48: FCU in the ring: its load comes straight off the FCU's faceplate
+          let endY = prev, midY = top + sz * 0.75;
+          if (it.lk) { const lr = loadR(it.lk, S * 0.85); const ly = Math.max(top + lr, prev + 5 + lr);
+            L(sh, P.px, prev, P.px, ly - lr, g); symbol(sh, it.lk, P.px, ly, S * 0.85); used.add(it.lk); endY = ly + lr; midY = ly; }
+          const labTop = midY - sz * 0.75;
+          const th = textLines(sh, P.labX, labTop, it.lab, P.labW, { size: sz, color: COL.grey });
+          const b = Math.max(endY, labTop + th); bottom = Math.max(bottom, b); prev = endY; yC = b + 10 + S * 0.5; return; }
         const sr = loadR(it.k, S);
         const hang = !!SOCK[it.k];
         L(sh, P.px, prev, P.px, yC, g);
@@ -1348,15 +1401,17 @@ export function layout(model, { W = 380, font = 12, screen = false, cableTable =
   }
   function ringPlain(sh, c, pc, sgl, tx, top, tw, feedTop) {
     const S = F * 1.5, g = { w: 1.1, color: COL.line }, step = S * 2 + 10, fx = tx - gap / 2; const { upT, dnB } = HP(S);
-    const ringN = pc.shown - sgl; const rad = loadR('socket', S), xL = tx + 14 + rad, xR = W - 16 - rad; const per0 = Math.max(1, Math.floor((xR - xL) / step) + 1); const per = Math.ceil(ringN / Math.max(1, Math.ceil(ringN / per0))); // v0.44.3: rows as even as they can be
-    const items = Array(ringN).fill('socket'); const rows = []; const pitch = upT + dnB + 10;
+    const seq = inRingSeq(c, Array(pc.shown - sgl).fill('socket')); const ringN = seq.kinds.length; const rad = loadR('socket', S), xL = tx + 14 + rad, xR = W - 16 - rad; const per0 = Math.max(1, Math.floor((xR - xL) / step) + 1); const per = Math.ceil(ringN / Math.max(1, Math.ceil(ringN / per0))); // v0.44.3: rows as even as they can be
+    const items = seq.kinds; const rows = []; const pitch = upT + dnB + 10;
     for (let k = 0; k * per < items.length; k++) rows.push({ items: items.slice(k * per, (k + 1) * per), cy: top + 4 + upT + k * pitch });
     const xRr = xL + (per - 1) * step; // right-hand turn sits just past the widest row
     const res = hairpin(sh, rows, { S, g, step, xL, xR: xRr, left: true, startT: fx, startB: tx - gap - devW * 0.3, turnL: [tx + 2, tx + 7], turnR: [xRr + rad + 12, xRr + rad + 7] });
     L(sh, fx, feedTop, fx, res[0].yT, g); ringLegB = res[0].yB; // leg B leaves the breaker's foot (drawn with the breaker)
     rows.forEach((row, k) => {
       const pos = res[k].pos;
-      row.items.forEach((kd, j) => markSock(pos[j], row.cy, kd, S, { yB: res[k].yB, dir: res[k].dir, step, col: j }));
+      row.items.forEach((kd, j) => { const sid = seq.ids[k * per + j];
+        if (sid) { inAnchors.push({ x: pos[j], cy: row.cy, bot: plateBot(kd, S, row.cy), k: kd, sid, yB: res[k].yB, dir: res[k].dir, step, col: j }); runEnd = { x: pos[j], cy: row.cy, r: loadR(kd, S), k: kd, yB: res[k].yB, dir: res[k].dir }; }
+        else markSock(pos[j], row.cy, kd, S, { yB: res[k].yB, dir: res[k].dir, step, col: j }); });
     });
     let bottom = res[res.length - 1].yB + 4;
     const lr0 = res[res.length - 1], jx = lr0.pos.length ? lr0.pos[lr0.pos.length - 1] + lr0.dir * (loadR('socket', S) + 12) : 0; const spurLab = sgl === 1 ? 'Spur' : 'Spurs';
@@ -1613,7 +1668,7 @@ export function layout(model, { W = 380, font = 12, screen = false, cableTable =
   // v0.43: where a conductor meets a load symbol on its row (half-width from centre)
   // v0.44.6: width the grey label above a load needs, so neighbours never collide
   function labW(k, S) { const t = LOAD_LAB[k]; return t ? textW(t, Math.max(S / 2 * 0.8, small * 0.85), true) + 4 : 0; }
-  function loadR(k, S) { const r = S / 2; return k === 'km' ? r * 0.75 : k === 'shelly' || k === 'hive' || k === 'relay' ? r * 1.5 : k === 'sfcu' ? r * 0.85 : k === 'timeclock' ? r * 0.9 : k === 'light' ? r * 0.8 : k === 'fan' ? r * 0.85 : SOCK[k] ? (SOCK[k][0] ? r * 2.0 : r * 1.1) : (k === 'dpu' || k === 'dps') ? r * 0.85 : k === 'fcu' || k === 'flex' ? r * 0.85 : k === 'point' ? r * 0.7 : r; }
+  function loadR(k, S) { const r = S / 2; if (k === 'fcuin' || k === 'sfcuin') k = k.slice(0, -2); return k === 'km' ? r * 0.75 : k === 'shelly' || k === 'hive' || k === 'relay' ? r * 1.5 : k === 'sfcu' ? r * 0.85 : k === 'timeclock' ? r * 0.9 : k === 'light' ? r * 0.8 : k === 'fan' ? r * 0.85 : SOCK[k] ? (SOCK[k][0] ? r * 2.0 : r * 1.1) : (k === 'dpu' || k === 'dps') ? r * 0.85 : k === 'fcu' || k === 'flex' ? r * 0.85 : k === 'point' ? r * 0.7 : r; }
   function rotH(o, x0, y0, fn) { const tmp = []; fn(tmp); const P = (x, y) => [x0 + (y - y0), y0 - (x - x0)];
     for (const z of tmp) { if (z.t === 'line') { const [a, b] = P(z.x1, z.y1), [c2, d] = P(z.x2, z.y2); o.push({ ...z, x1: a, y1: b, x2: c2, y2: d }); }
       else if (z.t === 'rect') { const [a, b] = P(z.x + z.w, z.y); o.push({ ...z, x: a, y: b, w: z.h, h: z.w }); }
@@ -1688,6 +1743,9 @@ export function layout(model, { W = 380, font = 12, screen = false, cableTable =
     const r = S / 2; const W0 = [255, 255, 255];
     if (kind === 'light') { // outlet for lighting: circle with a cross
       C(sh, cx, cy, r * 0.8, { fill: W0 }); const d = r * 0.8 * 0.707; L(sh, cx - d, cy - d, cx + d, cy + d, { w: 1 }); L(sh, cx - d, cy + d, cx + d, cy - d, { w: 1 }); }
+    else if (kind === 'fcuin' || kind === 'sfcuin') { // v0.48: FCU in the ring/radial: the cable runs over it and drops into its top, like a socket
+      const base = kind.slice(0, -2), d = r * 0.35, a = loadR(base, S), H = r * 1.7;
+      L(sh, cx - a, cy, cx + a, cy, { w: 1.1 }); L(sh, cx, cy, cx, cy + d, { w: 1.1 }); facePlate(sh, cx, cy + d + H / 2, base, r); used.add(base); }
     else if (SOCK[kind]) { // v0.43.9: pictorial UK 13 A faceplate under the cable; the cable dips into its top centre
       const [twin, sw] = SOCK[kind], d = r * 0.35, a = loadR(kind, S);
       // v0.48: a hanging spur socket sits on a vertical drop — do not draw the through-cable (a leftover T/JB stub)
