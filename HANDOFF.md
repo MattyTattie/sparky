@@ -624,6 +624,18 @@ Fake data only. Artefacts:
 - PDF seed: `/workspace/polish-review/zspro-v0481/make-pdf.mjs`.
 - Screenshot script: `/tmp/shot481app.py` (copy in the polish-review folder).
 
+Follow-up (14 Nov 2026):
+- Up-drawn loads (ringPlain in wiring.js):
+  - `ups` is built from the in-ring items plus "from" socket spurs that are not on the last row.
+  - `drawUp()` stacks the device, then the load, above the row, using the socket symbol option `{up:true}`.
+  - Labels are bounded by the turn verticals and the next up item.
+  - Each row's top gap grows by `extra[k]`.
+  - Items in `upDone` are skipped by circuitSpurSection.
+- Key: when both are used, the two DP entries are merged into "DP switch (local isolator, or 20 A / 45 A on the ring or a spur)".
+- Tests:
+  - New test in tests/v481.test.mjs covering 8- and 14-point hairpins, which must have zero hops and no overlaps.
+  - The v480_crossings test now asserts 0 hops.
+
 Not done:
-- An in-ring FCU/DP on an upper hairpin row still hops the rows below on its way down.
 - Rooms layouts still draw an in-ring FCU/DP as a spur off the socket it sits after.
+- "From socket N" in an upper room is not honoured; those spurs come off the last room.

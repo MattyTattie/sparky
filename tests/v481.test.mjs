@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { layout, diagramModel, diagramSvg, addSpur, updateSpur, circuitSpurList, spurLabel, inRingSeq, spurInRing, canSitInRing,
   spurLoadsFor, DP_LOADS, SPUR_DEVICES, spurNeedsLoad, spurSymbolOf, spurLoadKind, roomPointsNote, diagramPointTotal, spurListTotal } from '../js/wiring.js';
 import { diagramEIC, diagramMW, diagramMWSpur, diagramEICContactors, diagramEICExtras, diagramEICRooms, diagramEICPro, diagramEICSwitches } from './diagram-sample.mjs';
-import { textSymbolOverlaps, hangingSocketTicks, linesThroughPlates } from './shape_overlap.mjs';
+import { textSymbolOverlaps, hangingSocketTicks, linesThroughPlates, textBBox } from './shape_overlap.mjs';
 
 import { readFileSync } from 'node:fs';
 const src = (f) => readFileSync(new URL('../' + f, import.meta.url), 'utf8');
@@ -150,16 +150,20 @@ test('DP switch drawn: in line in the ring with what it feeds hanging off its bo
         const p = dp[0], cx = p.x + p.w / 2;
         if (place) { const r = inLine(sh, p); assert.ok(r.left && r.right, `${load} W=${o.W}: DP in line in the ring`); }
         else assert.ok(sh.some((z) => z.t === 'line' && near(z.x1, cx) && near(z.x2, cx) && near(Math.max(z.y1, z.y2), p.y)), `${load} W=${o.W}: spur drop into the DP's top`);
+        // v0.48.1: off the bottom row the load drops down; off an upper row (in-ring DP after socket 3) it goes UP
         const fromBot = sh.find((z) => z.t === 'line' && near(z.x1, cx) && near(z.x2, cx) && near(Math.min(z.y1, z.y2), p.y + p.h, 0.8));
-        assert.ok(fromBot, `${load}/${place || 'spur'} W=${o.W}: the load's line leaves the DP's bottom`);
-        if (wantSock) { // (an in-ring DP on an upper row reaches its load down the channel between columns)
-          const below = sockPlates(sh).filter((q) => q.y > p.y + p.h && !inLine(sh, q).left);
-          assert.equal(below.length, 1, `${load} W=${o.W}: a socket hangs under the DP`); const q = below[0], qx = q.x + q.w / 2;
-          assert.ok(sh.some((z) => z.t === 'line' && near(z.x1, qx) && near(z.x2, qx) && near(Math.max(z.y1, z.y2), q.y, 0.8)), 'fed into its top'); }
+        const fromTop = place && sh.find((z) => z.t === 'line' && near(z.x1, cx) && near(z.x2, cx) && near(Math.max(z.y1, z.y2), p.y, 0.8));
+        assert.ok(fromBot || fromTop, `${load}/${place || 'spur'} W=${o.W}: the load's line leaves the DP's bottom (or top, going up)`);
+        assert.equal(hops(sh).length, 0, `${load}/${place || 'spur'} W=${o.W}: nothing crosses`);
+        if (wantSock) {
+          const off = sockPlates(sh).filter((q) => !inLine(sh, q).left && q.x < cx && q.x + q.w > cx);
+          assert.equal(off.length, 1, `${load} W=${o.W}: one socket off the DP`); const q = off[0];
+          if (fromBot && !fromTop) assert.ok(q.y > p.y + p.h && sh.some((z) => z.t === 'line' && near(z.x1, cx) && near(Math.max(z.y1, z.y2), q.y, 0.8)), 'hangs below, fed into its top');
+          else assert.ok(q.y + q.h < p.y && sh.some((z) => z.t === 'line' && near(z.x1, cx) && near(Math.min(z.y1, z.y2), q.y + q.h, 0.8)), 'stands above, fed into its bottom'); }
         assert.equal(sh.some((t) => t.t === 'text' && t.txt === 'IP'), ip, `${load}: IP badge only for an outdoor socket`);
         assert.ok(sh.some((t) => t.t === 'text' && /20 A DP switch/.test(t.txt)), 'labelled');
         const kt = L.blocks.find((b) => b.kind === 'legend').shapes.filter((z) => z.t === 'text').map((z) => z.txt).join(' ');
-        assert.match(kt, /DP switch \(20 A \/ 45 A\)/);
+        assert.match(kt, /DP switch \(20 A \/ 45 A\)/); assert.doesNotMatch(kt, /Local switch \/ isolator/);
       }
       clean(cert([c]), `DP ${load} ${place || 'spur'}`);
     }
@@ -184,4 +188,25 @@ test('old data still draws: room DP counts, spur lists without the new fields, e
       assert.match(diagramSvg(cr, o), /^<svg/);
     }
   }
+});
+
+test('upper hairpin rows: loads and spurs go UP above their row; zero hops; labels clear of the title and the plates', () => {
+  const r = mk('1', 'Ring final: downstairs sockets', { ring: true, points: '8', diagram: { spurList: [] } });
+  addSpur(r, { device: 'fcu', load: 'boiler', place: 'in', after: '6' }); addSpur(r, { device: 'dp20', load: 'socket1u', place: 'in', after: '2' });
+  addSpur(r, { device: 'socket1' }); addSpur(r, { device: 'sfcu', load: 'towel' });
+  const r2 = mk('2', 'Ring big', { ring: true, points: '14', diagram: { spurList: [] } }); // three rows: a middle row too
+  addSpur(r2, { device: 'dp45', load: 'washer', place: 'in', after: '1' }); updateSpur(r2, addSpur(r2, { device: 'socket1' }), { from: '6' }); addSpur(r2, { device: 'sfcu', load: 'heater', place: 'in', after: '7' }); updateSpur(r2, addSpur(r2, { device: 'dp20', load: 'ipsock1' }), { from: '12' });
+  for (const c of [r, r2]) for (const o of OPTS) {
+    const sh = circ(cert([c]), o)[0].shapes;
+    assert.equal(hops(sh).length, 0, `c${c.num} W=${o.W}: no crossings`);
+    const texts = sh.filter((z) => z.t === 'text');
+    const lab = texts.filter((t) => /in the ring|\u2192|Single socket/.test(t.txt));
+    for (const t of lab) for (const u of texts) { if (u === t) continue; const a = textBBox(t), b = textBBox(u);
+      const ix = Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x), iy = Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y);
+      assert.ok(ix <= 0.5 || iy <= 0.5, `c${c.num} W=${o.W}: "${t.txt}" overlaps "${u.txt}"`); }
+  }
+  clean(cert([r, r2]), 'up spurs');
+  // the in-ring DP on the top row at 380: its socket stands above the ring
+  const sh = circ(cert([r]), OPTS[0])[0].shapes; const dp = dpPlates(sh)[0];
+  assert.ok(sockPlates(sh).some((q) => q.y + q.h < dp.y && q.x < dp.x + dp.w && q.x + q.w > dp.x), 'DP load above its row');
 });

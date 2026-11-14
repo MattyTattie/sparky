@@ -68,7 +68,7 @@ test('ring diagram: spur drops hop the ring return; no dot where they cross; key
     // v0.48.1: the last row's sockets sit on the lower leg, so a spur off a bottom-row socket crosses nothing;
     // only the in-ring FCU on an upper row has to hop the rows below it on its way down
     const hops = hopSegs(b.shapes).length / 8;
-    assert.ok(hops <= 3, 'W=' + o.W + ' hops: ' + hops);
+    assert.equal(hops, 0, 'W=' + o.W + ': v0.48.1: the upper-row FCU load goes up, the spur drops off the bottom row: nothing crosses');
     const singles = b.shapes.filter((z) => z.t === 'rect' && z.fill && z.fill[0] === 255 && z.w < 28 && z.w > z.h + 1 && z.h > 12);
     const spurPlate = singles.sort((a, c) => c.y - a.y)[0]; const sx = spurPlate.x + spurPlate.w / 2;
     assert.ok(!hopSegs(b.shapes).some((z) => Math.abs(z.x1 - sx) < 1), 'W=' + o.W + ': the single-socket spur drops off a bottom-row socket and crosses nothing');

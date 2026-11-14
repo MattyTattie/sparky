@@ -753,7 +753,7 @@ export function layout(model, { W = 380, font = 12, screen = false, cableTable =
     if (!circ || circ === '?') { const m = /circuit\s+(\S+)/i.exec(String(from) || ''); if (m) circ = m[1]; }
     const label = 'C' + n + (circ && circ !== '?' ? ' (circuit ' + circ + ')' : '');
     cables.push({ label, from, to, type: type || '' }); if (key) cableOf[key] = cables[cables.length - 1]; return label; }; const cableOf = {};
-  const busX = 14, devX = busX + 14, devW = F * 4.6, gap = 8; let ringLegB = null; let sockAnchors = []; let inAnchors = []; let runEnd = null;
+  const busX = 14, devX = busX + 14, devW = F * 4.6, gap = 8; let ringLegB = null; let sockAnchors = []; let inAnchors = []; let runEnd = null; let upDone = new Set(); /* v0.48.1: spur ids already drawn going UP off an upper hairpin row */
   const T = (sh, x, y, txt, o = {}) => sh.push({ t: 'text', x, y, txt, size: o.size || F, bold: !!o.bold, color: o.color || COL.ink, anchor: o.anchor || 'start' });
   const L = (sh, x1, y1, x2, y2, o = {}) => sh.push({ t: 'line', x1, y1, x2, y2, w: o.w || 1.2, color: o.color || COL.line, ...(o.dash ? { dash: o.dash } : {}) });
   const R = (sh, x, y, w, h, o = {}) => sh.push({ t: 'rect', x, y, w, h, lw: o.lw ? (o.lw < 1.4 ? o.lw * 1.3 : o.lw) : 1.5, color: o.color || COL.box, fill: o.fill || null }); // v0.44.2b: outlines a bit darker and thicker
@@ -888,8 +888,8 @@ export function layout(model, { W = 380, font = 12, screen = false, cableTable =
     let hh = textLines(sh, 8, y, 'Key', W - 16, { bold: true });
     const S = F * 1.5; const colW = (W - 16) / 2; let col = 0, rowY = y + hh + 4, rowH = 0; const KW = 2 * loadR('socket', S); // v0.43.9: icon column fits the widest (twin) outlet
     const CW = S * 1.7, CH = S * 1.4; void KW; // v0.44.3: every key symbol gets the same cell; labels line up
-    for (const k of order.filter((k) => used.has(k) && !(k === 'isofcu' && used.has('fcu')) && !(k === 'isosfcu' && used.has('sfcu')))) { // v0.43.9: one FCU entry, same faceplate
-      const cx = 8 + col * colW; const name = SWITCH_NAME[k] || KEY_EXTRA[k] || (k === 'contactor' ? 'Contactor contact (KM), in line on the circuit it switches' : k === 'coil' ? 'Contactor coil (A1/A2)' : k === 'timeclock' ? 'Time clock' : k === 'spd' ? 'Surge protection (SPD)' : KIND_NAME[k]);
+    for (const k of order.filter((k) => used.has(k) && !(k === 'isofcu' && used.has('fcu')) && !(k === 'isosfcu' && used.has('sfcu')) && !(k === 'dpsw' && used.has('iso')))) { // v0.48.1: one DP switch entry // v0.43.9: one FCU entry, same faceplate
+      const cx = 8 + col * colW; const name = k === 'iso' && used.has('dpsw') ? 'DP switch (local isolator, or 20 A / 45 A on the ring or a spur)' : SWITCH_NAME[k] || KEY_EXTRA[k] || (k === 'contactor' ? 'Contactor contact (KM), in line on the circuit it switches' : k === 'coil' ? 'Contactor coil (A1/A2)' : k === 'timeclock' ? 'Time clock' : k === 'spd' ? 'Surge protection (SPD)' : KIND_NAME[k]);
       const sym = []; { const x = 0, rowY = 0; // v0.44.3: draw at the origin, then fit into a fixed cell
       if (k === 'contactor') { nocH(sym, x - S * 0.1, rowY + S * 0.65, S * 1.2); }
       else if (k === 'coil') { coilSym(sym, x + S * 0.2, rowY + S * 0.1, S * 0.8, S * 0.75); }
@@ -957,7 +957,7 @@ export function layout(model, { W = 380, font = 12, screen = false, cableTable =
   function tag(b, bd, c) { b.ref = { bi: bd.bi ?? 0, ci: bd.src ? bd.src.indexOf(c) : 0, mw: model.type === 'MW' }; return b; }
 
   function circuitBlock(c, bus, last, outerBus, spd = '', spur = null) {
-    const sh = []; const info = circuitLines(c, spd); const y = 8; ringLegB = null; sockAnchors = []; inAnchors = []; runEnd = null; heatLab = isTowel(c) ? 'Rail' : 'Rad'; /* v0.44.3: rooms too */ let ctlChained = false; let ctlCap = 0;
+    const sh = []; const info = circuitLines(c, spd); const y = 8; ringLegB = null; sockAnchors = []; inAnchors = []; runEnd = null; upDone = new Set(); heatLab = isTowel(c) ? 'Rail' : 'Rad'; /* v0.44.3: rooms too */ let ctlChained = false; let ctlCap = 0;
     const dx = bus + 12; const tx = dx + devW + gap; const tw = W - tx - 6;
     // text
     let hh = textLines(sh, tx, y - 2, info.title, tw, { bold: true, color: info.spare ? COL.na : COL.ink });
@@ -1235,7 +1235,7 @@ export function layout(model, { W = 380, font = 12, screen = false, cableTable =
     return { x: cx, cy, bot: cy + h / 2, k: 'jb', r: w / 2 };
   }
   // v0.44.0: outdoor (IP rated) socket: a small white-on-blue IP badge on the plate's bottom right corner
-  function ipMark(sh, cx, cy, k, S, hang = false) { if (!SOCK[k]) return; const r = S / 2, H = r * 1.7, w = SOCK[k][0] ? H * 2.2 : H * 1.15, top = hang ? cy + r * 0.35 : cy - H / 2; // v0.48.1: in-line plate
+  function ipMark(sh, cx, cy, k, S, hang = false) { if (!SOCK[k]) return; const r = S / 2, H = r * 1.7, w = SOCK[k][0] ? H * 2.2 : H * 1.15, top = typeof hang === 'number' ? hang : hang ? cy + r * 0.35 : cy - H / 2; // v0.48.1: in-line plate (or an explicit plate top)
     const ts = small * 0.72, pw = textW('IP', ts, true) + 5, bh = ts * 1.3, bx = cx + w / 2 - pw * 0.6, by = top + H - bh * 0.55;
     sh.push({ t: 'rect', x: bx, y: by, w: pw, h: bh, lw: 0.6, color: COL.brand, fill: COL.brand }); T(sh, bx + pw / 2, by + bh * 0.78, 'IP', { anchor: 'middle', bold: true, size: ts, color: [255, 255, 255] }); }
   // v0.44.0: a simple daisy chain: one cable down from (inX, fromY), into each item and on to the next; wraps under itself
@@ -1304,7 +1304,7 @@ export function layout(model, { W = 380, font = 12, screen = false, cableTable =
     return loadR(k, S);
   }
   function circuitSpurSection(sh, c, tx, fromY, maxX) {
-    const list = circuitSpurList(c); if (!list.length) return 0;
+    const list = circuitSpurList(c).filter((s) => !upDone.has(s.id)); if (!list.length) return 0; // v0.48.1: ones drawn going up are done
     const S = F * 1.5, g = { w: 1.1, color: COL.line }, fx = tx - gap / 2;
     const savedHeat = heatLab;
     heatLab = ''; // v0.48: row label already names the load; a "Rail"/"Rad" caption above the symbol would sit on the row above
@@ -1455,8 +1455,45 @@ export function layout(model, { W = 380, font = 12, screen = false, cableTable =
     const S = F * 1.5, g = { w: 1.1, color: COL.line }, step = S * 2 + 10, fx = tx - gap / 2; const { upT, dnB } = HP(S);
     const seq = inRingSeq(c, Array(pc.shown - sgl).fill('socket')); const ringN = seq.kinds.length; const rad = loadR('socket', S), xL = tx + 14 + rad, xR = W - 16 - rad; const per0 = Math.max(1, Math.floor((xR - xL) / step) + 1); const per = Math.ceil(ringN / Math.max(1, Math.ceil(ringN / per0))); // v0.44.3: rows as even as they can be
     const items = seq.kinds; const rows = []; const pitch = upT + dnB + 10;
-    for (let k = 0; k * per < items.length; k++) rows.push({ items: items.slice(k * per, (k + 1) * per), cy: top + 4 + upT + k * pitch });
-    const xRr = xL + (per - 1) * step; // right-hand turn sits just past the widest row
+    const nRows = Math.ceil(items.length / per); const xRr = xL + (per - 1) * step; // right-hand turn sits just past the widest row
+    // v0.48.1: a load/spur taken off an in-ring item or a socket on an UPPER row goes UP, into the gap above its own
+    // row (made taller when needed), so it crosses nothing. Off the bottom row they keep dropping down.
+    const rowOf = (i) => Math.floor(i / per), dirOf = (k) => (k % 2 ? -1 : 1);
+    const xOf = (i) => { const k = rowOf(i), j = i % per, n = Math.min(per, items.length - k * per); return dirOf(k) > 0 ? xL + j * step : xL + (n - 1 - j) * step; };
+    const sockIdx = []; seq.ids.forEach((id, i) => { if (!id) sockIdx.push(i); });
+    const ups = []; const taken = new Set();
+    for (const s of circuitSpurList(c)) {
+      let i = -1;
+      if (spurInRing(s)) i = seq.ids.indexOf(s.id);
+      else { const m = /^(?:socket\s*)?(\d+)$/.exec(String(s.from || '').trim().toLowerCase()); if (m && sockIdx.length) i = sockIdx[Math.min(sockIdx.length, Math.max(1, parseInt(m[1], 10))) - 1]; }
+      if (i < 0 || rowOf(i) >= nRows - 1 || taken.has(i)) continue;
+      taken.add(i); ups.push({ s, i, k: rowOf(i), x: xOf(i), inRing: spurInRing(s) });
+    }
+    const sz = small * 0.9, S2 = S * 0.85, r0 = S / 2;
+    const upParts = (u) => { const k0 = spurSymbolOf(u.s), lk = spurLoadKind(u.s); const p = [];
+      if (!u.inRing) p.push({ k: k0, S }); if (lk && (u.inRing || lk !== k0)) p.push({ k: lk, S: S2, ip: spurLoadIp(u.s) }); return p; };
+    ups.forEach((u) => { u.parts = upParts(u); u.hw = Math.max(r0, ...u.parts.map((q) => spurHalfW(q.k, q.S))); u.lab = spurLabel(u.s, c).replace(/^Spur:\s*/, ''); });
+    // label room: up to the next up-item on the row, and clear of the turn verticals that pass through the gap
+    ups.forEach((u) => { const turnX = u.k > 0 && dirOf(u.k - 1) > 0 ? xRr + rad + 7 - 6 : W - 6;
+      const nxt = ups.filter((v) => v.k === u.k && v.x > u.x).sort((a, b) => a.x - b.x)[0]; u.maxX = Math.min(turnX, nxt ? nxt.x - nxt.hw - 8 : W - 6); });
+    const drawUp = (o, u, yT) => { // returns the top of what it drew
+      const savedHeat = heatLab; heatLab = '';
+      let cur = yT - r0 * 0.85, mid = cur - sz * 0.6;
+      u.parts.forEach((q, n) => { const qr = q.S / 2, bot = cur - 5; L(o, u.x, cur, u.x, bot, g);
+        if (SOCK[q.k]) { symbol(o, q.k, u.x, bot, q.S, null, { up: true }); const t = bot - qr * 0.35 - qr * 1.7; if (q.ip) { ipMark(o, u.x, bot, q.k, q.S, t); used.add('ipsock'); } if (n === 0 || u.inRing) mid = (t + bot - qr * 0.35) / 2; cur = t; }
+        else { const lr = loadR(q.k, q.S), cyq = bot - lr; symbol(o, q.k, u.x, cyq, q.S); if (n === 0 || u.inRing) mid = cyq; cur = cyq - lr; }
+        used.add(q.k); });
+      heatLab = savedHeat;
+      const labX = u.x + u.hw + 6, labW = Math.max(56, u.maxX - labX - 2);
+      const th = textLines([], labX, 0, u.lab, labW, { size: sz });
+      const labTop = Math.min(mid - sz * 0.75, yT - r0 * 0.85 - 3 - th); // never down onto the row's plates
+      textLines(o, labX, labTop, u.lab, labW, { size: sz, color: COL.grey });
+      return Math.min(cur, labTop);
+    };
+    const extra = Array(nRows).fill(0);
+    ups.forEach((u) => { const need = -drawUp([], u, 0) + (u.k ? 6 : 4), avail = u.k ? upT + 10 : upT + 4; extra[u.k] = Math.max(extra[u.k], need - avail); });
+    let acc = 0;
+    for (let k = 0; k < nRows; k++) { acc += Math.max(0, extra[k]); rows.push({ items: items.slice(k * per, (k + 1) * per), cy: top + 4 + upT + k * pitch + acc }); }
     const res = hairpin(sh, rows, { S, g, step, xL, xR: xRr, left: true, startT: fx, startB: tx - gap - devW * 0.3, turnL: [tx + 2, tx + 7], turnR: [xRr + rad + 12, xRr + rad + 7] });
     L(sh, fx, feedTop, fx, res[0].yT, g); ringLegB = res[0].yB; // leg B leaves the breaker's foot (drawn with the breaker)
     rows.forEach((row, k) => {
@@ -1466,6 +1503,7 @@ export function layout(model, { W = 380, font = 12, screen = false, cableTable =
         if (sid) { inAnchors.push({ x: pos[j], cy: sy, bot: plateBot(kd, S, sy), k: kd, sid, yB: res[k].yB, dir: res[k].dir, step, col: j }); runEnd = { x: pos[j], cy: sy, r: loadR(kd, S), k: kd, yB: res[k].yB, dir: res[k].dir }; }
         else markSock(pos[j], sy, kd, S, { yB: res[k].yB, dir: res[k].dir, step, col: j }); });
     });
+    for (const u of ups) { drawUp(sh, u, res[u.k].yT); upDone.add(u.s.id); }
     let bottom = res[res.length - 1].yB + S / 2 * 0.85 + 4; // v0.48.1: the last row's plates sit on the lower leg
     const lr0 = res[res.length - 1], jx = lr0.pos.length ? lr0.pos[lr0.pos.length - 1] + lr0.dir * (loadR('socket', S) + 12) : 0; const spurLab = sgl === 1 ? 'Spur' : 'Spurs';
     if (sgl && lr0.dir > 0 && jx + 10 + sgl * step + 4 + textW(spurLab, small) < W - 6) { // spur(s) teed off the ring on the same row, after the join
@@ -1814,6 +1852,7 @@ export function layout(model, { W = 380, font = 12, screen = false, cableTable =
     else if (SOCK[kind]) { // v0.43.9: pictorial UK 13 A faceplate
       const [twin, sw] = SOCK[kind], H = r * 1.7, a = loadR(kind, S), w2 = (twin ? H * 2.2 : H * 1.15) / 2;
       if (o.hang) { L(sh, cx, cy, cx, cy + r * 0.35, { w: 1.1 }); plate(sh, cx, cy + r * 0.35, r, twin, sw); } // v0.48: a spur socket hangs on its drop, fed into its top
+      else if (o.up) { L(sh, cx, cy, cx, cy - r * 0.35, { w: 1.1 }); plate(sh, cx, cy - r * 0.35 - H, r, twin, sw); } // v0.48.1: a spur going UP, fed into its bottom
       else { // v0.48.1: in line, like the DP switch: the cable runs into one side of the faceplate and out of the other
         if (a > w2 + 0.3) { L(sh, cx - a, cy, cx - w2, cy, { w: 1.1 }); L(sh, cx + w2, cy, cx + a, cy, { w: 1.1 }); }
         plate(sh, cx, cy - H / 2, r, twin, sw); } }
