@@ -108,7 +108,7 @@ const KIND_PLURAL = { heater: 'heaters', socket: 'sockets', light: 'lights', coo
 export const KIND_ONE = { heater: 'heater', socket: 'socket', light: 'light', cooker: 'cooker', hob: 'hob', oven: 'oven', combi: 'combi oven', hybinv: 'hybrid inverter', dciso: 'DC rotary isolator', aciso: 'AC rotary isolator', pvarray: 'PV array', battery: 'battery', shower: 'shower', alarm: 'alarm', immersion: 'immersion', ev: 'EV charger', fan: 'fan', fcu: 'FCU', sfcu: 'SFCU', km: 'contactor', shelly: 'Shelly relay', flex: 'flex outlet', appliance: 'fixed appliance', point: 'point' };
 // Optional per-circuit diagram extras: circuit.diagram = { rooms, sw1, sw2, swi }.
 // Old certs have none; a lighting circuit then gets one 1-way switch.
-const KEY_EXTRA = { ipsock: 'Outdoor socket, weatherproof (IP rated)', fanh: 'Humidistat (%RH) switching a fan', fant: 'Fan timer / overrun (T)', fani: 'Fan isolator', heater: 'Heater / radiator', tailblock: 'Meter tail connector block', swfuse: 'Switch fuse / isolator (supplying a board)', jbsw: 'Switch-fed: JB to switch, looped switch to switch, each to its own lights', socket: 'Twin socket (switched)', socketu: 'Twin socket (unswitched)', socket1: 'Single socket (switched)', socket1u: 'Single socket (unswitched)', rose: 'Ceiling rose (loop-in)', jb: 'Junction box (JB)', strap: '2-way strappers (two wires)', iso: 'Local switch / isolator: DP switch', fcu: 'Unswitched fused connection unit (FCU)', isofcu: 'Unswitched fused connection unit (FCU)', isosfcu: 'Switched fused connection unit (SFCU)', isofcux: 'Unswitched fused connection unit (FCU) with flex outlet', isosfcux: 'Switched fused connection unit (SFCU) with flex outlet', isoccu: 'Cooker control unit (CCU): 45 A DP switch with a 13 A socket', dpu: 'DP switch in the ring, spurring an unswitched single socket (washer, dishwasher etc.)', dps: 'DP switch in the ring, spurring a switched single socket' };
+const KEY_EXTRA = { xhop: 'Lines crossing, not connected', xdot: 'Connected', ipsock: 'Outdoor socket, weatherproof (IP rated)', fanh: 'Humidistat (%RH) switching a fan', fant: 'Fan timer / overrun (T)', fani: 'Fan isolator', heater: 'Heater / radiator', tailblock: 'Meter tail connector block', swfuse: 'Switch fuse / isolator (supplying a board)', jbsw: 'Switch-fed: JB to switch, looped switch to switch, each to its own lights', socket: 'Twin socket (switched)', socketu: 'Twin socket (unswitched)', socket1: 'Single socket (switched)', socket1u: 'Single socket (unswitched)', rose: 'Ceiling rose (loop-in)', jb: 'Junction box (JB)', strap: '2-way strappers (two wires)', iso: 'Local switch / isolator: DP switch', fcu: 'Unswitched fused connection unit (FCU)', isofcu: 'Unswitched fused connection unit (FCU)', isosfcu: 'Switched fused connection unit (SFCU)', isofcux: 'Unswitched fused connection unit (FCU) with flex outlet', isosfcux: 'Switched fused connection unit (SFCU) with flex outlet', isoccu: 'Cooker control unit (CCU): 45 A DP switch with a 13 A socket', dpu: 'DP switch in the ring, spurring an unswitched single socket (washer, dishwasher etc.)', dps: 'DP switch in the ring, spurring a switched single socket' };
 // v0.43 (test): optional local isolator next to the load: circuit.diagram.isolator = { type, rating }.
 export const ISOLATORS = { dp20: '20 A DP switch', dp45: '45 A DP switch (cooker / shower)', sfcu: 'Switched FCU', ufcu: 'Unswitched FCU', rotary: 'Rotary isolator', ccu: 'Cooker control unit (CCU)' };
 const ISO_SHORT = { dp20: '20A DP', dp45: '45A DP', sfcu: 'SFCU', ufcu: 'FCU', rotary: 'Rotary isolator', ccu: '45A CCU' };
@@ -737,7 +737,7 @@ export function layout(model, { W = 380, font = 12, screen = false, cableTable =
   // v0.43.3: meter tail connector block: a small block on the tails with two terminals
   const tailBlockSym = (sh, cx, y, s) => { L(sh, cx, y - 4, cx, y, { w: 1.2, color: COL.line }); R(sh, cx - s * 0.75, y, s * 1.5, s * 0.9, { lw: 1.1, fill: [255, 255, 255] }); for (const a of [-0.35, 0.35]) C(sh, cx + a * s, y + s * 0.45, s * 0.16, { lw: 0.9 }); };
   let heatLab = 'Rad'; // v0.43.3: label over the heater symbol (Rail for a towel rail)
-  const earthSym = (sh, x, y, s) => { L(sh, x, y, x, y + s * 0.6); L(sh, x - s * 0.6, y + s * 0.6, x + s * 0.6, y + s * 0.6); L(sh, x - s * 0.4, y + s * 0.85, x + s * 0.4, y + s * 0.85); L(sh, x - s * 0.2, y + s * 1.1, x + s * 0.2, y + s * 1.1); };
+  const earthSym = (sh, x, y, s) => { const k0 = sh.length; L(sh, x, y, x, y + s * 0.6); L(sh, x - s * 0.6, y + s * 0.6, x + s * 0.6, y + s * 0.6); L(sh, x - s * 0.4, y + s * 0.85, x + s * 0.4, y + s * 0.85); L(sh, x - s * 0.2, y + s * 1.1, x + s * 0.2, y + s * 1.1); for (let i = k0; i < sh.length; i++) sh[i].sym = true; }; // v0.48: symbol lines, no junction dots
 
   const head = []; let headTails = false;
   if (model.type !== 'MW') {
@@ -838,10 +838,12 @@ export function layout(model, { W = 380, font = 12, screen = false, cableTable =
     if (!isFinite(a)) return; const k = Math.min(1, (cw - 2) / Math.max(1, c - a), (ch - 2) / Math.max(1, d - b)); const ox = x0 + (cw - (c - a) * k) / 2 - a * k, oy = y0 + (ch - (d - b) * k) / 2 - b * k;
     const X = (v) => ox + v * k, Y = (v) => oy + v * k;
     for (const z of src) { if (z.t === 'line') dst.push({ ...z, x1: X(z.x1), y1: Y(z.y1), x2: X(z.x2), y2: Y(z.y2) }); else if (z.t === 'rect') dst.push({ ...z, x: X(z.x), y: Y(z.y), w: z.w * k, h: z.h * k }); else if (z.t === 'circle') dst.push({ ...z, cx: X(z.cx), cy: Y(z.cy), r: z.r * k }); else if (z.t === 'text') dst.push({ ...z, x: X(z.x), y: Y(z.y), size: z.size * k }); else dst.push(z); } };
+  // v0.48: hop-overs where cables cross unconnected, dots where they join (same on screen and in the PDF)
+  for (const b of blocks) if (/^(head|board|rcd|circuit)$/.test(b.kind || 'circuit') && b.shapes) { const r = markCrossings(b.shapes, F); if (r.hops) used.add('xhop'); if (r.dots) used.add('xdot'); }
   // key: only the symbols this diagram uses
   heatLab = 'Rad';
   if (used.size) {
-    const sh = []; const y = 10; const order = ['socket', 'socketu', 'socket1', 'socket1u', 'ipsock', 'light', 'rose', 'jb', 'jbsw', 'sw1', 'sw2', 'swi', 'strap', 'cooker', 'hob', 'oven', 'combi', 'hybinv', 'dciso', 'aciso', 'pvarray', 'battery', 'shower', 'alarm', 'immersion', 'heater', 'ev', 'fan', 'fcu', 'sfcu', 'flex', 'appliance', 'point', 'contactor', 'coil', 'km', 'shelly', 'hive', 'relay', 'timeclock', 'iso', 'isofcu', 'isofcux', 'isosfcu', 'isosfcux', 'isoccu', 'dpu', 'dps', 'tailblock', 'swfuse', 'fanh', 'fant', 'fani', 'spd'];
+    const sh = []; const y = 10; const order = ['socket', 'socketu', 'socket1', 'socket1u', 'ipsock', 'light', 'rose', 'jb', 'jbsw', 'sw1', 'sw2', 'swi', 'strap', 'cooker', 'hob', 'oven', 'combi', 'hybinv', 'dciso', 'aciso', 'pvarray', 'battery', 'shower', 'alarm', 'immersion', 'heater', 'ev', 'fan', 'fcu', 'sfcu', 'flex', 'appliance', 'point', 'contactor', 'coil', 'km', 'shelly', 'hive', 'relay', 'timeclock', 'iso', 'isofcu', 'isofcux', 'isosfcu', 'isosfcux', 'isoccu', 'dpu', 'dps', 'tailblock', 'swfuse', 'fanh', 'fant', 'fani', 'spd', 'xhop', 'xdot'];
     let hh = textLines(sh, 8, y, 'Key', W - 16, { bold: true });
     const S = F * 1.5; const colW = (W - 16) / 2; let col = 0, rowY = y + hh + 4, rowH = 0; const KW = 2 * loadR('socket', S); // v0.43.9: icon column fits the widest (twin) outlet
     const CW = S * 1.7, CH = S * 1.4; void KW; // v0.44.3: every key symbol gets the same cell; labels line up
@@ -863,6 +865,8 @@ export function layout(model, { W = 380, font = 12, screen = false, cableTable =
       else if (/^isos?fcux?$/.test(k)) facePlate(sym, x + S * 0.5, rowY + S / 2, isoType(true, k.startsWith('isosfcu'), false), S / 2, k.endsWith('x')); // v0.44.3: same plate as the SFCU/FCU entries, no leads
       else if (k === 'fanh' || k === 'fant' || k === 'fani') { fanCtlSym(sym, x - S * 0.1, rowY + S / 2, S, k === 'fanh' ? '%RH' : k === 'fant' ? 'T' : 'ISO'); }
       else if (k === 'spd') { spdSym(sym, x + S / 2, rowY - 2, F * 0.75); }
+      else if (k === 'xhop') { L(sym, x - S * 0.2, rowY + S / 2, x + S * 1.2, rowY + S / 2, { w: 1.1 }); L(sym, x + S / 2, rowY, x + S / 2, rowY + S, { w: 1.1 }); markCrossings(sym, F); }
+      else if (k === 'xdot') { L(sym, x - S * 0.2, rowY + S / 2, x + S * 1.2, rowY + S / 2, { w: 1.1 }); L(sym, x + S / 2, rowY + S / 2, x + S / 2, rowY + S, { w: 1.1 }); markCrossings(sym, F); }
       else if (k === 'rose') { L(sym, x + S / 2 - S * 0.6, rowY + S / 2, x + S / 2 + S * 0.6, rowY + S / 2, { w: 0.9, color: COL.grey }); C(sym, x + S / 2, rowY + S / 2, S * 0.17, { fill: COL.line, lw: 0.8 }); }
       else if (k === 'jb') { R(sym, x - S * 0.2, rowY + S * 0.05, S * 1.4, S * 0.9, { fill: [255, 255, 255] }); T(sym, x + S * 0.5, rowY + S * 0.5 + small * 0.3, 'JB', { anchor: 'middle', bold: true, size: small * 0.85 }); }
       else if (k === 'jbsw') { const yy = rowY + S / 2; R(sym, x - S * 0.2, yy - S * 0.3, S * 0.7, S * 0.6, { fill: [255, 255, 255] }); L(sym, x + S * 0.5, yy, x + S * 0.75, yy, { w: 0.9, color: COL.grey }); symbol(sym, 'sw1', x + S * 1.05, yy, S * 0.7); }
@@ -1804,6 +1808,75 @@ export function layout(model, { W = 380, font = 12, screen = false, cableTable =
 // ---------- SVG (screen) ----------
 const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 const rgb = (c) => `rgb(${c.join(',')})`;
+// v0.48: drawing convention for cable lines. Where a horizontal and a vertical cable cross but are NOT connected,
+// the vertical one hops over the horizontal (a small semicircle, bulging right). Where three or more cable directions
+// meet at a point (a T or a 4-way join), a filled junction dot. Short stubs (a socket's drop into its faceplate)
+// and anything inside a symbol are ignored, so a line ending at a symbol terminal gets no dot.
+// Works on any block's shapes (rings, radials, lights, rooms, controls, sub-mains, supply/board area); returns counts.
+export function markCrossings(shapes, F = 12, o = {}) {
+  const tol = 0.6, minArm = o.minArm != null ? o.minArm : 6, minLen = 8, minThrough = 12; // a short bar (e.g. a coil's N terminal) is a symbol, not a cable
+  const isH = (z) => Math.abs(z.y1 - z.y2) < 0.01 && Math.abs(z.x1 - z.x2) > 0.01;
+  const isV = (z) => Math.abs(z.x1 - z.x2) < 0.01 && Math.abs(z.y1 - z.y2) > 0.01;
+  const lines = shapes.filter((z) => z.t === 'line' && !z.hop && !z.sym && (isH(z) || isV(z)));
+  const solid = (z) => !z.dash; // dashed = a symbolic switch wire or a link not recorded: never a junction
+  if (lines.length < 2) return { hops: 0, dots: 0 };
+  // symbol interiors: small/medium rects and circles (faceplates, boxes, lamps)
+  const rects = shapes.filter((z) => z.t === 'rect' && (z.lw || z.fill) && z.w > 3 && z.h > 3 && z.w <= 60 && z.h <= 50); // symbols, not room boxes
+  const circs = shapes.filter((z) => z.t === 'circle' && z.r > 1.5 && !z.dot);
+  const inSym = (x, y, m = -0.5) => rects.some((r) => x > r.x - m && x < r.x + r.w + m && y > r.y - m && y < r.y + r.h + m)
+    || circs.some((c) => (x - c.cx) ** 2 + (y - c.cy) ** 2 < (c.r + m) ** 2);
+  const symM = Math.max(4.5, F * 0.4); // a line meeting a symbol's own terminal cable (just above a faceplate) is not a junction
+  const H = lines.filter(isH).map((z) => ({ z, y: z.y1, a: Math.min(z.x1, z.x2), b: Math.max(z.x1, z.x2) }));
+  const V = lines.filter(isV).map((z) => ({ z, x: z.x1, a: Math.min(z.y1, z.y2), b: Math.max(z.y1, z.y2) }));
+  // ---- junction dots
+  const dirsAt = (x, y) => { const d = new Set(); let ends = 0; let col = null, w = 0;
+    for (const h of H) { if (!solid(h.z) || Math.abs(h.y - y) > tol || x < h.a - tol || x > h.b + tol) continue;
+      const len = h.b - h.a; const atA = Math.abs(x - h.a) <= tol, atB = Math.abs(x - h.b) <= tol;
+      if (atA || atB) { if (len >= minArm) { d.add(atA ? 'R' : 'L'); ends++; if (h.z.w >= w) { w = h.z.w; col = h.z.color; } } }
+      else if (len >= minThrough) { d.add('L'); d.add('R'); if (h.z.w >= w) { w = h.z.w; col = h.z.color; } } }
+    for (const v of V) { if (!solid(v.z) || Math.abs(v.x - x) > tol || y < v.a - tol || y > v.b + tol) continue;
+      const len = v.b - v.a; const atA = Math.abs(y - v.a) <= tol, atB = Math.abs(y - v.b) <= tol;
+      if (atA || atB) { if (len >= minArm) { d.add(atA ? 'D' : 'U'); ends++; if (v.z.w >= w) { w = v.z.w; col = v.z.color; } } }
+      else if (len >= minThrough) { d.add('U'); d.add('D'); if (v.z.w >= w) { w = v.z.w; col = v.z.color; } } }
+    return { n: d.size, ends, col, w }; };
+  const seen = new Set(); const dots = [];
+  for (const z of lines) for (const [x, y] of [[z.x1, z.y1], [z.x2, z.y2]]) {
+    const key = Math.round(x * 2) + ',' + Math.round(y * 2); if (seen.has(key)) continue; seen.add(key);
+    if (inSym(x, y, symM)) continue;
+    const r = dirsAt(x, y);
+    if (r.n >= 3 && r.ends >= 1) dots.push({ x, y, col: r.col, w: r.w });
+  }
+  // ---- crossings: interior of both, neither ends there
+  const hopsByV = new Map();
+  for (const v of V) { if (v.b - v.a < minLen) continue;
+    for (const h of H) { if (h.b - h.a < minLen) continue;
+      if (v.x <= h.a + tol || v.x >= h.b - tol || h.y <= v.a + tol || h.y >= v.b - tol) continue;
+      if (inSym(v.x, h.y)) continue;
+      if (dots.some((d) => Math.abs(d.x - v.x) < 1 && Math.abs(d.y - h.y) < 1)) continue;
+      if (!hopsByV.has(v)) hopsByV.set(v, []); hopsByV.get(v).push(h.y); } }
+  const rho = Math.max(2.6, F * 0.3); let hops = 0;
+  for (const [v, ys0] of hopsByV) {
+    const ys = [...new Set(ys0.map((y) => Math.round(y * 100) / 100))].sort((a, b) => a - b);
+    const spans = []; // merge crossings too close for separate hops
+    for (const y of ys) { const s = spans[spans.length - 1]; if (s && y - s[1] < 2 * rho + 1) s[1] = y; else spans.push([y, y]); }
+    const z = v.z; const i = shapes.indexOf(z); if (i < 0) continue;
+    const out = []; let cur = v.a; const st = { w: z.w, color: z.color, ...(z.dash ? { dash: z.dash } : {}) };
+    for (const [y0, y1] of spans) {
+      const top = y0 - rho, bot = y1 + rho;
+      if (top < cur + 0.5 || bot > v.b - 0.5) continue; // too near the line's own end to bridge cleanly
+      out.push({ t: 'line', x1: v.x, y1: cur, x2: v.x, y2: top, ...st });
+      const cy = (top + bot) / 2, hh = (bot - top) / 2, n = 8; let px = v.x, py = top;
+      for (let k = 1; k <= n; k++) { const a = Math.PI * k / n; const nx = v.x + rho * Math.sin(a), ny = cy - hh * Math.cos(a);
+        out.push({ t: 'line', x1: px, y1: py, x2: nx, y2: ny, w: z.w, color: z.color, hop: true }); px = nx; py = ny; }
+      cur = bot; hops++;
+    }
+    if (!out.length) continue;
+    out.push({ t: 'line', x1: v.x, y1: cur, x2: v.x, y2: v.b, ...st });
+    shapes.splice(i, 1, ...out);
+  }
+  for (const d of dots) shapes.push({ t: 'circle', cx: d.x, cy: d.y, r: Math.max(F * 0.15, (d.w || 1.1) * 0.95), lw: 0, color: d.col || [60, 60, 60], fill: d.col || [60, 60, 60], dot: true });
+  return { hops, dots: dots.length };
+}
 export function shapesSvg(shapes, dy = 0) {
   return shapes.map((s) => {
     if (s.t === 'line') return `<line x1="${s.x1}" y1="${s.y1 + dy}" x2="${s.x2}" y2="${s.y2 + dy}" stroke="${rgb(s.color)}" stroke-width="${s.w}" stroke-linecap="round"${s.dash ? ` stroke-dasharray="${s.dash.join(' ')}"` : ''}/>`;
