@@ -577,7 +577,7 @@ Follow-up 4 (14 Nov, Matthew: "Can we do something so we know that where the lin
 - **PDF:** the certificate (16 pp) and diagram-only PDFs are made by the live code. `tests/pdf_overlap.py` finds 0 overlaps on both PDFs and both screen SVGs. View PDF opens the viewer.
 - **Cosmetic, not a regression:** at 390 the PDF viewer header wraps a long file name over several lines. v0.47.1 did the same.
 
-## v0.48.1 beta (built locally 14 Nov 2026, NOT pushed / not published; Matthew approved building it, go-live still to come)
+## v0.48.1 beta (LIVE 14 Nov 2026: main d367cb7, live sw.js serves sparky-v0.48.1 from 08:59:57 GMT)
 APP_VERSION `0.48.1 beta`, SW cache `sparky-v0.48.1`. Two items from NIGGLES "After v0.48.0". No change to the DB name, storage keys, section ids or backup/sync/export format. Only new optional values on `c.diagram.spurList` items.
 
 1. **Sockets in line** (js/wiring.js). Every socket faceplate (double/single, switched/unswitched, outdoor IP) is now centred on its cable, with the cable running into one side and out of the other, like the DP switch. This applies on every layout: hairpin rings (`ringPlain`/`hairpin`), the horizontal radial, rooms rings (`ringRooms`), rooms radials (`sockRoomsSection`), item rooms (`chain`), room spur rows, the ring/radial "singles" spur rows, and the Minor Works new-spur row.
@@ -639,3 +639,17 @@ Follow-up (14 Nov 2026):
 Not done:
 - Rooms layouts still draw an in-ring FCU/DP as a spur off the socket it sits after.
 - "From socket N" in an upper room is not honoured; those spurs come off the last room.
+
+Live smoke (14 Nov 2026, about 09:05 GMT; 390 and 1440 viewports, fake seed data only), all checks pass. Results are in /workspace/polish-review/v0481-live/ (smoke.py, extra.py, smoke.json, extra.json, screenshots, PDFs):
+- Service worker and cache sparky-v0.48.1; version 0.48.1 beta is shown in Settings.
+- No page errors and no console errors.
+- An old backup restores (3 records) and its diagram still shows the FCU as a spur.
+- Sockets are drawn inline.
+- The in-ring DP and FCU are drawn, and the rooms layout's DP + switched socket is drawn.
+- The key has one merged DP entry and no "Local switch / isolator" entry.
+- The DP's load on the top hairpin row is drawn upward (above the row, below the title text).
+- Seed diagram: 0 hops and 12 dots. A synthetic crossing check of markCrossings drew a hop and a dot.
+- The spare way shows N/A.
+- All 8 calculators load with no errors.
+- The View PDF viewer opens (16 pages).
+- pdf_overlap.py: 0 overlaps on both PDFs at both sizes. The 390 SVG has one known false positive, in the key text.
