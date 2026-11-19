@@ -1,5 +1,43 @@
 # Sparky — niggles and update lists
 
+## Audit (19 Nov 2026) — NOT BUILT (audit only, live v0.48.2, fake seed data)
+Evidence: /workspace/polish-review/audit-2026-11-19/zspro/ (faults/, shots/, crawl.json, probe2.json, probe4.py, PDFs).
+Clean: no console or page errors and no sideways scroll on ~48 routes at 390 and 1440, including empty states. EIC, EICR and MW PDFs have 0 overlaps. Backup export → fresh restore works. Calculator spot checks are right (VD, Zs, ring /4, 32 A on 2.5 mm² warns 27 A).
+
+### Faults
+- [NOT BUILT] **HIGH — Opening a board's schedule silently rewrites its RCD boxes.** fillBoardRcd only runs in the schedule route (schedule.js ~120), so verdicts, the PDF and the parts list change depending on whether the board has been opened.
+  - DB4, TT, MCB, Zs 12.5: before opening it passes (RCD 61009/30 mA left over from the template, so the Table 41.5 limit of 1667 Ω applies). After opening, the boxes are blank, the limit is 2.73 Ω, it goes red and a cert notice appears. Shots: faults/H1a–H1c.
+  - DB1 MCB circuits 2, 3, 5 and 11 print RCD "61009 / 32 A" on the EICR PDF (faults/H1e). The parts list shows phantom RCDs "32 A 30 mA Type A (BS EN 61009)" for circuits 2, 3, 5 and 11 and "40 A" for circuit 6 (faults/H1d). The real RCD is 61008 63 A.
+  - Fix idea: apply the board RCD on load/save/migrate (or when making the PDF/parts list), not on view.
+- [NOT BUILT] **MEDIUM — Cable smaller than the breaker (In > Iz, Reg 433.1.1) is only amber and doesn't appear in Check certificate.** Examples: B32 kitchen radial on 2.5 mm² method C (27 A), and the utility 6 mm² at 55 °C. On an EIC this is a design non-compliance. Add a "Worth a look" group to Check certificate, or make it red on EIC.
+- [NOT BUILT] **MEDIUM — TT sub-board fed through an upstream RCD** gets judged on Table 41.3 (2.73 Ω) unless a board RCD is entered. Add a "Protected by upstream RCD" option, or an explanatory hint on the red flag.
+- [NOT BUILT] **MEDIUM — SPARE circuit ("No device fitted" ticked)** still shows Protective device "RCBO (BS EN 61009)" in the dropdown. The PDF says N/A. Show "None / N/A" instead. Shot: faults/M1.
+- [NOT BUILT] **MEDIUM — Small tap targets on the phone.** Glossary "what it means" links are 9–35 px wide × 20 px. "Save now" is 62×19 at 390. Many buttons are 28 px high at 1440. Hard to hit with gloves; aim for ≥ 44 px.
+- [NOT BUILT] **MEDIUM — Progress bar "1 of 9 sections filled in / 11%"** on a heavily filled EIC reads as nearly empty. It only counts fully complete sections. Count partly done sections, or show "items left".
+- [NOT BUILT] LOW — Bad or old links (#/job/nope, #/cert/nope, unknown hash, #/import-extra) silently land on home or Settings with no "not found" message. Shot: faults/L-bad-link.
+- [NOT BUILT] LOW — At 390, footer buttons wrap onto 2 lines ("Previous", "All circuits", "Add another board", "Copy this board", "Copy to another job"). The circuit page chip row cuts "More" off at the edge.
+- [NOT BUILT] LOW — At 390, the Settings › Appearance System/Light/Dark segmented control wraps into a tall 3-row blob. Shot: faults/L-settings.
+
+### Continuity
+- [NOT BUILT] Missing-reading wording varies:
+  - "Still to fill in: Zs on circuit DB1 4" appears on the DB4 page, which is the wrong board's item;
+  - Check certificate says "DB1: no Zs on circuit 4";
+  - flags say "DB4 circuit 1". Pick one form, e.g. "DB1 circuit 4: no Zs", and show only this board's items on a board page.
+- [NOT BUILT] Two different "bad backup" messages in backup.js: "That isn't a backup file from this app…" vs "That file isn't a Zs Pro backup, or it's damaged…".
+- [NOT BUILT] Cert tag order differs: home card "EICR, Minor Works, EIC" vs job page "EIC, EICR, Minor Works".
+- [NOT BUILT] Schedule rows are in entry order (1–6, 11, 7, 8), not way order, on screen and in the PDF.
+- [NOT BUILT] "Due 19 Nov 2036 (in 3653 days)": say "in 10 years" / "in 8 months".
+- [NOT BUILT] Settings: "Test instruments" is a bare heading while the other sections are cards. "Device presets" is an empty card with no add button or "none yet" text.
+- [NOT BUILT] Home says "Re-tests due"; job and cert say "Next inspection". PFC / Ipf / PSCC are mixed across calculators and certs (pick one, with a glossary link).
+
+### Ideas (on site)
+- [NOT BUILT] "Sort by way number" button, or drag-to-reorder, on the schedule.
+- [NOT BUILT] Check certificate "Worth a look" (amber) group alongside "Needs fixing".
+- [NOT BUILT] Board page: show only that board's missing readings, with a tap-to-jump.
+- [NOT BUILT] "Not found — this job may have been deleted" page with a back-to-jobs button.
+- [NOT BUILT] TT boards: one-tap "RCD upstream (in DBx)" link so Table 41.5 applies correctly.
+- [NOT BUILT] Bigger glossary/help buttons and a glove-friendly 44 px minimum for buttons.
+
 ## [BUILT v0.33.2 on branch `v0.33.2-row-open` — NOT LIVE] Tap a circuit number in the table to open it
 - Schedule table (landscape phone / Mac): the No. cell is now a blue underlined number with a › chevron (pointer + hover tint on Mac). Click/tap or Enter on it opens that way's own circuit page. Other boxes stay typeable in the table; the circuit number itself is edited on the circuit page. The ✎ row button does the same.
 - Back / All circuits returns to the table at the same scroll (page and table, saved per board, used once).
