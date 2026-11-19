@@ -148,7 +148,7 @@ test('screens: spare with no device shows N/A; not-found page; settings cards; t
   assert.match(app, /chips seg2 oneline/); assert.match(app, /h\('span', \{\}, 'Due soon'\)/); assert.doesNotMatch(app, /Re-tests? due/);
   for (const f of ['testacross', 'dangerui', 'importui', 'schedule', 'certui']) assert.doesNotMatch(read(`js/${f}.js`), /if \(!cert\) return go\('#\/'\)/, f);
   const css = read('styles.css'); assert.match(css, /\.linkbtn::after \{[^}]*height: 44px/); assert.match(css, /\.btn\.small, \.btn\.tiny, \.btn\.fact \{ min-height: 44px; \}/);
-  assert.match(read('js/config.js'), /APP_VERSION = '0\.49\.0 beta'/); assert.match(read('sw.js'), /'sparky-v0\.49\.0'/); assert.match(read('sw.js'), /\.\/js\/boardrcd\.js/);
+  assert.match(read('js/config.js'), /APP_VERSION = '0\.(?:49|5\d)\.\d+ beta'/); assert.match(read('sw.js'), /'sparky-v0\.(?:49|5\d)\.\d+'/); assert.match(read('sw.js'), /\.\/js\/boardrcd\.js/);
   assert.match(read('js/db.js'), /settleBoardRcds/); assert.match(read('js/db.js'), /const DB_NAME = 'sparky-certs';/);
 });
 test('RCD upstream: a feeding circuit that is not on the board gives nothing; "DB1" alone uses DB1\u2019s own RCD', () => {

@@ -19,7 +19,7 @@ const BULK = { ir: [['irV', '500', 'Test V 500 on all'], ['irLL', '>999', 'L–L
 
 route(/^\/cert\/([^/]+)\/b\/(\d+)\/t\/([a-z0-9]+)$/, async (id, bi, tid) => {
   const cert = await openCert(id); if (!cert) return notFound('certificate');
-  const b = cert.boards[+bi]; if (!b) return go('#/cert/' + id);
+  const b = cert.boards[+bi]; if (cert.type === 'MW' || !b) return notFound('board', { back: '#/cert/' + id, backLabel: 'Back to the certificate', inWhat: 'this certificate' }); // v0.50.0
   const step = stepById(tid); const base = `#/cert/${id}/b/${bi}`;
   const prog = h('span', { class: 'tprog' });
   const updProg = () => { const p = progress(b, step.id); prog.textContent = p.need ? `${p.done} of ${p.need} done` : 'Nothing to test here'; prog.className = 'tprog' + (p.need && p.done === p.need ? ' all' : ''); };

@@ -2,7 +2,7 @@
 // On-Site Guide diversity figure, and (from a certificate) drop it into the
 // maximum demand box. Sums in maxdemand.js.
 import { h, fill, toast } from './ui.js';
-import { route, page, go } from './app.js';
+import { route, page, go, notFound } from './app.js';
 import * as db from './db.js';
 import { flush } from './state.js';
 import {  setLastCalc, icard, answerCard, pchip, resline, detailCard, banner , dec } from './calckit.js';
@@ -14,6 +14,7 @@ const load = () => { try { return JSON.parse(localStorage.getItem(KEY) || 'null'
 route(/^\/calc\/md(?:\/([^/]+))?$/, async (certId) => {
   setLastCalc('md');
   const cert = certId ? await db.get('certs', certId) : null;
+  if (certId && !cert) return notFound('certificate'); // v0.50.0: a bad link says so (not a blank Maximum demand)
   const v = load() || { loads: [], fuse: '100' }; v.loads = migrateCcu(v.loads || []);
   const top = h('div'); const list = h('div'); const add = h('div'); const work = h('div');
   const store = () => { try { localStorage.setItem(KEY, JSON.stringify(v)); } catch {} };

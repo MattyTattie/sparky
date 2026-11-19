@@ -200,6 +200,13 @@
   }
   body.circedit .circuitnav { max-width: var(--col, 940px); }
 }
+/* v0.50.0: with a mouse, buttons and chips get a little more room (36px, was 28-32px); touch stays 44px below */
+@media (min-width: 900px) and (pointer: fine) {
+  body.desk .btn { min-height: 36px; padding: 6px 14px; }
+  body.desk .btn.small { min-height: 36px; padding: 5px 12px; }
+  body.desk .chip { min-height: 36px; padding: 5px 12px; }
+  body.desk .btn.tiny { min-height: 30px; }
+}
 /* v0.49.0: a touch screen on a big display (tablet / touch laptop) gets the 44px glove-friendly sizes too */
 @media (pointer: coarse) {
   body.desk .btn, body.desk .btn.small, body.desk .chip { min-height: 44px; }

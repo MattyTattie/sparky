@@ -37,8 +37,8 @@ const ringRooms = () => {
 };
 
 test('v0.48.2+ version and SW cache', () => {
-  assert.match(src('js/config.js'), /APP_VERSION = '0\.(48\.2|49\.\d+) beta'/);
-  assert.match(src('sw.js'), /const CACHE = 'sparky-v0\.(48\.2|49\.\d+)'/);
+  assert.match(src('js/config.js'), /APP_VERSION = '0\.(48\.2|49\.\d+|50\.\d+) beta'/);
+  assert.match(src('sw.js'), /const CACHE = 'sparky-v0\.(48\.2|49\.\d+|50\.\d+)'/);
 });
 
 test('rooms ring: in-ring FCU and DP sit in line in their own room; loads go up inside it; a spur from an upper room socket comes off that socket', () => {

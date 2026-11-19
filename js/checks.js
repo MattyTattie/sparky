@@ -3,10 +3,12 @@
 // =====================================================================
 // Plain JS (no browser needed), tested by tests/checks.test.mjs.
 // Every limit comes from limits.js.
-import { CABLES, CABLE_PICKS, CU_MOHM_PER_M, ARMOUR_CSA, CA, CABLE_TEMP, cgFor, effectiveCi } from './cables.js';
+import { CABLES, CABLE_PICKS, CU_MOHM_PER_M, ARMOUR_CSA, CA, CABLE_TEMP, cgFor, effectiveCi, CF_BS3036 } from './cables.js';
 import { maxZsForTrip } from './limits.js';
+import { parseFeed, feedCircuit } from './feed.js';
+import { rcdForWay, hasRcd2 } from './rcdways.js';
 import { adiabatic, kFor } from './design.js';
-import { maxZs, coldLimit, irMinFor, IR_TABLE, rcdTimeLimit, RING, RCD_ZS, deviceById, isLegacyTable, RULE_OF_THUMB } from './limits.js';
+import { maxZs, coldLimit, irMinFor, IR_TABLE, rcdTimeLimit, RING, RCD_ZS, deviceById, deviceFromBs, isLegacyTable, RULE_OF_THUMB } from './limits.js';
 
 // "0.42" -> 0.42, ">999" -> 999, "≥200" -> 200, "N/A" / "" / "LIM" -> null
 export function num(v) {
@@ -31,12 +33,10 @@ const realV = (v) => v != null && String(v).trim() !== '' && !/^n\/?a$/i.test(St
 // v0.49.0: the board (and circuit) that feeds board b, from its 'Supplied from' text ('DB1 circuit 8').
 export function feedOf(cert, b) {
   const boards = (cert && cert.boards) || []; const bi = boards.indexOf(b); if (bi <= 0) return null;
-  const from = String((b && b.suppliedFrom) || '').trim(); if (!from) return null;
-  const m = from.match(/^(.*?)[\s,\-\u2013\u00b7/]*(?:(?:way|circuit|cct|ckt|c)\s*(?:no\.?)?\s*#?\s*(\d+[a-z]?))?\s*$/i);
-  const ref = (m ? m[1] : from).trim().toLowerCase(); const cn = m && m[2] ? m[2].toLowerCase() : '';
-  const fb = boards.find((x, i) => i !== bi && String(x.ref || '').trim().toLowerCase() === ref); if (!fb) return null;
-  const fc = cn ? (fb.circuits || []).find((c) => String(c.num || '').trim().toLowerCase() === cn) : null;
-  return { board: fb, circuit: fc || null, circuitNum: cn ? m[2] : '' };
+  // v0.50.0: one reader (feed.js) for the checks, the diagram and the board page ("DB1/9", "DB 1 - 9", "Circuit 9 of DB1"…)
+  const f = parseFeed(b && b.suppliedFrom, boards, bi); if (!f) return null;
+  const fb = boards[f.bi]; const fc = feedCircuit(boards, f);
+  return { board: fb, circuit: fc || null, circuitNum: f.circuitNum };
 }
 // v0.49.0: an RCD upstream of board b (optional b.upRcd = true, "Protected by an RCD upstream"): the feeding
 // circuit's RCD (an RCBO counts as 30 mA unless its boxes say otherwise), else the feeding board's own RCD.
@@ -53,7 +53,7 @@ export function upstreamRcd(cert, b) {
 export function boardCtx(cert, b) {
   b = b || {}; const tt = boardIsTT(b); const sup = (cert && cert.supply) || {};
   const ra = tt ? b.ra : (String(sup.earthing || '').toUpperCase() === 'TT' ? ((cert && cert.parts) || {}).elRa : '');
-  return { earthing: boardEarthing(cert, b), zdb: b.zdb, ra, boardTT: tt, boardRcd: realV(b.rcdIdn) ? { rcdBs: b.rcdBs, rcdType: b.rcdType, rcdIdn: b.rcdIdn, rcdRating: b.rcdRating } : null, upRcd: upstreamRcd(cert, b) };
+  return { earthing: boardEarthing(cert, b), zdb: b.zdb, ra, boardTT: tt, boardRcd: realV(b.rcdIdn) ? { rcdBs: b.rcdBs, rcdType: b.rcdType, rcdIdn: b.rcdIdn, rcdRating: b.rcdRating } : null, upRcd: upstreamRcd(cert, b), split: (String(b.rcdWays ?? '').trim() || hasRcd2(b)) ? { rcdWays: b.rcdWays, rcd2: b.rcd2, rcdIdn: b.rcdIdn } : null };
 }
 // v0.49.0: the RCD that protects circuit c on TT: its own boxes, else (MCB / fuse lines) the board's RCD, else one upstream.
 export function ttRcdFor(c, ctx = {}) {
@@ -61,7 +61,10 @@ export function ttRcdFor(c, ctx = {}) {
   if (num(c.rcdIdn) > 0) return { idn: num(c.rcdIdn), where: '' };
   if (dev.rcd) return { idn: 30, where: '' };
   if (/^n\/?a$/i.test(String(c.rcdIdn ?? '').trim())) return null; // 'N/A' typed: no RCD on this line
-  if (ctx.boardRcd && num(ctx.boardRcd.rcdIdn) > 0) return { idn: num(ctx.boardRcd.rcdIdn), where: 'the board\u2019s RCD' };
+  // v0.50.0: split-load / dual RCD: only the RCD that covers this way
+  const w = ctx.split ? rcdForWay(ctx.split, c.num).which : 'board';
+  if (w === '2' && num(ctx.split.rcd2.rcdIdn) > 0) return { idn: num(ctx.split.rcd2.rcdIdn), where: 'RCD 2' };
+  if (w !== 'none' && w !== '2' && ctx.boardRcd && num(ctx.boardRcd.rcdIdn) > 0) return { idn: num(ctx.boardRcd.rcdIdn), where: w === '1' ? 'RCD 1' : 'the board\u2019s RCD' };
   if (ctx.upRcd && num(ctx.upRcd.rcdIdn) > 0) return { idn: num(ctx.upRcd.rcdIdn), where: 'RCD upstream in ' + ctx.upRcd.where };
   return null;
 }
@@ -131,16 +134,27 @@ export function cableCheck(c) {
     ? `Cable tabulated rating It ${it} A (${src}). Iz ${iz} A after ${bits.join(' × ')}.`
     : `Cable rating ${it} A (${src}), before correction factors.`;
   const cmp = used ? iz : it;
-  const ringNeed = used ? 20 : 20; // 433.1.204: Iz ≥ 20 A
-  if (In == null) return { level: null, msg: base, it, iz: used ? iz : it, ca, cg, ci, factor };
-  if (In <= cmp + 1e-9) return { level: null, msg: base, it, iz: used ? iz : it, ca, cg, ci, factor };
-  const ringOk = live >= 2.5 && (isRingLike(c) || (c.ring !== false && live === 2.5 && [30, 32].includes(In) && SOCKETY.test(c.desc || ''))) && [30, 32].includes(In) && cmp >= ringNeed - 1e-9;
-  if (ringOk) return { level: null, msg: `${base} ${In} A on ${live} mm² is OK as a ring final (Regulation 433.1.204, Iz ≥ 20 A); a ${live} mm² radial can\u2019t be on ${In} A.`, it, iz: used ? iz : it, ca, cg, ci, factor };
+  const ringNeed = 20; // 433.1.204: Iz ≥ 20 A
+  // v0.50.0: a BS 3036 rewirable fuse needs In ≤ 0.725 × Iz (Reg 433.1.202), the same Cf as the Check / Size calculators.
+  // Where 433.1.204 applies (a 30/32 A ring on 2.5 mm² or more) the ring rule (Iz ≥ 20 A) is used instead, as in calc.js.
+  const fuse3036 = (deviceById(c.device) || deviceFromBs(c.bs) || {}).id === 'bs3036';
+  const cf = fuse3036 ? CF_BS3036 : 1;
+  const izCf = Math.round(cmp * cf * 100) / 100;
+  const cfBit = fuse3036 ? ` A BS 3036 rewirable fuse needs In \u2264 0.725 \u00d7 Iz (Reg 433.1.202): 0.725 \u00d7 ${cmp} A = ${izCf} A.` : '';
+  const out = (level, msg, reg) => ({ level, msg, ...(reg ? { reg } : {}), it, iz: used ? iz : it, ca, cg, ci, factor, cf });
+  if (In == null) return out(null, base);
+  const ringShape = live >= 2.5 && [30, 32].includes(In) && (isRingLike(c) || (c.ring !== false && live === 2.5 && SOCKETY.test(c.desc || '')));
+  if (!ringShape && In <= izCf + 1e-9) return out(null, base + (fuse3036 ? cfBit + ` ${In} A is OK.` : ''));
+  if (ringShape) {
+    if (cmp >= ringNeed - 1e-9) return out(null, `${base} ${In} A on ${live} mm² is OK as a ring final (Regulation 433.1.204, Iz ≥ 20 A); a ${live} mm² radial can\u2019t be on ${In} A.`);
+    return out('red', `As a ring final on ${In} A the cable needs Iz \u2265 20 A (Reg 433.1.204), and ${live} mm² here is only ${cmp} A (${src}${used ? ', after ' + bits.join(' \u00d7 ') : ', before correction factors'}). Check the installation method, the cable size or the device.`, '433.1.204');
+  }
   // v0.49.0: In > Iz breaks Reg 433.1.1 (Ib \u2264 In \u2264 Iz): a fault (red), not just worth a look.
+  if (fuse3036) return out('red', `The fuse (${In} A) is too big for the cable.${cfBit} ${In} A is more than ${izCf} A: check the cable size or the fuse.`, '433.1.202');
   const why = used
     ? `The device (${In} A) is bigger than the cable\u2019s Iz (${iz} A after ${bits.join(' × ')}). Overload protection needs In \u2264 Iz (Reg 433.1.1): check the cable size, the device, or the correction factors.`
     : `The device (${In} A) is bigger than the cable\u2019s rating (${it} A, ${src}, before correction factors). Overload protection needs In \u2264 Iz (Reg 433.1.1): check the cable size or the device.`;
-  return { level: 'red', msg: why, reg: '433.1.1', it, iz: used ? iz : it, ca, cg, ci, factor };
+  return out('red', why, '433.1.1');
 }
 // Cable picker on the circuit page → live and CPC columns.
 export function applyCable(c) {
@@ -176,7 +190,7 @@ export function checkCircuit(c, ctx = {}) {
   if (c.irV && ![250, 500, 1000].includes(testV)) put('irV', 'amber', 'Table 64 test voltages are 250 V, 500 V or 1000 V.');
 
   // --- Cable vs device rating
-  const cab = cableCheck(c); if (cab && cab.level) put('live', cab.level, cab.msg);
+  const cab = cableCheck(c); if (cab && cab.level) { put('live', cab.level, cab.msg); if (cab.reg && flags.live && flags.live.msg === cab.msg) flags.live.reg = cab.reg; }
 
   // --- Polarity
   if (/^(x|✗|✘|fail|no)$/i.test(String(c.pol || '').trim())) put('pol', 'red', 'Incorrect polarity. An \u2018X\u2019 can\u2019t go on a schedule issued with an EIC.');
@@ -191,11 +205,12 @@ export function checkCircuit(c, ctx = {}) {
   }
   // v0.47.0: TT: every circuit needs an RCD, and RA × IΔn ≤ 50 V (Reg 411.5.3)
   const dev = deviceById(c.device) || {}; const ttr = ctx.earthing === 'TT' ? ttRcdFor(c, ctx) : null; const idnN = ttr ? ttr.idn : (num(c.rcdIdn) || (dev.rcd ? 30 : null));
-  if (ctx.earthing === 'TT' && c.device && !idnN) put('rcdIdn', 'amber', 'TT earthing: this circuit needs RCD protection (Reg 411.5.2). Fill in its RCD or the board\u2019s RCD, or, if an RCD further up protects this board, tick \u201cRCD upstream\u201d in Board details.');
+  // v0.50.0: not twice for one cause: the red Zs line already says 'on TT the circuit needs an RCD'
+  if (ctx.earthing === 'TT' && c.device && !idnN && !(flags.zs && flags.zs.level === 'red' && /On TT the circuit needs an RCD/.test(flags.zs.msg))) put('rcdIdn', 'amber', 'TT earthing: this circuit needs RCD protection (Reg 411.5.2). Fill in its RCD or the board\u2019s RCD, or, if an RCD further up protects this board, tick \u201cRCD upstream\u201d in Board details.');
   const raN = num(ctx.ra);
   if (ctx.earthing === 'TT' && raN != null && idnN) { const v = raN * idnN / 1000; if (v > 50) put('rcdIdn', 'red', `RA ${raN} \u03a9 \u00d7 I\u0394n ${idnN} mA = ${+v.toFixed(1)} V, over 50 V (Reg 411.5.3). Lower RA or use a more sensitive RCD.`); }
   // v0.47.0: on the board's RCD but its S (time delay) doesn't match the board's
-  const br = ctx.boardRcd;
+  const br = ctx.split && ['2', 'none'].includes(rcdForWay(ctx.split, c.num).which) ? null : ctx.boardRcd; // v0.50.0: not on the board's RCD
   if (br && !dev.rcd && !c.noDevice && String(c.rcdIdn ?? '').trim() === String(br.rcdIdn ?? '').trim() && (!realV(c.rcdRating) || !realV(br.rcdRating) || String(c.rcdRating).trim() === String(br.rcdRating).trim())) {
     const bs = isSType(br.rcdType), cs = !!c.rcdS || isSType(c.rcdType);
     if (bs !== cs) put('rcdType', 'amber', bs ? 'The board\u2019s RCD is S-type (time-delayed), but this circuit\u2019s RCD isn\u2019t marked S. Is it the same RCD?' : 'This circuit\u2019s RCD is marked S-type, but the board\u2019s RCD isn\u2019t. Is it the same RCD?');

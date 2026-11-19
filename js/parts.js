@@ -8,6 +8,7 @@ import { mainAt, hasMainSwitch, mainSwitchParts } from './boardmain.js';
 import { msIsRcdAt, get } from './certmodel.js';
 import { showRcdType } from './rcdtype.js';
 import { settleBoardRcds } from './boardrcd.js';
+import { hasRcd2 } from './rcdways.js';
 
 const real = (v) => v != null && String(v).trim() !== '' && !/^n\/?a$/i.test(String(v).trim());
 const hasDevice = (c) => !c.noDevice && (real(c.device) || real(c.bs)) && real(c.rating);
@@ -63,11 +64,15 @@ export function partsForBoard(b, cert, first = false, bi = first ? 0 : -1) {
   if (msItem) msItem.rcd = true;
   const boardRcd = !mainRcd && real(b.rcdIdn) ? { name: rcdName({ ...b, rcdType: showRcdType(b.rcdType) }), qty: 1, circuits: [], rcd: true, key: b, no: '' } : null;
   if (boardRcd) rcds.push(boardRcd);
+  // v0.50.0: a second RCD set up on the board (b.rcd2) is a part even before any circuit says 'RCD 2'
+  const rcd2 = !mainRcd && hasRcd2(b) ? { name: rcdName({ ...b.rcd2, rcdType: showRcdType(b.rcd2.rcdType) }), qty: 1, circuits: [], rcd: true, key: b.rcd2, no: '2' } : null;
+  if (rcd2) { rcds.push(rcd2); if (boardRcd) boardRcd.no = '1'; }
   for (const c of fitted) {
     const d = deviceById(c.device); if (d && (d.rcd || d.adj)) continue;
     if (!real(c.rcdIdn)) continue;
     const no = rcdNoOf(c); const num = String(c.num);
     if (msItem && sameRcd(c, mainRcd) && (!no || no === '1')) { if (!msItem.circuits.includes(num)) msItem.circuits.push(num); continue; }
+    if (rcd2 && no === '2' && sameRcd(c, b.rcd2)) { if (!rcd2.circuits.includes(num)) rcd2.circuits.push(num); continue; }
     if (boardRcd && sameRcd(c, b) && (!no || no === '1')) { if (!boardRcd.circuits.includes(num)) boardRcd.circuits.push(num); continue; }
     let it = rcds.find((x) => x !== boardRcd && x.no === no && sameRcd(x.key, c));
     if (!it) rcds.push((it = { name: rcdName({ ...c, rcdType: showRcdType(c.rcdType) }), qty: 1, circuits: [], rcd: true, key: c, no }));

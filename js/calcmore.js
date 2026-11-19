@@ -100,7 +100,7 @@ route(/^\/calc\/fault(?:\/([^/]+)\/(\d+))?$/, async (certId, bi) => {
         h('li', {}, `Source impedance at the origin = 230 V ÷ ${dec(v.pfc)} kA = ${r.zsrc} Ω.`),
         h('li', {}, `Sub-main R1+Rn = ${r.r1rn} Ω${r.r1r2 != null ? `, R1+R2 = ${r.r1r2} Ω` : ''} (${v.length || 0} m of ${v.size} mm², cold).`),
         r.steps.slice(1).map((t) => h('li', {}, t)))),
-      detailCard('fl-more', 'More info', [h('p', { class: 'note' }, 'PSCC is the current if line and neutral (or two lines) touch; PEFC is the current if line touches earth. The fault level is the larger of the two, and every device at the sub-board must be able to break it (its kA rating). Write it as Ipf for that board on the schedule of test results. The cable is taken cold (20 °C) because that gives the highest current; reactance is ignored, which is fine up to about 35 mm².'),
+      detailCard('fl-more', 'More info', [h('p', { class: 'note' }, 'PSCC is the current if line and neutral (or two lines) touch; PEFC is the current if line touches earth. The PFC (prospective fault current) is the larger of the two, and every device at the sub-board must be able to break it (its kA rating). In the app it\u2019s the board\u2019s PFC box; the IET forms call it Ipf. The cable is taken cold (20 °C) because that gives the highest current; reactance is ignored, which is fine up to about 35 mm².'),
         r.big ? typical('Above 35 mm² cable reactance matters, so this estimate is on the high side.') : null,
         h('p', { class: 'note' }, 'An estimate: measure the PFC at the sub-board when you test.')])] : null);
   };

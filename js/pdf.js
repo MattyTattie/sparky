@@ -1,3 +1,4 @@
+import { hasRcd2, rcdCoverText, rcdCoverFull } from './rcdways.js';
 import { pdfFlagsOn } from './certmodel.js';
 import { showRcdType } from './rcdtype.js';
 import { drawDiagramPdf, diagramInPdf, sourcesText } from './wiring.js';
@@ -264,6 +265,9 @@ function boardHeaderDetails(k, cert, b, certNo) {
   checks(k, x, [['T1', b.spdT1], ['T2', b.spdT2], ['T3†', b.spdT3], ['N/A', b.spdNA]], { label: 'SPD Details: Type(s)*:' });
   const rv = bi >= 0 ? boardRcdView(cert, bi) : b; // v0.47.0: an RCD main switch's details fill the board RCD row
   row(k, x, w, [['RCD:  BS (EN)', rv.rcdBs, 0.3], ['Type', showRcdType(rv.rcdType), 0.15], ['Rating', rv.rcdRating, 0.18, { unit: 'A' }], ['Rated residual operating current (IΔn):', rv.rcdIdn, 0.37, { unit: 'mA' }]]);
+  // v0.50.0: a split-load / dual-RCD board: RCD 2's details and which ways each RCD covers (only when set up)
+  if (hasRcd2(b)) { const r2 = b.rcd2; row(k, x, w, [['RCD 2:  BS (EN)', r2.rcdBs, 0.3], ['Type', showRcdType(r2.rcdType), 0.15], ['Rating', r2.rcdRating, 0.18, { unit: 'A' }], ['Rated residual operating current (IΔn):', r2.rcdIdn, 0.37, { unit: 'mA' }]]); }
+  if (rcdCoverText(b)) row(k, x, w, [['RCD ways:', rcdCoverFull(b, isSpare), 1]]);
   // v0.47.0: a board on its own TT earth electrode, and generation feeding the board
   if (boardIsTT(b)) { const up = upstreamRcd(cert, b); row(k, x, w, [['Earthing (this board):', 'TT', 0.25], ['RA:', b.ra, 0.17, { unit: '\u03a9' }], ['Earth electrode:', [[b.elType, b.elLocation].map((v) => String(v ?? '').trim()).filter(Boolean).join(', '), up ? `RCD upstream: ${up.rcdIdn} mA in ${up.where}` : ''].filter(Boolean).join(' \u00b7 '), 0.58]]); }
   if (boardFedBySource(b)) row(k, x, w, [['Fed by:', (sourcesText(cert) || 'Battery / PV / generator') + ' (power can flow both ways; see other sources of supply)', 1]]);

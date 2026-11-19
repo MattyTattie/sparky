@@ -189,6 +189,16 @@ export const MCCB_FRAMES = [16, 20, 25, 32, 40, 50, 63, 80, 100, 125, 160, 200, 
 export const maxZsForTrip = (im, uo = UO) => (Number(im) > 0 ? Math.round(((uo * CMIN) / Number(im)) * 100) / 100 : null);
 
 // v0.20: plain device name for the answer ('13 A plug fuse (BS 1362)', not 'Type plug').
+// v0.50.0: the short breaker / fuse name for cards and the diagram: 'B32' for MCBs and RCBOs (type letter + rating),
+// '20 A' for fuses (BS 3036 'rewirable', BS 88 'gG', BS 1362 'plug' are table keys, not a type to print), 'Type 2 32' for BS 3871.
+export const devShortLabel = (d) => (d && d.label ? d.label.split(' (')[0] : '');
+export function ocpdShort(c, withA = false) {
+  const t = String((c && c.type) ?? '').trim(), r0 = String((c && c.rating) ?? '').trim(); const r = /^n\/?a$/i.test(r0) ? '' : r0; const a = r && withA ? ' A' : '';
+  if (!r) return ['B', 'C', 'D'].includes(t) ? t : '';
+  if (['B', 'C', 'D'].includes(t)) return t + r + a;
+  if (/^[123]$/.test(t)) return 'Type ' + t + ' ' + r + (withA ? ' A' : '');
+  return r + (withA || /^\d/.test(r) ? ' A' : '');
+}
 export function devName(d, type, rating, three = false, imag = null) {
   if (!d) return `${rating} A`;
   const tp = three ? ' triple-pole' : '';

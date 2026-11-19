@@ -58,6 +58,8 @@ function jobPane() {
   })().catch(() => {});
   return box;
 }
+// v0.50.0: an optional bar at the top of every page (Check certificate's "Fix next" walk-through uses it)
+let topBar = null; export const setTopBar = (fn) => { topBar = fn; };
 export function page(title, content, { back = null, sub = '', actions = [], wide = false } = {}) {
   const app = document.getElementById('app');
   const tab = navFor(location.hash);
@@ -68,7 +70,8 @@ export function page(title, content, { back = null, sub = '', actions = [], wide
   const listSpot = desk && !wide && /^#\/(job|cert)\//.test(location.hash);
   const listPane = listSpot && paneOpen(); // v0.31: Hide / Show jobs, remembered on this computer
   const calcPage = /^#\/calc\/./.test(location.hash);
-  const main = h('main', { class: (wide ? 'wide ' : '') + (tab ? 'hasnav' : '') + (desk && calcPage ? ' calcpage' : '') + (listPane ? ' withlist' : '') }, content);
+  let tb = null; try { tb = topBar ? topBar() : null; } catch { tb = null; }
+  const main = h('main', { class: (wide ? 'wide ' : '') + (tab ? 'hasnav' : '') + (desk && calcPage ? ' calcpage' : '') + (listPane ? ' withlist' : '') }, tb, content);
   document.body.classList.toggle('desk', desk); document.body.classList.toggle('withlist', listPane); document.body.classList.toggle('circedit', /\/b\/\d+\/c\/\d+/.test(location.hash));
   fill(app, 
     h('header', { class: 'top' },
@@ -112,24 +115,44 @@ export function decorate(root) {
 let decoT = 0;
 new MutationObserver(() => { if (!decoT) decoT = requestAnimationFrame(() => { decoT = 0; decorate(document.body); }); }).observe(document.body, { childList: true, subtree: true });
 
+// v0.50.0: main.js hands over a loader for the screens that aren't needed on the first page (jobs list).
+let lazyScreens = null; let screensP = null;
+export const setLazyScreens = (fn) => { lazyScreens = fn; };
+export function loadScreens() { if (!lazyScreens) return Promise.resolve(); if (!screensP) screensP = Promise.resolve().then(lazyScreens).then(() => { lazyScreens = null; }, (e) => { screensP = null; throw e; }); return screensP; }
 export async function render() {
   await flush();
   const hash = location.hash.slice(1) || '/';
   // v0.5: grey placeholder rows if a page takes a moment (big jobs, PDFs).
   const skel = setTimeout(() => { const m = document.querySelector('#app main'); if (m) fill(m, skeleton(4)); }, 160);
   try {
-    for (const [re, fn] of routes) { const m = re.exec(hash); if (m) { try { await fn(...m.slice(1)); } catch (e) { console.error(e); page('Something went wrong', h('div', { class: 'notice red' }, String(e.message || e)), { back: '#/' }); } return; } }
+    // v0.50.0: screens load on demand. A link to one that isn't loaded yet loads them all, then tries again.
+    for (let pass = 0; pass < 2; pass++) {
+      for (const [re, fn] of routes) { const m = re.exec(hash); if (m) { try { await fn(...m.slice(1)); } catch (e) { console.error(e); page('Something went wrong', h('div', { class: 'notice red' }, String(e.message || e)), { back: '#/' }); } return; } }
+      if (!lazyScreens) break;
+      try { await loadScreens(); } catch (e) { console.error(e); page('Couldn\u2019t open this screen', h('div', { class: 'notice red' }, 'This part of the app hasn\u2019t downloaded yet. Connect to the internet once, then try again.'), { back: '#/' }); return; }
+    }
     notFound('page'); // v0.49.0: a bad or old link says so (it used to land on Jobs without a word)
   } finally { clearTimeout(skel); }
 }
 window.addEventListener('hashchange', render);
 // v0.49.0: a proper "not found" page for a bad or old link, a deleted job or certificate.
-export function notFound(what = 'page') {
+export function notFound(what = 'page', { back = '#/', backLabel = 'Back to jobs', inWhat = '', title = '', note = '' } = {}) {
   const pageLink = what === 'page';
+  // v0.50.0: a board or circuit link that's out of range says so (and goes back to the certificate), rather than quietly showing another page
   page('Not found', h('div', { class: 'card notfound' },
-    h('h2', {}, pageLink ? 'That page doesn\u2019t exist' : `That ${what} isn\u2019t on this device`),
-    h('p', { class: 'note' }, pageLink ? 'The link may be from an older version of the app, or mistyped.' : `It may have been deleted, or it\u2019s on another device that hasn\u2019t synced yet.`),
-    h('div', { class: 'btns' }, h('a', { class: 'btn primary', href: '#/' }, 'Back to jobs'))), { back: '#/' });
+    h('h2', {}, title || (pageLink ? 'That page doesn\u2019t exist' : inWhat ? `That ${what} isn\u2019t on ${inWhat}` : `That ${what} isn\u2019t on this device`)),
+    h('p', { class: 'note' }, note || (pageLink ? 'The link may be from an older version of the app, or mistyped.' : inWhat ? `It may have been removed, or the link is from before the ${what}s were changed.` : `It may have been deleted, or it\u2019s on another device that hasn\u2019t synced yet.`)),
+    h('div', { class: 'btns' }, h('a', { class: 'btn primary', href: back }, backLabel))), { back });
+}
+
+// v0.50.0: board scan and the PDF viewer download in the background after install: say whether they're ready offline
+function offlineLine() {
+  const el = h('p', { class: 'note offlinepacks' });
+  if (!('caches' in window)) return el;
+  caches.open('sparky-vendor-1').then(async (vc) => { const ks = (await vc.keys()).map((r) => new URL(r.url).pathname);
+    const has = (re) => ks.some((k) => re.test(k)); const scan = has(/eng\.traineddata/) && has(/tesseract-core/) && has(/worker\.min/); const view = has(/pdf\.worker\.min/);
+    el.textContent = scan && view ? 'Works offline: everything, including board scan and View PDF \u2713' : `${view ? 'Board scan' : 'Board scan and View PDF'} ${navigator.onLine === false ? 'will download next time you\u2019re online' : (view ? 'is' : 'are') + ' downloading in the background'} (needed once, so ${view ? 'it works' : 'they work'} with no signal).`; }).catch(() => {});
+  return el;
 }
 
 // ---------- Home: jobs ----------
@@ -567,6 +590,7 @@ route(/^\/settings$/, async () => {
   drawDrive();
   page('Settings', [
     h('p', { class: 'note setver' }, `Version ${APP_VERSION}`),
+    offlineLine(),
     h('div', { class: 'card' }, h('h2', {}, 'You'), h('p', { class: 'note' }, 'Shown on your certificates. Kept on this device (and in your Drive backup), never in the app\u2019s code.'),
       txt('name', 'Your name'), txt('business', 'Business name'), txt('position', 'Position', 'text', 'e.g. Proprietor'),
       txt('address1', 'Address line 1'), txt('address2', 'Address line 2'), h('div', { class: 'grid2' }, txt('town', 'Town'), txt('postcode', 'Postcode')),

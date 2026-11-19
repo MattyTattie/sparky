@@ -9,7 +9,8 @@
 import { screenSections, sectionDone, missingFields, eicrOverall } from './certmodel.js';
 import { checkCircuit, isSpare, boardCtx } from './checks.js';
 import { settleBoardRcds } from './boardrcd.js';
-import { outOfWayOrder } from './templates.js';
+import { outOfWayOrder, noWayNumber } from './templates.js';
+import { obsSuggestion, hasObsFor } from './obsfrom.js';
 
 const MAX_LIST = 4;
 const listOf = (a) => (a.length > MAX_LIST ? a.slice(0, MAX_LIST).join(', ') + ` and ${a.length - MAX_LIST} more` : a.join(', '));
@@ -19,7 +20,7 @@ const secHref = (id, s) => (s.special === 'boards' ? `#/cert/${id}/boards` : `#/
 // "DB1 circuit 4: no Zs" / "DB1 circuits 2, 4: no Zs". zsMissing gives the circuit numbers and their indexes
 // (for tap-to-jump links to each circuit).
 export function zsMissing(b) {
-  const out = []; (b && b.circuits || []).forEach((c, ci) => { if (c && !isSpare(c) && !String(c.zs ?? '').trim()) out.push({ num: c.num || String(ci + 1), ci }); });
+  const out = []; (b && b.circuits || []).forEach((c, ci) => { if (c && !isSpare(c) && !String(c.zs ?? '').trim()) out.push({ num: String(c.num ?? '').trim() || '(row ' + (ci + 1) + ')', ci }); });
   return out;
 }
 export const missingZsText = (ref, nums) => `${ref || 'Board'} circuit${nums.length === 1 ? '' : 's'} ${listOf(nums)}: no Zs`;
@@ -30,11 +31,19 @@ export function checkCert(cert) {
   const fix = [], missing = [], check = [], look = [];
   // 1. Readings outside the limits (red flags): Zs over max, IR below the minimum, RCD too slow, polarity, test button
   // v0.49.0: amber flags go in "Worth a look" (they don't stop the PDF; reds are "Needs fixing")
-  const flagItems = (c, ctx, where, href) => { const r = checkCircuit(c, ctx); for (const f of Object.values(r.flags)) { if (f.level === 'red') fix.push({ text: `${where}: ${f.msg}`, href }); else if (f.level === 'amber') look.push({ text: `${where}: ${f.msg}`, href }); } };
+  // v0.50.0: each item says which board it's on (bi, for the board filter); on an EICR a red reading carries a
+  // suggested observation (obs) to record it, and whether one is already in (obsDone)
+  const flagItems = (c, ctx, where, href, bi = -1, b = null) => { const r = checkCircuit(c, ctx); for (const [field, f] of Object.entries(r.flags)) {
+    if (f.level === 'red') { const it = { text: `${where}: ${f.msg}`, href, bi };
+      if (cert.type === 'EICR' && b) { const o = obsSuggestion({ cert, b, bi, c, field, flag: f }); if (o) { it.obs = o; it.obsDone = hasObsFor(cert, o.src); } }
+      fix.push(it); }
+    else if (f.level === 'amber') look.push({ text: `${where}: ${f.msg}`, href, bi }); } };
   if (cert.type === 'MW') { const M = cert.mw || {}; if (M.circuit) flagItems(M.circuit, { earthing: M.earthing, zdb: M.zdb }, 'Circuit ' + (M.circuit.num || ''), `#/cert/${id}/mwc`); }
-  else (cert.boards || []).forEach((b, bi) => (b.circuits || []).forEach((c, ci) => flagItems(c, boardCtx(cert, b), `${b.ref || 'Board'} circuit ${c.num || ci + 1}`, `#/cert/${id}/b/${bi}/c/${ci}`)));
+  else (cert.boards || []).forEach((b, bi) => (b.circuits || []).forEach((c, ci) => flagItems(c, boardCtx(cert, b), `${b.ref || 'Board'} circuit ${String(c.num ?? '').trim() || '(no way number, row ' + (ci + 1) + ')'}`, `#/cert/${id}/b/${bi}/c/${ci}`, bi, b)));
   // v0.49.0: circuits out of way-number order (the PDF prints them as entered)
-  (cert.boards || []).forEach((b, bi) => { const o = outOfWayOrder(b.circuits); if (o) look.push({ text: `${b.ref || 'Board'}: circuits aren\u2019t in way order (${o.before} comes before ${o.after}). Sort them on the board page.`, href: `#/cert/${id}/b/${bi}` }); });
+  (cert.boards || []).forEach((b, bi) => { const o = outOfWayOrder(b.circuits); if (o) look.push({ text: `${b.ref || 'Board'}: circuits aren\u2019t in way order (${o.before} comes before ${o.after}). Sort them on the board page.`, href: `#/cert/${id}/b/${bi}`, bi }); });
+  // v0.50.0: a circuit with no way number (it can't be sorted, matched to a sub-main or printed in order)
+  if (cert.type !== 'MW') (cert.boards || []).forEach((b, bi) => { const nn = noWayNumber(b.circuits); if (nn.length) missing.push({ text: `${b.ref || 'Board'}: ${nn.length === 1 ? 'a circuit has' : nn.length + ' circuits have'} no way number${nn[0].desc ? ' (' + nn.map((x) => x.desc || 'no description').slice(0, 3).join(', ') + (nn.length > 3 ? '\u2026' : '') + ')' : ''}.`, href: `#/cert/${id}/b/${bi}/c/${nn[0].ci}`, bi }); });
   // 2. EICR: the overall assessment against the codes
   if (cert.type === 'EICR') {
     const codes = (cert.observations || []).map((o) => o && o.code);
@@ -57,7 +66,7 @@ export function checkCert(cert) {
       const bs = cert.boards || [];
       if (!bs.some((b) => (b.circuits || []).length)) { missing.push({ text: 'Circuits and test results: no circuits yet.', href }); continue; }
       bs.forEach((b, bi) => { const nz = zsMissing(b);
-        if (nz.length) missing.push({ text: missingZsText(b.ref, nz.map((x) => x.num)) + '.', href: `#/cert/${id}/b/${bi}/c/${nz[0].ci}` }); }); // v0.49.0: straight to the first circuit
+        if (nz.length) missing.push({ text: missingZsText(b.ref, nz.map((x) => x.num)) + '.', href: `#/cert/${id}/b/${bi}/c/${nz[0].ci}`, bi }); }); // v0.49.0: straight to the first circuit
       continue;
     }
     if (s.special === 'inspections') { const v = Object.values(cert.inspections || {}); const left = v.filter((x) => !x).length; missing.push({ text: `${s.title}: ${v.length ? left + ' of ' + v.length + ' items not ticked' : 'not started'}.`, href }); continue; }
@@ -67,9 +76,10 @@ export function checkCert(cert) {
     missing.push({ text: m.length ? `${s.title}: ${listOf(m)}.` : `${s.title}: not finished.`, href });
   }
   const groups = [
-    { id: 'fix', title: 'Needs fixing', level: 'red', items: fix },
-    { id: 'missing', title: 'Still to fill in', level: 'amber', items: missing },
-    { id: 'check', title: 'Worth a look', level: 'info', items: [...check, ...look] },
+    // v0.50.0: an EICR records faults (as observations), it doesn't fix them
+    { id: 'fix', title: cert.type === 'EICR' ? 'Outside the limits (record as observations)' : 'Needs fixing', count: cert.type === 'EICR' ? 'outside the limits' : 'to fix', level: 'red', items: fix },
+    { id: 'missing', title: 'Still to fill in', count: 'to fill in', level: 'amber', items: missing },
+    { id: 'check', title: 'Worth a look', count: 'worth a look', level: 'info', items: [...check, ...look] },
   ].filter((g) => g.items.length);
   return { groups, count: fix.length + missing.length + check.length + look.length, fix: fix.length };
 }

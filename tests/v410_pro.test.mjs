@@ -25,7 +25,7 @@ test('2: sub-boards from Supplied from; blank or mismatched never guessed', () =
   c.boards[2].suppliedFrom = 'Origin'; assert.equal(feedInfo(c.boards, 2).state, 'origin');
   const L = layout(diagramModel(diagramEICPro()), { W: 560, font: 11 }); const t = texts(L);
   assert.ok(t.includes('DB2 \u00b7 Garage (outbuilding)'));
-  assert.ok(t.includes('Feeds DB2 (Garage) (see DB2)')); assert.ok(t.includes('by cable C13'));
+  assert.ok(t.includes('Feeds DB2 (Garage) (see DB2)')); assert.ok(t.includes('by cable C11')); // v0.50.0: the sub-main from DB1 circuit 11 is cable C11
   assert.ok(/not recorded, so the link is/.test(t));
   const loft = L.blocks.filter((b) => b.kind === 'board')[2];
   assert.ok(loft.shapes.some((z) => z.t === 'line' && z.dash && z.color.join() === '196,120,0'));
@@ -55,7 +55,10 @@ test('4: on screen each circuit is a tappable group, not a link', () => {
 });
 test('5: cable labels C1… and a cable table in the PDF layout only', () => {
   const L = layout(diagramModel(diagramEICPro()), { W: 560, font: 11, cableTable: true });
-  assert.match(L.cables[0].label, /^C1\b/); assert.ok(L.cables.every((c, i) => c.label === 'C' + (i + 1) || c.label.startsWith('C' + (i + 1) + ' ')), L.cables.map((c) => c.label).join(','));
+  // v0.50.0: numbered by way (C5 is circuit 5), extra runs C2.2, a second board's cables DB2 C1; all unique
+  assert.equal(L.cables[0].label, 'C1'); const labs = L.cables.map((c) => c.label); assert.equal(new Set(labs).size, labs.length, labs.join(','));
+  for (const c of L.cables) { const m = /^(?:(DB\d) )?C(\d+)(?:\.\d+)?$/.exec(c.label); assert.ok(m, c.label); assert.ok(c.from.includes('circuit ' + m[2]), c.label + ' ' + c.from); assert.ok(m[1] ? c.from.startsWith(m[1]) : !/^DB[23]/.test(c.from), c.label + ' ' + c.from); }
+  assert.ok(labs.includes('C2.2') && labs.includes('DB2 C1'));
   const sub = L.cables.find((c) => c.from === 'DB1 circuit 11'); assert.ok(sub.to.includes('DB2 (Garage)'));
   assert.ok(!L.cables.some((c) => c.from === 'DB1 circuit 11' && c !== sub), 'the sub-main is one cable, not two');
   assert.ok(L.cables.some((c) => c.from === 'JB, circuit 2' && c.to === 'switch, Kitchen'));

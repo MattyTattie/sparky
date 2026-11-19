@@ -241,7 +241,8 @@ export function spareLine(c, deviceLabel = '') {
   if (c.noDevice) return 'Spare way \u00b7 no device fitted';
   const r = String(c.rating ?? '').trim();
   if (!r || isNA(r)) return 'Spare way';
-  return 'Spare way \u00b7 ' + `${c.type || ''}${r} A${deviceLabel ? ' ' + deviceLabel : ''}`;
+  const t = ['B', 'C', 'D'].includes(String(c.type ?? '').trim()) ? String(c.type).trim() : ''; // v0.50.0: no 'rewirable20' / 'gG32'
+  return 'Spare way \u00b7 ' + `${t}${r} A${deviceLabel ? ' ' + deviceLabel : ''}`;
 }
 // v0.31: "Copy to next way": the circuit details (device, cable, method...), not
 // the number, description or any test result. Fills the next way, or makes one.
@@ -312,10 +313,13 @@ export function evMissing(c, earthing) {
 const wayKey = (n) => { const m = /^\s*(\d+)\s*([a-z]*)/i.exec(String(n ?? '')); return m ? [Number(m[1]), m[2].toLowerCase()] : [Infinity, '']; };
 const cmpWay = (a, b) => { const x = wayKey(a.num), y = wayKey(b.num); return x[0] - y[0] || (x[1] < y[1] ? -1 : x[1] > y[1] ? 1 : 0); };
 export function outOfWayOrder(circuits) {
-  const cs = (circuits || []).filter(Boolean);
+  // v0.50.0: a circuit with no way number is its own message ("a circuit has no way number"), not "( comes before 3)"
+  const cs = (circuits || []).filter((c) => c && String(c.num ?? '').trim());
   for (let i = 1; i < cs.length; i++) if (cmpWay(cs[i - 1], cs[i]) > 0) return { before: cs[i - 1].num, after: cs[i].num };
   return null;
 }
+// v0.50.0: circuits (not spare-only rows with nothing in them) that have no way number: [{ ci, desc }]
+export const noWayNumber = (circuits) => (circuits || []).map((c, ci) => [c, ci]).filter(([c]) => c && !String(c.num ?? '').trim()).map(([c, ci]) => ({ ci, desc: String(c.desc ?? '').trim() }));
 export function sortByWay(circuits) {
   if (!Array.isArray(circuits)) return 0;
   const was = circuits.slice(); const sorted = circuits.map((c, i) => [c, i]).sort((p, q) => cmpWay(p[0] || {}, q[0] || {}) || p[1] - q[1]).map(([c]) => c);

@@ -12,6 +12,7 @@
 import { fillBoardRcd, releaseRcboRcd, boardHasRcd, syncBoardS } from './ocpdfill.js';
 import { mirrorMainRcd, liftBoardRcdToMain } from './boardmain.js';
 import { isSpareCircuit } from './templates.js';
+import { hasRcd2 } from './rcdways.js';
 import { deviceById, deviceFromBs } from './limits.js';
 
 const RCBO = { rcd: true }, NOT_RCBO = { rcd: false };
@@ -22,7 +23,7 @@ export function settleBoardRcds(cert) {
   cert.boards.forEach((b, bi) => {
     if (!b || !Array.isArray(b.circuits)) return;
     if (cert.parts || bi > 0) n += liftBoardRcdToMain(cert, bi).length + mirrorMainRcd(cert, bi).length;
-    if (boardHasRcd(b)) for (const c of b.circuits) {
+    if (boardHasRcd(b) || hasRcd2(b)) for (const c of b.circuits) {
       if (!c || c.noDevice || isSpareCircuit(c)) continue;
       const d = deviceById(c.device) || deviceFromBs(c.bs); if (!d || d.rcd) continue;
       // An MCB line still holding its old RCBO's own values: let the board's RCD replace them.

@@ -4,12 +4,13 @@
 // is left alone. Max Zs isn't a stored box: it's always worked out from the table.
 import { deviceById, deviceFromBs } from './limits.js';
 import { isSType, showRcdType, parseRcdType as _p, formatRcdType as _f } from './rcdtype.js';
+import { rcdForWay, hasRcd2 } from './rcdways.js';
 
 export const DEFAULT_KA = '6';
 // Standard breaking capacities (kA) where the product standard sets one.
 const KA = { mcb: null, rcbo: null, 'bs88-2': '50', 'bs88-3': '16', bs1362: '6' };
 const RCD4 = ['rcdBs', 'rcdType', 'rcdIdn', 'rcdRating'];
-export const FILL_KEYS = ['bs', 'type', 'bka', 'rcdBs', 'rcdType', 'rcdIdn', 'rcdRating'];
+export const FILL_KEYS = ['bs', 'type', 'bka', 'rcdBs', 'rcdType', 'rcdIdn', 'rcdRating', 'rcdNo'];
 
 // The standard values for this circuit's device (and RCD part for an RCBO).
 export function standardFor(c, { ka, board } = {}) {
@@ -22,7 +23,14 @@ export function standardFor(c, { ka, board } = {}) {
   else out.bka = KA[d.id] || ''; // no standard figure: take back only an earlier auto value
   const rating = String(c.rating ?? '').trim();
   if (d.rcd) { out.rcdBs = '61009'; out.rcdType = 'A'; out.rcdIdn = '30'; if (rating) out.rcdRating = rating; }
-  else { for (const k of RCD4) out[k] = board ? String(board[k] ?? '').trim() : ''; if (board) { out.rcdType = showRcdType(out.rcdType); out.rcdS = isSType(out.rcdType); } } // v0.35.2: not an RCBO: the board's main RCD (or N/A); no board: take back only what we filled
+  else {
+    // v0.50.0: split-load / dual-RCD boards: the RCD that covers this way (RCD 1, RCD 2 or none: 'N/A')
+    const w = board ? rcdForWay(board, c.num) : { which: 'board' };
+    const src = w.which === '2' ? board.rcd2 : board;
+    if (w.which === 'none') { for (const k of RCD4) out[k] = (boardHasRcd(board) || hasRcd2(board)) ? 'N/A' : ''; out.rcdS = false; }
+    else { for (const k of RCD4) out[k] = src ? String(src[k] ?? '').trim() : ''; if (board) { out.rcdType = showRcdType(out.rcdType); out.rcdS = isSType(out.rcdType); } } // v0.35.2: not an RCBO: the board's main RCD (or N/A); no board: take back only what we filled
+    if (board) out.rcdNo = w.which === '1' || w.which === '2' ? w.which : ''; // 'which RCD' follows the board (auto only)
+  }
   return out;
 }
 const blank = (v) => v == null || String(v).trim() === '';
@@ -76,6 +84,7 @@ export function syncBoardS(b) {
   if (!boardHasRcd(b)) return 0; const s = isSType(b.rcdType); let n = 0;
   for (const c of (b && b.circuits) || []) {
     const d = deviceById(c.device) || deviceFromBs(c.bs); if (c.noDevice || (d && d.rcd)) continue;
+    { const w = rcdForWay(b, c.num).which; if (w === '2' || w === 'none') continue; } // v0.50.0: not on the board's RCD
     if (realS(c.rcdIdn) !== realS(b.rcdIdn) || (realS(c.rcdRating) && realS(b.rcdRating) && realS(c.rcdRating) !== realS(b.rcdRating))) continue;
     if (realS(c.rcdBs) && realS(b.rcdBs) && realS(c.rcdBs) !== realS(b.rcdBs)) continue;
     const want = s ? formatS(c.rcdType || b.rcdType, true) : formatS(c.rcdType, false);
@@ -88,5 +97,6 @@ const formatS = (t, s) => { const p = _p(t); return _f(p.wave, s); };
 export function onBoardRcd(c, b) {
   if (!boardHasRcd(b) || !c) return false;
   const d = deviceById(c.device) || deviceFromBs(c.bs); if (d && d.rcd) return false;
+  { const w = rcdForWay(b, c.num).which; if (w === '2' || w === 'none') return false; }
   return realS(c.rcdIdn) === realS(b.rcdIdn) && (!realS(c.rcdRating) || !realS(b.rcdRating) || realS(c.rcdRating) === realS(b.rcdRating));
 }

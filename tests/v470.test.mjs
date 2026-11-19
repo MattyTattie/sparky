@@ -22,7 +22,8 @@ test('1: a TT board: Table 41.5 for its circuits, RA × IΔn ≤ 50 V, RCD neede
   const c = mcb(1, { device: 'rcbo', bs: '61009', rcdIdn: '30', rcdType: 'A', zs: '45' });
   assert.equal(limitZs(c, ctx).value, 1667); assert.equal(checkCircuit(c, ctx).flags.zs, undefined);
   assert.equal(checkCircuit(c, boardCtx(cert, cert.boards[0])).flags.zs.level, 'red'); // DB1 is still TN-C-S
-  const noRcd = mcb(2, { zs: '45', rcdIdn: '' }); assert.equal(checkCircuit(noRcd, ctx).flags.rcdIdn.level, 'amber');
+  const noRcd = mcb(2, { zs: '45', rcdIdn: '' }); { const f = checkCircuit(noRcd, ctx).flags; assert.match(f.zs.msg, /On TT the circuit needs an RCD/); assert.equal(f.rcdIdn, undefined, 'v0.50.0: one item for one cause'); }
+  assert.equal(checkCircuit(mcb(2, { zs: '', rcdIdn: '' }), ctx).flags.rcdIdn.level, 'amber');
   const hi = { ...c, rcdIdn: '300' }; const ctxHi = { ...ctx, ra: '200' }; assert.equal(checkCircuit(hi, ctxHi).flags.rcdIdn.level, 'red');
   assert.equal(fmtZs(1667), '1667'); assert.equal(fmtZs(1.3667), '1.37');
   assert.match(boardExtraLines(cert, b)[0].text, /^Earthing: TT, RA 45 Ω \(Rod, By the office door\)$/);
@@ -180,5 +181,5 @@ test('old v0.46.0 jobs: no new fields needed, nothing renamed', () => {
   const c = normaliseCert(JSON.parse(JSON.stringify({ ...newCert('EIC', {}), boards: [{ ref: 'DB1', rcdIdn: '30', circuits: [mcb(1, { rcdIdn: '30' })] }] })));
   assert.equal(boardCtx(c, c.boards[0]).earthing, 'TN-C-S (PME)');
   assert.equal(diagramModel(c).boards.length, 1);
-  assert.match(src('js/config.js'), /APP_VERSION = '0\.4[789]\.\d+ beta'/); assert.match(src('sw.js'), /const CACHE = 'sparky-v0\.4[789]\.\d+'/); // v0.47+ (v0.48 continues)
+  assert.match(src('js/config.js'), /APP_VERSION = '0\.(?:4[789]|50)\.\d+ beta'/); assert.match(src('sw.js'), /const CACHE = 'sparky-v0\.(?:4[789]|50)\.\d+'/); // v0.47+ (v0.48 continues)
 });

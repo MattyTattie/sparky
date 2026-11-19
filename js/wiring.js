@@ -8,6 +8,9 @@
 import { isSpareCircuit, circuitFedBySource, isRingCircuit } from './templates.js';
 import { showRcdType } from './rcdtype.js';
 import { checkCircuit, boardCtx, boardIsTT } from './checks.js';
+import { ocpdShort } from './limits.js';
+import { parseFeed } from './feed.js';
+import { rcdCoverText, rcdCoverFull, hasRcd2 } from './rcdways.js';
 
 const NA = 'N/A';
 const isNAv = (v) => /^\s*n\s*[\/.]?\s*a\s*\.?\s*$/i.test(String(v ?? ''));
@@ -19,7 +22,7 @@ export const WIRING_SHORT = { A: 'T&E', B: 'in metal conduit', C: 'in plastic co
 export function cableLabel(c) {
   if (!c) return '';
   const live = val(c.live), cpc = val(c.cpc); const ty = WIRING_SHORT[String(val(c.wiring)).toUpperCase()] || '';
-  const ocpd = [val(c.type) && val(c.type) !== 'adj' ? val(c.type) : '', val(c.rating)].join('');
+  const ocpd = ocpdShort(c); // v0.50.0: fuses show '20 A', not the table key ('rewirable20')
   const size = live ? `${live}${cpc ? '/' + cpc : ''}mm\u00b2` : '';
   const a = [size, ty].filter(Boolean).join(' ');
   return size ? [a, ocpd].filter(Boolean).join(' \u00b7 ') : '';
@@ -43,9 +46,9 @@ export function feedInfo(boards, bi) {
   { const sk = supplyKindOf(b); if (sk === 'tails' || sk === 'switchfuse') return { state: 'origin', text: from || SUPPLY_KINDS[sk], kind: sk }; }
   if (!from) return { state: 'blank', text: '' };
   if (/^(origin|main|supply|meter|cut.?out|intake|incomer)\b/i.test(from)) return { state: 'origin', text: from };
-  const m = from.match(/^(.*?)[\s,\-\u2013\u00b7/]*(?:(?:way|circuit|cct|ckt|c)\s*(?:no\.?)?\s*#?\s*(\d+[a-z]?))?\s*$/i);
-  const ref = (m ? m[1] : from).trim(); const cn = m && m[2] ? m[2] : '';
-  const si = boards.findIndex((x, i) => i !== bi && val(x.ref).toLowerCase() === ref.toLowerCase());
+  // v0.50.0: the same reader as the checks (feed.js): "DB1/9", "DB 1 - 9", "Circuit 9 of DB1"…
+  const pf = parseFeed(from, boards, bi); const cn = pf ? pf.circuitNum : '';
+  const si = pf ? pf.bi : -1;
   if (si < 0) return { state: 'mismatch', text: from, why: `\u2018${from}\u2019 doesn\u2019t match a board on this certificate` };
   if (cn && !(boards[si].circuits || []).some((c) => val(c.num).toLowerCase() === cn.toLowerCase())) return { state: 'mismatch', text: from, why: `${val(boards[si].ref)} has no circuit ${cn}` };
   return { state: 'ok', text: from, bi: si, ref: val(boards[si].ref), circuit: cn };
@@ -669,6 +672,8 @@ export function sourcesText(cert) { const t = [...new Set(((cert && cert.otherSo
 export function boardExtraLines(cert, b) {
   const out = []; b = b || {};
   if (boardIsTT(b)) out.push({ text: 'Earthing: TT' + (val(b.ra) ? ', RA ' + val(b.ra) + ' \u03a9' : '') + (val(b.elType) ? ' (' + val(b.elType) + (val(b.elLocation) ? ', ' + val(b.elLocation) : '') + ')' : val(b.elLocation) ? ' (' + val(b.elLocation) + ')' : ''), earth: true });
+  // v0.50.0: split-load / dual-RCD board: which ways each RCD covers
+  if (rcdCoverText(b)) out.push({ text: rcdCoverFull(b, isSpareCircuit) + (hasRcd2(b) && val(b.rcd2.rcdIdn) ? ` (RCD 2: ${val(b.rcd2.rcdIdn)} mA${val(b.rcd2.rcdType) ? ' Type ' + showRcdType(val(b.rcd2.rcdType)) : ''})` : '') });
   const fed = b.fedBySource === true || (b.circuits || []).some((c) => circuitFedBySource(c) && !isSpareCircuit(c));
   if (fed) { const src = sourcesText(cert); const circs = (b.circuits || []).filter((c) => circuitFedBySource(c) && !isSpareCircuit(c)).map((c) => val(c.num)).filter(Boolean);
     out.push({ text: 'Fed by: ' + (src || 'battery / PV / generator') + (circs.length ? ` (circuit${circs.length > 1 ? 's' : ''} ${circs.join(', ')})` : '') + ', power can flow both ways', gen: true }); }
@@ -687,7 +692,7 @@ export function diagramModel(cert) {
   const fuse = (val(sup.spType) || val(sup.spRating)) ? [val(sup.spBs), val(sup.spType), val(sup.spRating) && val(sup.spRating) + ' A'].filter(Boolean).join(' ') : '';
   return {
     type: cert.type,
-    supply: { earthing: val(sup.earthing), lines: [[val(sup.conductors), val(sup.u) && val(sup.u) + ' V', val(sup.f) && val(sup.f) + ' Hz'].filter(Boolean).join(', '), [val(sup.ze) && `Ze ${val(sup.ze)} Ω`, val(sup.ipf) && `Ipf ${val(sup.ipf)} kA`].filter(Boolean).join(', '), ].filter(Boolean), fuse },
+    supply: { earthing: val(sup.earthing), lines: [[val(sup.conductors), val(sup.u) && val(sup.u) + ' V', val(sup.f) && val(sup.f) + ' Hz'].filter(Boolean).join(', '), [val(sup.ze) && `Ze ${val(sup.ze)} Ω`, val(sup.ipf) && `PFC ${val(sup.ipf)} kA`].filter(Boolean).join(', '), ].filter(Boolean), fuse },
     main: { label: 'Main switch', detail: ms }, sources: sourcesText(cert),
     boards: (cert.boards || []).map((b, bi) => ({ ref: val(b.ref) || 'DB', location: val(b.location), from: val(b.suppliedFrom), items: groupCircuits(b.circuits, b), links: controlLinks(b.circuits), tags: boardTags(b.circuits), bi, src: b.circuits || [], main: boardMainLine(cert, bi), viaTails: bi === 0 && b.supplyKind === 'tails',
       feed: feedInfo(cert.boards, bi), raw: { supplyKind: b.supplyKind, suppliedFrom: b.suppliedFrom }, outbuilding: bi > 0 && isOutbuilding(b), ctx: boardCtx(cert, b), extra: boardExtraLines(cert, b), tt: boardIsTT(b),
@@ -725,7 +730,7 @@ export function wrapText(s, w, size, bold = false) {
 // top to bottom: { h, shapes }. Shapes: line, rect, circle, text.
 export function circuitLines(c, spd = '') {
   if (isSpareCircuit(c)) return { title: `${val(c.num) || '?'}  SPARE`, rows: [], spare: true };
-  const dev = [val(c.type) && val(c.type) !== 'adj' ? val(c.type) : '', val(c.rating)].join('') ;
+  const dev = ocpdShort(c); // v0.50.0: same short name as the cards ('B32', '20 A' for a fuse)
   const kind = isRcbo(c) ? 'RCBO' : c.device === 'mcb' ? 'MCB' : val(c.bs) ? 'BS ' + val(c.bs) : '';
   const device = [dev, kind].filter(Boolean).join(' ') + (isRcbo(c) && val(c.rcdIdn) ? `, ${val(c.rcdIdn)} mA` + (val(c.rcdType) ? ' Type ' + val(c.rcdType) : '') : '');
   const cable = cableLabel(c);
@@ -747,11 +752,19 @@ export function layout(model, { W = 380, font = 12, screen = false, cableTable =
   const F = font, small = F * 0.86, lh = (s) => s * 1.3;
   const blocks = []; const cables = []; let ctx = {}; let feeds = {}; let curBoard = '';
   // v0.41: C1, C2… one per cable run, listed in the PDF's cable table
-  const cable = (from, to, type, key) => { const n = cables.length + 1;
-    let circ = '';
-    if (key && String(key).includes('|')) circ = String(key).split('|')[1];
+  // v0.50.0: a circuit's cable is numbered by its way: C5 is circuit 5's cable (C5.2, C5.3 for its other runs). On a
+  // second board the board goes in front (DB2 C1), so the numbers never clash. A run with no circuit is R1, R2…
+  const firstRef = String(((model.boards || [])[0] || {}).ref || '').toLowerCase(); const seen = {}; let other = 0;
+  const cable = (from, to, type, key) => {
+    let circ = '', bref = curBoard;
+    if (key && String(key).includes('|')) { circ = String(key).split('|')[1]; }
+    const fm = /^(.*?)\s+circuit\s+(\S+)/i.exec(String(from) || '');
+    if (fm && !/^jb,?$/i.test(fm[1].trim())) { bref = fm[1]; if (!circ || circ === '?') circ = fm[2]; }
     if (!circ || circ === '?') { const m = /circuit\s+(\S+)/i.exec(String(from) || ''); if (m) circ = m[1]; }
-    const label = 'C' + n + (circ && circ !== '?' ? ' (circuit ' + circ + ')' : '');
+    let label;
+    if (circ && circ !== '?') { const pre = (model.boards || []).length > 1 && String(bref || '').toLowerCase() !== firstRef ? String(bref).trim() + ' ' : '';
+      const base = pre + 'C' + circ; const k = base.toLowerCase(); seen[k] = (seen[k] || 0) + 1; label = seen[k] > 1 ? base + '.' + seen[k] : base; }
+    else label = 'R' + (++other);
     cables.push({ label, from, to, type: type || '' }); if (key) cableOf[key] = cables[cables.length - 1]; return label; }; const cableOf = {};
   const busX = 14, devX = busX + 14, devW = F * 4.6, gap = 8; let ringLegB = null; let sockAnchors = []; let inAnchors = []; let runEnd = null; let upDone = new Set(); let ordAnchors = null; /* v0.48.2: rooms: socket N -> its anchor (null: a DP + socket) */ /* v0.48.1: spur ids already drawn going UP off an upper hairpin row */
   const T = (sh, x, y, txt, o = {}) => sh.push({ t: 'text', x, y, txt, size: o.size || F, bold: !!o.bold, color: o.color || COL.ink, anchor: o.anchor || 'start' });

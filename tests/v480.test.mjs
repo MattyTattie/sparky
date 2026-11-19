@@ -454,7 +454,7 @@ test('Check calculator has full Table 52.2 Ci and Use on a circuit; Size accepts
   assert.match(src('js/app.js'), /circedit/);
   assert.match(src('js/schedule.js'), /applyNoDevice/);
   assert.match(src('js/certui.js'), /Share as PNG/);
-  assert.match(src('js/wiring.js'), /' \(circuit ' \+ circ/);
+  assert.match(src('js/wiring.js'), /'C' \+ circ/); // v0.50.0: cable labels are the way number
 });
 
 test('sizeCable at 55 °C still steps a 32 A load from 6 mm² up (Ca 0.61)', () => {

@@ -6,7 +6,7 @@ import { findOldPdf } from './filerules.js';
 import * as db from './db.js';
 import { isSpareCircuit as isSpareC } from './templates.js';
 import { h, fill, toast, modal, confirmBox, fmtDate, shareOrDownload, blobToDataUrl, emptyState, icon, withIcon } from './ui.js';
-import { route, page, go, render, notFound } from './app.js';
+import { route, page, go, render, notFound, setTopBar } from './app.js';
 import { S, openCert, changed, flush, getProfile, defaultInstruments, defaultInstrumentIds, getInstruments, instrumentsFor, instrumentText, calibrationWarnings, INSTRUMENT_KINDS, saveSetting } from './state.js';
 import { calDateFields, CAL_DATE_WARN } from './instruments.js';
 import { screenSections, countsToward, pdfFlagsOn, formRef, fillPeopleBlanks } from './certmodel.js';
@@ -94,7 +94,10 @@ route(/^\/cert\/([^/]+)$/, async (id) => {
       cert.status !== 'issued' && nextSec ? h('a', { class: 'btn primary', id: 'continuebtn', style: 'display:flex;margin-top:10px;justify-content:center;text-align:center', href: secHref(nextSec) }, 'Continue: ' + nextSec.title + ' \u203a') : null,
       // v0.45: straight to testing (the first board with circuits)
       testBi >= 0 ? h('a', { class: 'btn', id: 'testacrossbtn', style: 'display:flex;margin-top:8px;justify-content:center', href: `#/cert/${id}/b/${testBi}/t/r1r2` }, withIcon('gauge', 'Test across circuits')) : null),
-    nFlags ? h('div', { class: 'notice red' }, `${nFlags} circuit${nFlags === 1 ? ' needs' : 's need'} fixing (a reading outside the limits, or a device bigger than its cable). Check the schedule before issuing.`) : null,
+    // v0.50.0: an EICR records existing faults: say "record them", not "fix before issuing"
+    nFlags ? (cert.type === 'EICR'
+      ? (eicrLeft(cert) === 0 ? h('div', { class: 'notice info' }, `${nFlags} circuit${nFlags === 1 ? ' has a reading' : 's have readings'} outside the limits. Each one is in the observations \u2713`) : h('div', { class: 'notice red' }, `${nFlags} circuit${nFlags === 1 ? ' has a reading' : 's have readings'} outside the limits (or a device bigger than its cable). Record each one as an observation: `, h('a', { href: '#', onclick: (e) => { e.preventDefault(); certCheckDialog(cert); } }, 'Check certificate'), ' lists them with “Add as observation”.'))
+      : h('div', { class: 'notice red' }, `${nFlags} circuit${nFlags === 1 ? ' needs' : 's need'} fixing (a reading outside the limits, or a device bigger than its cable). Check the schedule before issuing.`)) : null,
     warns.map((w) => h('div', { class: 'notice ' + w.level }, w.text)),
     h('div', { class: 'list' }, secs.map((s) => h('a', { class: 'row', href: s.special === 'boards' ? `#/cert/${id}/boards` : `#/cert/${id}/s/${s.id}` },
       h('span', { class: 'dot ' + (sectionDone(cert, s) ? 'ok' : '') }), h('div', { class: 'main' }, h('div', { class: 't' }, s.title), s.form ? h('div', { class: 's faint' }, 'On the IET form: ' + formRef(s.form)) : null), h('span', { class: 'go' }, '›'))),
@@ -139,21 +142,84 @@ async function askIssued(cert, direct) {
   if (await confirmBox(direct ? 'Mark as issued?' : 'Sent it? Mark as issued?', 'Records today as the issue date. You can still edit it.', 'Mark issued')) { cert.status = 'issued'; cert.issuedAt = new Date().toISOString(); changed(); await flush(); render(); }
 }
 // v0.46.0: Check certificate: problems grouped, each a link. Before a PDF it warns but lets you carry on.
+// v0.50.0: a one-line count ("3 to fix · 8 to fill in · 4 worth a look"), groups that fold (Needs fixing open), a
+// board filter, "Fix next" (walks through the items, a bar at the top of each page) and, on an EICR, "Add as
+// observation" on a red reading (an EICR records what it finds: it doesn't fix it).
+// v0.50.0 (EICR): red readings not yet recorded as an observation
+const eicrLeft = (cert) => { const g = checkCert(cert).groups.find((x) => x.id === 'fix'); return g ? g.items.filter((it) => !it.obs || !it.obsDone).length : 0; };
+const ccCount = (r, bi = -1) => r.groups.map((g) => [g.items.filter((it) => bi < 0 || it.bi === bi || it.bi == null || it.bi < 0).length, g.count]).filter(([n]) => n).map(([n, t]) => `${n} ${t}`).join(' \u00b7 ');
+const ccItems = (r, bi = -1) => r.groups.flatMap((g) => g.items.map((it) => ({ ...it, group: g.id }))).filter((it) => bi < 0 || it.bi === bi || it.bi == null || it.bi < 0);
+let walk = null; // { id, href, filter }
+function walkBar() {
+  if (!walk || !location.hash.startsWith('#/cert/' + walk.id)) return null;
+  const cert = S.cert && S.cert.id === walk.id ? S.cert : null; if (!cert) return null;
+  const items = ccItems(checkCert(cert), walk.filter);
+  const i = items.findIndex((x) => x.href === walk.href && x.text === walk.text);
+  const cur = i >= 0 ? items[i] : null;
+  return h('div', { class: 'notice info ccwalk', role: 'status' },
+    h('div', { class: 'ccwalk-t' }, cur ? `Check certificate \u00b7 ${i + 1} of ${items.length}: ${cur.text}` : items.length ? `Check certificate: that one\u2019s sorted. ${items.length} left.` : 'Check certificate: nothing left to look at \u2713'),
+    h('div', { class: 'btns' },
+      items.length ? h('button', { class: 'btn small primary', type: 'button', onclick: () => walkNext(cert) }, 'Next \u203a') : null,
+      h('button', { class: 'btn small', type: 'button', onclick: () => { walk = null; render(); certCheckDialog(cert); } }, 'List'),
+      h('button', { class: 'btn small', type: 'button', onclick: () => { walk = null; render(); } }, 'Done')));
+}
+setTopBar(walkBar);
+function walkNext(cert, filter = walk ? walk.filter : -1) {
+  const items = ccItems(checkCert(cert), filter); if (!items.length) { walk = null; toast('Nothing left to look at'); render(); return; }
+  let i = walk ? items.findIndex((x) => x.href === walk.href && x.text === walk.text) : -1;
+  const next = items[(i + 1) % items.length] || items[0];
+  walk = { id: cert.id, href: next.href, text: next.text, filter };
+  if (location.hash === next.href) render(); else go(next.href);
+}
+// v0.50.0 (EICR): record a red reading as an observation. Prefilled; everything can be changed. Resolves true if added.
+export async function addObsDialog(cert, o) {
+  if (!o) return false;
+  const v = { text: o.text, code: o.code, reg: o.reg, location: o.location };
+  const chips = h('div', { class: 'chips' });
+  const dc = () => fill(chips, ...['C1', 'C2', 'C3', 'FI'].map((c) => h('button', { type: 'button', class: 'chip ' + c.toLowerCase() + (v.code === c ? ' on' : ''), 'aria-pressed': String(v.code === c), onclick: () => { v.code = c; dc(); } }, c)));
+  dc();
+  const body = h('div', { class: 'addobs' },
+    h('p', { class: 'note' }, 'An EICR records what you found. The code is a suggestion: pick the one that fits what you saw.'),
+    h('label', { class: 'f' }, h('span', {}, 'Observation'), h('textarea', { value: v.text, rows: 4, oninput: (e) => { v.text = e.target.value; } })),
+    h('label', { class: 'f' }, h('span', {}, 'Location / circuit'), h('input', { value: v.location, oninput: (e) => { v.location = e.target.value; } })),
+    h('div', { class: 'grid2' }, h('label', { class: 'f' }, h('span', {}, 'Regulation(s)'), h('input', { value: v.reg, oninput: (e) => { v.reg = e.target.value; } })), h('div', {}, h('span', { class: 'note' }, 'Code'), chips)),
+    h('details', {}, h('summary', { class: 'note' }, 'What the codes mean'), Object.entries(CODE_TEXT).map(([k, t]) => h('p', { class: 'note' }, h('b', {}, k + ': '), t))));
+  const ok = await modal('Add as observation', body, [{ label: 'Cancel', value: false }, { label: 'Add observation', value: true, cls: 'primary' }]);
+  if (!ok) return false;
+  cert.observations = cert.observations || [];
+  if (o.src && cert.observations.some((x) => x && x.src === o.src)) { toast('Already in the observations'); return false; }
+  cert.observations.push({ id: db.newId(), text: v.text.trim(), code: v.code, reg: v.reg.trim(), location: v.location.trim(), ...(o.src ? { src: o.src } : {}) });
+  changed(); await flush(); toast(`Added to observations (${v.code})`); return true;
+}
 export async function certCheckDialog(cert, { pdf = false } = {}) {
   await flush();
-  const r = checkCert(cert);
+  let r = checkCert(cert);
   if (!r.count) { if (!pdf) toast('No problems found'); return true; }
-  let goTo = null; let cancelBtn = null;
-  const body = h('div', { class: 'certcheck' },
-    h('p', { class: 'note' }, pdf ? 'Worth a look before the PDF goes out. Tap one to go to it, or make the PDF anyway.' : 'Tap one to go to it.'),
-    r.groups.map((g) => h('div', { class: 'ccgroup ' + g.level },
-      h('div', { class: 'cchd' }, `${g.title} (${g.items.length})`),
-      h('div', { class: 'list' }, g.items.map((it) => h('a', { class: 'row', href: it.href, onclick: (e) => { e.preventDefault(); goTo = it.href; if (cancelBtn) cancelBtn.click(); } },
-        h('div', { class: 'main' }, h('div', { class: 't' }, it.text)), h('span', { class: 'go' }, '\u203a')))))));
-  const p = modal(`${r.count} thing${r.count === 1 ? '' : 's'} to look at` + (r.fix ? ` (${r.fix} to fix)` : ''), body,
-    pdf ? [{ label: 'Go back', value: false }, { label: 'Make PDF anyway', value: true, cls: 'primary' }] : [{ label: 'Close', value: false }]);
+  let goTo = null; let cancelBtn = null; let filter = -1;
+  const boardsWith = [...new Set(ccItems(r).map((it) => it.bi).filter((x) => x != null && x >= 0))].sort((a, z) => a - z);
+  const body = h('div', { class: 'certcheck' });
+  const draw = () => {
+    const items = (g) => g.items.filter((it) => filter < 0 || it.bi === filter || it.bi == null || it.bi < 0);
+    fill(body,
+      h('p', { class: 'cccount' }, h('b', {}, ccCount(r, filter)), filter >= 0 ? h('span', { class: 'note' }, ` on ${(cert.boards[filter] || {}).ref || 'this board'} (and the certificate itself)`) : null),
+      h('p', { class: 'note' }, pdf ? 'Tap one to go to it, or make the PDF anyway.' : 'Tap one to go to it. Fix next takes you through them in turn.'),
+      boardsWith.length > 1 ? h('div', { class: 'chips small ccfilter', role: 'group', 'aria-label': 'Show one board' }, [[-1, 'All boards'], ...boardsWith.map((bi) => [bi, (cert.boards[bi] || {}).ref || 'DB' + (bi + 1)])].map(([v, t]) => h('button', { type: 'button', class: 'chip' + (filter === v ? ' on' : ''), 'aria-pressed': String(filter === v), onclick: () => { filter = v; draw(); } }, t))) : null,
+      r.groups.map((g) => { const its = items(g); if (!its.length) return null;
+        return h('details', { class: 'ccgroup ' + g.level, open: g.id === 'fix' || (!pdf && its.length <= 6) ? true : null },
+          h('summary', { class: 'cchd' }, `${g.title} (${its.length})`),
+          h('div', { class: 'list' }, its.map((it) => h('div', { class: 'ccitem' },
+            h('a', { class: 'row', href: it.href, onclick: (e) => { e.preventDefault(); goTo = it.href; if (cancelBtn) cancelBtn.click(); } },
+              h('div', { class: 'main' }, h('div', { class: 't' }, it.text)), h('span', { class: 'go' }, '\u203a')),
+            it.obs ? (it.obsDone ? h('div', { class: 'note ccobs done' }, '\u2713 In the observations') : h('button', { type: 'button', class: 'btn small ccobs', onclick: async () => { if (await addObsDialogInline(it.obs)) { r = checkCert(cert); draw(); } } }, '+ Add as observation (' + it.obs.code + ')')) : null)))); }));
+  };
+  // the observation dialog stacks on top of this one
+  const addObsDialogInline = (o) => addObsDialog(cert, o);
+  draw();
+  const p = modal(pdf ? 'Before the PDF goes out' : 'Check certificate', body,
+    pdf ? [{ label: 'Go back', value: false }, { label: 'Make PDF anyway', value: true, cls: 'primary' }] : [{ label: 'Close', value: false }, { label: 'Fix next \u203a', value: 'next', cls: 'primary' }]);
   cancelBtn = [...document.querySelectorAll('.modal-bg .btns button')].find((b) => /Go back|Close/.test(b.textContent));
-  const v = await p; if (goTo) go(goTo);
+  const v = await p; if (v === 'next') { walk = null; walkNext(cert, filter); return false; }
+  if (goTo) go(goTo);
   return v === true;
 }
 async function makePdf(cert, btn, how) {
