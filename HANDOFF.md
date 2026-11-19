@@ -653,3 +653,34 @@ Live smoke (14 Nov 2026, about 09:05 GMT; 390 and 1440 viewports, fake seed data
 - All 8 calculators load with no errors.
 - The View PDF viewer opens (16 pages).
 - pdf_overlap.py: 0 overlaps on both PDFs at both sizes. The 390 SVG has one known false positive, in the key text.
+
+## v0.48.2 beta (built LOCALLY 19 Nov 2026, NOT pushed / not published; waiting for Matthew's "go live")
+
+Rooms layouts (js/wiring.js):
+- roomRun / roomRuns: in-ring FCU / SFCU / DP spurs are set into the rooms' runs. "After socket N" counts sockets across the rooms in drawn order, with a DP + socket counting as a socket, so it matches spurAfterOptions / spurFromOptions (roomSocketTotal). Room "spurs" counts are left out.
+- ringRooms and sockRoomsSection (radial):
+  - In-line items are drawn with symbol(kind 'fcuin' / 'sfcuin' / 'dpin').
+  - Loads and spurs off them, or "From socket N" in that room, go UP through the shared upPrep / drawUpAt (moved out of ringPlain).
+  - Each row's gap grows by extra[k]; ids are added to upDone.
+  - Only the last room's last row drops down (circuitSpurSection, as before), and only when that crosses nothing.
+- ordAnchors: socket N's anchor for circuitSpurSection, so a down-drop from socket N in the last room uses the editor's numbering.
+- upLabels: on each row, labels run right up to the next item. If that leaves too little room, the item's stem is lengthened so it and its label stand above everything to its right (including DP + socket stacks, passed as fixed obstacles). Used by the hairpin too.
+- Fixed: the last room's return row now draws the drop from the row above when that room has 3 or more rows.
+- The editor is unchanged. The "Where" and "Position" dropdowns already work for rooms circuits.
+
+Tests:
+- tests/v482.test.mjs (5 tests): version and SW cache; rooms ring in line with items in the right box; start, end and two-row rooms; radial rooms; numbering; old data.
+- The version check moved out of v481.test.mjs.
+- Full suite 724 pass, 0 fail. Overlap sweep 0 bad blocks. pdf_overlap.py: 0 overlaps on the PDFs.
+- Headless 390 and 1440 on localhost: SW sparky-v0.48.2, no page or console errors, the old backup loads, calculators OK, View PDF opens.
+
+Review files: /workspace/polish-review/zspro-v0482/
+- for-matthew/1-rooms-ring-fcu-dp-upper-spur-390.png
+- for-matthew/3-rooms-spur-editor-390.png
+- for-matthew/4-pdf-diagram-rooms-ring.png
+- smoke/
+- pdf/
+- scripts: r482.mjs, r482b.mjs, shot482app.py, smoke-local.py, make-pdf.mjs
+
+Not done: see NIGGLES (room "spurs" counts are not numbered; a second spur from the same socket falls back).
+

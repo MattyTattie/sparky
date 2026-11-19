@@ -753,7 +753,7 @@ export function layout(model, { W = 380, font = 12, screen = false, cableTable =
     if (!circ || circ === '?') { const m = /circuit\s+(\S+)/i.exec(String(from) || ''); if (m) circ = m[1]; }
     const label = 'C' + n + (circ && circ !== '?' ? ' (circuit ' + circ + ')' : '');
     cables.push({ label, from, to, type: type || '' }); if (key) cableOf[key] = cables[cables.length - 1]; return label; }; const cableOf = {};
-  const busX = 14, devX = busX + 14, devW = F * 4.6, gap = 8; let ringLegB = null; let sockAnchors = []; let inAnchors = []; let runEnd = null; let upDone = new Set(); /* v0.48.1: spur ids already drawn going UP off an upper hairpin row */
+  const busX = 14, devX = busX + 14, devW = F * 4.6, gap = 8; let ringLegB = null; let sockAnchors = []; let inAnchors = []; let runEnd = null; let upDone = new Set(); let ordAnchors = null; /* v0.48.2: rooms: socket N -> its anchor (null: a DP + socket) */ /* v0.48.1: spur ids already drawn going UP off an upper hairpin row */
   const T = (sh, x, y, txt, o = {}) => sh.push({ t: 'text', x, y, txt, size: o.size || F, bold: !!o.bold, color: o.color || COL.ink, anchor: o.anchor || 'start' });
   const L = (sh, x1, y1, x2, y2, o = {}) => sh.push({ t: 'line', x1, y1, x2, y2, w: o.w || 1.2, color: o.color || COL.line, ...(o.dash ? { dash: o.dash } : {}) });
   const R = (sh, x, y, w, h, o = {}) => sh.push({ t: 'rect', x, y, w, h, lw: o.lw ? (o.lw < 1.4 ? o.lw * 1.3 : o.lw) : 1.5, color: o.color || COL.box, fill: o.fill || null }); // v0.44.2b: outlines a bit darker and thicker
@@ -957,7 +957,7 @@ export function layout(model, { W = 380, font = 12, screen = false, cableTable =
   function tag(b, bd, c) { b.ref = { bi: bd.bi ?? 0, ci: bd.src ? bd.src.indexOf(c) : 0, mw: model.type === 'MW' }; return b; }
 
   function circuitBlock(c, bus, last, outerBus, spd = '', spur = null) {
-    const sh = []; const info = circuitLines(c, spd); const y = 8; ringLegB = null; sockAnchors = []; inAnchors = []; runEnd = null; upDone = new Set(); heatLab = isTowel(c) ? 'Rail' : 'Rad'; /* v0.44.3: rooms too */ let ctlChained = false; let ctlCap = 0;
+    const sh = []; const info = circuitLines(c, spd); const y = 8; ringLegB = null; sockAnchors = []; inAnchors = []; runEnd = null; upDone = new Set(); ordAnchors = null; heatLab = isTowel(c) ? 'Rail' : 'Rad'; /* v0.44.3: rooms too */ let ctlChained = false; let ctlCap = 0;
     const dx = bus + 12; const tx = dx + devW + gap; const tw = W - tx - 6;
     // text
     let hh = textLines(sh, tx, y - 2, info.title, tw, { bold: true, color: info.spare ? COL.na : COL.ink });
@@ -1332,9 +1332,9 @@ export function layout(model, { W = 380, font = 12, screen = false, cableTable =
       if (f === 'jb' && jbPort) return { s, port: jbPort };
       const m = /^(?:socket\s*)?(\d+)$/.exec(f);
       if (m && all.length) {
-        const want = all[Math.min(all.length, Math.max(1, parseInt(m[1], 10))) - 1];
-        if (bottomRow.includes(want)) return { s, port: want };
-        const ch = viaChannel(want);
+        const want = ordAnchors ? ordAnchors[Math.min(ordAnchors.length, Math.max(1, parseInt(m[1], 10))) - 1] : all[Math.min(all.length, Math.max(1, parseInt(m[1], 10))) - 1]; // v0.48.2: rooms number sockets like the editor
+        if (want && bottomRow.includes(want)) return { s, port: want };
+        const ch = want && viaChannel(want);
         if (ch) return { s, port: ch };
       }
       if (bottomRow.length) return { s, port: bottomRow[ai++ % bottomRow.length] };
@@ -1451,6 +1451,41 @@ export function layout(model, { W = 380, font = 12, screen = false, cableTable =
     L(sh, fx, jy, jx - half, jy, g);
     return drawJB(sh, jx, jy, S);
   }
+  // v0.48.1/v0.48.2: a load or spur drawn going UP off an in-line item (hairpin rows, and room rows from v0.48.2).
+  // u = { s, x, inRing }; upPrep adds parts (symbols bottom to top), hw (widest half-width) and lab.
+  function upPrep(u, c, S) { const k0 = spurSymbolOf(u.s), lk = spurLoadKind(u.s); const p = [];
+    if (!u.inRing) p.push({ k: k0, S }); if (lk && (u.inRing || lk !== k0)) p.push({ k: lk, S: S * 0.85, ip: spurLoadIp(u.s) });
+    u.parts = p; u.hw = Math.max(S / 2, ...p.map((q) => spurHalfW(q.k, q.S))); u.lab = spurLabel(u.s, c).replace(/^Spur:\s*/, ''); return u; }
+  function drawUpAt(o, u, yT, S) { // returns the top of what it drew (yT = the cable the item sits on)
+    const g = { w: 1.1, color: COL.line }, sz = small * 0.9, r0 = S / 2;
+    const savedHeat = heatLab; heatLab = '';
+    const start = yT - r0 * 0.85; let cur = start - (u.lift || 0), mid = cur - sz * 0.6; const cur0 = cur; // u.lift: a longer stem, to stand clear above items to its right
+    u.parts.forEach((q, n) => { const qr = q.S / 2, bot = cur - 5; L(o, u.x, n ? cur : start, u.x, bot, g);
+      if (SOCK[q.k]) { symbol(o, q.k, u.x, bot, q.S, null, { up: true }); const t = bot - qr * 0.35 - qr * 1.7; if (q.ip) { ipMark(o, u.x, bot, q.k, q.S, t); used.add('ipsock'); } if (n === 0 || u.inRing) mid = (t + bot - qr * 0.35) / 2; cur = t; }
+      else { const lr = loadR(q.k, q.S), cyq = bot - lr; symbol(o, q.k, u.x, cyq, q.S); if (n === 0 || u.inRing) mid = cyq; cur = cyq - lr; }
+      used.add(q.k); });
+    heatLab = savedHeat;
+    const labX = u.x + u.hw + 6, labW = Math.max(56, u.maxX - labX - 2);
+    const th = textLines([], labX, 0, u.lab, labW, { size: sz });
+    const labTop = Math.min(mid - sz * 0.75, cur0 - 3 - th); // never down onto the row's plates (or what it stands above)
+    textLines(o, labX, labTop, u.lab, labW, { size: sz, color: COL.grey });
+    return Math.min(cur, labTop);
+  }
+  // v0.48.2: labels on one row: each runs right up to the next item; when that leaves too little room, the item's stem
+  // is lengthened so it and its label stand above everything to its right, and the label gets the full width (u.maxFull).
+  function upLabels(ups, S, fixed = []) { // fixed: things already standing above a row ({ k, x, hw, top }), e.g. a DP + socket stack
+    const sz = small * 0.9, rows = new Map(); ups.forEach((u) => { if (!rows.has(u.k)) rows.set(u.k, []); rows.get(u.k).push(u); });
+    for (const row of rows.values()) {
+      row.push(...fixed.filter((f) => f.k === row[0].k).map((f) => ({ ...f, fixed: true })));
+      row.sort((a, b) => b.x - a.x); const done = [];
+      for (const u of row) { if (u.fixed) { done.push(u); continue; } u.lift = 0; const labX = u.x + u.hw + 6; const nxt = done[done.length - 1];
+        const bounded = nxt ? Math.min(u.maxFull, nxt.x - nxt.hw - 8) : u.maxFull;
+        if (!nxt || bounded - labX - 2 >= Math.min(textW(u.lab, sz) + 2, 120)) u.maxX = bounded;
+        else { u.maxX = u.maxFull; const over = done.filter((v) => v.x - v.hw < u.maxFull);
+          u.lift = Math.max(0, ...over.map((v) => -S / 2 * 0.85 + 1 - (v.fixed ? v.top : drawUpAt([], v, 0, S)))); }
+        done.push(u); }
+    }
+  }
   function ringPlain(sh, c, pc, sgl, tx, top, tw, feedTop) {
     const S = F * 1.5, g = { w: 1.1, color: COL.line }, step = S * 2 + 10, fx = tx - gap / 2; const { upT, dnB } = HP(S);
     const seq = inRingSeq(c, Array(pc.shown - sgl).fill('socket')); const ringN = seq.kinds.length; const rad = loadR('socket', S), xL = tx + 14 + rad, xR = W - 16 - rad; const per0 = Math.max(1, Math.floor((xR - xL) / step) + 1); const per = Math.ceil(ringN / Math.max(1, Math.ceil(ringN / per0))); // v0.44.3: rows as even as they can be
@@ -1469,27 +1504,12 @@ export function layout(model, { W = 380, font = 12, screen = false, cableTable =
       if (i < 0 || rowOf(i) >= nRows - 1 || taken.has(i)) continue;
       taken.add(i); ups.push({ s, i, k: rowOf(i), x: xOf(i), inRing: spurInRing(s) });
     }
-    const sz = small * 0.9, S2 = S * 0.85, r0 = S / 2;
-    const upParts = (u) => { const k0 = spurSymbolOf(u.s), lk = spurLoadKind(u.s); const p = [];
-      if (!u.inRing) p.push({ k: k0, S }); if (lk && (u.inRing || lk !== k0)) p.push({ k: lk, S: S2, ip: spurLoadIp(u.s) }); return p; };
-    ups.forEach((u) => { u.parts = upParts(u); u.hw = Math.max(r0, ...u.parts.map((q) => spurHalfW(q.k, q.S))); u.lab = spurLabel(u.s, c).replace(/^Spur:\s*/, ''); });
+    const r0 = S / 2;
+    ups.forEach((u) => upPrep(u, c, S));
     // label room: up to the next up-item on the row, and clear of the turn verticals that pass through the gap
-    ups.forEach((u) => { const turnX = u.k > 0 && dirOf(u.k - 1) > 0 ? xRr + rad + 7 - 6 : W - 6;
-      const nxt = ups.filter((v) => v.k === u.k && v.x > u.x).sort((a, b) => a.x - b.x)[0]; u.maxX = Math.min(turnX, nxt ? nxt.x - nxt.hw - 8 : W - 6); });
-    const drawUp = (o, u, yT) => { // returns the top of what it drew
-      const savedHeat = heatLab; heatLab = '';
-      let cur = yT - r0 * 0.85, mid = cur - sz * 0.6;
-      u.parts.forEach((q, n) => { const qr = q.S / 2, bot = cur - 5; L(o, u.x, cur, u.x, bot, g);
-        if (SOCK[q.k]) { symbol(o, q.k, u.x, bot, q.S, null, { up: true }); const t = bot - qr * 0.35 - qr * 1.7; if (q.ip) { ipMark(o, u.x, bot, q.k, q.S, t); used.add('ipsock'); } if (n === 0 || u.inRing) mid = (t + bot - qr * 0.35) / 2; cur = t; }
-        else { const lr = loadR(q.k, q.S), cyq = bot - lr; symbol(o, q.k, u.x, cyq, q.S); if (n === 0 || u.inRing) mid = cyq; cur = cyq - lr; }
-        used.add(q.k); });
-      heatLab = savedHeat;
-      const labX = u.x + u.hw + 6, labW = Math.max(56, u.maxX - labX - 2);
-      const th = textLines([], labX, 0, u.lab, labW, { size: sz });
-      const labTop = Math.min(mid - sz * 0.75, yT - r0 * 0.85 - 3 - th); // never down onto the row's plates
-      textLines(o, labX, labTop, u.lab, labW, { size: sz, color: COL.grey });
-      return Math.min(cur, labTop);
-    };
+    ups.forEach((u) => { u.maxFull = u.k > 0 && dirOf(u.k - 1) > 0 ? xRr + rad + 7 - 6 : W - 6; });
+    upLabels(ups, S);
+    const drawUp = (o, u, yT) => drawUpAt(o, u, yT, S);
     const extra = Array(nRows).fill(0);
     ups.forEach((u) => { const need = -drawUp([], u, 0) + (u.k ? 6 : 4), avail = u.k ? upT + 10 : upT + 4; extra[u.k] = Math.max(extra[u.k], need - avail); });
     let acc = 0;
@@ -1516,6 +1536,23 @@ export function layout(model, { W = 380, font = 12, screen = false, cableTable =
     if (pc.more) ph += textLines(sh, tx, top + ph, `+ ${pc.more} more (${pc.n} in total)`, tw, { size: small, color: COL.grey }) + 2;
     return ph;
   }
+  // v0.48.2: a socket room's run of points, and in-ring FCU / DP switches set into the rooms' runs. `after` counts the
+  // sockets across the rooms in their drawn order (the same order the spur's "From socket N" uses).
+  function roomRun(r) { const uD = Math.min(r.unsw, r.sockets), uS = Math.min(r.unsw - uD, r.singles); return [...Array(r.sockets - uD).fill('socket'), ...Array(uD).fill('socketu'), ...Array(r.singles - uS).fill('socket1'), ...Array(uS).fill('socket1u'), ...Array(r.dpsw).fill('dpu'), ...Array(r.dpsws).fill('dps'), ...r.items.flatMap(([k, n]) => Array(n).fill(k))]; }
+  function roomRuns(c, rooms) {
+    const flat = []; rooms.forEach((r, ri) => roomRun(r).forEach((k) => flat.push({ k, id: '', ri })));
+    const isOrd = (k) => SOCK[k] || k === 'dpu' || k === 'dps'; const n0 = flat.filter((f) => isOrd(f.k)).length, lastRi = rooms.length - 1;
+    inRingSpurs(c).forEach((s) => {
+      const a = parseInt(s.after, 10); const nth = Number.isFinite(a) && a >= 0 ? Math.min(a, n0) : -1;
+      let at = flat.length, ri = lastRi;
+      if (nth === 0) { at = 0; ri = 0; }
+      else if (nth > 0) { let seen = 0; for (let i = 0; i < flat.length; i++) { if (!flat[i].id && isOrd(flat[i].k)) seen++; if (seen === nth) { ri = flat[i].ri; at = i + 1; while (at < flat.length && flat[at].id && flat[at].ri === ri) at++; break; } } }
+      flat.splice(at, 0, { k: DP_DEVICES[s.device] ? 'dpin' : s.device + 'in', id: s.id, ri });
+    });
+    const runs = rooms.map(() => ({ kinds: [], ids: [] })); runs.ord = [];
+    flat.forEach((f) => { const ru = runs[f.ri]; if (!f.id && isOrd(f.k)) runs.ord.push([f.ri, ru.kinds.length, f.k]); ru.kinds.push(f.k); ru.ids.push(f.id); });
+    return runs;
+  }
   // v0.43.5 (Matthew's spec): ring with rooms. Leg 1 runs straight down from the
   // breaker. Leg 2, just right of it, goes in and out of each room: a line into the
   // box at its left with the sockets sitting on it, just past the last socket it
@@ -1527,35 +1564,66 @@ export function layout(model, { W = 380, font = 12, screen = false, cableTable =
     const per = Math.max(1, Math.floor((bx + bw - 12 - rad - cx0) / step) + 1); const lead = r0 * 0.95, pitch = S * 0.85 + 16; const ph = r0 * 0.85; /* v0.48.1: plates sit in line, centred on the cable */ const hasList = circuitSpurList(c).length > 0;
     let y0 = top; if (screen && info.roomNote) y0 += textLines(sh, tx, y0 - 4, info.roomNote, tw, { size: small, color: COL.na }) + 4;
     let legY = feedTop; // where leg 2 picks up again
+    const runs = roomRuns(c, info.sockRooms); const spurById = new Map(circuitSpurList(c).map((s) => [s.id, s])); const lastRi = info.sockRooms.length - 1; // v0.48.2: in-ring FCU / DP switches sit in the rooms' runs
+    ordAnchors = runs.ord.map(() => null); const ordIx = (ri, j) => runs.ord.findIndex((o) => o[0] === ri && o[1] === j);
     info.sockRooms.forEach((r, ri) => {
       const rs = [], ln = []; let ry = y0 + 4;
       ry += textLines(rs, ix, ry, r.name || 'Room ' + (r.i + 1), iw, { bold: true, size: small });
       const ip = /outside|outdoor|garden|exterior|external|patio/i.test(r.name); if (ip) used.add('ipsock');
       const pl = (n, w) => (+n ? `${n} ${w}${n === 1 ? '' : 's'}` : ''); // v0.44.6: never a 0 count
       ry += textLines(rs, ix, ry, [r.sockets ? pl(r.sockets, 'double socket') : '', r.singles ? pl(r.singles, 'single socket') : '', r.spurs ? pl(r.spurs, 'spur') + (r.spurKind === 'fcu' ? ' (FCU)' : '') : '', Math.min(r.unsw, r.sockets + r.singles) > 0 ? Math.min(r.unsw, r.sockets + r.singles) + ' unswitched' : '', r.dpsw ? pl(r.dpsw, 'DP + socket') : '', r.dpsws ? pl(r.dpsws, 'DP + switched socket') : '', ...r.items.filter(([k, n]) => !SOCK[k] && +n > 0).map(([k, n]) => n + ' \u00d7 ' + (n === 1 ? KIND_ONE[k] : KIND_PLURAL[k])), ip ? 'outdoor, IP rated' : ''].filter(Boolean).join(' \u00b7 '), iw, { size: small * 0.92, color: COL.grey });
-      const uD = Math.min(r.unsw, r.sockets), uS = Math.min(r.unsw - uD, r.singles); const items = [...Array(r.sockets - uD).fill('socket'), ...Array(uD).fill('socketu'), ...Array(r.singles - uS).fill('socket1'), ...Array(uS).fill('socket1u'), ...Array(r.dpsw).fill('dpu'), ...Array(r.dpsws).fill('dps'), ...r.items.flatMap(([k, n]) => Array(n).fill(k))]; const dpH = items.some((k) => k === 'dpu' || k === 'dps') ? S * 1.75 : 0; /* v0.44.0: any extra items join the room's run */ // v0.43.8: DP stacks stand taller
+      const items = runs[ri].kinds, ids = runs[ri].ids; const dpH = items.some((k) => k === 'dpu' || k === 'dps') ? S * 1.75 : 0; /* v0.44.0: any extra items join the room's run */ // v0.43.8: DP stacks stand taller
       // spurs ride on the same row, teed off after the last ring socket, when they fit
       const spurK = r.spurKind === 'fcu' ? 'fcu' : 'socket1'; const spurLab = r.spurs === 1 ? 'Spur' : 'Spurs'; // the symbol says socket or FCU; the room summary says which
       const spurW = r.spurs ? 10 + (r.spurs - 1) * step + 2 * loadR(spurK, S) + (ip && spurK === 'socket1' ? 12 : 4) + textW(spurLab, small) : 0;
-      const nRows = Math.max(1, Math.ceil(items.length / per)); let cy = ry + 6 + (items.slice(0, per).some((k) => k === 'dpu' || k === 'dps') ? r0 * 3.45 : ph); let x = fx; const pitchR = pitch + dpH; let lineY = cy; const yIn = lineY;
+      const nRows = Math.max(1, Math.ceil(items.length / per)); let cy = ry + 6 + (items.slice(0, per).some((k) => k === 'dpu' || k === 'dps') ? r0 * 3.45 : ph); let x = fx; const pitchR = pitch + dpH; let lineY = cy;
       // v0.48.1: on the last room, when spurs are taken off its sockets, the last row's sockets go on the way back
       // (like the hairpin's lower leg) so each spur drops straight off the bottom of its socket and crosses nothing.
       const lastRow = items.slice((nRows - 1) * per); const onRet = hasList && ri === info.sockRooms.length - 1 && (nRows - 1) % 2 === 0 && lastRow.length && !lastRow.some((k) => k === 'dpu' || k === 'dps');
       let retDone = false;
+      // v0.48.2: loads / spurs off an in-line item in this room go UP into a gap above its row (the gap grows to fit),
+      // except on the last room's last row, where they drop clear below (as before).
+      const lastDirP = onRet ? -1 : (nRows - 1) % 2 ? -1 : 1;
+      const downRow = (k) => ri === lastRi && k === nRows - 1 && (onRet || lastDirP < 0) && !r.spurs;
+      const rowLen = (k) => Math.min(per, items.length - k * per), dirK = (k) => (k % 2 ? -1 : 1);
+      const xAt = (j) => { const k = Math.floor(j / per), jj = j % per; return dirK(k) > 0 || (onRet && k === nRows - 1) ? cx0 + jj * step : cx0 + (rowLen(k) - 1 - jj) * step; };
+      const ups = []; const taken = new Set();
+      for (const s of circuitSpurList(c)) {
+        let j = -1, elsewhere = false;
+        if (spurInRing(s)) j = ids.indexOf(s.id);
+        else { const f = String(s.from || '').trim().toLowerCase(), m = /^(?:socket\s*)?(\d+)$/.exec(f); if (m && runs.ord.length) { const o = runs.ord[Math.min(runs.ord.length, Math.max(1, parseInt(m[1], 10))) - 1]; if (SOCK[o[2]]) { if (o[0] === ri) j = o[1]; else elsewhere = true; } }
+          // no socket picked (or a DP + socket): off the last room's last row. When a drop from there would cross its way out, it goes up too.
+          if (j < 0 && !elsewhere && f !== 'jb' && ri === lastRi && !downRow(nRows - 1)) for (let q = (nRows - 1) * per; q < items.length; q++) if (SOCK[items[q]] && !ids[q] && !taken.has(q)) { j = q; break; } }
+        if (j < 0 || taken.has(j) || downRow(Math.floor(j / per))) continue;
+        taken.add(j); ups.push(upPrep({ s, j, k: Math.floor(j / per), x: xAt(j), inRing: spurInRing(s) }, c, S));
+      }
+      ups.forEach((u) => { let mx = bx + bw - 6;
+        if (u.k > 0 && dirK(u.k - 1) > 0) mx = Math.min(mx, Math.max(...Array.from({ length: rowLen(u.k - 1) }, (_, q) => cx0 + q * step)) + rad + 8 - 6); // the drop from the row above
+        u.maxFull = mx; });
+      upLabels(ups, S, items.map((kd, q) => (kd === 'dpu' || kd === 'dps' ? { k: Math.floor(q / per), x: xAt(q), hw: r0 * 1.2, top: -r0 * 3.45 } : null)).filter(Boolean)); // DP + socket stacks stand above the row
+      const extra = Array(nRows).fill(0);
+      ups.forEach((u) => { const need = -drawUpAt([], u, 0, S) + (u.k ? 6 : 4), avail = u.k ? pitchR - ph - (ip ? 6 : 3) : cy - ry; extra[u.k] = Math.max(extra[u.k], need - avail); });
+      cy += Math.max(0, extra[0]); lineY = cy; const yIn = lineY; const rowY = []; let prevY = lineY;
+      const markRun = (cx, yy, kd, sid, j) => { if (!sid) { markSock(cx, yy, kd, S); const n = ordIx(ri, j); if (n >= 0 && SOCK[kd]) ordAnchors[n] = sockAnchors[sockAnchors.length - 1]; return; } runEnd = { x: cx, cy: yy, r: loadR(kd, S), k: kd };
+        if (!upDone.has(sid) && !ups.some((u) => u.s.id === sid)) inAnchors.push({ x: cx, cy: yy, bot: plateBot(kd, S, yy), k: kd, sid }); };
       for (let k = 0; k < nRows; k++) { const row = items.slice(k * per, (k + 1) * per); const dir = k % 2 ? -1 : 1; lineY = cy;
         if (onRet && k === nRows - 1) {
           const pos = row.map((_, j) => cx0 + j * step); const end = Math.max(...pos) + rad + 8; const yR = lineY + ph * 2 + 8;
+          if (k > 0) L(ln, x, prevY, x, lineY, g); // v0.48.2: the drop from the row above
           L(ln, x, lineY, end, lineY, g); L(ln, end, lineY, end, yR, g); let px = end;
           for (let j = row.length - 1; j >= 0; j--) { const kd = row[j], cx = pos[j], kr = loadR(kd, S); L(ln, px, yR, cx + kr, yR, g); symbol(rs, kd, cx, yR, S); used.add(kd); if (ip) ipMark(rs, cx, yR, kd, S); px = cx - kr; }
-          row.forEach((kd, j) => markSock(pos[j], yR, kd, S));
+          row.forEach((kd, j) => markRun(pos[j], yR, kd, ids[k * per + j], k * per + j));
+          rowY[k] = yR;
           L(ln, px, yR, fx, yR, g); x = fx; lineY = cy = yR; retDone = true; break; }
         const pos = row.map((_, j) => (dir > 0 ? cx0 + j * step : cx0 + (row.length - 1 - j) * step));
-        if (k > 0) { L(ln, x, lineY - pitchR, x, lineY, g); } // drop to the next row
+        if (k > 0) { L(ln, x, prevY, x, lineY, g); } // drop to the next row
+        rowY[k] = lineY;
         const end = row.length ? (dir > 0 ? Math.max(...pos) + rad + 8 : Math.min(...pos) - rad - 8) : (dir > 0 ? cx0 + 6 : cx0 - 6);
         // the line runs in one side of each socket and out the other
-        let px = x; row.forEach((kd, j) => { const cx = pos[j], kr = loadR(kd, S); L(ln, px, lineY, cx - dir * kr, lineY, g); symbol(rs, kd, cx, cy, S); used.add(kd); if (ip) ipMark(rs, cx, cy, kd, S); markSock(cx, cy, kd, S); px = cx + dir * kr; });
+        let px = x; row.forEach((kd, j) => { const cx = pos[j], kr = loadR(kd, S); L(ln, px, lineY, cx - dir * kr, lineY, g); symbol(rs, kd, cx, cy, S); used.add(kd); if (ip) ipMark(rs, cx, cy, kd, S); markRun(cx, cy, kd, ids[k * per + j], k * per + j); px = cx + dir * kr; });
         L(ln, px, lineY, end, lineY, g); x = end;
-        if (k < nRows - 1) cy += pitchR; }
+        if (k < nRows - 1) { prevY = lineY; cy += pitchR + Math.max(0, extra[k + 1]); } }
+      for (const u of ups) { drawUpAt(rs, u, rowY[u.k], S); upDone.add(u.s.id); }
       // back to leg 2: straight on if the last row already runs left, else down a little and back
       let yOut = lineY; const lastDir = retDone ? -1 : (nRows - 1) % 2 ? -1 : 1;
       const spurInline = r.spurs && lastDir > 0 && x + spurW < bx + bw - 6;
@@ -1584,22 +1652,45 @@ export function layout(model, { W = 380, font = 12, screen = false, cableTable =
     const ring = isRingC(c); const xi = ring ? fx : tx + 4, bx = tx + 8, bw = tx + tw - bx - (ring ? 18 : 0), xr = bx + bw + 10; /* v0.43.5: a ring is drawn as a closed loop */
     let y0 = top; if (screen && info.roomNote) y0 += textLines(sh, tx, y0 - 4, info.roomNote, tw, { size: small, color: COL.na }) + 4;
     const topY = y0 + 2; y0 += 8; let teeY = topY, lastBottom = y0;
-    info.sockRooms.forEach((r) => {
+    const runs = roomRuns(c, info.sockRooms), lastRi = info.sockRooms.length - 1, r0 = S / 2; // v0.48.2: in-line FCU / DP switches, loads going up
+    ordAnchors = runs.ord.map(() => null); const ordIx = (ri, j) => runs.ord.findIndex((o) => o[0] === ri && o[1] === j);
+    info.sockRooms.forEach((r, ri) => {
       const rs = []; const ix = bx + 8, iw = bw - 16; let ry = y0 + 4;
       ry += textLines(rs, ix, ry, r.name || 'Room ' + (r.i + 1), iw, { bold: true, size: small });
       const ip = /outside|outdoor|garden|exterior|external|patio/i.test(r.name); if (ip) used.add('ipsock'); // outdoor: weatherproof, marked IP
       const pl = (n, w) => (+n ? `${n} ${w}${n === 1 ? '' : 's'}` : ''); // v0.44.6: never a 0 count
       const parts = [r.sockets ? pl(r.sockets, 'double socket') : '', r.singles ? pl(r.singles, 'single socket') : '', r.spurs ? pl(r.spurs, 'spur') + (r.spurKind === 'fcu' ? ' (FCU)' : '') : '', Math.min(r.unsw, r.sockets + r.singles) > 0 ? Math.min(r.unsw, r.sockets + r.singles) + ' unswitched' : '', r.dpsw ? pl(r.dpsw, 'DP + socket') : '', r.dpsws ? pl(r.dpsws, 'DP + switched socket') : '', ...r.items.filter(([k, n]) => !SOCK[k] && +n > 0).map(([k, n]) => n + ' \u00d7 ' + (n === 1 ? KIND_ONE[k] : KIND_PLURAL[k])), ip ? 'outdoor, IP rated' : ''].filter(Boolean);
       ry += textLines(rs, ix, ry, parts.join(' \u00b7 '), iw, { size: small * 0.92, color: COL.grey });
-      const uD = Math.min(r.unsw, r.sockets), uS = Math.min(r.unsw - uD, r.singles); const items = [...Array(r.sockets - uD).fill('socket'), ...Array(uD).fill('socketu'), ...Array(r.singles - uS).fill('socket1'), ...Array(uS).fill('socket1u'), ...Array(r.dpsw).fill('dpu'), ...Array(r.dpsws).fill('dps'), ...r.items.flatMap(([k, n]) => Array(n).fill(k))]; const dpH = items.some((k) => k === 'dpu' || k === 'dps') ? S * 1.75 : 0; /* v0.44.0: any extra items join the room's run */ // v0.43.8: DP stacks stand taller
+      const items = runs[ri].kinds, ids = runs[ri].ids; const dpH = items.some((k) => k === 'dpu' || k === 'dps') ? S * 1.75 : 0; /* v0.44.0: any extra items join the room's run */ // v0.43.8: DP stacks stand taller
       const cx0 = ix + S * 0.9 + rad; const per = Math.max(1, Math.floor((bx + bw - 10 - rad - cx0) / step) + 1);
-      const rowY0 = ry + 6 + (items.slice(0, per).some((k) => k === 'dpu' || k === 'dps') ? S / 2 * 3.45 : ph); let last = null; const rowHr = rowH + dpH;
+      let rowY0 = ry + 6 + (items.slice(0, per).some((k) => k === 'dpu' || k === 'dps') ? S / 2 * 3.45 : ph); let last = null; const rowHr = rowH + dpH;
+      const nRows = Math.max(1, Math.ceil(items.length / per)), xAt = (j) => cx0 + (j % per) * step;
+      const downRow = (k) => ri === lastRi && k === nRows - 1 && !r.spurs; // the last room's last row: drops below cross nothing
+      const ups = []; const taken = new Set();
+      for (const s of circuitSpurList(c)) {
+        let j = -1, elsewhere = false;
+        if (spurInRing(s)) j = ids.indexOf(s.id);
+        else { const f = String(s.from || '').trim().toLowerCase(), m = /^(?:socket\s*)?(\d+)$/.exec(f); if (m && runs.ord.length) { const o = runs.ord[Math.min(runs.ord.length, Math.max(1, parseInt(m[1], 10))) - 1]; if (SOCK[o[2]]) { if (o[0] === ri) j = o[1]; else elsewhere = true; } }
+          // no socket picked (or a DP + socket): off the last room's last row. When a drop from there would cross its way out, it goes up too.
+          if (j < 0 && !elsewhere && f !== 'jb' && ri === lastRi && !downRow(nRows - 1)) for (let q = (nRows - 1) * per; q < items.length; q++) if (SOCK[items[q]] && !ids[q] && !taken.has(q)) { j = q; break; } }
+        if (j < 0 || taken.has(j) || downRow(Math.floor(j / per))) continue;
+        taken.add(j); const u = upPrep({ s, j, k: Math.floor(j / per), x: xAt(j), inRing: spurInRing(s) }, c, S);
+        u.maxFull = bx + bw - 6;
+        ups.push(u);
+      }
+      upLabels(ups, S, items.map((kd, q) => (kd === 'dpu' || kd === 'dps' ? { k: Math.floor(q / per), x: xAt(q), hw: r0 * 1.2, top: -r0 * 3.45 } : null)).filter(Boolean));
+      const extra = Array(nRows).fill(0);
+      ups.forEach((u) => { const need = -drawUpAt([], u, 0, S) + (u.k ? 6 : 4), avail = u.k ? rowHr - ph - (ip ? 9 : 6) - 4 : rowY0 - ry; extra[u.k] = Math.max(extra[u.k], need - avail); });
+      rowY0 += Math.max(0, extra[0]); const rowY = [rowY0]; for (let k = 1; k < nRows; k++) rowY[k] = rowY[k - 1] + rowHr + Math.max(0, extra[k]);
       const ipTag = (x, y, k) => { if (ip) ipMark(rs, x, y, k, S); };
-      items.forEach((k, j) => { const cx = cx0 + (j % per) * step, cy = rowY0 + Math.floor(j / per) * rowHr; const kr = loadR(k, S);
+      items.forEach((k, j) => { const cx = cx0 + (j % per) * step, cy = rowY[Math.floor(j / per)]; const kr = loadR(k, S);
         if (!j) L(rs, bx, cy, cx - kr, cy, g);
         else if (j % per === 0) { const wy = last.y + ph + (ip ? 9 : 6), wx = ix + 2, ex = last.x + last.r + 3; L(rs, last.x + last.r, last.y, ex, last.y, g); L(rs, ex, last.y, ex, wy, g); L(rs, ex, wy, wx, wy, g); L(rs, wx, wy, wx, cy, g); L(rs, wx, cy, cx - kr, cy, g); }
         else L(rs, last.x + last.r, cy, cx - kr, cy, g);
-        symbol(rs, k, cx, cy, S); used.add(k); ipTag(cx, cy, k); markSock(cx, cy, k, S); last = { x: cx, y: cy, r: kr }; });
+        symbol(rs, k, cx, cy, S); used.add(k); ipTag(cx, cy, k); const sid = ids[j];
+        if (!sid) { markSock(cx, cy, k, S); const n = ordIx(ri, j); if (n >= 0 && SOCK[k]) ordAnchors[n] = sockAnchors[sockAnchors.length - 1]; } else { runEnd = { x: cx, cy, r: kr, k }; if (!ups.some((u) => u.s.id === sid)) inAnchors.push({ x: cx, cy, bot: plateBot(k, S, cy), k, sid }); }
+        last = { x: cx, y: cy, r: kr }; });
+      for (const u of ups) { drawUpAt(rs, u, rowY[u.k], S); upDone.add(u.s.id); }
       if (!last) L(rs, bx, rowY0, r.spurs ? cx0 - S * 0.8 : bx + 10, rowY0, g);
       let bottom = (last ? last.y : rowY0) + ph + (ip ? 6 : 3);
       if (r.spurs) { const k = r.spurKind === 'fcu' ? 'fcu' : 'socket1'; used.add(k); const sr = loadR(k, S); const sy = bottom + S * 0.5 + 6, dx = cx0 - rad - 6;

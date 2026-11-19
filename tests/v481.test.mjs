@@ -8,10 +8,7 @@ import { textSymbolOverlaps, hangingSocketTicks, linesThroughPlates, textBBox } 
 
 import { readFileSync } from 'node:fs';
 const src = (f) => readFileSync(new URL('../' + f, import.meta.url), 'utf8');
-test('v0.48.1 version and SW cache', () => {
-  assert.match(src('js/config.js'), /APP_VERSION = '0\.48\.1 beta'/);
-  assert.match(src('sw.js'), /const CACHE = 'sparky-v0\.48\.1'/);
-});
+// v0.48.2: the version / SW cache check moved to v482.test.mjs
 test('spur editor: It feeds follows the device (DP: every socket type and appliances)', () => {
   const s = src('js/schedule.js');
   assert.match(s, /spurLoadsFor\(s\.device\)\.map/);
