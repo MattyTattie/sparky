@@ -654,7 +654,7 @@ Live smoke (14 Nov 2026, about 09:05 GMT; 390 and 1440 viewports, fake seed data
 - The View PDF viewer opens (16 pages).
 - pdf_overlap.py: 0 overlaps on both PDFs at both sizes. The 390 SVG has one known false positive, in the key text.
 
-## v0.48.2 beta (built LOCALLY 19 Nov 2026, NOT pushed / not published; waiting for Matthew's "go live")
+## v0.48.2 beta (LIVE 19 Nov 2026: main 7a2aade pushed 19:37:26 GMT; live sw.js serves sparky-v0.48.2 from 19:38:00 GMT; Matthew: "Go live")
 
 Rooms layouts (js/wiring.js):
 - roomRun / roomRuns: in-ring FCU / SFCU / DP spurs are set into the rooms' runs. "After socket N" counts sockets across the rooms in drawn order, with a DP + socket counting as a socket, so it matches spurAfterOptions / spurFromOptions (roomSocketTotal). Room "spurs" counts are left out.
@@ -683,4 +683,16 @@ Review files: /workspace/polish-review/zspro-v0482/
 - scripts: r482.mjs, r482b.mjs, shot482app.py, smoke-local.py, make-pdf.mjs
 
 Not done: see NIGGLES (room "spurs" counts are not numbered; a second spur from the same socket falls back).
+
+Live smoke (19 Nov 2026, about 19:40 GMT; 390 and 1440 viewports, fake seed data only), all checks pass. Results are in /workspace/polish-review/v0482-live/:
+- Service worker and cache sparky-v0.48.2; version 0.48.2 beta is shown.
+- No page errors and no console errors.
+- An old backup restores (3 records) and its FCU still draws as a spur.
+- Rooms ring: the in-ring FCU and the spur from socket 2 are drawn in the Hall box, the in-ring DP in the Utility box, and the towel-rail spur below the last room.
+- 0 hops; 12 dots on the seed diagram.
+- Hairpin DP still drawn upward; one merged DP key entry.
+- The spare way shows N/A.
+- All 8 calculators load with no errors.
+- The View PDF viewer opens (17 pages).
+- pdf_overlap.py: 0 overlaps on both PDFs at both sizes.
 
