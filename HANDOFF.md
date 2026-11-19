@@ -1,6 +1,6 @@
 # Handoff notes
 
-Status: live is **v0.48.2 beta** (https://mattytattie.github.io/sparky/, main 7a2aade, pushed 19 Nov 2026 19:37:26 GMT, live 19:38:00 GMT). **v0.49.0 beta is built locally on main, NOT pushed or published** (`sparky-v0.49.0`; see the v0.49.0 section at the end). Android: last published APK is still Zs Pro v5 (0.45.0) at https://github.com/MattyTattie/sparky/releases/download/app-v5/ZsPro-0.45.0.apk. The app is called Zs Pro; repo, data keys, cache prefix and Android package still say sparky on purpose (see RENAME.md).
+Status: live is **v0.49.0 beta** (https://mattytattie.github.io/sparky/, main 25c4d36, pushed 19 Nov 2026 21:19 GMT; live sw.js serves sparky-v0.49.0 from ~21:20 GMT; Matthew: "Go live"). Android: last published APK is still Zs Pro v5 (0.45.0) at https://github.com/MattyTattie/sparky/releases/download/app-v5/ZsPro-0.45.0.apk. The app is called Zs Pro; repo, data keys, cache prefix and Android package still say sparky on purpose (see RENAME.md).
 Run the tests with `node --test tests/*.test.mjs tests/*.test.js` (plain `node --test tests/` doesn't work on Node 24). PDF tests find jsPDF's Node build through tests/jspdf-node.cjs; if it's missing it runs tests/setup-jspdf.sh (npm, into tests/.jspdf, git-ignored).
 
 Open points
@@ -696,7 +696,7 @@ Live smoke (19 Nov 2026, about 19:40 GMT; 390 and 1440 viewports, fake seed data
 - The View PDF viewer opens (17 pages).
 - pdf_overlap.py: 0 overlaps on both PDFs at both sizes.
 
-## v0.49.0 beta (BUILT locally 19 Nov 2026 on main, NOT pushed / not live; Matthew 19 Nov 20:24 "Fix everything" from the NIGGLES Audit (19 Nov 2026))
+## v0.49.0 beta (LIVE 19 Nov 2026: main 25c4d36 pushed 21:19 GMT; live sw.js serves sparky-v0.49.0 from ~21:20 GMT; Matthew: "Go live". Built from Matthew 19 Nov 20:24 "Fix everything" on the NIGGLES Audit (19 Nov 2026))
 Fixes every audit item; see NIGGLES "Audit (19 Nov 2026)" for the item-by-item list. Evidence: /workspace/polish-review/zspro-v0490/.
 - Board RCD settle: js/boardrcd.js `settleBoardRcds(cert)` (idempotent).
   - Runs on every read of certs in js/db.js (all/get/byJob), in certificatePdf/diagramOnlyPdf, in checkCert (on a clone) and in partsForJob (on clones).
@@ -716,5 +716,14 @@ Fixes every audit item; see NIGGLES "Audit (19 Nov 2026)" for the item-by-item l
 - Checks:
   - crawl at 390/1440/empty: 0 errors, no sideways scroll, nothing clipped (1440 table.sched "over" is the in-wrapper scroll, as before);
   - pdf_overlap.py 0 on the EIC/EICR/MW PDFs.
-- To go live: push main, then check sw.js serves sparky-v0.49.0.
+- Live smoke (19 Nov 2026 ~21:25 GMT; fresh throwaway profiles, fake data only, no Drive; /workspace/polish-review/zspro-v0490/live/live490.json): all passed.
+  - All 109 cached files on live match local byte for byte. sw.js serves sparky-v0.49.0 and the app shows 0.49.0 beta.
+  - At 390 and 1440: no console or page errors.
+  - With the fake job, opened and never-opened boards give the same Check certificate, parts list, RCD boxes and PDF text (EIC, EICR, MW).
+    - DB1 MCB circuits show 61008 63 A; there are no phantom 61009 RCDs.
+    - The parts list shows one RCD 63 A 30 mA (61008) covering 1, 2, 3, 5, 6 and 11.
+  - The DB4 "RCD upstream in DB1 circuit 10" button works: the Zs flag clears, the limit is 1667 Ω and upRcd is stored.
+  - Not-found pages show for job, cert, cert board, customer and unknown links.
+  - PDFs build with 0 overlaps.
+  - The old backup restores 3 records; its spare shows N/A and its PDF builds.
 
