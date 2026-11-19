@@ -1,42 +1,43 @@
 # Sparky — niggles and update lists
 
-## Audit (19 Nov 2026) — NOT BUILT (audit only, live v0.48.2, fake seed data)
+## Audit (19 Nov 2026) — BUILT in v0.49.0 (local, NOT pushed / not live; Matthew 19 Nov 20:24 "Fix everything")
+v0.49.0 evidence: /workspace/polish-review/zspro-v0490/ (for-matthew/ shots, shots490.json, crawl.json, backup/, PDFs). Tests: tests/v490.test.mjs.
 Evidence: /workspace/polish-review/audit-2026-11-19/zspro/ (faults/, shots/, crawl.json, probe2.json, probe4.py, PDFs).
 Clean: no console or page errors and no sideways scroll on ~48 routes at 390 and 1440, including empty states. EIC, EICR and MW PDFs have 0 overlaps. Backup export → fresh restore works. Calculator spot checks are right (VD, Zs, ring /4, 32 A on 2.5 mm² warns 27 A).
 
 ### Faults
-- [NOT BUILT] **HIGH — Opening a board's schedule silently rewrites its RCD boxes.** fillBoardRcd only runs in the schedule route (schedule.js ~120), so verdicts, the PDF and the parts list change depending on whether the board has been opened.
+- [BUILT v0.49.0] **HIGH — Opening a board's schedule silently rewrites its RCD boxes.** fillBoardRcd only runs in the schedule route (schedule.js ~120), so verdicts, the PDF and the parts list change depending on whether the board has been opened.
   - DB4, TT, MCB, Zs 12.5: before opening it passes (RCD 61009/30 mA left over from the template, so the Table 41.5 limit of 1667 Ω applies). After opening, the boxes are blank, the limit is 2.73 Ω, it goes red and a cert notice appears. Shots: faults/H1a–H1c.
   - DB1 MCB circuits 2, 3, 5 and 11 print RCD "61009 / 32 A" on the EICR PDF (faults/H1e). The parts list shows phantom RCDs "32 A 30 mA Type A (BS EN 61009)" for circuits 2, 3, 5 and 11 and "40 A" for circuit 6 (faults/H1d). The real RCD is 61008 63 A.
   - Fix idea: apply the board RCD on load/save/migrate (or when making the PDF/parts list), not on view.
-- [NOT BUILT] **MEDIUM — Cable smaller than the breaker (In > Iz, Reg 433.1.1) is only amber and doesn't appear in Check certificate.** Examples: B32 kitchen radial on 2.5 mm² method C (27 A), and the utility 6 mm² at 55 °C. On an EIC this is a design non-compliance. Add a "Worth a look" group to Check certificate, or make it red on EIC.
-- [NOT BUILT] **MEDIUM — TT sub-board fed through an upstream RCD** gets judged on Table 41.3 (2.73 Ω) unless a board RCD is entered. Add a "Protected by upstream RCD" option, or an explanatory hint on the red flag.
-- [NOT BUILT] **MEDIUM — SPARE circuit ("No device fitted" ticked)** still shows Protective device "RCBO (BS EN 61009)" in the dropdown. The PDF says N/A. Show "None / N/A" instead. Shot: faults/M1.
-- [NOT BUILT] **MEDIUM — Small tap targets on the phone.** Glossary "what it means" links are 9–35 px wide × 20 px. "Save now" is 62×19 at 390. Many buttons are 28 px high at 1440. Hard to hit with gloves; aim for ≥ 44 px.
-- [NOT BUILT] **MEDIUM — Progress bar "1 of 9 sections filled in / 11%"** on a heavily filled EIC reads as nearly empty. It only counts fully complete sections. Count partly done sections, or show "items left".
-- [NOT BUILT] LOW — Bad or old links (#/job/nope, #/cert/nope, unknown hash, #/import-extra) silently land on home or Settings with no "not found" message. Shot: faults/L-bad-link.
-- [NOT BUILT] LOW — At 390, footer buttons wrap onto 2 lines ("Previous", "All circuits", "Add another board", "Copy this board", "Copy to another job"). The circuit page chip row cuts "More" off at the edge.
-- [NOT BUILT] LOW — At 390, the Settings › Appearance System/Light/Dark segmented control wraps into a tall 3-row blob. Shot: faults/L-settings.
+- [BUILT v0.49.0] **MEDIUM — Cable smaller than the breaker (In > Iz, Reg 433.1.1) is only amber and doesn't appear in Check certificate.** Examples: B32 kitchen radial on 2.5 mm² method C (27 A), and the utility 6 mm² at 55 °C. On an EIC this is a design non-compliance. Add a "Worth a look" group to Check certificate, or make it red on EIC.
+- [BUILT v0.49.0] **MEDIUM — TT sub-board fed through an upstream RCD** gets judged on Table 41.3 (2.73 Ω) unless a board RCD is entered. Add a "Protected by upstream RCD" option, or an explanatory hint on the red flag.
+- [BUILT v0.49.0] **MEDIUM — SPARE circuit ("No device fitted" ticked)** still shows Protective device "RCBO (BS EN 61009)" in the dropdown. The PDF says N/A. Show "None / N/A" instead. Shot: faults/M1.
+- [BUILT v0.49.0] **MEDIUM — Small tap targets on the phone.** Glossary "what it means" links are 9–35 px wide × 20 px. "Save now" is 62×19 at 390. Many buttons are 28 px high at 1440. Hard to hit with gloves; aim for ≥ 44 px.
+- [BUILT v0.49.0] **MEDIUM — Progress bar "1 of 9 sections filled in / 11%"** on a heavily filled EIC reads as nearly empty. It only counts fully complete sections. Count partly done sections, or show "items left".
+- [BUILT v0.49.0] LOW — Bad or old links (#/job/nope, #/cert/nope, unknown hash, #/import-extra) silently land on home or Settings with no "not found" message. Shot: faults/L-bad-link.
+- [BUILT v0.49.0] LOW — At 390, footer buttons wrap onto 2 lines ("Previous", "All circuits", "Add another board", "Copy this board", "Copy to another job"). The circuit page chip row cuts "More" off at the edge.
+- [BUILT v0.49.0] LOW — At 390, the Settings › Appearance System/Light/Dark segmented control wraps into a tall 3-row blob. Shot: faults/L-settings.
 
 ### Continuity
-- [NOT BUILT] Missing-reading wording varies:
+- [BUILT v0.49.0] Missing-reading wording varies:
   - "Still to fill in: Zs on circuit DB1 4" appears on the DB4 page, which is the wrong board's item;
   - Check certificate says "DB1: no Zs on circuit 4";
   - flags say "DB4 circuit 1". Pick one form, e.g. "DB1 circuit 4: no Zs", and show only this board's items on a board page.
-- [NOT BUILT] Two different "bad backup" messages in backup.js: "That isn't a backup file from this app…" vs "That file isn't a Zs Pro backup, or it's damaged…".
-- [NOT BUILT] Cert tag order differs: home card "EICR, Minor Works, EIC" vs job page "EIC, EICR, Minor Works".
-- [NOT BUILT] Schedule rows are in entry order (1–6, 11, 7, 8), not way order, on screen and in the PDF.
-- [NOT BUILT] "Due 19 Nov 2036 (in 3653 days)": say "in 10 years" / "in 8 months".
-- [NOT BUILT] Settings: "Test instruments" is a bare heading while the other sections are cards. "Device presets" is an empty card with no add button or "none yet" text.
-- [NOT BUILT] Home says "Re-tests due"; job and cert say "Next inspection". PFC / Ipf / PSCC are mixed across calculators and certs (pick one, with a glossary link).
+- [BUILT v0.49.0] Two different "bad backup" messages in backup.js: "That isn't a backup file from this app…" vs "That file isn't a Zs Pro backup, or it's damaged…".
+- [BUILT v0.49.0] Cert tag order differs: home card "EICR, Minor Works, EIC" vs job page "EIC, EICR, Minor Works".
+- [BUILT v0.49.0] Schedule rows are in entry order (1–6, 11, 7, 8), not way order, on screen and in the PDF.
+- [BUILT v0.49.0] "Due 19 Nov 2036 (in 3653 days)": say "in 10 years" / "in 8 months".
+- [BUILT v0.49.0] Settings: "Test instruments" is a bare heading while the other sections are cards. "Device presets" is an empty card with no add button or "none yet" text.
+- [BUILT v0.49.0] Home says "Re-tests due"; job and cert say "Next inspection". PFC / Ipf / PSCC are mixed across calculators and certs (pick one, with a glossary link).
 
 ### Ideas (on site)
-- [NOT BUILT] "Sort by way number" button, or drag-to-reorder, on the schedule.
-- [NOT BUILT] Check certificate "Worth a look" (amber) group alongside "Needs fixing".
-- [NOT BUILT] Board page: show only that board's missing readings, with a tap-to-jump.
-- [NOT BUILT] "Not found — this job may have been deleted" page with a back-to-jobs button.
-- [NOT BUILT] TT boards: one-tap "RCD upstream (in DBx)" link so Table 41.5 applies correctly.
-- [NOT BUILT] Bigger glossary/help buttons and a glove-friendly 44 px minimum for buttons.
+- [BUILT v0.49.0] "Sort by way number" button, or drag-to-reorder, on the schedule.
+- [BUILT v0.49.0] Check certificate "Worth a look" (amber) group alongside "Needs fixing".
+- [BUILT v0.49.0] Board page: show only that board's missing readings, with a tap-to-jump.
+- [BUILT v0.49.0] "Not found — this job may have been deleted" page with a back-to-jobs button.
+- [BUILT v0.49.0] TT boards: one-tap "RCD upstream (in DBx)" link so Table 41.5 applies correctly.
+- [BUILT v0.49.0] Bigger glossary/help buttons and a glove-friendly 44 px minimum for buttons.
 
 ## [BUILT v0.33.2 on branch `v0.33.2-row-open` — NOT LIVE] Tap a circuit number in the table to open it
 - Schedule table (landscape phone / Mac): the No. cell is now a blue underlined number with a › chevron (pointer + hover tint on Mac). Click/tap or Enter on it opens that way's own circuit page. Other boxes stay typeable in the table; the circuit number itself is edited on the circuit page. The ✎ row button does the same.
@@ -331,3 +332,24 @@ Audit only of v0.47.1 (local serve of the live build) at 390px and 1440px, with 
 - DONE (v0.48.2, LIVE 19 Nov 2026 19:38 GMT, main 7a2aade): rooms layouts. An FCU/SFCU or DP switch set "In the ring" (or "In the radial") is drawn IN LINE in its room's run at its "After socket N" position, with the cable running through its faceplate. Its load goes UP inside that room's box, which grows to fit. "From socket N" now takes the spur off socket N in whichever room it is in, going up there. Off the last room's last row, spurs still drop down, unless the drop would cross the way out (e.g. a DP + socket on that row); then they go up too. Socket numbers match the editor's list: a DP + socket counts as a socket, and room "spurs" counts are not numbered.
 - Still open (minor): a room's own "spurs" count (the Spur row in a room) is not numbered for "From socket N". A second spur picked from the same socket falls back to the old placement (the last room). Placement choice: the "Where" dropdown (Spur off a socket/JB, or In the ring/radial) and "Position" are in each spur row of the Spurs list, for FCU, SFCU and DP switches. It works the same for rooms layouts. Clear enough; not redesigned.
 - Known checker false positive: pdf_overlap.py on the 390 SVG flags the key text "Single socket (unswitched)". Its width estimate is too wide; the rendered text is clear.
+
+### How v0.49.0 fixed them (short)
+- HIGH board RCD: new js/boardrcd.js `settleBoardRcds(cert)` runs when certs are read from the database (db.all/get/byJob), and again in the PDF, Check certificate and parts list. MCB/fuse circuits under a board RCD lose any template 61009/62423 RCD left in auto-filled boxes, then get the board RCD (e.g. 61008 63 A). Typed boxes are never changed. Same result whether or not a board is opened.
+- Overload In > Iz is now red, reg 433.1.1, and listed under Needs fixing.
+- TT upstream RCD: Board details has a one-tap "RCD upstream in DBx (circuit n)" chip (optional `b.upRcd`), so Table 41.5 applies. The red flag hints at it, and the PDF board row prints "RCD upstream: 30 mA in DBx circuit n".
+- Spare with no device fitted: the device select shows "N/A (no device fitted)".
+- 44 px tap areas on touch and narrow screens (help/glossary links, Save now, More info, chips, small buttons, back button, fold-out headings). A mouse desktop keeps its compact sizes; a touch desktop gets 44 px.
+- Progress counts partly filled sections: "55% filled in · 1 of 9 sections complete".
+- Not-found page for bad or old links (job, certificate, customer, unknown page); #/import-extra has its own page.
+- 390 footers: one line per button. "More" is a proper pill button.
+- Appearance toggle stays on one line.
+- Continuity:
+  - missing readings read "DB1 circuit 4: no Zs" everywhere, and a board page shows only its own with tap-to-jump links;
+  - one bad-backup message;
+  - certificate order by created date on home and job;
+  - "Sort by way number" button plus a Check certificate note (stored order, so screen = PDF);
+  - "in 10 years" style wording;
+  - Test instruments and Device presets are cards, with a "None yet" state and "+ Add preset";
+  - "Next inspection" / "Due soon" wording;
+  - "PFC" with "Ipf" where the form needs it.
+- Ideas: "Worth a look" group (amber) in Check certificate; tap-to-jump; one-tap RCD upstream; glove sizes.

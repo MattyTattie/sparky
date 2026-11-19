@@ -1,6 +1,6 @@
 # Handoff notes
 
-Status: live is **v0.48.0 beta** (https://mattytattie.github.io/sparky/, main e10d4ea, PUBLISHED 14 Nov 2026 ~08:15 GMT). **v0.48.1 beta is built locally, not pushed or published** (`sparky-v0.48.1`; see the v0.48.1 section at the end). Android: last published APK is still Zs Pro v5 (0.45.0) at https://github.com/MattyTattie/sparky/releases/download/app-v5/ZsPro-0.45.0.apk. The app is called Zs Pro; repo, data keys, cache prefix and Android package still say sparky on purpose (see RENAME.md).
+Status: live is **v0.48.2 beta** (https://mattytattie.github.io/sparky/, main 7a2aade, pushed 19 Nov 2026 19:37:26 GMT, live 19:38:00 GMT). **v0.49.0 beta is built locally on main, NOT pushed or published** (`sparky-v0.49.0`; see the v0.49.0 section at the end). Android: last published APK is still Zs Pro v5 (0.45.0) at https://github.com/MattyTattie/sparky/releases/download/app-v5/ZsPro-0.45.0.apk. The app is called Zs Pro; repo, data keys, cache prefix and Android package still say sparky on purpose (see RENAME.md).
 Run the tests with `node --test tests/*.test.mjs tests/*.test.js` (plain `node --test tests/` doesn't work on Node 24). PDF tests find jsPDF's Node build through tests/jspdf-node.cjs; if it's missing it runs tests/setup-jspdf.sh (npm, into tests/.jspdf, git-ignored).
 
 Open points
@@ -695,4 +695,26 @@ Live smoke (19 Nov 2026, about 19:40 GMT; 390 and 1440 viewports, fake seed data
 - All 8 calculators load with no errors.
 - The View PDF viewer opens (17 pages).
 - pdf_overlap.py: 0 overlaps on both PDFs at both sizes.
+
+## v0.49.0 beta (BUILT locally 19 Nov 2026 on main, NOT pushed / not live; Matthew 19 Nov 20:24 "Fix everything" from the NIGGLES Audit (19 Nov 2026))
+Fixes every audit item; see NIGGLES "Audit (19 Nov 2026)" for the item-by-item list. Evidence: /workspace/polish-review/zspro-v0490/.
+- Board RCD settle: js/boardrcd.js `settleBoardRcds(cert)` (idempotent).
+  - Runs on every read of certs in js/db.js (all/get/byJob), in certificatePdf/diagramOnlyPdf, in checkCert (on a clone) and in partsForJob (on clones).
+  - It is not run on put, so typing on the circuit editor is never fought.
+  - Order per board: liftBoardRcdToMain/mirrorMainRcd, then strip template 61009/62423 RCD boxes from MCB/fuse circuits when the board has its own RCD (auto-filled boxes only, via releaseRcboRcd), then fillBoardRcd and syncBoardS.
+- New optional field `board.upRcd` (true = protected by an RCD further up).
+  - js/checks.js `feedOf`/`upstreamRcd` read Supplied from ("DB1 circuit 10" or "DB1"). `ttRcdFor` picks the RCD for the TT limit (Table 41.5).
+  - It's ignored by v0.48.2 and kept through its restore.
+- Overload (In > Iz) is red with reg 433.1.1. Check certificate has a "Worth a look" group for amber items.
+- Way order: `outOfWayOrder`/`sortByWay` in js/templates.js. This is an explicit button: the stored order is what the screen, PDF and diagram use.
+- `notFound(what)` in js/app.js is used by every route that loads a job, cert or customer.
+- Tap sizes: styles.css v0.49.0 blocks (touch or < 900 px). desktop.css (pointer: coarse) for touch desktops.
+- Backup format unchanged (format 1, same keys).
+  - Old v0.18-shaped backup → v0.49.0: OK.
+  - v0.49.0 backup → LIVE v0.48.2 in a throwaway profile: restored 8 records, all pages open, PDF builds, no errors, upRcd kept (backup/backup490.json).
+- Tests: 740 pass (16 new in tests/v490.test.mjs; older source-grep tests updated for the new wording/levels).
+- Checks:
+  - crawl at 390/1440/empty: 0 errors, no sideways scroll, nothing clipped (1440 table.sched "over" is the in-wrapper scroll, as before);
+  - pdf_overlap.py 0 on the EIC/EICR/MW PDFs.
+- To go live: push main, then check sw.js serves sparky-v0.49.0.
 
