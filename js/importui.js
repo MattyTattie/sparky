@@ -1,7 +1,7 @@
 // importui.js — "Import results file" screen: shows exactly what will change
 // before anything is changed. Fills blanks only; your values win unless you tick otherwise.
 import { h, fill, toast, pickFile } from './ui.js';
-import { route, page, go } from './app.js';
+import { route, page, go, notFound } from './app.js';
 import { openCert, changed, flush } from './state.js';
 import { blankCircuit } from './templates.js';
 import { planImport, applyImport, checkResultsFile } from './importres.js';
@@ -17,7 +17,7 @@ export async function startImport(certId) {
 const show = (v) => (v === true ? '✓' : v === '' || v == null ? '–' : String(v));
 
 route(/^\/cert\/([^/]+)\/import$/, async (id) => {
-  const cert = await openCert(id); if (!cert) return go('#/');
+  const cert = await openCert(id); if (!cert) return notFound('certificate');
   if (!pending || pending.certId !== id) return go(`#/cert/${id}`);
   const box = h('div'); let bi = 0;
   const takeFile = new Set(); let clash = 'skip';

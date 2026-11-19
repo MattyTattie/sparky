@@ -8,18 +8,33 @@
 // =====================================================================
 import { screenSections, sectionDone, missingFields, eicrOverall } from './certmodel.js';
 import { checkCircuit, isSpare, boardCtx } from './checks.js';
+import { settleBoardRcds } from './boardrcd.js';
+import { outOfWayOrder } from './templates.js';
 
 const MAX_LIST = 4;
 const listOf = (a) => (a.length > MAX_LIST ? a.slice(0, MAX_LIST).join(', ') + ` and ${a.length - MAX_LIST} more` : a.join(', '));
 const secHref = (id, s) => (s.special === 'boards' ? `#/cert/${id}/boards` : `#/cert/${id}/s/${s.id}`);
 
+// v0.49.0: ONE wording for a missing reading, used by Check certificate, the boards notice and the board page:
+// "DB1 circuit 4: no Zs" / "DB1 circuits 2, 4: no Zs". zsMissing gives the circuit numbers and their indexes
+// (for tap-to-jump links to each circuit).
+export function zsMissing(b) {
+  const out = []; (b && b.circuits || []).forEach((c, ci) => { if (c && !isSpare(c) && !String(c.zs ?? '').trim()) out.push({ num: c.num || String(ci + 1), ci }); });
+  return out;
+}
+export const missingZsText = (ref, nums) => `${ref || 'Board'} circuit${nums.length === 1 ? '' : 's'} ${listOf(nums)}: no Zs`;
 export function checkCert(cert) {
-  cert = cert || {}; const id = cert.id;
-  const fix = [], missing = [], check = [];
+  // v0.49.0: judged on the settled boards (the board RCD on its MCB lines), same as the screens and PDF
+  cert = cert || {}; if (Array.isArray(cert.boards)) { cert = { ...cert, boards: structuredClone(cert.boards), parts: structuredClone(cert.parts || {}) }; settleBoardRcds(cert); }
+  const id = cert.id;
+  const fix = [], missing = [], check = [], look = [];
   // 1. Readings outside the limits (red flags): Zs over max, IR below the minimum, RCD too slow, polarity, test button
-  const flagItems = (c, ctx, where, href) => { const r = checkCircuit(c, ctx); for (const f of Object.values(r.flags)) if (f.level === 'red') fix.push({ text: `${where}: ${f.msg}`, href }); };
+  // v0.49.0: amber flags go in "Worth a look" (they don't stop the PDF; reds are "Needs fixing")
+  const flagItems = (c, ctx, where, href) => { const r = checkCircuit(c, ctx); for (const f of Object.values(r.flags)) { if (f.level === 'red') fix.push({ text: `${where}: ${f.msg}`, href }); else if (f.level === 'amber') look.push({ text: `${where}: ${f.msg}`, href }); } };
   if (cert.type === 'MW') { const M = cert.mw || {}; if (M.circuit) flagItems(M.circuit, { earthing: M.earthing, zdb: M.zdb }, 'Circuit ' + (M.circuit.num || ''), `#/cert/${id}/mwc`); }
   else (cert.boards || []).forEach((b, bi) => (b.circuits || []).forEach((c, ci) => flagItems(c, boardCtx(cert, b), `${b.ref || 'Board'} circuit ${c.num || ci + 1}`, `#/cert/${id}/b/${bi}/c/${ci}`)));
+  // v0.49.0: circuits out of way-number order (the PDF prints them as entered)
+  (cert.boards || []).forEach((b, bi) => { const o = outOfWayOrder(b.circuits); if (o) look.push({ text: `${b.ref || 'Board'}: circuits aren\u2019t in way order (${o.before} comes before ${o.after}). Sort them on the board page.`, href: `#/cert/${id}/b/${bi}` }); });
   // 2. EICR: the overall assessment against the codes
   if (cert.type === 'EICR') {
     const codes = (cert.observations || []).map((o) => o && o.code);
@@ -41,8 +56,8 @@ export function checkCert(cert) {
     if (s.special === 'boards') {
       const bs = cert.boards || [];
       if (!bs.some((b) => (b.circuits || []).length)) { missing.push({ text: 'Circuits and test results: no circuits yet.', href }); continue; }
-      bs.forEach((b, bi) => { const nz = (b.circuits || []).filter((c) => !isSpare(c) && !String(c.zs || '').trim()).map((c, i) => c.num || String(i + 1));
-        if (nz.length) missing.push({ text: `${b.ref || 'Board'}: no Zs on circuit${nz.length === 1 ? '' : 's'} ${listOf(nz)}.`, href: `#/cert/${id}/b/${bi}` }); });
+      bs.forEach((b, bi) => { const nz = zsMissing(b);
+        if (nz.length) missing.push({ text: missingZsText(b.ref, nz.map((x) => x.num)) + '.', href: `#/cert/${id}/b/${bi}/c/${nz[0].ci}` }); }); // v0.49.0: straight to the first circuit
       continue;
     }
     if (s.special === 'inspections') { const v = Object.values(cert.inspections || {}); const left = v.filter((x) => !x).length; missing.push({ text: `${s.title}: ${v.length ? left + ' of ' + v.length + ' items not ticked' : 'not started'}.`, href }); continue; }
@@ -54,7 +69,7 @@ export function checkCert(cert) {
   const groups = [
     { id: 'fix', title: 'Needs fixing', level: 'red', items: fix },
     { id: 'missing', title: 'Still to fill in', level: 'amber', items: missing },
-    { id: 'check', title: 'Worth checking', level: 'info', items: check },
+    { id: 'check', title: 'Worth a look', level: 'info', items: [...check, ...look] },
   ].filter((g) => g.items.length);
-  return { groups, count: fix.length + missing.length + check.length, fix: fix.length };
+  return { groups, count: fix.length + missing.length + check.length + look.length, fix: fix.length };
 }

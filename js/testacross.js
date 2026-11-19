@@ -7,7 +7,7 @@
 // =====================================================================
 import { h, fill, toast, modal } from './ui.js';
 import { rcdGroups, commonTime, planRcdTime, applyRcdTime, undoRcdTime } from './rcdreuse.js';
-import { route, page, go } from './app.js';
+import { route, page, go, notFound } from './app.js';
 import { openCert, changed } from './state.js';
 import { FIELD, autoNA } from './templates.js';
 import { checkCircuit, limitZs, boardCtx, fmtZs } from './checks.js';
@@ -18,7 +18,7 @@ const LABEL = { r1r2: 'R1+R2 Ω', R2: 'R2 Ω', r1: 'r1 Ω', rn: 'rn Ω', r2: 'r2
 const BULK = { ir: [['irV', '500', 'Test V 500 on all'], ['irLL', '>999', 'L–L >999 on all empty'], ['irLE', '>999', 'L–E >999 on all empty']], pol: [['pol', '✓', 'Polarity ✓ on all empty']], rcd: [['rcdBtn', '✓', 'Test button ✓ on all empty']] };
 
 route(/^\/cert\/([^/]+)\/b\/(\d+)\/t\/([a-z0-9]+)$/, async (id, bi, tid) => {
-  const cert = await openCert(id); if (!cert) return go('#/');
+  const cert = await openCert(id); if (!cert) return notFound('certificate');
   const b = cert.boards[+bi]; if (!b) return go('#/cert/' + id);
   const step = stepById(tid); const base = `#/cert/${id}/b/${bi}`;
   const prog = h('span', { class: 'tprog' });

@@ -76,7 +76,7 @@ route(/^\/calc\/fault(?:\/([^/]+)\/(\d+))?$/, async (certId, bi) => {
     const armour = /^swa/.test(v.cable) && (cab.cores === 2 || cab.cores === 4);
     const r = faultLevel({ pfc: v.pfc, ze: v.ze, phase: v.phase, cable: v.cable, size: v.size, length: v.length, armour, deviceKa: v.ka });
     const three = v.phase === '3';
-    fill(top, h('p', { class: 'note flintro' }, 'Works out the fault current at a sub-board, so you can check its breakers can handle it.'), r.ok ? answerCard({ kicker: 'Fault level at the sub-board', good: r.pass ? true : false, big: `${r.worst} kA`,
+    fill(top, h('p', { class: 'note flintro' }, 'Works out the fault current at a sub-board, so you can check its breakers can handle it.'), r.ok ? answerCard({ kicker: 'PFC at the sub-board', good: r.pass ? true : false, big: `${r.worst} kA`,
       sub: `The larger of the two: ${r.which === 'PEFC' ? 'the earth fault (PEFC)' : 'the short circuit (PSCC)'}.`,
       chips: [pchip(r.pass, `${r.ka} kA breakers: ${r.pass ? 'OK' : 'NOT enough'}`)],
       extra: h('div', {},
@@ -87,8 +87,8 @@ route(/^\/calc\/fault(?:\/([^/]+)\/(\d+))?$/, async (certId, bi) => {
         board ? h('button', { class: 'btn primary', style: 'margin-top:10px;width:100%', onclick: async () => {
           await flush(); const c = await db.get('certs', cert.id); const b = c.boards[Number(bi)]; b.ipf = String(r.worst);
           c.updatedAt = new Date().toISOString(); c.version = (c.version || 0) + 1; await db.put('certs', c);
-          toast(`${r.worst} kA put in Ipf for ${b.ref || 'the board'}`); go(`#/cert/${c.id}/b/${bi}`); } }, `Use ${r.worst} kA as Ipf on ${board.ref || 'this board'}`) : null) })
-      : answerCard({ kicker: 'Fault level at the sub-board', big: 'Fill in the boxes', sub: 'Put in the fault current and Ze at the main board, then the sub-main cable.', good: 'warn' }),
+          toast(`${r.worst} kA put in as the PFC (Ipf) for ${b.ref || 'the board'}`); go(`#/cert/${c.id}/b/${bi}`); } }, `Use ${r.worst} kA as the PFC (Ipf) on ${board.ref || 'this board'}`) : null) })
+      : answerCard({ kicker: 'PFC at the sub-board', big: 'Fill in the boxes', sub: 'Put in the fault current and Ze at the main board, then the sub-main cable.', good: 'warn' }),
       r.ok && !r.pass ? banner(`${r.worst} kA is more than the ${r.ka} kA rating of the breakers.`, 'Use higher-rated devices (10 kA or more), or check the maker’s back-up (cascade) table with the upstream fuse. A consumer unit fed by a BS 88-3 fuse of 100 A or less is usually rated 16 kA conditional.') : null);
     fill(form,
       icard('At the main board (origin)', [F.seg('phase', '', [['1', 'Single-phase'], ['3', 'Three-phase']], three ? 'Three-phase fault taken as 2 × the single-phase PSCC (rule of thumb from Guidance Note 3).' : '', 'seg2'),
@@ -105,5 +105,5 @@ route(/^\/calc\/fault(?:\/([^/]+)\/(\d+))?$/, async (certId, bi) => {
         h('p', { class: 'note' }, 'An estimate: measure the PFC at the sub-board when you test.')])] : null);
   };
   draw();
-  page('Fault level at a sub-board', [top, form, work], { back: board ? `#/cert/${cert.id}/b/${bi}` : '#/calc' });
+  page('PFC at a sub-board', [top, form, work], { back: board ? `#/cert/${cert.id}/b/${bi}` : '#/calc' });
 });

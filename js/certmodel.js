@@ -127,7 +127,7 @@ const SUPPLY = { id: 'supply', title: 'Supply and earthing', form: 'F / I', fiel
   f('supply.earthing', 'Earthing arrangement', 'chips', { opts: EARTHING }),
   f('supply.conductors', 'Live conductors', 'select', { opts: LIVE_COND }),
   f('supply.u', 'Nominal voltage U/U0 (V)', 'num'), f('supply.f', 'Nominal frequency (Hz)', 'num'),
-  f('supply.ipf', 'Prospective fault current Ipf (kA)', 'num'), f('supply.ze', 'External loop impedance Ze (Ω)', 'num'),
+  f('supply.ipf', 'Prospective fault current PFC (Ipf on the form, kA)', 'num'), f('supply.ze', 'External loop impedance Ze (Ω)', 'num'),
   f('supply.polarity', 'Supply polarity confirmed', 'check'), f('supply.otherSources', 'Other sources of supply (continuation sheet)', 'check', { redraw: true }),
   f('supply.spBs', 'Supply protective device BS (EN)'), f('supply.spType', 'Type', 'text', { opt: true }), f('supply.spRating', 'Rated current (A)', 'num'), f('supply.spKa', 'Breaking capacity (kA)', 'num'),
 ], doneIf: (c) => sourcesOk(c) };
@@ -294,6 +294,17 @@ export const neededFields = (cert, s) => (s.fields || []).filter((x) => x.type !
 const filled = (v) => String(v ?? '').trim() !== '';
 
 // How complete a section is (for the progress dots).
+// v0.49.0: how far through a section is (0..1), so the progress bar moves as you fill boxes in, not only
+// when a whole section is complete. 1 only when sectionDone; a nearly-done section stays under 1.
+export function sectionProgress(cert, s) {
+  if (sectionDone(cert, s)) return 1;
+  const part = (a, n) => (n > 0 ? Math.min(0.95, a / n) : 0);
+  if (s.special === 'inspections') { const v = Object.values(cert.inspections || {}); return part(v.filter(Boolean).length, v.length); }
+  if (s.special === 'boards') { const cs = (cert.boards || []).flatMap((b) => b.circuits || []); return part(cs.filter((c) => isSpareCircuit(c) || String(c.zs ?? '').trim()).length, cs.length); }
+  if (s.special === 'mwcircuit') { const c = (cert.mw && cert.mw.circuit) || {}; const nf = neededFields(cert, s); return part([c.desc, c.zs].filter((v) => String(v ?? '').trim()).length + nf.filter((x) => filled(get(cert, x.k))).length, 2 + nf.length); }
+  if (s.special) return 0;
+  const nf = neededFields(cert, s); return part(nf.filter((x) => filled(get(cert, x.k))).length, nf.length);
+}
 export function sectionDone(cert, s) {
   if (s.special === 'inspections') { const v = Object.values(cert.inspections || {}); return v.length && v.every(Boolean); }
   if (s.special === 'boards') return (cert.boards || []).some((b) => b.circuits.length) && cert.boards.every((b) => b.circuits.length && b.circuits.every((c) => isSpareCircuit(c) || c.zs)); // v0.47.0: a board with no circuits yet isn't done

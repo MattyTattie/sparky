@@ -6,10 +6,11 @@ import { drawDiagramPdf, diagramInPdf, sourcesText } from './wiring.js';
 // (BS 7671:2018+A4:2026, 15 April 2026). No IET logo (their terms).
 // =====================================================================
 import { Kit, loadJsPDF, VALUE, GREY, INK, RED } from './pdfkit.js';
+import { settleBoardRcds } from './boardrcd.js';
 import { TYPES, get, eicrOverall, isElectrode, msIsRcd, msIsOcpd, BOND_SERVICES, bondTicked, bondCsaFor, bondNone, sourceRows, isNewInstall, SECTION_I_NA, normaliseCert } from './certmodel.js';
 import { EIC_ITEMS, EICR_ITEMS, CODE_TEXT, INTAKE_NOTE_10, INTAKE_NOTES, INTAKE_NOTIFIED, migrateIntake } from './inspections.js';
 import { GUIDANCE } from './guidance.js';
-import { limitZs, isSpare, boardCtx, boardIsTT, fmtZs } from './checks.js';
+import { limitZs, isSpare, boardCtx, boardIsTT, fmtZs, upstreamRcd } from './checks.js';
 import { mainSwitchRow, boardRcdView } from './boardmain.js';
 import { FIELDS, autoNA, boardFedBySource } from './templates.js';
 const AUTO_GREY = [170, 170, 170]; // v0.10: automatic N/A on spare ways
@@ -264,7 +265,7 @@ function boardHeaderDetails(k, cert, b, certNo) {
   const rv = bi >= 0 ? boardRcdView(cert, bi) : b; // v0.47.0: an RCD main switch's details fill the board RCD row
   row(k, x, w, [['RCD:  BS (EN)', rv.rcdBs, 0.3], ['Type', showRcdType(rv.rcdType), 0.15], ['Rating', rv.rcdRating, 0.18, { unit: 'A' }], ['Rated residual operating current (IΔn):', rv.rcdIdn, 0.37, { unit: 'mA' }]]);
   // v0.47.0: a board on its own TT earth electrode, and generation feeding the board
-  if (boardIsTT(b)) row(k, x, w, [['Earthing (this board):', 'TT', 0.25], ['RA:', b.ra, 0.17, { unit: '\u03a9' }], ['Earth electrode:', [b.elType, b.elLocation].map((v) => String(v ?? '').trim()).filter(Boolean).join(', '), 0.58]]);
+  if (boardIsTT(b)) { const up = upstreamRcd(cert, b); row(k, x, w, [['Earthing (this board):', 'TT', 0.25], ['RA:', b.ra, 0.17, { unit: '\u03a9' }], ['Earth electrode:', [[b.elType, b.elLocation].map((v) => String(v ?? '').trim()).filter(Boolean).join(', '), up ? `RCD upstream: ${up.rcdIdn} mA in ${up.where}` : ''].filter(Boolean).join(' \u00b7 '), 0.58]]); }
   if (boardFedBySource(b)) row(k, x, w, [['Fed by:', (sourcesText(cert) || 'Battery / PV / generator') + ' (power can flow both ways; see other sources of supply)', 1]]);
   // v0.32: optional per-board maximum demand (only printed when filled in).
   if (String(b.maxDemand ?? '').trim()) row(k, x, w, [['Maximum demand (this board):', b.maxDemand, 0.4, { unit: 'A' }]]);
@@ -947,7 +948,7 @@ export async function boardChartPdf(cert, board, profile) {
 // ---------- entry point ----------
 export async function certificatePdf(cert, { profile = {}, photos = [] } = {}) {
   const { jsPDF } = await loadJsPDF();
-  cert = normaliseCert(structuredClone(cert || {})); profile = profile || {}; // v0.36: old/damaged jobs never crash the PDF
+  cert = normaliseCert(structuredClone(cert || {})); settleBoardRcds(cert); profile = profile || {}; // v0.36: old/damaged jobs never crash the PDF
   const k = new Kit(jsPDF, { orientation: 'p', footer: FOOT + (profile.business ? '  Issued by ' + profile.business + '.' : '') });
   k.profile = profile;
   if (cert.type === 'EIC') { eic(k, cert, profile); guidancePage(k, 'EIC'); }
@@ -960,7 +961,7 @@ export async function certificatePdf(cert, { profile = {}, photos = [] } = {}) {
 // v0.44.6: just the wiring diagram sheets (View PDF on the diagram screen), drawn by the same code as the certificate's diagram pages
 export async function diagramOnlyPdf(cert, { profile = {} } = {}) {
   const { jsPDF } = await loadJsPDF();
-  cert = normaliseCert(structuredClone(cert || {})); profile = profile || {};
+  cert = normaliseCert(structuredClone(cert || {})); settleBoardRcds(cert); profile = profile || {};
   const k = new Kit(jsPDF, { orientation: 'p', footer: FOOT + (profile.business ? '  Issued by ' + profile.business + '.' : '') });
   k.profile = profile;
   diagramSheet(k, cert, cert.number, true);

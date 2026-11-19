@@ -15,7 +15,7 @@ export const CALCS = [
   { key: 'check', href: '#/calc/check', ic: 'check', title: 'Check a circuit', sub: 'Zs, volt drop, current rating and the adiabatic check for a cable you\u2019ve picked.' },
   { key: 'md', href: '#/calc/md', ic: 'gauge', title: 'Maximum demand', sub: 'List the cooker, heaters, showers, sockets and lights: get the On-Site Guide figure with diversity.' },
   { key: 'ring', href: '#/calc/ring', ic: 'link', title: 'Ring final check', sub: 'Your r1, rn and r2 readings: do the ends match, and what R1+R2 to expect.' },
-  { key: 'fault', href: '#/calc/fault', ic: 'zap', title: 'Fault level at a sub-board', sub: 'PFC at the origin and the sub-main: get the PSCC and PEFC at the far end against the 6 or 10 kA rating.' },
+  { key: 'fault', href: '#/calc/fault', ic: 'zap', title: 'PFC at a sub-board', sub: 'PFC at the origin and the sub-main: get the PSCC and PEFC at the far end against the 6 or 10 kA rating.' },
   { key: 'contactor', href: '#/calc/contactor', ic: 'layers', title: 'Contactor picker', sub: 'Pick the load type: get the AC-1 / AC-3 category and the size, with a margin.' },
   { key: 'xfmr', href: '#/calc/xfmr', ic: 'gauge', title: 'Control transformer', sub: 'VA and voltages: primary and secondary current, and the fuse each side.' },
   { key: 'symbols', href: '#/calc/symbols', ic: 'clipboard', title: 'Symbols', sub: 'Ib, In, Iz, Zs, Ca, Icu, AC-3\u2026: what each one means, in one line.' },

@@ -61,3 +61,15 @@ export function icsFor({ uid, date, title, location = '', notes = '', now = new 
     'BEGIN:VALARM', 'ACTION:DISPLAY', `DESCRIPTION:${esc(title)}`, 'TRIGGER:-P30D', 'END:VALARM', 'END:VEVENT', 'END:VCALENDAR']
     .filter(Boolean).map(fold).join('\r\n') + '\r\n';
 }
+
+// v0.49.0: "in 10 years", "in 8 months", "in 3 weeks", "in 5 days", "today"; overdue: "2 months ago".
+export function inWords(days) {
+  if (days == null || !isFinite(days)) return '';
+  const a = Math.abs(Math.round(days)); const pl = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`;
+  let t;
+  if (a === 0) return 'today';
+  if (a < 14) t = pl(a, 'day');
+  else if (a < 61) t = pl(Math.round(a / 7), 'week');
+  else { const m = Math.round(a / 30.4375); if (m < 12) t = pl(m, 'month'); else { const y = Math.floor(m / 12), r = m % 12; t = r === 0 ? pl(y, 'year') : y >= 2 ? `about ${pl(Math.round(m / 12), 'year')}` : `${pl(y, 'year')} ${pl(r, 'month')}`; } }
+  return days < 0 ? `${t} ago` : `in ${t}`;
+}

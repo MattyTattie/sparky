@@ -6,7 +6,7 @@
 import * as db from './db.js';
 import { h, fill, toast, modal, confirmBox, pickFile, shrinkImage, icon, withIcon } from './ui.js';
 import { orderRows, mainSide, mainRow, settleSpdMcb } from './cuscan.js';
-import { route, page, go, render } from './app.js';
+import { route, page, go, render, notFound } from './app.js';
 import { openCert, changed, flush, touchJob } from './state.js';
 import { field, stateLine } from './certui.js';
 import { sectionsFor, get, set, mainSwitchFields } from './certmodel.js';
@@ -14,11 +14,27 @@ import { mainFromScan, mainSummary, mirrorMainRcd, liftBoardRcdToMain, mainAt, s
 import { msIsRcdAt } from './certmodel.js';
 import { QUICK, planQuick, applyQuick, undoQuick } from './quickfill.js';
 import { supplyKindOf, feedInfo, circuitSpurList, addSpur, removeSpur, updateSpur, spurLabel, SPUR_DEVICES, spurLoadsFor, canSitInRing, spurNeedsLoad, namedLoadKind, pointKind, roomPointsNote, diagramPointTotal, setPointsToDiagramTotal, pointCount, KIND_ONE, spurFromOptions, spurAfterOptions, spurInRing, isRingC } from './wiring.js';
+// v0.49.0: a board page shows only its own missing readings, each circuit a link (tap to jump to it)
+const boardLine = (cert, bi) => {
+  const b = cert.boards[bi]; if (!b) return null;
+  if (!(b.circuits || []).length) return h('div', { class: 'notice info secstate' }, 'Still to fill in: add the circuits.');
+  const m = zsMissing(b);
+  if (!m.length) return h('div', { class: 'notice green secstate' }, `${b.ref || 'Board'}: every circuit has a Zs \u2713`);
+  const links = m.slice(0, 12).flatMap((x, i) => [i ? ', ' : '', h('a', { href: `#/cert/${cert.id}/b/${bi}/c/${x.ci}`, class: 'jump' }, x.num)]);
+  return h('div', { class: 'notice info secstate' }, `Still to fill in: ${b.ref || 'Board'} circuit${m.length === 1 ? '' : 's'} `, links, m.length > 12 ? ` and ${m.length - 12} more` : '', ': no Zs.');
+};
+// v0.49.0: circuits not in way-number order: say so, and sort them on one tap (the PDF prints the same order)
+const wayOrderLine = (cert, b) => {
+  const o = outOfWayOrder(b.circuits); if (!o) return null;
+  return h('div', { class: 'notice info wayorder' }, `Circuits aren\u2019t in way order (${o.before} comes before ${o.after}). The schedule and PDF list them as they are here.`,
+    h('div', { class: 'btns' }, h('button', { class: 'btn small primary', type: 'button', onclick: () => { const n = sortByWay(b.circuits); changed(); toast(n ? 'Sorted by way number' : 'Already in way order'); render(); } }, 'Sort by way number')));
+};
 const boardsLine = (cert) => { const sec = sectionsFor(cert.type).find((x) => x.special === 'boards'); if (!sec) return null; const [c, t] = stateLine(cert, sec); return h('div', { class: 'notice ' + c + ' secstate' }, t); };
 import { blankBoard } from './certmodel.js';
 import * as presets from './presets.js';
-import { FIELDS, FIELD, TEMPLATES, blankCircuit, applyTemplate, copyCircuit, copyBoard, copyBoardToCert, makeSpare, autoNA, applyNoDevice, descChanged, rcdGroupChanged, spdGroupChanged, SPD_HIDE, spdHidden, spdObservation, circuitFedBySource, boardFedBySource, bidiTarget, hasBidiNote, addBidiNote, bidiCircuits, addBidiRemark, bidiRemarksDone, GEN_NOTES, EV_NOTES, addNote, noteDone, isEvCircuit, evMissing, isBatteryCircuit, spareLine, copyToNextWay, laterSequential, deleteCircuitAt } from './templates.js';
-import { checkCircuit, limitZs, isSpare, boardCtx, boardIsTT, fmtZs } from './checks.js';
+import { outOfWayOrder, sortByWay, FIELDS, FIELD, TEMPLATES, blankCircuit, applyTemplate, copyCircuit, copyBoard, copyBoardToCert, makeSpare, autoNA, applyNoDevice, descChanged, rcdGroupChanged, spdGroupChanged, SPD_HIDE, spdHidden, spdObservation, circuitFedBySource, boardFedBySource, bidiTarget, hasBidiNote, addBidiNote, bidiCircuits, addBidiRemark, bidiRemarksDone, GEN_NOTES, EV_NOTES, addNote, noteDone, isEvCircuit, evMissing, isBatteryCircuit, spareLine, copyToNextWay, laterSequential, deleteCircuitAt } from './templates.js';
+import { checkCircuit, limitZs, isSpare, boardCtx, boardIsTT, fmtZs, feedOf, upstreamRcd } from './checks.js';
+import { zsMissing } from './certcheck.js';
 import { WAVES, parseRcdType, formatRcdType, isSType } from './rcdtype.js';
 import { autoFillOcpd as autoFill0, typed, fillBoardRcd, releaseRcboRcd, boardHasRcd, syncBoardS } from './ocpdfill.js';
 // v0.35.2: MCB / fuse lines take the RCD boxes from their board's main RCD.
@@ -46,7 +62,7 @@ const isTick = (k) => FIELD[k] && FIELD[k].tick;
 
 // ---------- Boards list ----------
 route(/^\/cert\/([^/]+)\/boards$/, async (id) => {
-  const cert = await openCert(id); if (!cert) return go('#/');
+  const cert = await openCert(id); if (!cert) return notFound('certificate');
   if (cert.boards.length === 1) { history.replaceState(null, '', `#/cert/${id}/b/0`); return render(); }
   page('Boards', [
     boardsLine(cert),
@@ -112,17 +128,18 @@ function addBoard(cert) { cert.boards.push(blankBoard(cert.boards.length + 1)); 
 
 // ---------- One board ----------
 route(/^\/cert\/([^/]+)\/b\/(\d+)$/, async (id, bi) => {
-  const cert = await openCert(id); if (!cert) return go('#/');
+  const cert = await openCert(id); if (!cert) return notFound('certificate');
   const b = cert.boards[+bi]; if (!b) return go('#/cert/' + id);
   const back = cert.boards.length > 1 ? `#/cert/${id}/boards` : '#/cert/' + id;
   // v0.47.0: an RCD main switch is the board's RCD: one set of boxes (the main switch's), copied into the board's
   if (liftBoardRcdToMain(cert, +bi).length + mirrorMainRcd(cert, +bi).length) changed();
   if (fillBoardRcd(b, isSpare)) changed(); // v0.35.2: older jobs pick up the board's RCD on MCB lines
   const tools = boardTools(cert, b, +bi);
-  if (LAND.matches) return page(`${b.ref || 'Board'} · schedule of test results`, [boardDetails(cert, b), tools, scheduleTable(cert, b, +bi),
+  if (LAND.matches) return page(`${b.ref || 'Board'} · schedule of test results`, [boardLine(cert, +bi), wayOrderLine(cert, b), boardDetails(cert, b), tools, scheduleTable(cert, b, +bi),
     h('div', { class: 'btns' }, h('button', { class: 'btn small', onclick: () => copyBoardDialog(cert, b) }, 'Copy this board'), h('button', { class: 'btn small', onclick: () => copyBoardToJobDialog(cert, b) }, 'Copy to another job'))], { back, wide: true, sub: cert.number });
   page(b.ref || 'Board', [
-    boardsLine(cert),
+    boardLine(cert, +bi),
+    wayOrderLine(cert, b),
     tools, // v0.45: circuits first; the board details fold sits under the buttons
     boardDetails(cert, b),
     circuitCards(cert, b, +bi),
@@ -137,14 +154,14 @@ function boardDetails(cert, b) {
   const rcdBox = boardRcdBox(cert, b);
   // v0.45: open only on a new board (no circuits yet and Zdb not filled in)
   return h('details', { class: 'card boarddetails', open: !b.zdb && !(b.circuits || []).length ? true : null },
-    h('summary', { style: 'font-weight:700' }, 'Board details', b.zdb ? h('span', { class: 'note' }, `  Zdb ${b.zdb} Ω · Ipf ${b.ipf || '–'} kA`) : null),
+    h('summary', { style: 'font-weight:700' }, 'Board details', b.zdb ? h('span', { class: 'note' }, `  Zdb ${b.zdb} Ω · PFC ${b.ipf || '–'} kA`) : null),
     h('div', { style: 'margin-top:10px' },
       F('ref', 'DB reference'), F('location', 'Location'),
       cert.boards.indexOf(b) > 0 ? supplyChips(cert, b) : db1SupplyChips(b),
       F('suppliedFrom', 'Supplied from'),
       h('div', { class: 'grid3' }, F('ocpdBs', 'Supplying device BS (EN)'), F('ocpdType', 'Type'), F('ocpdRating', 'Rating (A)', 'num')),
-      h('div', { class: 'grid3' }, F('zdb', 'Zdb (Ω)', 'num'), F('ipf', 'Ipf (kA)', 'num'), F('maxDemand', 'Max demand (A)', 'num')),
-      h('a', { class: 'btn small', href: `#/calc/fault/${cert.id}/${cert.boards.indexOf(b)}` }, 'Work out Ipf for a sub-board'),
+      h('div', { class: 'grid3' }, F('zdb', 'Zdb (Ω)', 'num'), F('ipf', 'PFC (Ipf, kA)', 'num'), F('maxDemand', 'Max demand (A)', 'num')),
+      h('a', { class: 'btn small', href: `#/calc/fault/${cert.id}/${cert.boards.indexOf(b)}` }, 'Work out the PFC at a sub-board'),
       cert.boards.indexOf(b) > 0 ? boardEarthing(cert, b) : null,
       cert.boards.indexOf(b) > 0 ? boardMainSwitch(cert, b, () => rcdBox.redraw()) : msPointer(cert),
       h('div', { class: 'note', style: 'margin-top:12px' }, 'Other sources'), bidiTick(cert, b),
@@ -169,8 +186,22 @@ function boardEarthing(cert, b) {
     fill(box, h('div', { class: 'note', style: 'margin:0 0 4px' }, 'Earthing at this board'),
       h('div', { role: 'group', 'aria-label': 'Earthing at this board', style: 'display:flex;align-items:stretch;padding:0;border:1px solid var(--line);border-radius:10px;overflow:hidden' }, chip(false, 'Same as supply' + (cert.supply.earthing ? ' (' + cert.supply.earthing + ')' : '')), chip(true, 'TT (own earth electrode)')),
       tt ? h('div', { style: 'margin-top:8px' }, h('div', { class: 'grid2' }, field(b, { k: 'ra', label: 'Electrode RA (\u03a9)', type: 'num' }), field(b, { k: 'elType', label: 'Electrode type (rod, tape\u2026)' })), field(b, { k: 'elLocation', label: 'Electrode location' }),
-        h('div', { class: 'note' }, 'Circuits here are checked to Table 41.5 (TT, with an RCD) and RA \u00d7 I\u0394n \u2264 50 V. It prints on the schedule, in section G and on the diagram.')) : null); };
+        h('div', { class: 'note' }, 'Circuits here are checked to Table 41.5 (TT, with an RCD) and RA \u00d7 I\u0394n \u2264 50 V. It prints on the schedule, in section G and on the diagram.')) : null,
+      tt || String(cert.supply.earthing || '').toUpperCase() === 'TT' ? upRcdChip(cert, b) : null); };
   draw(); return box;
+}
+// v0.49.0: one tap for "this TT board is protected by an RCD further up" (optional b.upRcd = true). The RCD is
+// read from the circuit (or board) that feeds it, so Table 41.5 applies to its MCB lines with no RCD of their own.
+function upRcdChip(cert, b) {
+  const f = feedOf(cert, b); const on = b.upRcd === true; const up = upstreamRcd(cert, b);
+  const where = f ? (f.circuitNum ? `${f.board.ref} circuit ${f.circuitNum}` : f.board.ref) : '';
+  const btn = h('button', { type: 'button', class: 'btn small uprcd' + (on ? ' primary' : ''), 'aria-pressed': String(on), style: 'margin-top:10px', disabled: !f && !on ? true : null,
+    onclick: () => { if (on) delete b.upRcd; else b.upRcd = true; changed(); render(); } }, (on ? '\u2713 ' : '') + (where ? `RCD upstream in ${where}` : 'RCD upstream'));
+  const note = !f ? 'To use an RCD further up, pick the circuit that feeds this board under Supplied from (Sub-main).'
+    : on && up ? `Uses the ${up.rcdIdn} mA RCD in ${up.where}: MCB lines here with no RCD of their own are checked to Table 41.5.`
+    : on ? (f.circuitNum && !f.circuit ? `${f.board.ref} has no circuit ${f.circuitNum}: check Supplied from.` : `No RCD found on ${where}. Fill in its RCD there (or untick this).`)
+    : 'Tap if an RCD further up (e.g. the sub-main\u2019s RCBO) protects this board.';
+  return h('div', { class: 'uprcdbox' }, btn, h('div', { class: on && !up ? 'note warn' : 'note' }, note));
 }
 
 // v0.45.1: a later board's own main switch: the same boxes as DB1's (certificate section J), kept in board.main
@@ -386,7 +417,7 @@ function circuitCards(cert, b, bi) {
 
 // ---------- One circuit (portrait) ----------
 route(/^\/cert\/([^/]+)\/b\/(\d+)\/c\/(\d+)$/, async (id, bi, ci) => {
-  const cert = await openCert(id); if (!cert) return go('#/');
+  const cert = await openCert(id); if (!cert) return notFound('certificate');
   const b = cert.boards[+bi]; const c = b && b.circuits[+ci]; if (!c) return go(`#/cert/${id}/b/${bi}`);
   const base = `#/cert/${id}/b/${bi}`;
   circuitEditor({ cert, c, ctx: () => ctxFor(cert, b), back: base, title: `Circuit ${c.num}`,
@@ -402,7 +433,7 @@ route(/^\/cert\/([^/]+)\/b\/(\d+)\/c\/(\d+)$/, async (id, bi, ci) => {
     ] });
 });
 route(/^\/cert\/([^/]+)\/mwc$/, async (id) => {
-  const cert = await openCert(id); if (!cert) return go('#/');
+  const cert = await openCert(id); if (!cert) return notFound('certificate');
   circuitEditor({ cert, c: cert.mw.circuit, ctx: () => ({ earthing: cert.mw.earthing, zdb: cert.mw.zdb }), back: `#/cert/${id}/s/mwC`, title: 'Minor works circuit', mw: true,
     extra: [h('button', { class: 'btn small', onclick: async () => { const t = await pickTemplate(); if (t) { Object.assign(cert.mw.circuit, applyTemplate(cert.mw.circuit, t)); changed(); render(); } } }, 'Template')] });
 });
@@ -577,8 +608,8 @@ function circuitEditor({ cert, c, ctx, back, title, prev, next, extra = [], more
     if (d && c.device !== d.id) c.device = d.id;
     const ratings = d ? (ratingsFor(d.id, c.type).length ? ratingsFor(d.id, c.type) : ratingsFor(d.id)) : [];
     fill(devBox, 
-      h('label', { class: 'f' }, h('span', {}, 'Protective device'), h('select', { onchange: (e) => { const nd = deviceById(e.target.value); if (!nd) return; const od = deviceById(c.device) || deviceFromBs(c.bs); releaseRcboRcd(c, od, nd); c.device = nd.id; askRcd = !!(od && od.rcd && !nd.rcd) && !boardHasRcd(boardOf(cert, c)); if (isAutoBs(c)) c.bs = nd.bs; if (nd.types.length && !nd.types.includes(c.type)) c.type = nd.types.length === 1 ? nd.types[0] : nd.types[0]; autoFillOcpd(c); changed(); drawDev(); refresh(); } },
-        h('option', { value: '' }, '— pick —'), DEVICES.map((x) => h('option', { value: x.id, selected: d && d.id === x.id ? true : null }, x.label)))),
+      h('label', { class: 'f' }, h('span', {}, 'Protective device'), h('select', { disabled: c.noDevice ? true : null, title: c.noDevice ? 'Untick \u201cNo device fitted\u201d to pick a device' : null, onchange: (e) => { const nd = deviceById(e.target.value); if (!nd) return; const od = deviceById(c.device) || deviceFromBs(c.bs); releaseRcboRcd(c, od, nd); c.device = nd.id; askRcd = !!(od && od.rcd && !nd.rcd) && !boardHasRcd(boardOf(cert, c)); if (isAutoBs(c)) c.bs = nd.bs; if (nd.types.length && !nd.types.includes(c.type)) c.type = nd.types.length === 1 ? nd.types[0] : nd.types[0]; autoFillOcpd(c); changed(); drawDev(); refresh(); } },
+        c.noDevice ? h('option', { value: '', selected: true }, 'N/A (no device fitted)') : h('option', { value: '' }, '— pick —'), c.noDevice ? null : DEVICES.map((x) => h('option', { value: x.id, selected: d && d.id === x.id ? true : null }, x.label)))), // v0.49.0: a spare with no device shows N/A, as the PDF does
       d && d.types.length > 1 ? h('div', { class: 'f', style: 'margin-bottom:10px' }, h('span', { class: 'note' }, 'Type (col 9)'), h('div', { class: 'chips' }, [['N/A', 'N/A'], ...d.types.map((t) => [t, t])].map(([v, lab]) => h('button', { class: 'chip' + ((v === 'N/A' ? autoNA(c, 'type') || /^n\/?a$/i.test(String(c.type || '')) : !autoNA(c, 'type') && c.type === v) ? ' on' : ''), type: 'button', onclick: () => { c.type = v; typed(c, 'type'); if (c.noDevice) c.noDevAuto = { ...(c.noDevAuto || {}) }; autoFillOcpd(c); changed(); drawDev(); refresh(); } }, lab)))) : null,
       ratings.length ? h('div', { class: 'f', style: 'margin-bottom:10px' }, h('span', { class: 'note' }, 'Rating, A (col 10)'), h('div', { class: 'chips' }, [['N/A', 'N/A'], ...ratings.map((r) => [String(r), String(r)])].map(([v, lab]) => h('button', { class: 'chip' + ((v === 'N/A' ? autoNA(c, 'rating') || /^n\/?a$/i.test(String(c.rating || '')) : !autoNA(c, 'rating') && String(c.rating) === v) ? ' on' : ''), type: 'button', onclick: () => { c.rating = v; typed(c, 'rating'); if (c.noDevice) c.noDevAuto = { ...(c.noDevAuto || {}) }; autoFillOcpd(c); changed(); drawDev(); refresh(); } }, lab)))) : inp('rating'),
       d && d.adj ? h('label', { class: 'f' }, h('span', {}, d.adj === 'mpcb' ? 'Magnetic trip, A (MPCB: about 13 × the top of the dial)' : 'Magnetic setting Im / Ii, A (MCCB: e.g. 10 × Ir)'), h('input', { inputmode: 'decimal', 'aria-label': 'Magnetic trip setting', value: c.im || '', oninput: (e) => { c.im = e.target.value.trim(); changed(); refresh(); } }), h('div', { class: 'note imnote' }, c.im ? `Max Zs = 230 × 0.95 ÷ ${c.im} A. Check the maker\u2019s setting.` : 'Gives the max Zs and the adiabatic check. Leave blank to type your own max Zs below.')) : null,
@@ -772,7 +803,7 @@ function openWayButton(cert, bi, ci, c) {
 //    each row of breakers. 3. Read. 4. Check every way next to its own crop of
 //    the photo, fix anything flagged, then add. The photos are kept with the job.
 route(/^\/cert\/([^/]+)\/b\/(\d+)\/scan$/, async (id, bi) => {
-  const cert = await openCert(id); if (!cert) return go('#/');
+  const cert = await openCert(id); if (!cert) return notFound('certificate');
   const b = cert.boards[+bi];
   const box = h('div');
   const status = h('div', { class: 'note' });

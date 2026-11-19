@@ -5,6 +5,7 @@
 // Every change is written straight away (autosave): nothing waits for a
 // Save button, so closing the app or losing signal never loses a reading.
 // NEVER rename DB_NAME or the stores (old data would vanish from view).
+import { settleBoardRcds } from './boardrcd.js';
 const DB_NAME = 'sparky-certs';
 const DB_VERSION = 1;
 export const STORES = ['jobs', 'customers', 'certs', 'files', 'meta'];
@@ -34,8 +35,12 @@ async function tx(store, mode, fn) {
     t.oncomplete = () => res(out); t.onerror = () => rej(t.error); t.onabort = () => rej(t.error || new Error('aborted'));
   });
 }
-export const all = (s) => tx(s, 'readonly', (st) => st.getAll());
-export const get = (s, id) => tx(s, 'readonly', (st) => st.get(id));
+// v0.49.0: every certificate read from the phone has its boards' RCDs settled (boardrcd.js), so the
+// verdicts, Check certificate, PDF and parts list are the same whether or not a board was opened.
+// Values only (no new fields, same format); idempotent; anything typed by hand is left alone.
+const settle = (s, v) => { if (s === 'certs' && v) for (const c of Array.isArray(v) ? v : [v]) { try { settleBoardRcds(c); } catch {} } return v; };
+export const all = (s) => tx(s, 'readonly', (st) => st.getAll()).then((v) => settle(s, v));
+export const get = (s, id) => tx(s, 'readonly', (st) => st.get(id)).then((v) => settle(s, v));
 // v0.9: sync.js listens for saves (to send changes up after a pause).
 export const onPut = new Set();
 export const put = (s, v) => tx(s, 'readwrite', (st) => st.put(v)).then((r) => { onPut.forEach((fn) => { try { fn(s, v); } catch {} }); return r; });
@@ -53,7 +58,7 @@ export async function putMany(writes) {
   return writes.length;
 }
 export const del = (s, id) => tx(s, 'readwrite', (st) => st.delete(id));
-export const byJob = (s, jobId) => tx(s, 'readonly', (st) => st.index('jobId').getAll(jobId));
+export const byJob = (s, jobId) => tx(s, 'readonly', (st) => st.index('jobId').getAll(jobId)).then((v) => settle(s, v));
 export const getMeta = (k) => tx('meta', 'readonly', (st) => st.get(k));
 export const setMeta = (k, v) => tx('meta', 'readwrite', (st) => st.put(v, k));
 export function newId() { return crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2, 8); }

@@ -32,7 +32,7 @@ export function parseBackup(json) {
   let d = json;
   if (typeof json === 'string') { try { d = JSON.parse(json); } catch { throw new Error(BAD_BACKUP); } }
   if (!isObj(d)) throw new Error(BAD_BACKUP);
-  if (d.app !== APP_SLUG) throw new Error('That isn\u2019t a backup file from this app. Nothing was changed.');
+  if (d.app !== APP_SLUG) throw new Error(BAD_BACKUP); // v0.49.0: one wording for every bad backup file
   for (const s of ['customers', 'jobs', 'certs', 'files']) {
     if (d[s] == null) continue;
     if (!Array.isArray(d[s]) || !d[s].every(okId)) throw new Error(BAD_BACKUP);

@@ -7,6 +7,7 @@ import { isSpareCircuit } from './templates.js';
 import { mainAt, hasMainSwitch, mainSwitchParts } from './boardmain.js';
 import { msIsRcdAt, get } from './certmodel.js';
 import { showRcdType } from './rcdtype.js';
+import { settleBoardRcds } from './boardrcd.js';
 
 const real = (v) => v != null && String(v).trim() !== '' && !/^n\/?a$/i.test(String(v).trim());
 const hasDevice = (c) => !c.noDevice && (real(c.device) || real(c.bs)) && real(c.rating);
@@ -88,7 +89,8 @@ export function certsForParts(certs) {
 }
 
 export function partsForJob(certs) {
-  const use = certsForParts(certs);
+  // v0.49.0: settled copies (the board RCD on its MCB lines), so the list doesn't depend on which boards were opened
+  const use = certsForParts(certs).map((c) => { const x = { ...c, boards: structuredClone(c.boards), parts: structuredClone(c.parts || {}) }; settleBoardRcds(x); return x; });
   const boards = use.flatMap((c) => (c.boards || []).map((b, i) => ({ ...partsForBoard(b, c, i === 0, i), cert: c.number || c.type, certId: c.id, bi: i })));
   const totals = [];
   for (const b of boards) for (const it of b.items) { const t = totals.find((x) => x.name === it.name); if (t) t.qty += it.qty; else totals.push({ name: it.name, qty: it.qty }); }

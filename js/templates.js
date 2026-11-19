@@ -306,3 +306,19 @@ export function evMissing(c, earthing) {
   if (isTNCS(earthing) && !EV_PEN_HAS(t)) out.push('pen');
   return out;
 }
+
+// v0.49.0: way-number order. "7", "7a", "11"; three-phase "1L1/1L2" keep their order; no number goes last.
+// The stored order is only changed when you tap "Sort by way number" (never on its own).
+const wayKey = (n) => { const m = /^\s*(\d+)\s*([a-z]*)/i.exec(String(n ?? '')); return m ? [Number(m[1]), m[2].toLowerCase()] : [Infinity, '']; };
+const cmpWay = (a, b) => { const x = wayKey(a.num), y = wayKey(b.num); return x[0] - y[0] || (x[1] < y[1] ? -1 : x[1] > y[1] ? 1 : 0); };
+export function outOfWayOrder(circuits) {
+  const cs = (circuits || []).filter(Boolean);
+  for (let i = 1; i < cs.length; i++) if (cmpWay(cs[i - 1], cs[i]) > 0) return { before: cs[i - 1].num, after: cs[i].num };
+  return null;
+}
+export function sortByWay(circuits) {
+  if (!Array.isArray(circuits)) return 0;
+  const was = circuits.slice(); const sorted = circuits.map((c, i) => [c, i]).sort((p, q) => cmpWay(p[0] || {}, q[0] || {}) || p[1] - q[1]).map(([c]) => c);
+  circuits.splice(0, circuits.length, ...sorted);
+  return sorted.filter((c, i) => c !== was[i]).length;
+}

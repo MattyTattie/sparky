@@ -19,7 +19,7 @@ export async function startExtra(certId = null) {
 const show = (v) => (v === true ? '✓' : v == null || v === '' ? '–' : typeof v === 'object' ? (Array.isArray(v) ? `${v.length} item(s)` : '…') : String(v));
 
 route(/^\/import-extra$/, async () => {
-  if (!pending) return go('#/settings');
+  if (!pending) return page('Import extra details', h('div', { class: 'card' }, h('p', { class: 'empty' }, 'Nothing to import yet (the file isn\u2019t kept after the app reloads).'), h('div', { class: 'btns' }, h('button', { class: 'btn primary', onclick: () => startExtra() }, 'Pick a file'), h('a', { class: 'btn', href: '#/settings' }, 'Back to Settings'))), { back: '#/settings' }); // v0.49.0
   const p = pending;
   const plan = planImport(await db.all('certs'), p.file, { forceCertId: p.certId });
   const jobs = Object.fromEntries((await db.all('jobs')).map((j) => [j.id, j]));

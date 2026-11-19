@@ -6,18 +6,18 @@ import { findOldPdf } from './filerules.js';
 import * as db from './db.js';
 import { isSpareCircuit as isSpareC } from './templates.js';
 import { h, fill, toast, modal, confirmBox, fmtDate, shareOrDownload, blobToDataUrl, emptyState, icon, withIcon } from './ui.js';
-import { route, page, go, render } from './app.js';
+import { route, page, go, render, notFound } from './app.js';
 import { S, openCert, changed, flush, getProfile, defaultInstruments, defaultInstrumentIds, getInstruments, instrumentsFor, instrumentText, calibrationWarnings, INSTRUMENT_KINDS, saveSetting } from './state.js';
 import { calDateFields, CAL_DATE_WARN } from './instruments.js';
 import { screenSections, countsToward, pdfFlagsOn, formRef, fillPeopleBlanks } from './certmodel.js';
-import { TYPES, newCert, sectionsFor, sectionDone, missingFields, visible, get, set, eicrOverall, blankBond, BOND_LOCATIONS, BOND_PARTS, SOURCE_TYPES, blankSource, sourcesMissing, isNewInstall } from './certmodel.js';
+import { TYPES, newCert, sectionsFor, sectionDone, sectionProgress, missingFields, visible, get, set, eicrOverall, blankBond, BOND_LOCATIONS, BOND_PARTS, SOURCE_TYPES, blankSource, sourcesMissing, isNewInstall } from './certmodel.js';
 import { INTAKE_NOTE_10, INTAKE_NOTES, INTAKE_NOTIFIED, migrateIntake, EIC_ITEMS, EIC_OUTCOMES, EICR_ITEMS, EICR_OUTCOMES, CODE_TEXT, OBSERVATIONS, OBS_CATS, EIC_HELP, EICR_HELP } from './inspections.js';
 import { checkCircuit, isSpare, boardCtx } from './checks.js';
 import { CHECK_NOTE } from './limits.js';
 import { ITEM_KINDS, itemRoomsOf, isControlCircuit, chainOf, migrateChain, kmNumbers, CHAIN_KINDS, CHAIN_SUPPLY, iconSvg, itemsOf, insertKind } from './wiring.js';
 import { diagramSvg, diagramInPdf, diagramHasCircuits, SPUR_FEEDS, CONTROL_VIA, switchInfo, roomListOf, roomPointsNote, socketRoomsOf, roomPointTotal, diagramPointTotal, pointKind, socketSingles, arrangedOrder, feedInfo, ISOLATORS } from './wiring.js';
 import { limitOn, limitBar } from './limitbar.js';
-import { checkCert } from './certcheck.js';
+import { checkCert, zsMissing, missingZsText } from './certcheck.js';
 import { WAVES, parseRcdType, formatRcdType } from './rcdtype.js';
 import { circuitReadings, makeTemplate, applyTemplate, nextRoom, tidyLayouts, BUILTIN_TEMPLATES, TEMPLATE_KEY } from './diagrampro.js';
 import { dangerCodes, noticeForObs, noticesOf, noticeMissing, noticeNo } from './dangermodel.js';
@@ -72,12 +72,14 @@ export function field(cert, fd, onChange) {
 
 // ---------- Overview ----------
 route(/^\/cert\/([^/]+)$/, async (id) => {
-  const cert = await openCert(id); if (!cert) return go('#/');
+  const cert = await openCert(id); if (!cert) return notFound('certificate');
   const job = cert.jobId ? await db.get('jobs', cert.jobId) : null;
   const secs = screenSections(cert.type);
   const counted = secs.filter(countsToward);
   const nFlags = (cert.boards || []).reduce((n, b) => n + b.circuits.filter((c) => checkCircuit(c, boardCtx(cert, b)).worst === 'red').length, 0) + (cert.type === 'MW' && checkCircuit(cert.mw.circuit, { earthing: cert.mw.earthing, zdb: cert.mw.zdb }).worst === 'red' ? 1 : 0);
   const done = counted.filter((s) => sectionDone(cert, s)).length;
+  // v0.49.0: the bar counts what's filled in inside each section too (it used to sit at 11% on a well-filled certificate)
+  const pct = counted.length ? (done === counted.length ? 100 : Math.min(99, Math.round(counted.reduce((a, s) => a + sectionProgress(cert, s), 0) / counted.length * 100))) : 0;
   const nextSec = secs.find((s) => s.special !== 'sign' && countsToward(s) && !sectionDone(cert, s)) || secs.find((s) => countsToward(s) && !sectionDone(cert, s));
   const secHref = (s) => (s.special === 'boards' ? `#/cert/${id}/boards` : `#/cert/${id}/s/${s.id}`);
   const warns = await calibrationWarnings();
@@ -87,12 +89,12 @@ route(/^\/cert\/([^/]+)$/, async (id) => {
     h('div', { class: 'card' },
       h('div', { style: 'display:flex;justify-content:space-between;align-items:center' }, h('b', {}, cert.number), cert.status === 'issued' ? h('span', { class: 'pill green' }, 'Issued ' + fmtDate(cert.issuedAt)) : h('span', { class: 'pill' }, 'Draft')),
       h('div', { class: 'note' }, [cert.client.name, (cert.install.address || '').split(/[,\n]/)[0]].filter(Boolean).join(' · ')),
-      limitOn() ? limitBar(done, counted.length) : h('div', { class: 'prog', style: 'margin-top:10px' }, h('i', { style: `width:${Math.round((done / counted.length) * 100)}%` })),
-      h('div', { class: 'note', style: 'margin-top:4px' }, `${done} of ${counted.length} sections filled in`),
+      limitOn() ? limitBar(pct, 100) : h('div', { class: 'prog', style: 'margin-top:10px' }, h('i', { style: `width:${pct}%` })),
+      h('div', { class: 'note', style: 'margin-top:4px' }, `${pct}% filled in \u00b7 ${done} of ${counted.length} sections complete`),
       cert.status !== 'issued' && nextSec ? h('a', { class: 'btn primary', id: 'continuebtn', style: 'display:flex;margin-top:10px;justify-content:center;text-align:center', href: secHref(nextSec) }, 'Continue: ' + nextSec.title + ' \u203a') : null,
       // v0.45: straight to testing (the first board with circuits)
       testBi >= 0 ? h('a', { class: 'btn', id: 'testacrossbtn', style: 'display:flex;margin-top:8px;justify-content:center', href: `#/cert/${id}/b/${testBi}/t/r1r2` }, withIcon('gauge', 'Test across circuits')) : null),
-    nFlags ? h('div', { class: 'notice red' }, `${nFlags} circuit${nFlags === 1 ? ' has a reading' : 's have readings'} outside the limits. Check the schedule before issuing.`) : null,
+    nFlags ? h('div', { class: 'notice red' }, `${nFlags} circuit${nFlags === 1 ? ' needs' : 's need'} fixing (a reading outside the limits, or a device bigger than its cable). Check the schedule before issuing.`) : null,
     warns.map((w) => h('div', { class: 'notice ' + w.level }, w.text)),
     h('div', { class: 'list' }, secs.map((s) => h('a', { class: 'row', href: s.special === 'boards' ? `#/cert/${id}/boards` : `#/cert/${id}/s/${s.id}` },
       h('span', { class: 'dot ' + (sectionDone(cert, s) ? 'ok' : '') }), h('div', { class: 'main' }, h('div', { class: 't' }, s.title), s.form ? h('div', { class: 's faint' }, 'On the IET form: ' + formRef(s.form)) : null), h('span', { class: 'go' }, '›'))),
@@ -229,7 +231,7 @@ async function makeChart(cert, btn) {
 
 // ---------- Photos on the certificate ----------
 route(/^\/cert\/([^/]+)\/photos$/, async (id) => {
-  const cert = await openCert(id); if (!cert) return go('#/');
+  const cert = await openCert(id); if (!cert) return notFound('certificate');
   const photos = (await db.byJob('files', cert.jobId)).filter((f) => f.kind === 'photo');
   cert.photoIds = cert.photoIds || [];
   page('Photos on the certificate', [
@@ -240,7 +242,7 @@ route(/^\/cert\/([^/]+)\/photos$/, async (id) => {
 
 // ---------- v0.38 (prototype): wiring diagram ----------
 route(/^\/cert\/([^/]+)\/diagram$/, async (id) => {
-  const cert = await openCert(id); if (!cert) return go('#/');
+  const cert = await openCert(id); if (!cert) return notFound('certificate');
   const box = h('div', { class: 'diagram', style: 'overflow-x:auto;background:#fff;border-radius:8px;color-scheme:light' }); // white paper in dark mode too
   const href = (r) => (r.mw ? `#/cert/${id}/mwc` : `#/cert/${id}/b/${r.bi}/c/${r.ci}`);
   const draw = () => { box.innerHTML = diagramHasCircuits(cert) ? diagramSvg(cert, { W: diagW(), font: diagW() > 600 ? 14 : 12, screen: true, tap: true }) : ''; };
@@ -632,7 +634,7 @@ function spurCard(cert, redraw) {
 
 // ---------- A form section ----------
 route(/^\/cert\/([^/]+)\/s\/([^/]+)$/, async (id, sid) => {
-  const cert = await openCert(id); if (!cert) return go('#/');
+  const cert = await openCert(id); if (!cert) return notFound('certificate');
   const secs = sectionsFor(cert.type);
   const prof = await getProfile(); // v0.47.0: 'Use my details' for signatory boxes left blank
   const i = secs.findIndex((s) => s.id === sid);
@@ -679,9 +681,10 @@ export function stateLine(cert, s) {
   if (s.special === 'inspections') { const v = Object.values(cert.inspections || {}); const left = v.filter((x) => !x).length; return ['info', v.length ? `Still to fill in: ${left} of ${v.length} inspection items.` : 'Still to fill in: the inspection items.']; }
   if (s.special === 'boards') {
     const bs = cert.boards || []; if (!bs.some((b) => b.circuits.length)) return ['info', 'Still to fill in: add the circuits.'];
-    const miss = bs.flatMap((b) => b.circuits.filter((c) => !isSpare(c) && !c.zs).map((c) => (bs.length > 1 ? `${b.ref || 'DB'} ` : '') + c.num));
+    // v0.49.0: the same wording as Check certificate ("DB1 circuit 4: no Zs")
+    const miss = bs.map((b) => [b, zsMissing(b)]).filter(([, m]) => m.length).map(([b, m]) => missingZsText(b.ref || 'DB', m.map((x) => x.num)));
     const empty = bs.filter((b) => !b.circuits.length).map((b) => b.ref || 'DB'); if (empty.length && !miss.length) return ['info', `Still to fill in: the circuits on ${list(empty)}.`];
-    return ['info', `Still to fill in: Zs on circuit${miss.length > 1 ? 's' : ''} ${list(miss)}.`];
+    return ['info', `Still to fill in: ${miss.join('; ')}.`];
   }
   if (s.special === 'bonding') return ['info', 'Still to fill in: add the supplementary bonding, or tick N/A.'];
   if (s.special === 'sign') return ['info', 'Still to fill in: a signature.'];

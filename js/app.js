@@ -14,14 +14,14 @@ import { labelInputs } from './a11y.js';
 import { APP_NAME, APP_VERSION, APP_SLUG, DRIVE_ROOT, DRIVE_ROOT_OLD } from './config.js';
 import { TYPES, copyCertForJob } from './certmodel.js';
 import { diagramHasCircuits } from './wiring.js';
-import { JOB_COLS, jobRows, sortRows } from './jobtable.js';
+import { JOB_COLS, jobRows, sortRows, certsOfJob, byCreated } from './jobtable.js';
 import { calibrationState } from './checks.js';
 import { CHECK_NOTE } from './limits.js';
 import * as backup from './backup.js';
 import * as G from './gdrive.js';
 import * as sync from './sync.js';
 import * as presets from './presets.js';
-import { dueList, nextFor, suggestFromCerts, dueState, icsFor } from './reminders.js';
+import { dueList, nextFor, suggestFromCerts, dueState, icsFor, inWords } from './reminders.js';
 
 const routes = [];
 export const route = (re, fn) => routes.push([re, fn]);
@@ -49,7 +49,7 @@ function jobPane() {
     const cur = m ? (m[1] === 'job' ? m[2] : (certs.find((c) => c.id === m[2]) || {}).jobId) : null;
     jobs.sort((a, b) => (b.updatedAt || '').localeCompare(a.updatedAt || ''));
     box.append(h('div', { class: 'list' }, jobs.map((j) => {
-      const n = certs.filter((c) => c.jobId === j.id);
+      const n = certsOfJob(certs, j.id);
       return h('a', { class: 'row' + (j.id === cur ? ' on' : ''), href: '#/job/' + j.id, 'aria-current': j.id === cur ? 'page' : null },
         h('div', { class: 'main' }, h('div', { class: 't' }, j.title || 'Job'), h('div', { class: 's' }, jobLine(j, cmap[j.customerId]) || 'No customer yet'),
           n.length ? h('div', { class: 'rowtags' }, h('span', { class: 'pill' }, n.map((c) => (TYPES[c.type] || { short: c.type || '?' }).short).join(', '))) : null));
@@ -119,10 +119,18 @@ export async function render() {
   const skel = setTimeout(() => { const m = document.querySelector('#app main'); if (m) fill(m, skeleton(4)); }, 160);
   try {
     for (const [re, fn] of routes) { const m = re.exec(hash); if (m) { try { await fn(...m.slice(1)); } catch (e) { console.error(e); page('Something went wrong', h('div', { class: 'notice red' }, String(e.message || e)), { back: '#/' }); } return; } }
-    go('#/');
+    notFound('page'); // v0.49.0: a bad or old link says so (it used to land on Jobs without a word)
   } finally { clearTimeout(skel); }
 }
 window.addEventListener('hashchange', render);
+// v0.49.0: a proper "not found" page for a bad or old link, a deleted job or certificate.
+export function notFound(what = 'page') {
+  const pageLink = what === 'page';
+  page('Not found', h('div', { class: 'card notfound' },
+    h('h2', {}, pageLink ? 'That page doesn\u2019t exist' : `That ${what} isn\u2019t on this device`),
+    h('p', { class: 'note' }, pageLink ? 'The link may be from an older version of the app, or mistyped.' : `It may have been deleted, or it\u2019s on another device that hasn\u2019t synced yet.`),
+    h('div', { class: 'btns' }, h('a', { class: 'btn primary', href: '#/' }, 'Back to jobs'))), { back: '#/' });
+}
 
 // ---------- Home: jobs ----------
 const jobLine = (j, cust) => [cust && cust.name, (j.siteAddress || '').split(/[,\n]/)[0]].filter(Boolean).join(' · ');
@@ -135,7 +143,7 @@ route(/^\/$/, async () => {
     const qq = q.toLowerCase();
     const shown = jobs.filter((j) => !qq || [j.title, j.siteAddress, j.sitePostcode, (cmap[j.customerId] || {}).name].join(' ').toLowerCase().includes(qq));
     fill(list, ...(shown.length ? shown.map((j) => {
-      const n = certs.filter((c) => c.jobId === j.id);
+      const n = certsOfJob(certs, j.id);
       const tt = n.length ? ({ EICR: ' t-eicr', MW: ' t-mw' })[n[0].type] || '' : '';
       return h('a', { class: 'row', href: '#/job/' + j.id }, h('span', { class: 'tile' + tt }, icon(n.length ? 'fileCheck' : 'briefcase', { size: 20 })),
         h('div', { class: 'main' }, h('div', { class: 't' }, j.title || 'Job'), h('div', { class: 's' }, jobLine(j, cmap[j.customerId]) || 'No customer yet'),
@@ -183,7 +191,7 @@ function statsStrip(jobs, certs) {
   return h('div', { class: 'stats' },
     h('div', { class: 'stat' }, h('b', {}, String(open)), h('span', {}, open === 1 ? 'Open job' : 'Open jobs')),
     h('div', { class: 'stat' }, h('b', {}, String(drafts)), h('span', {}, drafts === 1 ? 'Draft cert' : 'Draft certs')),
-    h('div', { class: 'stat' + (due ? ' warn' : '') }, h('b', {}, String(due)), h('span', {}, due === 1 ? 'Re-test due' : 'Re-tests due')));
+    h('div', { class: 'stat' + (due ? ' warn' : '') }, h('b', {}, String(due)), h('span', {}, 'Due soon'))); // v0.49.0: matches the “Due soon” card (next inspections); fits one line
 }
 
 // v0.9: a job changed on both devices: say which copy is which.
@@ -201,10 +209,10 @@ async function conflictNotice() {
 function dueCard(jobs, certs, cmap) {
   const due = dueList(jobs, certs);
   if (!due.length) return null;
-  const when = (d) => d.state === 'overdue' ? `Overdue ${-d.days} day${d.days === -1 ? '' : 's'}` : d.days === 0 ? 'Due today' : `In ${d.days} day${d.days === 1 ? '' : 's'}`;
+  const when = (d) => d.state === 'overdue' ? `Overdue, ${inWords(d.days)}` : d.days === 0 ? 'Due today' : inWords(d.days).replace(/^in/, 'In'); // v0.49.0: weeks / months / years
   return h('div', { class: 'card duecard' }, h('h2', {}, `Due soon (${due.length})`),
     h('div', { class: 'list' }, due.map((d) => h('a', { class: 'row', href: '#/job/' + d.job.id },
-      h('div', { class: 'main' }, h('div', { class: 't' }, d.job.title || 'Job'), h('div', { class: 's' }, [jobLine(d.job, cmap[d.job.customerId]), 're-test ' + fmtDate(d.date)].filter(Boolean).join(' · '))),
+      h('div', { class: 'main' }, h('div', { class: 't' }, d.job.title || 'Job'), h('div', { class: 's' }, [jobLine(d.job, cmap[d.job.customerId]), 'next inspection ' + fmtDate(d.date)].filter(Boolean).join(' · '))),
       h('span', { class: 'pill ' + (d.state === 'overdue' ? 'red' : 'amber') }, when(d)), h('span', { class: 'go' }, '›')))),
     h('p', { class: 'note' }, 'From the next inspection date on each job (set on the job page). Inspections due within 90 days show here.'));
 }
@@ -255,9 +263,9 @@ route(/^\/newjob(?:\/(.+))?$/, async (custId) => {
 const fmtDateTime = (iso) => { const d = new Date(iso); return isNaN(d) ? '' : d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) + ', ' + d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }); };
 // ---------- Job page ----------
 route(/^\/job\/([^/]+)(?:\/(photos|details|next|pdfs|backup|dc|parts))?$/, async (id, sub) => {
-  const job = await db.get('jobs', id); if (!job) return go('#/');
+  const job = await db.get('jobs', id); if (!job) return notFound('job');
   const cust = job.customerId ? await db.get('customers', job.customerId) : null;
-  const certs = (await db.byJob('certs', id)).sort((a, b) => (a.createdAt || '').localeCompare(b.createdAt || ''));
+  const certs = (await db.byJob('certs', id)).sort(byCreated);
   const files = await db.byJob('files', id);
   const photos = files.filter((f) => f.kind === 'photo');
   const pdfs = files.filter((f) => f.kind === 'pdf' || f.kind === 'chart');
@@ -346,7 +354,7 @@ route(/^\/job\/([^/]+)(?:\/(photos|details|next|pdfs|backup|dc|parts))?$/, async
   const drafts = certs.filter((c) => c.status !== 'issued');
   const pills = [
     ...[...new Set(certs.map((c) => c.type))].map((t) => { const d = drafts.some((c) => c.type === t); return h('span', { class: 'pill ' + (d ? 'info' : 'green') }, `${t === 'MW' ? 'Minor Works' : t} ${d ? 'draft' : 'issued'}`); }),
-    nx ? h('span', { class: 'pill amber' }, 'Re-test ' + new Date(nx.date).toLocaleDateString('en-GB', { month: 'short', year: 'numeric' })) : null,
+    nx ? h('span', { class: 'pill amber' }, 'Next inspection ' + new Date(nx.date).toLocaleDateString('en-GB', { month: 'short', year: 'numeric' })) : null,
     backedState ? h('span', { class: 'pill ' + backedState[1] }, backedState[0]) : null];
   // v0.43.1: the wiring diagram lives on the job page (one cert opens it; several ask which)
   const diagramRow = (cs) => { const ds = cs.filter((c) => c.type !== 'MW' || (c.boards || []).length);
@@ -384,19 +392,19 @@ route(/^\/job\/([^/]+)(?:\/(photos|details|next|pdfs|backup|dc|parts))?$/, async
   ], { back: '#/', sub: cust ? cust.name : '', actions: [h('button', { class: 'iconbtn', 'aria-label': 'More', id: 'jobmore', onclick: more }, icon('more', { size: 22 }))] });
 });
 
-// Next inspection (re-test reminder) for a job.
+// Next inspection (reminder) for a job. v0.49.0: one wording, “Next inspection”, everywhere.
 function nextCard(job, certs, cust, save) {
   const box = h('div', { class: 'card' });
   const draw = () => {
     const sug = suggestFromCerts(certs); const n = nextFor(job, certs); const st = n && dueState(n.date);
     fill(box, h('h2', {}, 'Next inspection'),
-      st ? h('div', { class: 'notice ' + (st.state === 'overdue' ? 'red' : st.state === 'soon' ? 'amber' : 'info') }, st.state === 'overdue' ? `Overdue since ${fmtDate(n.date)}.` : `Due ${fmtDate(n.date)} (in ${st.days} days).`, n.set ? '' : ` From ${n.from}.`) : h('p', { class: 'note' }, 'No date yet. Fill in “Next inspection” on the EICR (or EIC), or set one here.'),
-      h('label', { class: 'f' }, h('span', {}, 'Re-test due (leave blank to use the certificate)'), h('input', { type: 'date', value: job.nextInspection || '', onchange: async (e) => { job.nextInspection = e.target.value; await save(); draw(); } })),
+      st ? h('div', { class: 'notice ' + (st.state === 'overdue' ? 'red' : st.state === 'soon' ? 'amber' : 'info') }, st.state === 'overdue' ? `Overdue since ${fmtDate(n.date)} (${inWords(st.days)}).` : `Due ${fmtDate(n.date)} (${inWords(st.days)}).`, n.set ? '' : ` From ${n.from}.`) : h('p', { class: 'note' }, 'No date yet. Fill in “Next inspection” on the EICR (or EIC), or set one here.'),
+      h('label', { class: 'f' }, h('span', {}, 'Next inspection date (leave blank to use the certificate)'), h('input', { type: 'date', value: job.nextInspection || '', onchange: async (e) => { job.nextInspection = e.target.value; await save(); draw(); } })),
       sug && job.nextInspection && sug.date !== job.nextInspection ? h('button', { class: 'btn small', onclick: async () => { job.nextInspection = ''; await save(); draw(); } }, `Use ${sug.from}: ${fmtDate(sug.date)}`) : null,
       h('label', { class: 'check' }, h('input', { type: 'checkbox', checked: !job.remindOff, onchange: async (e) => { job.remindOff = !e.target.checked; await save(); } }), 'Show on “Due soon” on the jobs page'),
       n ? h('div', { class: 'btns' }, h('button', { class: 'btn small', onclick: async () => {
         const where = [job.siteAddress, job.sitePostcode].filter(Boolean).join(', ');
-        const ics = icsFor({ uid: job.id + '-' + n.date, date: n.date, title: `Electrical inspection due: ${[cust && cust.name, (job.siteAddress || '').split(/[,\n]/)[0]].filter(Boolean).join(', ') || job.title}`, location: where, notes: `${job.title || ''}. Re-test due (from ${n.set ? 'the job' : n.from}). Made by ${APP_NAME}.` });
+        const ics = icsFor({ uid: job.id + '-' + n.date, date: n.date, title: `Electrical inspection due: ${[cust && cust.name, (job.siteAddress || '').split(/[,\n]/)[0]].filter(Boolean).join(', ') || job.title}`, location: where, notes: `${job.title || ''}. Next inspection due (from ${n.set ? 'the job' : n.from}). Made by ${APP_NAME}.` });
         const r = await shareOrDownload(new Blob([ics], { type: 'text/calendar' }), `inspection-due-${n.date}.ics`); if (r === 'downloaded') toast('Calendar file saved: open it to add the reminder');
       } }, 'Add to calendar')) : null,
       h('p', { class: 'note' }, 'The calendar file has a reminder a month before. It stays on this device: nothing is sent to the customer.'));
@@ -414,7 +422,7 @@ route(/^\/customers$/, async () => {
   ], { back: '#/' });
 });
 route(/^\/customer\/([^/]+)$/, async (id) => {
-  const c = await db.get('customers', id); if (!c) return go('#/customers');
+  const c = await db.get('customers', id); if (!c) return notFound('customer');
   const jobs = (await db.all('jobs')).filter((j) => j.customerId === id);
   const save = async () => { c.updatedAt = new Date().toISOString(); await db.put('customers', c); };
   const txt = (k, label, type = 'text') => h('label', { class: 'f' }, h('span', {}, label), h(type === 'area' ? 'textarea' : 'input', { type: type === 'area' ? null : type, value: c[k] || '', oninput: (e) => { c[k] = e.target.value; save(); } }));
@@ -429,7 +437,7 @@ route(/^\/customer\/([^/]+)$/, async (id) => {
 // v0.18: Appearance (this device only).
 function appearanceCard() {
   const T = window.sparkyTheme || { get: () => 'system', set: () => {} };
-  const box = h('div', { class: 'chips seg2', role: 'radiogroup', 'aria-label': 'Appearance' });
+  const box = h('div', { class: 'chips seg2 oneline', role: 'radiogroup', 'aria-label': 'Appearance' }); // v0.49.0: one row on a phone too
   const draw = () => fill(box, [['system', 'System'], ['light', 'Light'], ['dark', 'Dark']].map(([v, t]) => h('button', { class: 'chip' + (T.get() === v ? ' on' : ''), role: 'radio', 'aria-checked': T.get() === v ? 'true' : 'false', onclick: () => { T.set(v); draw(); } }, t)));
   draw();
   return h('div', { class: 'card', id: 'appearance' }, h('h2', {}, 'Appearance'), box,
@@ -441,6 +449,7 @@ function appearanceCard() {
 // ---------- Settings: you, your logo, test instruments, backup ----------
 route(/^\/settings$/, async () => {
   const p = await getProfile();
+  const nPresets = presets.shown(await presets.load()).length; // v0.49.0: count / empty state on the card
   const ins = await getInstruments();
   const saveP = () => saveSetting('profile', p); // v0.26: stamped, syncs to your other devices
   const saveI = () => saveSetting('instruments', ins);
@@ -566,8 +575,11 @@ route(/^\/settings$/, async () => {
     h('div', { class: 'card' }, h('h2', {}, 'Logo'), logoBox),
     appearanceCard(),
     h('div', { class: 'card' }, h('h2', {}, 'Signature'), sigBox),
-    h('a', { class: 'card linkcard', href: '#/settings/presets' }, h('h2', {}, 'Device presets'), h('p', { class: 'note' }, 'Breakers and RCBOs you\u2019ve used, ready to tap on any circuit. Rename or delete them here.')),
-    h('h2', { class: 'sec' }, 'Test instruments'), h('p', { class: 'note' }, 'Add each tester and tag what it\u2019s used for. On a certificate you pick one for each test, and it prints the serial. You\u2019ll get a warning a month before calibration is due.'), insBox,
+    // v0.49.0: Device presets and Test instruments are cards like the rest, each with its own empty state and add button
+    h('div', { class: 'card', id: 'presets' }, h('h2', {}, 'Device presets'), h('p', { class: 'note' }, 'Breakers and RCBOs you\u2019ve used, ready to tap on any circuit.'),
+      nPresets ? h('p', { class: 'note' }, `${nPresets} saved.`) : h('p', { class: 'empty presetempty' }, 'None yet. A device you fill in on a circuit is saved here, or add one now.'),
+      h('div', { class: 'btns' }, h('a', { class: 'btn small primary', href: '#/settings/presets/add' }, '+ Add preset'), nPresets ? h('a', { class: 'btn small', href: '#/settings/presets' }, 'Rename or delete') : null)),
+    h('div', { class: 'card', id: 'instruments' }, h('h2', {}, 'Test instruments'), h('p', { class: 'note' }, 'Add each tester and tag what it\u2019s used for. On a certificate you pick one for each test, and it prints the serial. You\u2019ll get a warning a month before calibration is due.'), insBox),
     h('div', { class: 'card', id: 'drive' }, h('h2', {}, 'Sync'), G.isConfigured() ? driveBox : h('p', { class: 'note' }, 'Not set up in this build.')),
     h('div', { class: 'card', id: 'files' }, h('h2', {}, 'Files'),
       h('p', { class: 'note' }, 'Backups and imports from a file you keep anywhere. Restoring adds to what\u2019s here; imports show you every change first and never overwrite or remove anything.'),
@@ -584,6 +596,28 @@ route(/^\/settings$/, async () => {
   try { if (sessionStorage.getItem('sparky.goRestore')) { sessionStorage.removeItem('sparky.goRestore'); setTimeout(() => { const el = document.getElementById('newphone') || document.getElementById('drive'); if (el) { el.scrollIntoView({ block: 'center' }); el.classList.add('flash'); } }, 350); } } catch {}
 });
 
+// v0.49.0: add a device preset by hand (the same record a circuit makes when you fill its device in)
+route(/^\/settings\/presets\/add$/, async () => {
+  const { DEVICES } = await import('./limits.js');
+  const v = { device: 'rcbo', type: 'B', rating: '', bka: '6' };
+  const box = h('div', { class: 'card' });
+  const draw = () => {
+    const d = DEVICES.find((x) => x.id === v.device) || DEVICES[0]; if (d.types.length && !d.types.includes(v.type)) v.type = d.types[0];
+    fill(box, h('label', { class: 'f' }, h('span', {}, 'Protective device'), h('select', { onchange: (e) => { v.device = e.target.value; draw(); } }, DEVICES.map((x) => h('option', { value: x.id, selected: x.id === v.device ? true : null }, x.label)))),
+      d.types.length > 1 ? h('div', { class: 'f' }, h('span', { class: 'note' }, 'Type'), h('div', { class: 'chips' }, d.types.map((t) => h('button', { type: 'button', class: 'chip' + (v.type === t ? ' on' : ''), onclick: () => { v.type = t; draw(); } }, t)))) : null,
+      h('div', { class: 'grid2' }, h('label', { class: 'f' }, h('span', {}, 'Rating (A)'), h('input', { inputmode: 'decimal', value: v.rating, oninput: (e) => { v.rating = e.target.value.trim(); } })),
+        h('label', { class: 'f' }, h('span', {}, 'Breaking capacity (kA)'), h('input', { inputmode: 'decimal', value: v.bka, oninput: (e) => { v.bka = e.target.value.trim(); } }))),
+      d.rcd ? h('p', { class: 'note' }, 'An RCBO preset fills its own RCD boxes as 30 mA Type A (change them on the circuit if not).') : null,
+      h('div', { class: 'btns' }, h('button', { class: 'btn primary', type: 'button', onclick: async () => {
+        if (!/^\d+(\.\d+)?$/.test(v.rating)) return toast('Put in the rating (A)');
+        const c = { device: d.id, bs: d.bs || '', type: d.types.length ? v.type : '', rating: v.rating, bka: v.bka, ...(d.rcd ? { rcdBs: '61009', rcdType: 'A', rcdIdn: '30', rcdRating: v.rating } : {}) };
+        const list = await presets.load(); const r = presets.remember(list, c);
+        if (r.deleted) { const k = presets.keyOf(presets.presetFrom(c)); const p = list.find((x) => presets.keyOf(x.fields) === k); if (p) { p.deleted = false; p.updatedAt = new Date().toISOString(); } }
+        await presets.save(list); toast(r.added || r.deleted ? 'Preset added' : 'You already have that one'); go('#/settings/presets'); } }, 'Save preset'), h('a', { class: 'btn', href: '#/settings/presets' }, 'Cancel')));
+  };
+  draw();
+  page('Add a device preset', [h('p', { class: 'note' }, 'Ready to tap on any circuit. It fills only the protective device boxes.'), box], { back: '#/settings/presets' });
+});
 // v0.11: device presets — rename / delete.
 route(/^\/settings\/presets$/, async () => {
   const all = await presets.load();
@@ -599,7 +633,7 @@ route(/^\/settings\/presets$/, async () => {
     for (const ms of [0, 400]) setTimeout(() => box.querySelectorAll('textarea.pname').forEach((t) => { t.style.height = 'auto'; t.style.height = t.scrollHeight + 'px'; }), ms);
   };
   draw();
-  page('Device presets', [h('p', { class: 'note' }, 'Most recently used first. Tapping one on a circuit fills only the protective device boxes (BS EN, type, rating, kA, the RCD boxes for RCBOs only, and the MCCB settings); cable sizes and readings are never touched. Saved on this device and in your backup; synced with your jobs.'), box], { back: '#/settings' });
+  page('Device presets', [h('div', { class: 'btns' }, h('a', { class: 'btn small primary', href: '#/settings/presets/add' }, '+ Add preset')), h('p', { class: 'note' }, 'Most recently used first. Tapping one on a circuit fills only the protective device boxes (BS EN, type, rating, kA, the RCD boxes for RCBOs only, and the MCCB settings); cable sizes and readings are never touched. Saved on this device and in your backup; synced with your jobs.'), box], { back: '#/settings' });
 });
 
 // Auto-backup when leaving a job or certificate (only if switched on and signed in).

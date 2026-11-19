@@ -5,7 +5,7 @@
 // =====================================================================
 import * as db from './db.js';
 import { h, fill, toast, confirmBox, modal, withIcon } from './ui.js';
-import { route, page, go } from './app.js';
+import { route, page, go, notFound } from './app.js';
 import { openCert, changed, flush, getProfile } from './state.js';
 import { CODE_TEXT } from './inspections.js';
 import { ACTIONS, blankNotice, blankItem, noticesOf, noticeForObs, noticeMissing, noticeNo, openNotices, addObs, removeObs, dangerCodes, itemFromObs } from './dangermodel.js';
@@ -39,7 +39,7 @@ async function fromObs(cert, id, obsId) {
 }
 
 route(/^\/cert\/([^/]+)\/danger\/([^/]+)$/, async (id, nid) => {
-  const cert = await openCert(id); if (!cert) return go('#/');
+  const cert = await openCert(id); if (!cert) return notFound('certificate');
   if (!Array.isArray(cert.dangerNotices)) cert.dangerNotices = [];
   noticesOf(cert); // migrate older single-item notices
   if (nid.startsWith('obs-')) return fromObs(cert, id, nid.slice(4));

@@ -30,7 +30,7 @@ test('fault level: blank start, working in ohms, larger of PSCC and PEFC', () =>
   const r = faultLevel({ pfc: 16, ze: 0.35, cable: 'swa', size: 16, length: 20, armour: true, deviceKa: 6 });
   assert.equal(r.ok, true); assert.equal(r.worst, Math.max(r.pscc, r.pefc)); assert.ok(r.r1rn > 0 && r.r1r2 > 0 && r.zeSub > 0.35);
   assert.equal(r.which, r.pefc > r.pscc ? 'PEFC' : 'PSCC');
-  assert.match(read('js/calcmore.js'), /breakers: \$\{r\.pass \? 'OK'/); assert.match(read('js/calcmore.js'), /as Ipf on/);
+  assert.match(read('js/calcmore.js'), /breakers: \$\{r\.pass \? 'OK'/); assert.match(read('js/calcmore.js'), /as the PFC \(Ipf\) on/);
   assert.equal(faultLevel({ pfc: '', ze: '' }).ok, false);
 });
 test('new reference methods from Appendix 4', () => {

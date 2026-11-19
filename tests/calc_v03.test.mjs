@@ -49,12 +49,12 @@ test('design Zs and expected R1+R2 (T&E, 3rd core, armour)', () => {
 test('3-core SWA in the calculator', () => {
   assert.equal(CABLES.swa3.cores, 3); assert.equal(CABLES.swa3.methods.C.amps[4], 38); assert.match(CABLES.swa3.note, /two loaded cores/);
 });
-test('circuit check: device bigger than the cable rating (e.g. B32 on 2.5 T&E clipped) → amber, but rings are fine', () => {
+test('circuit check: device bigger than the cable rating (e.g. B32 on 2.5 T&E clipped) → red since v0.49.0 (Reg 433.1.1), but rings are fine', () => {
   const spd = { desc: 'SPD', wiring: 'A', ref: 'C', live: '2.5', cpc: '1.5', rating: '32', device: 'mcb', type: 'B' };
-  assert.equal(cableCheck(spd).level, 'amber'); assert.equal(checkCircuit(spd).flags.live.level, 'amber');
+  assert.equal(cableCheck(spd).level, 'red'); assert.equal(checkCircuit(spd).flags.live.level, 'red');
   assert.equal(cableCheck({ ...spd, desc: 'Downstairs sockets' }).level, null);
   assert.equal(cableCheck({ ...spd, desc: 'Kitchen', r1: '0.52' }).level, null);
-  assert.equal(cableCheck({ ...spd, rating: '16', ref: '103' }).level, 'amber', '13.5 A in an insulated stud wall');
+  assert.equal(cableCheck({ ...spd, rating: '16', ref: '103' }).level, 'red', '13.5 A in an insulated stud wall');
   assert.equal(cableCheck({ ...spd, rating: '20' }).level, null);
 });
 test('cable picker fills live and CPC', () => {

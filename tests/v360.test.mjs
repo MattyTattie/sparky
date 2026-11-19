@@ -74,7 +74,7 @@ test('parseBackup: plain message for bad files, nothing thrown raw', () => {
   for (const bad of ['not json', '{', '[]', 'null', '{"app":"sparky","jobs":"x"}', '{"app":"sparky","certs":[{"no":"id"}]}', '{"app":"sparky","files":[{"id":"f","blob":"http://x"}]}', '{"app":"sparky","meta":[]}']) {
     assert.throws(() => parseBackup(bad), (e) => e.message === BAD_BACKUP, bad);
   }
-  assert.throws(() => parseBackup('{"app":"other"}'), /isn’t a backup file from this app/);
+  assert.throws(() => parseBackup('{"app":"other"}'), /isn’t a Zs Pro backup, or it’s damaged\. Nothing was changed\./);
   assert.equal(parseBackup(JSON.stringify({ app: APP_SLUG, jobs: [] })).app, APP_SLUG);
 });
 

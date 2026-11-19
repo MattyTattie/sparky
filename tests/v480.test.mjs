@@ -60,7 +60,7 @@ test('cableCheck applies optional Ca / Cg / Ci; no factors keeps the old It word
   assert.match(plain.msg, /before correction factors/);
   assert.equal(plain.it, 47);
   const hot = cableCheck({ ...base, ambient: 55 });
-  assert.equal(hot.level, 'amber');
+  assert.equal(hot.level, 'red');
   assert.equal(hot.ca, 0.61);
   assert.ok(Math.abs(hot.iz - 28.67) < 0.02);
   assert.match(hot.msg, /Iz \(28\.67 A/);
@@ -498,7 +498,7 @@ test('old backups still load: new fields are optional', async () => {
   assert.equal(noGuessLoad(cook), false);
   assert.equal(circuitSpurList(k).length, 0);
   assert.equal(k.ambient, undefined);
-  assert.equal(cableCheck({ ...k, ref: 'C', cable: 'te' }).level, 'amber'); // 32 A on 2.5 radial
+  assert.equal(cableCheck({ ...k, ref: 'C', cable: 'te' }).level, 'red'); // 32 A on 2.5 radial (v0.49.0: Reg 433.1.1 fault)
   assert.equal(autoNA(spare, 'type'), true);
   assert.equal(autoNA(spare, 'rating'), true);
   const p = await planRestore(d, { getCur: async () => null, getMeta: async () => null, decode: async () => 1 });

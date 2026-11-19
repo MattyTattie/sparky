@@ -19,7 +19,7 @@ const CIRCUIT_KEYS = FIELDS.map((f) => f.k).filter((k) => k !== 'num');
 export const CERT_FIELDS = {
   'install.description': 'Description of installation', 'install.extent': 'Extent covered', 'install.extentType': 'Type of work',
   'supply.earthing': 'Earthing arrangement', 'supply.conductors': 'Live conductors', 'supply.acdc': 'AC/DC', 'supply.u': 'Nominal voltage', 'supply.f': 'Frequency',
-  'supply.ipf': 'Ipf (kA)', 'supply.ze': 'Ze (Ω)', 'supply.polarity': 'Supply polarity confirmed', 'supply.spBs': 'Supply fuse BS (EN)', 'supply.spType': 'Supply fuse type', 'supply.spRating': 'Supply fuse rating (A)', 'supply.spKa': 'Supply fuse kA',
+  'supply.ipf': 'PFC Ipf (kA)', 'supply.ze': 'Ze (Ω)', 'supply.polarity': 'Supply polarity confirmed', 'supply.spBs': 'Supply fuse BS (EN)', 'supply.spType': 'Supply fuse type', 'supply.spRating': 'Supply fuse rating (A)', 'supply.spKa': 'Supply fuse kA',
   'parts.means': 'Means of earthing', 'parts.maxDemand': 'Maximum demand', 'parts.mdUnit': 'Max demand unit',
   'parts.ecMat': 'Earthing conductor material', 'parts.ecCsa': 'Earthing conductor csa', 'parts.ecOk': 'Earthing conductor verified',
   'parts.bondMat': 'Bonding material', 'parts.bondCsa': 'Bonding csa', 'parts.bondOk': 'Bonding verified',

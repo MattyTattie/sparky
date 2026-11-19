@@ -993,3 +993,35 @@ main > div:not([class]) + .card.boarddetails { margin-top: var(--s3); }
 .rcdreuse .rgrow { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 8px; margin-top: 6px; }
 .rcdreuse .rgrow .f { flex: 1 1 140px; margin: 0; }
 .rcdreuse .rgrow .btn { min-height: 44px; }
+/* v0.49.0: glove-friendly tap targets: 44px minimum on touch screens and phones (audit 19 Nov 2026) */
+.sym { position: relative; }
+.sym::after { content: ''; position: absolute; top: 50%; left: 50%; width: max(44px, calc(100% + 16px)); height: 44px; transform: translate(-50%, -50%); }
+.linkbtn { position: relative; }
+.linkbtn::after { content: ''; position: absolute; top: 50%; left: 50%; width: max(44px, calc(100% + 12px)); height: 44px; transform: translate(-50%, -50%); }
+@media (pointer: coarse), (max-width: 899px) {
+  .btn.small, .btn.tiny, .btn.fact { min-height: 44px; }
+  .chip, .chips.small .chip, .ins .chips .chip, .chips.seg2 .chip { min-height: 44px; }
+  .iconbtn.small { width: 44px; height: 44px; }
+  table.sched td.act button { min-width: 44px; min-height: 44px; }
+}
+/* v0.49.0: footer and board buttons on a phone: one line each, never clipped */
+.stick .btn, .circuitnav .btn { white-space: nowrap; min-width: 0; padding-left: 10px; padding-right: 10px; }
+.btns.full .btn { white-space: nowrap; }
+/* v0.49.0: missing-reading links (tap to jump to the circuit) */
+.secstate a.jump { font-weight: 700; color: inherit; text-decoration: underline; position: relative; }
+.secstate a.jump::after { content: ''; position: absolute; top: 50%; left: 50%; width: 44px; height: 44px; transform: translate(-50%, -50%); }
+.note.warn { color: var(--red); }
+/* v0.49.0: the circuit page "More" looks and taps like the buttons beside it (it used to sit clipped at the edge) */
+details.circmore > summary { display: inline-flex; align-items: center; min-height: 44px; padding: 0 14px; border: 1.5px solid #dfe3ec; border-radius: 999px; background: #fff; font-weight: 700; font-size: 14px; white-space: nowrap; cursor: pointer; }
+html.dark details.circmore > summary { background: var(--card); border-color: var(--line); }
+/* v0.49.0: Settings › Appearance stays one row of three on a phone (it used to stack into a tall blob) */
+.chips.seg2.oneline { flex-wrap: nowrap; }
+.chips.seg2.oneline .chip { flex: 1 1 0; min-width: 0; padding-left: 4px; padding-right: 4px; }
+/* v0.49.0: the last small targets on a phone: the back button and fold-out headings */
+@media (pointer: coarse), (max-width: 899px) {
+  header.top .iconbtn { min-width: 44px; min-height: 44px; }
+  details:not(.circmore) > summary { min-height: 44px; box-sizing: border-box; padding-top: 10px; padding-bottom: 10px; }
+}
+/* v0.49.0: "More info" links get the same 44px tap area */
+.infolink { position: relative; }
+.infolink::after { content: ''; position: absolute; top: 50%; left: 50%; width: max(44px, calc(100% + 12px)); height: 44px; transform: translate(-50%, -50%); }

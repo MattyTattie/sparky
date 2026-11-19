@@ -200,3 +200,8 @@
   }
   body.circedit .circuitnav { max-width: var(--col, 940px); }
 }
+/* v0.49.0: a touch screen on a big display (tablet / touch laptop) gets the 44px glove-friendly sizes too */
+@media (pointer: coarse) {
+  body.desk .btn, body.desk .btn.small, body.desk .chip { min-height: 44px; }
+  body.desk .navi { min-height: 44px; }
+}

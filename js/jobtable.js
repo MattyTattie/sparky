@@ -1,8 +1,11 @@
 // jobtable.js — v0.28: the rows and sorting for the desktop jobs table (pure, no DOM).
 export const JOB_COLS = [['job', 'Job'], ['customer', 'Customer'], ['address', 'Address'], ['certs', 'Certificates'], ['status', 'Status'], ['updated', 'Updated']];
+// v0.49.0: a job's certificates in ONE order everywhere (home, job list, job page, table): oldest first
+export const byCreated = (a, b) => String(a.createdAt || '').localeCompare(String(b.createdAt || '')) || String(a.id || '').localeCompare(String(b.id || ''));
+export const certsOfJob = (certs, jobId) => (certs || []).filter((c) => c && c.jobId === jobId).sort(byCreated);
 export function jobRows(jobs, certs, cmap, types = {}) {
   return (jobs || []).map((j) => {
-    const n = (certs || []).filter((c) => c.jobId === j.id);
+    const n = certsOfJob(certs, j.id);
     const drafts = n.filter((c) => c.status !== 'issued').length;
     const status = j.status === 'done' || j.status === 'closed' ? 'Closed' : !n.length ? 'No certificate yet' : drafts ? (drafts === n.length ? 'Draft' : `${drafts} draft, ${n.length - drafts} issued`) : 'Issued';
     const cust = cmap[j.customerId];
