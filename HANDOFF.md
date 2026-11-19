@@ -1,6 +1,6 @@
 # Handoff notes
 
-Status: live is **v0.49.0 beta** (https://mattytattie.github.io/sparky/, main 25c4d36, pushed 19 Nov 2026 21:19 GMT; live sw.js serves sparky-v0.49.0 from ~21:20 GMT; Matthew: "Go live"). Android: last published APK is still Zs Pro v5 (0.45.0) at https://github.com/MattyTattie/sparky/releases/download/app-v5/ZsPro-0.45.0.apk. The app is called Zs Pro; repo, data keys, cache prefix and Android package still say sparky on purpose (see RENAME.md).
+Status: **v0.50.0 beta is BUILT LOCALLY, NOT LIVE** (local main, not pushed; Matthew 19 Nov 22:18 "fix everything and implement ideas" on NIGGLES Audit 2; push only on his "go live"). Live is **v0.49.0 beta** (https://mattytattie.github.io/sparky/, main 25c4d36, pushed 19 Nov 2026 21:19 GMT; live sw.js serves sparky-v0.49.0 from ~21:20 GMT; Matthew: "Go live"). Android: last published APK is still Zs Pro v5 (0.45.0) at https://github.com/MattyTattie/sparky/releases/download/app-v5/ZsPro-0.45.0.apk. The app is called Zs Pro; repo, data keys, cache prefix and Android package still say sparky on purpose (see RENAME.md).
 Run the tests with `node --test tests/*.test.mjs tests/*.test.js` (plain `node --test tests/` doesn't work on Node 24). PDF tests find jsPDF's Node build through tests/jspdf-node.cjs; if it's missing it runs tests/setup-jspdf.sh (npm, into tests/.jspdf, git-ignored).
 
 Open points
@@ -695,6 +695,31 @@ Live smoke (19 Nov 2026, about 19:40 GMT; 390 and 1440 viewports, fake seed data
 - All 8 calculators load with no errors.
 - The View PDF viewer opens (17 pages).
 - pdf_overlap.py: 0 overlaps on both PDFs at both sizes.
+
+## v0.50.0 beta (BUILT LOCALLY 19 Nov 2026, NOT LIVE — local main, not pushed. Built from Matthew 19 Nov 22:18 "fix everything and implement ideas" on NIGGLES Audit 2)
+Item-by-item: NIGGLES "Audit 2 (19 Nov 2026, v0.49.0)". Evidence: /workspace/polish-review/zspro-v0500/.
+- New modules:
+  - js/feed.js `parseFeed(text, boards, selfBi)`: the one "Supplied from" parser (DB1 circuit 9, DB1/9, DB1 - 9, DB 1, Circuit 9 of DB1, DB1 c9). Used by checks.feedOf, wiring.feedInfo and the board page picker. The picker writes plain text ("DB1 circuit 9"), so nothing new is stored.
+  - js/rcdways.js: optional `board.rcdWays` ("1-6") and `board.rcd2` {rcdBs, rcdType, rcdIdn, rcdRating, ways}. `rcdForWay` → board/1/2/none; `rcdCoverFull` is the one sentence used by the board page, PDF row and diagram. ocpdfill.standardFor fills N/A on uncovered ways and rcdNo 1/2 (auto, FILL_KEYS).
+  - js/obsfrom.js: EICR "Add as observation" suggestions (text, reg, suggested code, location). Optional `observation.src` ("bi/way/field") stops duplicates.
+- Check certificate (js/certui.js): count line, board filter, groups (fix open), per-item "Add as observation" on EICR, "Fix next ›" walk bar (setTopBar in app.js). Pre-PDF title "Before the PDF goes out".
+- Board line (schedule.js boardLine): separate notices for no Zs / no way number / red circuits; green tick only when nothing is red.
+- Diagram cables are numbered by way (C5, C5.2, DB2 C1; R1… for runs with no circuit). Supply shows PFC, not Ipf.
+- cableCheck: BS 3036 In ≤ 0.725 × Iz (433.1.202); ring needs Iz ≥ 20 A (433.1.204). Fuse cards read "20 A Rewirable fuse BS 3036".
+- notFound(what, {back, backLabel, inWhat, title, note}) for out-of-range boards/circuits, MW board links, unknown MD/scan routes.
+- Desktop mouse (≥ 900 px, pointer: fine): buttons/chips 36 px; touch stays 44 px.
+- Lighten:
+  - sw.js: app cache `sparky-v0.50.0` (100 files, bump per release as before) + vendor cache `sparky-vendor-1` (fonts, jsPDF, pdf.js, Tesseract; bump ONLY when a vendor file changes). Install fetches the app + fonts + jsPDF; the page posts 'fillVendor' (idle, on 'online', on controllerchange) and the SW fills the rest in the background (resumable). Only the Tesseract core the device can run (WebAssembly.validate SIMD). Vendor files are copied from old sparky-* caches before activate deletes them.
+  - build-sw.sh writes FILES (app) and VENDOR. Keep running it before each release.
+  - main.js lazy-loads the screen modules (setLazyScreens/loadScreens; route miss → load, then idle preload). All routes are precached, so offline is unaffected.
+  - Font: fonts/inter-latin.woff2 (replaces .woff).
+  - Settings shows "Works offline: everything, including board scan and View PDF ✓" or "downloading in the background".
+  - Minify skipped (Pages serves main with no build step; see NIGGLES).
+- Measured (measure/measure500.json, 1.6 Mbps/150 ms/4× CPU): update 6.9 MB → 0.60 MB; install 6.91 MB (offline-ready 36 s) → 1.26 MB app (9 s) + 4.6 MB background; DCL 3.57 → 2.21 s; JS on home 72 → 41; storage 14.5 → 10.7 MB. Offline after update and after install: all screens, cold deep link, View PDF, OCR OK.
+- Backup format unchanged (format 1, same keys; new fields optional). Old backup → v0.50.0 OK; v0.49.0 backup → v0.50.0 OK; v0.50.0 backup (split board, rcd2, obs.src) → LIVE v0.49.0 in a throwaway profile: 8 records, all pages open, PDFs build, optional fields kept, no errors (backup/backup500.json).
+- Caveat: v0.49.0 opening a v0.50.0 split board refills its N/A ways with the board RCD (auto values) until v0.50.0 opens it.
+- Tests: 757 pass (17 new in tests/v500.test.mjs; version regexes widened; cable-label tests updated). Crawl 390/1440/empty: 0 errors, no sideways scroll. pdf_overlap 0 on EIC/EICR/MW. v0.49.0 features rechecked (retest490/).
+- Go-live checklist: push main, wait for Pages, check live sw.js says sparky-v0.50.0, smoke update from v0.49.0 in a throwaway profile (vendor cache copied, ~0.6 MB), offline check.
 
 ## v0.49.0 beta (LIVE 19 Nov 2026: main 25c4d36 pushed 21:19 GMT; live sw.js serves sparky-v0.49.0 from ~21:20 GMT; Matthew: "Go live". Built from Matthew 19 Nov 20:24 "Fix everything" on the NIGGLES Audit (19 Nov 2026))
 Fixes every audit item; see NIGGLES "Audit (19 Nov 2026)" for the item-by-item list. Evidence: /workspace/polish-review/zspro-v0490/.
