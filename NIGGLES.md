@@ -1,6 +1,6 @@
 # Sparky — niggles and update lists
 
-## Audit 2 (19 Nov 2026, v0.49.0) — BUILT in v0.50.0 LOCALLY, NOT LIVE (local main, not pushed; go live only on Matthew's OK)
+## Audit 2 (19 Nov 2026, v0.49.0) — BUILT and LIVE in v0.50.0 (main 966def1, pushed 23 Nov 2026 21:49 GMT, live 21:49:57 GMT; live smoke passed, see HANDOFF v0.50.0 and /workspace/polish-review/zspro-v0500/live/)
 v0.50.0 build (19 Nov 2026, evening GMT): every fault, continuity item and idea below is built; Lighten built except minify (skipped, see below).
 v0.50.0 evidence: /workspace/polish-review/zspro-v0500/: for-matthew/ (390-/1440- 01…17), crawl.json + shots/ (54 routes × 390/1440 + empty: 0 errors, no sideways scroll), features500.json, retest490/ (v0.49.0 features rechecked), backup/ (both ways with live v0.49.0), pdfs/ (EIC/EICR/MW, 0 overlaps), measure/measure500.json (throttled size/speed + offline). Tests: tests/v500.test.mjs.
 Size/speed (throttled 1.6 Mbps, 150 ms, 4× CPU, 390):
@@ -23,33 +23,33 @@ Mostly clean:
 - Zs tables (41.2–41.5), the IR table, RCD times and the EICR FI rule (A4: FI/C3 don't make the report unsatisfactory) are all correct. EICR/MW PDFs follow the A4 IET layout.
 
 ### Faults
-- [BUILT v0.50.0] MEDIUM — **BS 3036 rewirable fuses skip the 0.725 factor on the schedule** (Reg 433.1.202). A 20 A BS 3036 on 2.5 mm² method C (27 × 0.725 = 19.6 A < 20 A) and a 30 A on 4 mm² (26.8 A) aren't flagged. The Check calculator and design.js do apply it. Found by: node cableCheck cases plus an EICR circuit 12 (faults/C). Fix: in cableCheck use In ≤ 0.725 × Iz for device bs3036, with a 433.1.202 message.
-- [BUILT v0.50.0] MEDIUM — **On an EICR the red notice says "N circuits need fixing … Check the schedule before issuing."** An EICR records existing faults; it doesn't fix them. Overload/Zs reds on an EICR should lead to an observation (C2/C3), not "fix before issuing". Found on the live EICR page (faults/B). Fix: EICR wording "N circuits have readings outside the limits: add an observation for each (or tap to add one)".
-- [BUILT v0.50.0] LOW — **Rewirable fuse card label reads "rewirable20 A Rewirable"** (type key glued to rating; faults/C). Fix: blank type for fuses in the card line, as the PDF does.
-- [BUILT v0.50.0] LOW — **Ring final on 2.5 mm² method 103 (13.5 A)** shows only the general "device bigger than cable" message. Fix: for rings say "needs Iz ≥ 20 A for a ring (433.1.204)".
-- [BUILT v0.50.0] LOW — **"Supplied from" parsing misses common forms**: "DB1/9", "DB1 - 9", "DB 1", "Circuit 9 of DB1". With RCD upstream ticked the button then reads just "✓ RCD upstream" and the circuit stays red (faults/F). Fix: accept "/", " - " and "DB 1", or better a picker (see Ideas).
-- [BUILT v0.50.0] LOW — **Some not-found gaps remain**:
+- [LIVE v0.50.0] MEDIUM — **BS 3036 rewirable fuses skip the 0.725 factor on the schedule** (Reg 433.1.202). A 20 A BS 3036 on 2.5 mm² method C (27 × 0.725 = 19.6 A < 20 A) and a 30 A on 4 mm² (26.8 A) aren't flagged. The Check calculator and design.js do apply it. Found by: node cableCheck cases plus an EICR circuit 12 (faults/C). Fix: in cableCheck use In ≤ 0.725 × Iz for device bs3036, with a 433.1.202 message.
+- [LIVE v0.50.0] MEDIUM — **On an EICR the red notice says "N circuits need fixing … Check the schedule before issuing."** An EICR records existing faults; it doesn't fix them. Overload/Zs reds on an EICR should lead to an observation (C2/C3), not "fix before issuing". Found on the live EICR page (faults/B). Fix: EICR wording "N circuits have readings outside the limits: add an observation for each (or tap to add one)".
+- [LIVE v0.50.0] LOW — **Rewirable fuse card label reads "rewirable20 A Rewirable"** (type key glued to rating; faults/C). Fix: blank type for fuses in the card line, as the PDF does.
+- [LIVE v0.50.0] LOW — **Ring final on 2.5 mm² method 103 (13.5 A)** shows only the general "device bigger than cable" message. Fix: for rings say "needs Iz ≥ 20 A for a ring (433.1.204)".
+- [LIVE v0.50.0] LOW — **"Supplied from" parsing misses common forms**: "DB1/9", "DB1 - 9", "DB 1", "Circuit 9 of DB1". With RCD upstream ticked the button then reads just "✓ RCD upstream" and the circuit stays red (faults/F). Fix: accept "/", " - " and "DB 1", or better a picker (see Ideas).
+- [LIVE v0.50.0] LOW — **Some not-found gaps remain**:
   - #/cert/x/b/99 shows the certificate page (faults/G);
   - #/cert/x/b/0/c/99 shows the board page;
   - #/calc/md/nope shows a blank Maximum demand;
   - #/cert/<MW>/b/0 shows the MW page.
   Fix: notFound('board'/'circuit') when the index is out of range.
-- [BUILT v0.50.0] LOW — **Way order with a blank way number**: outOfWayOrder reports "( comes before 1)" when an unnumbered row is first. There is also no "circuit has no number" item in Still to fill in. Fix: skip blanks in outOfWayOrder and list "DB1: a circuit has no number".
-- [BUILT v0.50.0] LOW — **Split-load boards**: the board RCD is now filled into every MCB/fuse line on load, including ways on the non-RCD side of an old split board, until N/A is typed. This happened before v0.49.0 too, but now it happens without opening the board. Fix: see the Ideas item "RCD covers ways …".
+- [LIVE v0.50.0] LOW — **Way order with a blank way number**: outOfWayOrder reports "( comes before 1)" when an unnumbered row is first. There is also no "circuit has no number" item in Still to fill in. Fix: skip blanks in outOfWayOrder and list "DB1: a circuit has no number".
+- [LIVE v0.50.0] LOW — **Split-load boards**: the board RCD is now filled into every MCB/fuse line on load, including ways on the non-RCD side of an old split board, until N/A is typed. This happened before v0.49.0 too, but now it happens without opening the board. Fix: see the Ideas item "RCD covers ways …".
 
 ### Continuity
-- [BUILT v0.50.0] DB4 shows a green "DB4: every circuit has a Zs ✓" directly above circuit 1 marked red Check (faults/E). Say "every circuit has a Zs reading" without the tick, or "1 circuit needs fixing".
-- [BUILT v0.50.0] Diagram cable numbers are by sequence, not way: "C4 (circuit 5)", "C6 (circuit 11)", "C7 (circuit 4)" (faults/H). Number cables after the way (C5 for circuit 5), or drop the C-number.
-- [BUILT v0.50.0] The pre-PDF dialog starts "Worth a look before the PDF goes out", but "Worth a look" is now also the name of the amber group. It lists all 15 items, mostly "still to fill in", every time (faults/I). Re-word it ("Before the PDF goes out") and show "3 to fix · 8 to fill in · 4 worth a look" collapsed.
-- [BUILT v0.50.0] DB4 circuit 1 shows twice in Check certificate (Needs fixing for Zs on Table 41.3, Worth a look for "TT: needs RCD"): same cause. Merge them into one item.
-- [BUILT v0.50.0] The diagram says "Ipf 1.6 kA" while the board pages say "PFC 1.6 kA". The PFC calculator talks of "PSCC or PEFC" (correct, but explain once: "PFC = the bigger of PSCC and PEFC").
-- [BUILT v0.50.0] At 1440 with a mouse, buttons are still 28 px (by design since v0.49.0). Fine for mouse, but Settings, presets and calculator chips at 28 px look cramped next to 44 px phone sizes.
+- [LIVE v0.50.0] DB4 shows a green "DB4: every circuit has a Zs ✓" directly above circuit 1 marked red Check (faults/E). Say "every circuit has a Zs reading" without the tick, or "1 circuit needs fixing".
+- [LIVE v0.50.0] Diagram cable numbers are by sequence, not way: "C4 (circuit 5)", "C6 (circuit 11)", "C7 (circuit 4)" (faults/H). Number cables after the way (C5 for circuit 5), or drop the C-number.
+- [LIVE v0.50.0] The pre-PDF dialog starts "Worth a look before the PDF goes out", but "Worth a look" is now also the name of the amber group. It lists all 15 items, mostly "still to fill in", every time (faults/I). Re-word it ("Before the PDF goes out") and show "3 to fix · 8 to fill in · 4 worth a look" collapsed.
+- [LIVE v0.50.0] DB4 circuit 1 shows twice in Check certificate (Needs fixing for Zs on Table 41.3, Worth a look for "TT: needs RCD"): same cause. Merge them into one item.
+- [LIVE v0.50.0] The diagram says "Ipf 1.6 kA" while the board pages say "PFC 1.6 kA". The PFC calculator talks of "PSCC or PEFC" (correct, but explain once: "PFC = the bigger of PSCC and PEFC").
+- [LIVE v0.50.0] At 1440 with a mouse, buttons are still 28 px (by design since v0.49.0). Fine for mouse, but Settings, presets and calculator chips at 28 px look cramped next to 44 px phone sizes.
 
 ### Ideas (on site)
-- [BUILT v0.50.0] Board details "RCD covers ways …" (e.g. 1–6 on RCD1, 7–10 on RCD2/none) for split-load and dual-RCD boards, so the board RCD only fills the right ways.
-- [BUILT v0.50.0] "Supplied from" as a picker: board, then circuit, from the cert's boards. This feeds RCD upstream, the diagram and sub-main checks with no parsing.
-- [BUILT v0.50.0] EICR: a red reading gets one-tap "Add as observation" (prefilled text, reg and suggested code, e.g. 433.1.1 → C2/C3; Zs over → C2).
-- [BUILT v0.50.0] Check certificate: per-board filter, and a "Fix next" button that walks through the items in order.
+- [LIVE v0.50.0] Board details "RCD covers ways …" (e.g. 1–6 on RCD1, 7–10 on RCD2/none) for split-load and dual-RCD boards, so the board RCD only fills the right ways.
+- [LIVE v0.50.0] "Supplied from" as a picker: board, then circuit, from the cert's boards. This feeds RCD upstream, the diagram and sub-main checks with no parsing.
+- [LIVE v0.50.0] EICR: a red reading gets one-tap "Add as observation" (prefilled text, reg and suggested code, e.g. 433.1.1 → C2/C3; Zs over → C2).
+- [LIVE v0.50.0] Check certificate: per-board filter, and a "Fix next" button that walks through the items in order.
 
 ### Lighten (measured on live, 390, throttled 1.6 Mbps/150 ms RTT, 4× CPU)
 Sizes and timings:
@@ -64,17 +64,17 @@ Sizes and timings:
 - **Memory:** JS heap 2.8 MB home → 5.4 MB diagram → about 17 MB while building the EIC PDF (0.8 s at 4× CPU) → 11 MB after GC. Fine.
 
 Savings ideas:
-- [BUILT v0.50.0] HIGH value — **Every release re-downloads all 6.1 MB.** There's one cache name, and install re-fetches every file with cache: 'reload'. Matthew ships several releases a day. Fix: put vendor (Tesseract, pdf.js, jsPDF, fonts) in its own cache, e.g. sparky-vendor-1, bumped only when vendor changes, and keep it in activate. Saves about 5.5 MB gz per update (an update becomes about 0.6 MB). Risk low: offline unchanged; activate's "delete other sparky-*" filter must spare the vendor cache.
-- [BUILT v0.50.0] **Precache only the one Tesseract core the device uses**: the SW feature-detects SIMD with WebAssembly.validate. Saves about 1.0 MB gz download and 2.8 MB storage. Risk low; fall back to fetching the other build on demand.
-- [BUILT v0.50.0] **Board scan (OCR) as a "download for offline" pack**: fetch on first Scan board, or idle-fetch after first launch, rather than in the install precache. Install drops from about 6.1 to about 2.1 MB gz. Risk medium: scan won't work offline on a phone that never went online after install. Mitigate with a Settings switch, "Board scan works offline (4 MB)", on by default after first idle.
-- [BUILT v0.50.0] **pdf.js viewer the same way** (View PDF only; Share PDF doesn't need it). Saves 0.49 MB gz. Risk medium (View PDF offline before first use); keep it precached if offline viewing matters.
-- [BUILT v0.50.0] **Lazy-load route modules**: diagram/wiring, DC planner, calculators, import, danger notices, scanner. main.js imports 15 screen modules eagerly. The home page would execute about 40 % of today's JS, saving about 1 s DOMContentLoaded on a slow phone's first load (repeat loads are already 0.16 s). Risk medium (route registration needs small stubs); offline is unaffected because everything stays precached.
+- [LIVE v0.50.0] HIGH value — **Every release re-downloads all 6.1 MB.** There's one cache name, and install re-fetches every file with cache: 'reload'. Matthew ships several releases a day. Fix: put vendor (Tesseract, pdf.js, jsPDF, fonts) in its own cache, e.g. sparky-vendor-1, bumped only when vendor changes, and keep it in activate. Saves about 5.5 MB gz per update (an update becomes about 0.6 MB). Risk low: offline unchanged; activate's "delete other sparky-*" filter must spare the vendor cache.
+- [LIVE v0.50.0] **Precache only the one Tesseract core the device uses**: the SW feature-detects SIMD with WebAssembly.validate. Saves about 1.0 MB gz download and 2.8 MB storage. Risk low; fall back to fetching the other build on demand.
+- [LIVE v0.50.0] **Board scan (OCR) as a "download for offline" pack**: fetch on first Scan board, or idle-fetch after first launch, rather than in the install precache. Install drops from about 6.1 to about 2.1 MB gz. Risk medium: scan won't work offline on a phone that never went online after install. Mitigate with a Settings switch, "Board scan works offline (4 MB)", on by default after first idle.
+- [LIVE v0.50.0] **pdf.js viewer the same way** (View PDF only; Share PDF doesn't need it). Saves 0.49 MB gz. Risk medium (View PDF offline before first use); keep it precached if offline viewing matters.
+- [LIVE v0.50.0] **Lazy-load route modules**: diagram/wiring, DC planner, calculators, import, danger notices, scanner. main.js imports 15 screen modules eagerly. The home page would execute about 40 % of today's JS, saving about 1 s DOMContentLoaded on a slow phone's first load (repeat loads are already 0.16 s). Risk medium (route registration needs small stubs); offline is unaffected because everything stays precached.
 - [SKIPPED v0.50.0 — see above] **Minify app JS at build time** (esbuild): 1.45 MB → 0.97 MB raw, 502 → 384 KB gz (−118 KB, −24 %). Risk low-medium: needs a build step (source maps for debugging); the source-grep tests must run on the sources.
 - **Small wins**:
-  - [BUILT v0.50.0] Inter woff → woff2 (38.6 → 30.9 KB, all glyphs kept);
+  - [LIVE v0.50.0] Inter woff → woff2 (38.6 → 30.9 KB, all glyphs kept);
   - [SKIPPED v0.50.0] pdffonts.js base64 Arimo → binary .ttf fetched on PDF build (about −12 KB gz, risk low);
   - [SKIPPED v0.50.0] dark.css (27 KB) and desktop.css loaded with media attributes (no byte saving, a little less render-blocking).
-  - [BUILT v0.50.0] Duplicate code is negligible (16 repeated lines; the Supplied-from parser is duplicated in checks.js and wiring.js, keep one) → one parser, js/feed.js.
+  - [LIVE v0.50.0] Duplicate code is negligible (16 repeated lines; the Supplied-from parser is duplicated in checks.js and wiring.js, keep one) → one parser, js/feed.js.
   - Nothing worth dropping outright.
 
 ## Audit (19 Nov 2026) — BUILT and LIVE in v0.49.0 (main 25c4d36, pushed 19 Nov 2026 21:19 GMT, live ~21:20 GMT; live smoke passed)

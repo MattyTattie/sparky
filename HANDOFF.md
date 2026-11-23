@@ -1,6 +1,6 @@
 # Handoff notes
 
-Status: **v0.50.0 beta is BUILT LOCALLY, NOT LIVE** (local main, not pushed; Matthew 19 Nov 22:18 "fix everything and implement ideas" on NIGGLES Audit 2; push only on his "go live"). Live is **v0.49.0 beta** (https://mattytattie.github.io/sparky/, main 25c4d36, pushed 19 Nov 2026 21:19 GMT; live sw.js serves sparky-v0.49.0 from ~21:20 GMT; Matthew: "Go live"). Android: last published APK is still Zs Pro v5 (0.45.0) at https://github.com/MattyTattie/sparky/releases/download/app-v5/ZsPro-0.45.0.apk. The app is called Zs Pro; repo, data keys, cache prefix and Android package still say sparky on purpose (see RENAME.md).
+Status: live is **v0.50.0 beta** (https://mattytattie.github.io/sparky/, main 966def1, pushed 23 Nov 2026 21:49 GMT; live sw.js serves sparky-v0.50.0 from 21:49:57 GMT; Matthew 23 Nov 21:47: "publish zs pro update"). Previous: v0.49.0 (main 25c4d36, live 19 Nov 2026 ~21:20 GMT). Android: last published APK is still Zs Pro v5 (0.45.0) at https://github.com/MattyTattie/sparky/releases/download/app-v5/ZsPro-0.45.0.apk. The app is called Zs Pro; repo, data keys, cache prefix and Android package still say sparky on purpose (see RENAME.md).
 Run the tests with `node --test tests/*.test.mjs tests/*.test.js` (plain `node --test tests/` doesn't work on Node 24). PDF tests find jsPDF's Node build through tests/jspdf-node.cjs; if it's missing it runs tests/setup-jspdf.sh (npm, into tests/.jspdf, git-ignored).
 
 Open points
@@ -696,7 +696,7 @@ Live smoke (19 Nov 2026, about 19:40 GMT; 390 and 1440 viewports, fake seed data
 - The View PDF viewer opens (17 pages).
 - pdf_overlap.py: 0 overlaps on both PDFs at both sizes.
 
-## v0.50.0 beta (BUILT LOCALLY 19 Nov 2026, NOT LIVE — local main, not pushed. Built from Matthew 19 Nov 22:18 "fix everything and implement ideas" on NIGGLES Audit 2)
+## v0.50.0 beta (LIVE 23 Nov 2026: main 966def1 pushed 21:49 GMT; live sw.js serves sparky-v0.50.0 from 21:49:57 GMT; Matthew 23 Nov 21:47: "publish zs pro update". Built from Matthew 19 Nov 22:18 "fix everything and implement ideas" on NIGGLES Audit 2)
 Item-by-item: NIGGLES "Audit 2 (19 Nov 2026, v0.49.0)". Evidence: /workspace/polish-review/zspro-v0500/.
 - New modules:
   - js/feed.js `parseFeed(text, boards, selfBi)`: the one "Supplied from" parser (DB1 circuit 9, DB1/9, DB1 - 9, DB 1, Circuit 9 of DB1, DB1 c9). Used by checks.feedOf, wiring.feedInfo and the board page picker. The picker writes plain text ("DB1 circuit 9"), so nothing new is stored.
@@ -719,7 +719,15 @@ Item-by-item: NIGGLES "Audit 2 (19 Nov 2026, v0.49.0)". Evidence: /workspace/pol
 - Backup format unchanged (format 1, same keys; new fields optional). Old backup → v0.50.0 OK; v0.49.0 backup → v0.50.0 OK; v0.50.0 backup (split board, rcd2, obs.src) → LIVE v0.49.0 in a throwaway profile: 8 records, all pages open, PDFs build, optional fields kept, no errors (backup/backup500.json).
 - Caveat: v0.49.0 opening a v0.50.0 split board refills its N/A ways with the board RCD (auto values) until v0.50.0 opens it.
 - Tests: 757 pass (17 new in tests/v500.test.mjs; version regexes widened; cable-label tests updated). Crawl 390/1440/empty: 0 errors, no sideways scroll. pdf_overlap 0 on EIC/EICR/MW. v0.49.0 features rechecked (retest490/).
-- Go-live checklist: push main, wait for Pages, check live sw.js says sparky-v0.50.0, smoke update from v0.49.0 in a throwaway profile (vendor cache copied, ~0.6 MB), offline check.
+- Live smoke (23 Nov 2026 ~21:50–22:07 GMT; fresh throwaway profiles, fake data only, no Drive; /workspace/polish-review/zspro-v0500/live/): all passed.
+  - All 112 cached files (100 app + 11 vendor + sw.js) on live match local byte for byte; the app shows 0.50.0 beta.
+  - Crawl of 54 routes at 390/1440 (+ empty): 0 console/page errors, no sideways scroll, nothing clipped (1440 table.sched "over" is the in-wrapper scroll, as before).
+  - Feature walk at 390 and 1440: BS 3036 0.725 flag; EICR red notice + Add as observation (Check certificate and circuit page; "✓ In the observations" survives reload, obs.src stored); RCD covers ways + RCD 2 (board note, parts RCD 1/RCD 2, PDF rows); Supplied-from picker (warns "DB1 has no circuit 9"); Check certificate counts, board filter, Fix next walk; pre-PDF "Before the PDF goes out"; diagram C1…C11, DB2 C1, PFC (no Ipf); not-found for board 99, circuit 99, MD, MW board; buttons 36–38 px at 1440, 44+ px at 390.
+  - PDFs (EIC/EICR/MW) built on live: pdf_overlap 0 on all three.
+  - Offline after a fresh live install (app 100 + vendor 9 cached): every screen, cold deep link, View PDF, OCR all work.
+  - Real update: v0.49.0 installed on the live origin (local TLS copy of 25c4d36 mapped to mattytattie.github.io), then reopened against live: updated to 0.50.0 in ~4 s, update bar shown, vendor copied (only the new woff2 font downloaded), fake job kept; offline after update: every screen, View PDF and OCR work.
+  - Backups: old v0.18-shaped backup and the v0.49.0 backup load into live v0.50.0; v0.50.0 export keeps rcdWays/rcd2/obs.src.
+- (Done) Go-live checklist: push main, wait for Pages, check live sw.js says sparky-v0.50.0, smoke update from v0.49.0 in a throwaway profile (vendor cache copied, ~0.6 MB), offline check.
 
 ## v0.49.0 beta (LIVE 19 Nov 2026: main 25c4d36 pushed 21:19 GMT; live sw.js serves sparky-v0.49.0 from ~21:20 GMT; Matthew: "Go live". Built from Matthew 19 Nov 20:24 "Fix everything" on the NIGGLES Audit (19 Nov 2026))
 Fixes every audit item; see NIGGLES "Audit (19 Nov 2026)" for the item-by-item list. Evidence: /workspace/polish-review/zspro-v0490/.
